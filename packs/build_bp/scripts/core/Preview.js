@@ -7,6 +7,11 @@ import { FACE_OFFSETS, smartOutline, wireframePositions, skeletonAABB, boxEdges,
 import { getModeOption } from "../utils/ModeOptions.js";
 import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReach, getInfiniteReach, getInfiniteReachDistance, getReplaceBlocks, getMaxBlocks, getPreviewQuality, getSwapBookActions, getDeferShapeCalc, SHAPE_SETTLE_TICKS } from "./Settings.js";
 import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "../utils/Items.js";
+import { createIdleClock } from "../utils/idle-cadence.js";
+import { holdsBuildTool } from "../utils/build-tool.js";
+import { beginVisualizationTick, forgetHolder, isVisualizationHolder, visualizationIdle, visualizationReleased } from "../utils/tool-gate.js";
+import { getFlippedStates } from "../modifiers/MirrorModifier.js";
+import { expandBeds, isBedType, directionFromYaw, directionFromStates, bedPartnerPos } from "./beds.js";
 
 /** Players the preview looks at every tick: a mode on, or a book in hand. The others every IDLE_EVERY ticks. */
 const previewBusy = new WeakSet();
@@ -297,16 +302,71 @@ function bboxCorners(minX, maxX, minY, maxY, minZ, maxZ) {
 
 const tpsPart = { text: "" };
 
+function previewDestroyBeds(positions, dim) {
+    const out = positions.slice();
+    const seen = new Set(positions.map((p) => `${p.x},${p.y},${p.z}`));
+    for (const pos of positions) {
+        try {
+            const block = dim.getBlock(pos);
+            if (!block || !isBedType(block.typeId)) continue;
+            const partner = bedPartnerPos(pos, block.permutation.getAllStates());
+            if (!partner) continue;
+            const k = `${partner.x},${partner.y},${partner.z}`;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            out.push(partner);
+        } catch {}
+    }
+    return out;
+}
+
+function previewBedPositions(positions, typeId, player, blockStates) {
+    if (!isBedType(typeId) || !positions?.length) return positions;
+    let yaw = 0;
+    try { yaw = player.getRotation().y; } catch { yaw = 0; }
+    const { positions: expanded } = expandBeds(positions.map((p) => {
+        const raw = p.states ?? p._resolvedStates ?? blockStates ?? {};
+        const flipped = (p._mx || p._my || p._mz) ? getFlippedStates(raw, !!p._mx, !!p._my, !!p._mz) : raw;
+        return {
+            x: p.x, y: p.y, z: p.z, typeId,
+            direction: directionFromStates(flipped) ?? directionFromYaw(yaw),
+            states: flipped,
+            _alreadyHalf: flipped?.head_piece_bit === true,
+        };
+    }));
+    return expanded.map((p) => ({ x: p.x, y: p.y, z: p.z, states: p._resolvedStates }));
+}
+
+const previewClock = createIdleClock();
 export function startPreviewLoop() {
     system.runInterval(() => {
         recordTick();
         tpsPart.text = `  §8-  ${tpsText()}`;
 
+        if (visualizationIdle()) return;
         const all = allPlayers();
+        if (!beginVisualizationTick(all, holdsBuildTool)) {
+            for (const id of visualizationReleased()) {
+                const player = all.find((p) => p.id === id);
+                try { if (player && getState(player).anchor) clearAnchor(player); } catch {}
+            }
+            return;
+        }
+        const phase = previewClock.tick();
         for (let i = 0; i < all.length; i++) {
             const player = all[i];
-            // Players with building off and no book in hand (most of them, most of the time) every few ticks only.
-            if (idleSkip(player, i, previewBusy)) continue;
+            if (!isVisualizationHolder(player.id)) {
+                try { if (getState(player).anchor) clearAnchor(player); } catch {}
+                continue;
+            }
+            const anchored = !!getState(player).anchor;
+            if (!anchored && idleSkip(player, i, previewBusy, phase, 1)) continue;
+            if (!holdsBuildTool(player)) {
+                forgetHolder(player.id);
+                if (anchored) clearAnchor(player);
+                previewBusy.delete(player);
+                continue;
+            }
             try {
                 const idle   = getState(player).mode === "disable";
                 const inHand = heldItemCached(player, idle ? IDLE_EVERY : 0);
@@ -374,7 +434,7 @@ export function startPreviewLoop() {
                         if (player.dimension.getBlock(target)?.typeId === held.typeId) continue;
                     } catch {  }
                     const particleId = (previewMode === "outline" || previewMode === "corner_outline") ? CONTROLLER : PARTICLE;
-                    spawnParticles(player.dimension, [target], particleId);
+                    spawnParticles(player.dimension, previewBedPositions([target], held.typeId, player), particleId);
                     if (!isActionBarLocked(player.id)) steadyBar(player,
                         t("eb.preview.air_build", target.x, target.y, target.z)
                     );
@@ -898,7 +958,12 @@ export function startPreviewLoop() {
                         }
                         catch { return true; }
                     });
-                if (!positions.length) continue;
+                const shown = !positions.length ? positions
+                    : isDestroy ? previewDestroyBeds(positions, dim)
+                    : previewBedPositions(positions, state.blockTypeId, player, state.blockStates);
+                if (!shown.length) continue;
+                positions.length = 0;
+                for (const p of shown) positions.push(p);
                 const cap = getMaxBlocks(player);
                 if (positions.length > cap) {
                     const last = previewCache.get(player.id);
@@ -999,6 +1064,7 @@ export function startPreviewLoop() {
                             if (filtered.length) base = filtered;
                         }
                     }
+                    if (!isDestroy) base = previewBedPositions(base, state.blockTypeId, player, state.blockStates);
                     const wf = wireframePositions(base);
 
                     const count = wf.length;
@@ -1041,6 +1107,7 @@ export function startPreviewLoop() {
                             if (filtered.length) base = filtered;
                         }
                     }
+                    if (!isDestroy) base = previewBedPositions(base, state.blockTypeId, player, state.blockStates);
                     preview = adaptiveParticles(wireframePositions(base));
                 }
 

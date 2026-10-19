@@ -4,20 +4,38 @@
     "name": "Realm Calendar",
     "description": "The 96-day Realm Year: four seasons, four festivals with activities and Festival Ribbons, and the Gray Choir's night sieges on the towns. /realm:calendar",
     "uuid": "70fa666a-d6c1-40b5-8bbb-47069f9e0db2",
-    "version": [1, 0, 14],
-    "min_engine_version": [1, 21, 100]
+    "version": [
+      1,
+      0,
+      16
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      100
+    ]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
       "uuid": "6362f605-870f-458a-ac92-c597c0938edc",
-      "version": [1, 0, 0],
+      "version": [
+        1,
+        0,
+        0
+      ],
       "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.1.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
   ]
 }

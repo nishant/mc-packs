@@ -7,6 +7,36 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Earlier pages and bounded offline rewards
+
+- New pickups fill earlier inventory pages first. Fill earlier pages in /realm:inv tidies every later page without sorting; your hotbar stays put. Story collect steps count your saved pages too, without giving free hand-in credit.
+- Operators can export a retained failed inventory save with /realm:inv_recover. Back up and inspect the player's live inventory and recovery chests: it is a backup export, not automatic duplicate removal.
+- Pack letters have separate retention and inbox limits, leaving room for player mail. Old offline rewards use bounded per-player saves instead of one growing property.
+- Inactive gamertag protection and earned title records expire after a year by default; solo parties after 180 days. Operators can set each retention to 0 to keep them indefinitely. Untimestamped old records start counting now.
+- /realm:map_reset confirm clears destinations and marks for online players now and offline players once on return. New marks survive stale menus.
+- Building beds keeps paired halves and one-item accounting. The normal default stays 50000 blocks; the operator Large server profile uses 2000, operator-only tools and no Infinite Reach.
+- Story quests: operators can set where the town is with /realm:saga_place town. With the daylight cycle stopped, night and time-of-day windows no longer block quest progress, a bed tap counts as sleep, and wait steps count 20 real minutes a day. A story says when it needs a pack that was removed, and Gristle's fight still counts without Champions. Kitchen dishes carry their own name, so a renamed dish can't pass for another.
+- Operators can take titles away with /realm:titles_take or the give-or-take form. The nickname list has pages and search. New worlds greet players with a generic welcome; older Realms keep their text. Slow pack-data deletions now report when they finish, and setup pages stop when you leave, die or respawn.
+- Land claims can protect tamed and farm animals from leashing, riding, feeding, milking, shearing, naming, sitting and taming. Animal damage, fire, flowing liquids, pistons and endermen are not stopped by a claim.
+- Chest Finder indexes only the containers you opened, own or share. New worlds get this private index; old worlds keep the world-wide index (`privateIndex` false) until an operator changes it.
+- Realm Mail limits how many unread letters one sender can leave you (senderUnreadCap, default 5). Party chat can be muted; it covers /realm:party_chat and the party form only.
+- Crowns: /realm:crowns_audit shows the newest 50 of the last 200 pays and gives, in UTC. A daily pay limit (dailyPayLimit, default 250000) caps what each player can pay in a UTC day.
+- Nicknames: Admin, Owner and Server are reserved (reservedNames). Online operators reserve their gamertag automatically; an operator who has never joined needs reservedGamertags.
+- Expeditions: the chat line announcing a clear can start at a chosen level (announceFromLevel, default 0). Forgetting an expedition removes its parcel structures; player stash structures are kept, because offline owners cannot be listed. Saves wait for /reload.
+- Essentials+ tips no longer come back by themselves on a Realm that never saved its tip list; /realm:news_tips adds them back.
+- The Parties migration cannot be rolled back.
+- Operators see the setup reminder once.
+- Nickname protection for an offline gamertag starts at that player's next join.
+- Town news is quieter: champions, sieges, fairs, legendary fish, meteors, nightmare expeditions, new guild Masters, Starlit relics and new Callings are told at most once an hour per pack, with the same rewards. News about nobody no longer shows a blank name, and milestone titles you already earned are not offered again on every join.
+- The minimap skips players who have just left the server.
+- Blood Moon: placing a block near a spot checked as clear makes the game check that spot again. Monsters left from a Blood Moon are removed at dawn in every dimension, not only the Overworld.
+- Side boxes for Stats and Parties ignore stale or malformed updates instead of showing them.
+- Champions: the most at once now scales with the players online (maxAlivePerPlayer, 0.8 each, up to maxAlive 80). Each area keeps at most 3 (maxAliveNearby). A saved non-default cap stays as the world ceiling; a world that still has the old default 8 gets the new scale.
+- Blood Moon: blood.maxExtraWorld caps the extra monsters for the whole world. Default 0 means no limit. It counts loaded monsters only.
+- Expeditions: when every dungeon is busy, up to 8 parties wait in a first-come line for 30 minutes. Leaving the line keeps your place for the others; a queued reroll is refused before it costs anything.
+- Parties and Stats side boxes: long updates arrive in parts and show only once the whole set is in.
+- Tornadoes: wind, rumble and horn volume change in 8-block steps, so players at the same distance hear the same volume.
+
 ## Clear quests and safer inventory pages
 
 - Long quest steps wrap instead of being cut off with "...". A full tracker says how many more steps are in /realm:saga. Empty minimap panels now hide their backgrounds too.

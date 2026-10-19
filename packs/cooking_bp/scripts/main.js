@@ -237,6 +237,7 @@ function dishLore(d) {
   if (d.roll) lines.push("§dRolls for a surprise");
   else lines.push(...d.effects.map(fxLore));
   lines.push(d.tier === "rare" ? "§6Rare dish" : "§8Kitchen dish");
+  lines.push(`§8Dish: ${d.name}`); // the mark a renamed dish can't fake: the Story Log's deliveries check it
   return lines;
 }
 
@@ -1213,7 +1214,8 @@ const findIng = (v) => (typeof v === "string" ? ingByKey.get(keyOf(v)) : undefin
 /** @param {unknown} v */
 const amountOf = (v) => Math.max(1, Math.min(640, Math.floor(Number(v) || 1)));
 
-const HANDLED = new Set([
+onScriptEvent(
+  [
   "realm:npc_talk",
   "realm:npc_choose",
   "realm:champion_slain",
@@ -1226,12 +1228,8 @@ const HANDLED = new Set([
   "realm:cooking_eat",
   "realm:cooking_owed_ping",
   "realm:cooking_owed_test",
-]);
-
-onScriptEvent(
-  [...HANDLED],
+  ],
   ({ id, message, sourceType }) => {
-    if (!HANDLED.has(id)) return;
     /** @type {any} */
     let msg;
     try {

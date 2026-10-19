@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { buttonSlots, initPages, openInvMenu, refillFromPages, setOpPages } from "./pages.js";
+import { buttonSlots, initPages, openInvMenu, recoverInventory, refillFromPages, revisionOf, setOpPages, storedCount } from "./pages.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -1063,6 +1063,24 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
   customCommandRegistry.registerCommand(
     {
+      name: "realm:inv_recover",
+      description: "Operators: recover a player's stuck inventory move. Asks you to confirm, then puts their saved items into chests next to you",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [{ name: "player", type: CustomCommandParamType.PlayerSelector }],
+    },
+    (origin, targets) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      if (!Array.isArray(targets) || targets.length !== 1) return { status: CustomCommandStatus.Failure, message: "Name exactly one player." };
+      const target = targets[0];
+      system.run(() => recoverInventory(player, target).then((m) => player.sendMessage(m), (e) => console.warn(`[stash] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
       name: "realm:stash_help",
       description: "How Quick Stack & Sort works: the sneak-tap menu, /realm:stash and /realm:sort, with usage",
       permissionLevel: CommandPermissionLevel.Any,
@@ -1081,7 +1099,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // Access checks: which containers a player may not open, asked across packs
 // ---------------------------------------------------------------------------
 //   realm:access_check        { id, player, spots: [[dim, x, y, z], ...] }  (at most 40 spots per message)
-//   realm:access_check_result { id, from, closed: [i, ...] }                 (indexes into that message's spots)
+//   realm:access_check_result { id, from, closed: [i, ...], ours?: [i, ...] } (indexes into that message's spots)
 // Every pack that keeps players out of blocks answers every check, with nothing closed too, so an asker learns
 // who answers: this pack (someone else's locked container) and Land Claims (someone else's claim).
 
@@ -1146,6 +1164,8 @@ function answerAccess(message) {
   const pid = String(q.player ?? "");
   /** @type {number[]} */
   const closed = [];
+  /** @type {number[]} spots whose lock is the player's own or shared with them */
+  const ours = [];
   if (locksOn() && locks().size && Array.isArray(q.spots)) {
     /** @type {Map<string, (b: Block) => string | undefined>} one read per chest for the whole message, per dimension */
     const sigs = new Map();
@@ -1164,9 +1184,10 @@ function answerAccess(message) {
         }
       }
       if (lock && lock.o !== pid && !lock.s.some((w) => w.i === pid)) closed.push(i);
+      else if (lock) ours.push(i);
     });
   }
-  system.sendScriptEvent("realm:access_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), from: "stash_bp", closed }));
+  system.sendScriptEvent("realm:access_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), from: "stash_bp", closed, ours }));
 }
 
 // Learn early who answers access checks, so the first quick stack doesn't wait.
@@ -1211,12 +1232,50 @@ function refillNeed(message) {
   }
 }
 
+/**
+ * Saga's collect steps ask what the saved pages hold, because page routing moves pickups off the active page:
+ *   realm:stash_count_ask { player, item?, name? }
+ *     ->  realm:stash_count { player, item?, name?, rev, part, parts, rows: [{ id, name?, lore?, n }] }
+ * One row per name and lore on saved pages (never the active page, which the asker counts itself); a step with only a
+ * name gets every named stack and matches the name itself. rev is the committed revision of the saved pages. Rows are
+ * split over as many messages as they need (each under 2048 characters, part 1..parts): no row is ever dropped, and the
+ * asker uses the rows only when all parts of one revision arrived. A page that can't be read sends no answer, so the
+ * asker keeps waiting rather than counting zero.
+ * @param {string} message
+ */
+function stashCountAsk(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string") return;
+    const player = world.getAllPlayers().find((p) => p.id === m.player);
+    if (!player) return;
+    const item = typeof m.item === "string" ? m.item : undefined;
+    const name = typeof m.name === "string" ? m.name : undefined;
+    const rows = item !== undefined || name !== undefined ? storedCount(player, item, name) : [];
+    if (!rows) return;
+    const rev = revisionOf(player);
+    const row = (/** @type {import("./pages.js").CountRow} */ r) => ({ id: r.id, name: r.name, lore: r.lore, n: r.n });
+    const wire = (/** @type {unknown[]} */ list, part = 1, parts = 1) => JSON.stringify({ player: m.player, item, name, rev, part, parts, rows: list });
+    /** @type {unknown[][]} */
+    const chunks = [[]];
+    for (const r of rows.map(row)) {
+      const cur = /** @type {unknown[]} */ (chunks[chunks.length - 1]);
+      if (cur.length && wire([...cur, r], 99, 99).length >= 1900) chunks.push([r]);
+      else cur.push(r);
+    }
+    chunks.forEach((c, i) => system.sendScriptEvent("realm:stash_count", wire(c, i + 1, chunks.length)));
+  } catch (e) {
+    console.warn(`[stash] count: ${e}`);
+  }
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 onScriptEvent(
-  ["realm:help_ping", "realm:refill_need", "realm:access_check", "realm:access_check_result"],
+  ["realm:help_ping", "realm:refill_need", "realm:stash_count_ask", "realm:access_check", "realm:access_check_result"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stash_bp");
     else if (id === "realm:refill_need") refillNeed(message);
+    else if (id === "realm:stash_count_ask") stashCountAsk(message);
     else if (id === "realm:access_check" || id === "realm:access_check_result") {
       try {
         if (id === "realm:access_check") answerAccess(message);

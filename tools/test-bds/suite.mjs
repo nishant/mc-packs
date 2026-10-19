@@ -7,8 +7,10 @@
 // --prepare-only (offline, starts no BDS): stages every header recipe and checks the folder its run command points at.
 // --perf runs only the perf-soak scenario once per player count (with run.mjs --profile, one after another) and
 // prints ms/tick per pack side by side with the budget (whole bundle < 5 ms/tick at 40 players, a typical pack
-// <= 0.15, the Minimap and HUD <= 1); --perf-only installs just those packs. A count whose soak did not spawn and
-// keep every declared player for the whole window is marked INVALID (profile "acceptance"), and the run exits 1.
+// <= 0.15, the Minimap and HUD <= 1; steady soak window only, verdicts at 40 players only); --perf-only installs just
+// those packs. The run exits 1 over budget (OVER BUDGET), and also when a count is INVALID: its soak did not spawn and
+// keep every declared player for the whole window (profile "acceptance"), its scenario did not pass, or a steady-window
+// figure is missing or not a number. An INVALID count is never reported as over budget (lib/perf-acceptance.mjs).
 // Logs: tools/test-bds/logs/suite-<time>/<scenario>.out (run.mjs output) and .log (full BDS log).
 // Exit code: 0 when nothing failed or timed out (flaky and skipped count as ok), 1 otherwise.
 // Header recipes run in bash (Git for Windows' bash.exe on Windows, or BDS_HARNESS_BASH); see lib/recipe.mjs.
@@ -28,6 +30,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { findBash, runRecipe, stageRecipe, stageWord } from "./lib/recipe.mjs";
 import { findPacks } from "./lib/packs.mjs";
+import { BUDGET_PLAYERS, BUNDLE_BUDGET_MS, evaluatePerfBudgets, packBudget } from "./lib/perf-acceptance.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
@@ -63,6 +66,8 @@ const SPECIAL = {
   "saga-lighthouse": { args: ["--flat", "--only", "saga_bp", "--timeout", "300"], note: "no command in header" },
   "perf-soak": { args: ["--no-relay", "--profile", "--profile-every", "0", "--arg", "players=6", "--arg", "seconds=60", "--timeout", "400"], note: "short soak (6 players, 60 s)" },
   "stash-pages-persistence": { runner: "stash-persistence.mjs", note: "custom runner stash-persistence.mjs" },
+  "stash-recover-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-recover-restart.js")], note: "owning-addon pending journal recovery across a restart" },
+  "build-beds": { runner: "build-beds.mjs", note: "native main-pipeline proof, not simulated second-input or physical acceptance" },
   "bundle-smoke": { args: ["--flat", "--bundle", "dist/realm_bundle.mcpack", "--timeout", "300"], prepare: ["tools/bundle.mjs", "--all"], note: "builds the Realm Bundle first (dist/realm_bundle.mcpack), runs it as one script context" },
   "full-bundle-protocols": { fullBundle: true, note: "builds and stages the genuine 67-member cancellation bundle" },
   "stash-page-transfer-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-page-transfer-restart.js")], note: "moved native row across two physical restarts" },
@@ -250,7 +255,6 @@ async function perf() {
   const soak = path.join(EXAMPLES, "perf-soak.js");
   /** @type {Map<number, any>} */
   const reports = new Map();
-  const invalid = [];
   for (const n of counts) {
     const json = path.join(logDir, `perf-${n}.json`);
     // Spawning takes about a second per player on top of the soak itself; ticks run slow under load.
@@ -260,40 +264,34 @@ async function perf() {
     const r = await runOne(p, logDir);
     console.log(`[suite] perf ${n}: ${r.result} (${r.seconds.toFixed(0)} s)${r.failure ? ` - ${r.failure.slice(0, 160)}` : ""}`);
     try {
-      const rep = JSON.parse(fs.readFileSync(json, "utf8"));
-      reports.set(n, rep);
-      if (!rep.acceptance?.ok) {
-        invalid.push(n);
-        console.log(`[suite] perf ${n}: INVALID as a ${n}-player measurement - ${rep.acceptance ? rep.acceptance.reasons.join("; ") : "the profile has no acceptance verdict (no perf-workload report)"}`);
-      }
-    } catch (e) { invalid.push(n); console.log(`[suite] perf ${n}: no profile report (${e.message})`); }
+      reports.set(n, { result: r.result, report: JSON.parse(fs.readFileSync(json, "utf8")) });
+    } catch (e) {
+      reports.set(n, { result: r.result, report: undefined });
+      console.log(`[suite] perf ${n}: no profile report (${e.message})`);
+    }
   }
-  if (!reports.size) process.exit(1);
+  const verdict = evaluatePerfBudgets(reports, { only: args["perf-only"] ? String(args["perf-only"]).split(",").filter(Boolean) : undefined });
   const ns = [...reports.keys()];
   const packs = new Set();
-  for (const rep of reports.values()) for (const pk of rep.packs) packs.add(pk.pack);
-  const ms = (rep, pack) => rep?.packs.find((x) => x.pack === pack)?.msPerTick;
-  const last = reports.get(ns[ns.length - 1]);
-  const rows = [...packs].sort((a, b) => (ms(last, b) ?? 0) - (ms(last, a) ?? 0));
-  const HEAVY = new Set(["map_bp", "hud_bp"]);
-  const budget = (pack) => (HEAVY.has(pack) ? 1 : 0.15);
-  const f3 = (x) => (x === undefined ? "-" : x.toFixed(3));
+  for (const { report } of reports.values()) for (const pk of report?.packs ?? []) packs.add(pk.pack);
+  const fig = (v) => (typeof v === "number" && Number.isFinite(v) ? v.toFixed(3) : "-");
+  const steadyOf = (n, pack) => verdict.steady.get(n)?.packs.get(pack);
+  const last = ns[ns.length - 1];
+  const rows = [...packs].sort((a, b) => (steadyOf(last, b) ?? 0) - (steadyOf(last, a) ?? 0));
   const w = Math.max(12, ...rows.map((r) => r.length));
-  const L = ["", `${"pack".padEnd(w)} | ${ns.map((n) => `@${n} ms/tick`.padStart(13)).join(" | ")} | budget | over at`, `${"-".repeat(w)}-|${ns.map(() => "-".repeat(15)).join("|")}|--------|--------`];
-  L.push(`${"whole bundle".padEnd(w)} | ${ns.map((n) => f3(reports.get(n).bundle?.msPerTick).padStart(13)).join(" | ")} | ${"5".padStart(6)} | ${ns.filter((n) => n >= 40 && reports.get(n).bundle?.msPerTick > 5).join(",") || "-"}`);
-  L.push(`${"server TPS".padEnd(w)} | ${ns.map((n) => (reports.get(n).server?.tps ?? 0).toFixed(1).padStart(13)).join(" | ")} |        |`);
-  for (const pack of rows) {
-    const over = ns.filter((n) => (ms(reports.get(n), pack) ?? 0) > budget(pack));
-    L.push(`${pack.padEnd(w)} | ${ns.map((n) => f3(ms(reports.get(n), pack)).padStart(13)).join(" | ")} | ${String(budget(pack)).padStart(6)} | ${over.join(",") || "-"}`);
-  }
+  const L = ["", `ms/tick over the steady soak window only (the spawn ramp is not included); a verdict applies at ${BUDGET_PLAYERS} players only`, `${"pack".padEnd(w)} | ${ns.map((n) => `@${n} ms/tick`.padStart(13)).join(" | ")} | budget`, `${"-".repeat(w)}-|${ns.map(() => "-".repeat(15)).join("|")}|--------`];
+  L.push(`${"whole bundle".padEnd(w)} | ${ns.map((n) => fig(verdict.steady.get(n)?.bundle).padStart(13)).join(" | ")} | ${`<${BUNDLE_BUDGET_MS}`.padStart(6)}`);
+  L.push(`${"server TPS".padEnd(w)} | ${ns.map((n) => (reports.get(n).report?.server?.tps ?? 0).toFixed(1).padStart(13)).join(" | ")} |`);
+  for (const pack of rows) L.push(`${pack.padEnd(w)} | ${ns.map((n) => fig(steadyOf(n, pack)).padStart(13)).join(" | ")} | ${String(packBudget(pack)).padStart(6)}`);
   L.push("", `reports: ${ns.map((n) => path.join(logDir, `perf-${n}.json`)).join(", ")}`);
-  if (invalid.length) L.push(`INVALID player counts (not comparators, whatever their numbers): ${invalid.join(", ")}`);
   console.log(L.join("\n"));
   if (args.json) {
     fs.mkdirSync(path.dirname(path.resolve(args.json)), { recursive: true });
-    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, invalid, perf: Object.fromEntries([...reports].map(([n, r]) => [n, { acceptance: r.acceptance ?? null, bundle: r.bundle, server: r.server, packs: Object.fromEntries(r.packs.map((x) => [x.pack, x.msPerTick])) }])) }, null, 2));
+    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, invalid: verdict.invalid, over: verdict.over, perf: Object.fromEntries([...reports].map(([n, { report: r }]) => [n, r ? { acceptance: r.acceptance ?? null, bundle: r.bundle, server: r.server, packs: Object.fromEntries((r.packs ?? []).map((x) => [x.pack, { whole: x.msPerTick, steady: x.steadyMsPerTick ?? null }])) } : null])) }, null, 2));
   }
-  if (invalid.length) process.exitCode = 1;
+  for (const line of verdict.invalid) console.log(`INVALID (not a budget result, not a pass): ${line}`);
+  for (const line of verdict.over) console.log(`OVER BUDGET: ${line}`);
+  if (!verdict.ok) process.exitCode = 1;
 }
 
 async function pool(items, n, fn) {

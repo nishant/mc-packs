@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { markHolderDirty } from "../utils/tool-gate.js";
 const states = new Map();
 
 const MODIFIER_KEY = "eb:modifiers";
@@ -61,6 +62,7 @@ export function setMode(player, mode) {
         s.waypoints    = [];
 
     }
+    markHolderDirty(player.id);
 }
 export function clearClipboard(player) {
     getState(player).clipboard = null;
@@ -70,6 +72,7 @@ export function setAnchor(player, location, typeId, blockStates) {
     s.anchor = { x: location.x, y: location.y, z: location.z, dimensionId: player.dimension.id };
     s.blockTypeId = typeId;
     s.blockStates = blockStates ?? {};
+    markHolderDirty(player.id);
 }
 export function setSecondAnchor(player, location) {
     const s = getState(player);
@@ -82,6 +85,7 @@ export function clearAnchor(player) {
     s.blockTypeId  = null;
     s.blockStates  = {};
     s.waypoints    = [];
+    markHolderDirty(player.id);
 }
 export function addWaypoint(player, location) {
     const s = getState(player);

@@ -101,7 +101,7 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators: Operator Tools§r is one page (everything on it is for operators). It starts with §lSet up this world§r (see §e/realm:admin_setup§r) and §lServer size§r: §lSmall Realm§r (up to about 10 players: every setting below at its pack's default) or §lLarge server§r (30 to 100+ players). Picking one lists every change first, §ePack: Setting: old -> new§r in menu words, plus how many already match and which packs aren't installed; §lYes§r changes them all at once (chat: §eServer size: Large server. Changed 8 settings.§r). Large server sets: Minimap §ebudgetLevel§r normal -> low and §emobRadiusMax§r 32 -> 24, Champions §emaxAlive§r 8 -> 16, Expeditions §eslots§r 1 -> 3, Easy Building §emaxBlocksCap§r 50,000 -> 10,000, Lag Cleanup §ethreshold§r 500 -> 1,500, Chest Finder §eliveScanRadius§r 16 -> 8, Realm Configuration §echeckSeconds§r 30 -> 60, Realm Mail §esendCooldownSeconds§r 10 -> 30 and AFK + Smart Sleep §esleep.percent§r 100 -> 50; Small Realm puts each back to its default. Then come three headings. §lQuick actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player (nearest first) or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. §lPack diagnostics§r, after the quick actions, measures every pack's script time for 10 seconds and lists the packs, slowest first, with their saved data; a pack's page can forget its saved data (see §e/realm:diag§r). §lServer setup checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the Townsfolk§r. The marks are the same as in Set up this world: §e[x]§r done (its pack says so, or it ran from Set up this world), §e[-]§r skipped there, a red §e[ ]§r when its pack says not yet. Under §lRealm Configuration§r, §lGet the Menu Item§r gives the item to other players.",
+        "text": "§lOperators: Operator Tools§r is one page (everything on it is for operators). It starts with §lSet up this world§r (see §e/realm:admin_setup§r) and §lServer size§r: §lSmall Realm§r (up to about 10 players: every setting below at its pack's default) or §lLarge server§r (30 to 100+ players). Picking one lists every change first, §ePack: Setting: old -> new§r in menu words, plus how many already match and which packs aren't installed; §lYes§r changes them all at once (chat: §eServer size: Large server. Changed 8 settings.§r). Large server sets: Minimap §ebudgetLevel§r normal -> low and §emobRadiusMax§r 32 -> 24, Champions §emaxAlive§r 8 -> 16, Expeditions §eslots§r 1 -> 3, Easy Building §emaxBlocksCap§r 50,000 -> 2,000, §eoperatorsOnly§r Enabled and §eallowInfiniteReach§r Disabled, Lag Cleanup §ethreshold§r 500 -> 1,500, Chest Finder §eliveScanRadius§r 16 -> 8, Realm Configuration §echeckSeconds§r 30 -> 60, Realm Mail §esendCooldownSeconds§r 10 -> 30 and AFK + Smart Sleep §esleep.percent§r 100 -> 50; Small Realm puts each back to its default. Then come three headings. §lQuick actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player (nearest first) or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. §lPack diagnostics§r, after the quick actions, measures every pack's script time for 10 seconds and lists the packs, slowest first, with their saved data; a pack's page can forget its saved data (see §e/realm:diag§r). §lServer setup checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the Townsfolk§r. The marks are the same as in Set up this world: §e[x]§r done (its pack says so, or it ran from Set up this world), §e[-]§r skipped there, a red §e[ ]§r when its pack says not yet. Under §lRealm Configuration§r, §lGet the Menu Item§r gives the item to other players.",
         "ops": true
       },
       {
@@ -130,13 +130,13 @@ export const PACKS = [
         "usage": "/realm:admin_setup",
         "ops": true,
         "who": "Ops",
-        "text": "§lSet up this world§r: walks you through the one-time jobs a new world needs, one page each: what it is, why, whether it's done (the packs say so where they can: townsfolk placed, a town, a safe zone or town over world spawn, a waystone you know near spawn), a button that runs the step's own command, §lMark as done§r where no pack can tell, and §lSkip§r. Steps (only those of installed packs): place the Townsfolk, add a town, a safe zone at spawn, a caravan arrival spot, the bounty board, a first waystone at spawn, the expedition site, Server size, then the rest of the setup checklist. Ends with a summary (§eSetup finished: 3 done, 2 skipped.§r). Also the first button of §lOperator Tools§r"
+        "text": "§lSet up this world§r: walks you through the one-time jobs a new world needs, one page each: what it is, why, whether it's done (the packs say so where they can: townsfolk placed, a town, a safe zone or town over world spawn, a waystone you know near spawn), a button that runs the step's own command, §lMark as done§r where no pack can tell, and §lSkip§r. Steps (only those of installed packs): place the Townsfolk, add a town, a safe zone at spawn, a caravan arrival spot, the bounty board, a first waystone at spawn, the expedition site, Server size, then the rest of the setup checklist. Ends with a summary (§eSetup finished: 3 done, 2 skipped.§r). A page stops quietly when the operator leaves, dies or respawns; it never reopens forms or changes what a newer page set, and a page waiting for a busy client keeps waiting instead of giving up on the first busy answer. Also the first button of §lOperator Tools§r"
       },
       {
         "usage": "/realm:diag [seconds]",
         "ops": true,
         "who": "Ops",
-        "text": "§lPack diagnostics§r: measures every pack's script time for a few seconds (default 10, 1 to 60), then lists every pack that answered, slowest first, with its version, ms per tick and saved data. Red: over 0.5 ms per tick, or one saved entry over 24 KB (one entry can hold 32 KB). Packs that don't answer (an older version) are listed under §lNo answer§r. A pack's page shows what takes its time (its top two callbacks), its biggest saved entry, and §lForget this pack's saved data§r: after you confirm, the pack deletes everything it saved in the world (in a bundle only its own entries), including anything it kept for players there such as stored inventory pages or letters, and saves nothing more until you run §e/reload§r or restart. Scoreboards, tags, structures and data saved on players are kept. Also §lOperator Tools > Pack diagnostics§r"
+        "text": "§lPack diagnostics§r: measures every pack's script time for a few seconds (default 10, 1 to 60), then lists every pack that answered, slowest first, with its version, ms per tick and saved data. Red: over 0.5 ms per tick, or one saved entry over 24 KB (one entry can hold 32 KB). Packs that don't answer (an older version) are listed under §lNo answer§r. A pack's page shows what takes its time (its top two callbacks), its biggest saved entry, and §lForget this pack's saved data§r: after you confirm, the pack deletes everything it saved in the world (in a bundle only its own entries), including anything it kept for players there such as stored inventory pages or letters, and saves nothing more until you run §e/reload§r or restart. If the pack has not answered after 200 ticks, the page says §e<pack> hasn't answered yet: it may still have deleted its data§r and an answer that arrives later is reported to you in chat (§e... forgot N saved entries ..., after taking longer than expected. Run /reload or restart the server now.§r, or that it didn't). Up to 16 forgets wait at once, one per pack (a second says it is still waiting), and a forget with no answer after 12,000 ticks (10 minutes) is dropped and a later reply ignored. Scoreboards, tags, structures and data saved on players are kept. Also §lOperator Tools > Pack diagnostics§r"
       },
       {
         "usage": "/realm:admin_title <title> [subtitle] [seconds] [player]",
@@ -150,7 +150,7 @@ export const PACKS = [
     "folder": "welcome_bp",
     "topic": "welcome",
     "name": "Welcome Message",
-    "summary": "Shows a popup when a player joins the Realm: by default a short introduction to the realm (the story, what there is to do, handy commands and the rules) under gold headings. Operators can edit the popup in-game.",
+    "summary": "Shows a popup when a player joins the Realm: by default a short introduction to the realm (the story, what there is to do, handy commands and the rules) under gold headings. A brand-new world with no other saved data gets a generic welcome instead (below). Operators can edit the popup in-game.",
     "steps": [
       {
         "text": "Join the realm. The welcome popup appears after about 2 seconds; tap its button (§eLet's go!§r by default) to close it.",
@@ -161,7 +161,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:welcome§r opens the §lWelcome Message§r menu instead: §eShow the welcome message§r, §eEdit the welcome message§r, §eReset to the defaults§r and §eSettings§r (which points to §e/realm:config§r -> Welcome Message). The edit and reset buttons do the same as the commands below. Run §e/realm:welcome_edit§r, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type §e\\n§r for a new line. Players see the new text on their next join (with \"show once\" on, each player sees it one more time, unless you turn off \"Show it again to players who've seen it\" for a typo fix). §e/realm:welcome_reset§r asks first, then goes back to the pack's default text.",
+        "text": "§lOperators:§r §e/realm:welcome§r opens the §lWelcome Message§r menu instead: §eShow the welcome message§r, §eEdit the welcome message§r, §eReset to the defaults§r and §eSettings§r (which points to §e/realm:config§r -> Welcome Message). The edit and reset buttons do the same as the commands below. Run §e/realm:welcome_edit§r, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type §e\\n§r for a new line. Players see the new text on their next join (with \"show once\" on, each player sees it one more time, unless you turn off \"Show it again to players who've seen it\" for a typo fix). §e/realm:welcome_reset§r asks first, then goes back to the pack's default text. On a §lnew world§r (see §ewelcome:profile§r under Saved data) the default is a generic welcome: the title §eWelcome!§r, a greeting, one line for each installed pack that has one (stories, daily quests, expeditions, bounty board, skills, crowns, land claims, calendar, parties, mail, minimap, stats, journal, prefs; installed packs are asked at most once a minute), and a closing line pointing to §e/realm:help§r and §e/realm:welcome_edit§r. It names no town, character or rule. §e/realm:welcome_edit§r and §e/realm:welcome_reset§r use these defaults there. A world that already ran, and any text an operator saved, keep their text. Full native verification of the new-world path in the full bundle is UNVERIFIED.",
         "ops": true
       }
     ],
@@ -505,7 +505,7 @@ export const PACKS = [
     "folder": "stash_bp",
     "topic": "stash",
     "name": "Quick Stack & Sort",
-    "summary": "Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; holding a tool, weapon or armor opens its menu to sort, lock or quick stack into storage that already holds each item (like Terraria). The §l5 native-persistent inventory pages§r share your hotbar, have previous/menu/next controls together at the top right, and let you move a stack or whole row to a page you choose. When a page fills up, new pickups are stored on another page by themselves.",
+    "summary": "Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; holding a tool, weapon or armor opens its menu to sort, lock or quick stack into storage that already holds each item (like Terraria). The §l5 native-persistent inventory pages§r share your hotbar, have previous/menu/next controls together at the top right, and let you move a stack or whole row to a page you choose. New pickups fill earlier pages first; §lFill earlier pages§r tidies all later pages without sorting them.",
     "steps": [
       {
         "text": "§lSort storage:§r sneak and tap a chest, trapped chest, copper chest, barrel or shulker box with an empty hand. It sorts at once and the bar says §eSorted 31 stacks§r. §lOpen the menu:§r sneak-tap holding a tool, weapon or armor. An ender chest gets the menu with an empty hand too. A §lQuick Stack & Sort§r menu opens instead of the container, with these buttons:\n  - §lSort this chest§r (or barrel, shulker box): the same as the empty-hand sort.\n  - §lLock this chest:§r only you can open, sort or break it. Once it's yours, the button reads §lShare or unlock§r: share it with players who are online, stop sharing, or unlock it.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
@@ -536,7 +536,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lAuto-store:§r when the page you are on is full (or down to its last free slot), the stack you just picked up moves to another page by itself, and the bar says §e[Page #2] Auto-stored 12x Cobblestone (96 slots left)§r.",
+        "text": "§lAuto-store:§r genuinely new pickups fill the earliest earlier page with room, even while the page you are viewing has free slots. Each earlier page's compatible stacks fill first, then its empty slots, before the next page is tried. Overflow goes to later pages only when the viewed page is full or down to its last free slot. Your hotbar stays as it is. §lFill earlier pages§r in §e/realm:inv§r pulls items from every later page toward page 1, in page and slot order without sorting; it also works with auto-store disabled.",
         "ops": false
       },
       {
@@ -544,7 +544,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r sneak-tap someone else's locked container holding gear for §lRemove the lock (operator)§r. To switch chest locks off for the realm, disable §lChest locks§r in §e/realm:config§r (existing locks are kept for when they're enabled again). §e/realm:inv_pages <count>§r gives you your own number of pages (2 to 25, §e1§r for a single page with no buttons, §e0§r to follow the realm again) without changing everyone else's; §lInventory pages§r in §e/realm:config§r (§epages§r, 1 to 15) sets the realm's.",
+        "text": "§lOperators:§r sneak-tap someone else's locked container holding gear for §lRemove the lock (operator)§r. To switch chest locks off for the realm, disable §lChest locks§r in §e/realm:config§r (existing locks are kept for when they're enabled again). §e/realm:inv_pages <count>§r gives you your own number of pages (2 to 25, §e1§r for a single page with no buttons, §e0§r to follow the realm again) without changing everyone else's; §lInventory pages§r in §e/realm:config§r (§epages§r, 1 to 15) sets the realm's. If a failed inventory save has paused a player's pages, back up the world, run §e/realm:inv_recover <player>§r for that online player, and read its confirmation carefully. It exports the retained before-image into empty chest spots near you; it does not remove anything the player still carries. Inspect both inventories before distributing recovered items.",
         "ops": true
       }
     ],
@@ -578,6 +578,12 @@ export const PACKS = [
         "ops": false,
         "who": "Operators",
         "text": "Sets how many pages you have, only for yourself (§epages§r: 0 to 25; with no number, §e0§r, which follows the realm's §epages§r, default §e5§r): §e2§r to §e25§r is your own total, §e1§r is one vanilla page with no buttons, §e0§r or no number follows the realm's setting again. Items on pages that go away move to the pages you keep. The realm's setting is not changed"
+      },
+      {
+        "usage": "/realm:inv_recover <player>",
+        "ops": false,
+        "who": "Operators",
+        "text": "After confirmation, exports one online player's retained failed-save before-image into empty chest spots near you and clears that recovery journal. Proven page controls are omitted; real items and native metadata are kept. Their live inventory is untouched: inspect it and the chests for duplicates before handing anything out. No normal save or healthy inventory is recovered by this command"
       }
     ]
   },
@@ -620,11 +626,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Inside it, only you and the players you share it with can break or place blocks, open chests, doors and furnaces, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees §eThis land is claimed by Sam§r.",
+        "text": "Inside it, only you and the players you share it with can break or place blocks, open chests, furnaces and doors, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees §eThis land is claimed by Sam§r.",
         "ops": false
       },
       {
-        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). In a party, §lShare with my party§r shares it with everyone in your party, now and later, in one tap. The same menu stops sharing, shows its borders or removes the claim (it asks first).",
+        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). In a party, §lShare with my party§r shares it with everyone in your party, now and later, in one tap. The same menu stops sharing, shows its borders or removes the claim (it asks first). The same menu has §lVisitors may open doors§r, which lets visitors open doors, trapdoors and gates (off by default).",
         "ops": false
       },
       {
@@ -876,7 +882,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with (§ecompassDefault§r, §eradarDefault§r, §eradarTerrain§r), the largest mob range anyone may pick (default 32, §emobRadiusMax§r), whether players outside your party show (§lShow players outside your party§r, enabled by default, §eshowOthers§r) and §lMinimap script time a tick§r (default normal, §ebudgetLevel§r): on a big server, low costs the server less. §lServer size§r in Realm Configuration's Operator Tools sets it to low for a Large server. To show everyone a title, use §e/realm:admin_title \"Text\" \"Subtitle\" 5§r instead of §e/title§r: the strip draws over a plain §e/title§r within about 1.5 seconds.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with (§ecompassDefault§r, §eradarDefault§r, §eradarTerrain§r), the largest mob range anyone may pick (default 32, §emobRadiusMax§r), whether players outside your party show (§lShow players outside your party§r, enabled by default, §eshowOthers§r) and §lMinimap script time a tick§r (default normal, §ebudgetLevel§r): on a big server, low costs the server less. §lServer size§r in Realm Configuration's Operator Tools sets it to low for a Large server. §e/realm:map_reset§r explains the reset; §e/realm:map_reset confirm§r clears everyone's picked destination and saved marks, including offline players once they next join. A form opened before the reset cannot restore old marks. To show everyone a title, use §e/realm:admin_title \"Text\" \"Subtitle\" 5§r instead of §e/title§r: the strip draws over a plain §e/title§r within about 1.5 seconds.",
         "ops": true
       }
     ],
@@ -910,6 +916,12 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Clears your destination: the star follows your story again"
+      },
+      {
+        "usage": "/realm:map_reset [confirm]",
+        "ops": false,
+        "who": "Operators",
+        "text": "With no argument, explains what will be cleared. With §econfirm§r, clears online players' destinations and marked spots now and offline players' once on their next join. New marks saved after the reset stay; preferences, known waystones and native map items are untouched"
       }
     ]
   },
@@ -936,6 +948,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lBlock a sender:§r open one of their letters and tap §lBlock sender§r (their later letters to you aren't delivered). §lBlocked players§r in §e/realm:mail§r lists who you've blocked; tap a name to unblock it.",
+        "ops": false
+      },
+      {
         "text": "§lSee what you sent:§r §e/realm:mail§r -> §lSent§r shows your recent letters and whether each was read yet.",
         "ops": false
       },
@@ -944,7 +960,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lRealm Mail§r sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lRealm Mail§r sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining. §e/realm:mail§r -> §lDelete letters from a player§r (operators only) finds a writer by gamertag and removes all their letters from every inbox and Sent list after you confirm; it can't be undone.",
         "ops": true
       }
     ],
@@ -976,7 +992,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:nick§r -> §lPlayers' nicknames (operator)§r lists every saved nickname; tap one to clear it, even for players who are offline. To turn nicknames off for everyone, disable §lNicknames§r in §e/realm:config§r -> §lNicknames§r.",
+        "text": "§lOperators:§r §e/realm:nick§r -> §lPlayers' nicknames (operator)§r lists saved nicknames 20 to a page (§lPrevious page§r / §lNext page§r), with §lSearch by name§r (part of a nickname or gamertag) and §lShow everyone§r; tap one to clear it, even for players who are offline. If the nickname changed while the question was open, nothing is cleared. To turn nicknames off for everyone, disable §lNicknames§r in §e/realm:config§r -> §lNicknames§r.",
         "ops": true
       }
     ],
@@ -985,7 +1001,7 @@ export const PACKS = [
         "usage": "/realm:nick",
         "ops": false,
         "who": "Everyone",
-        "text": "Set, change or remove your nickname and its color, shown above your head (3 to 16 letters, digits, spaces or §e_§r). Operators also get every saved nickname, to clear any of them. Works while nicknames are enabled (default enabled, §eenabled§r)"
+        "text": "Set, change or remove your nickname and its color, shown above your head (3 to 16 letters, digits, spaces or §e_§r). Operators also get the saved nicknames, 20 to a page and searchable, to clear any of them. Works while nicknames are enabled (default enabled, §eenabled§r)"
       }
     ]
   },
@@ -1320,7 +1336,7 @@ export const PACKS = [
         "usage": "/realm:crowns_pay <player> <amount>",
         "ops": false,
         "who": "Everyone",
-        "text": "Pays one online player from your balance (1 to 100,000, §emaxPay§r)"
+        "text": "Pays one online player from your balance (1 to 100,000, §emaxPay§r), up to §edailyPayLimit§r a UTC day"
       },
       {
         "usage": "/realm:crowns_market",
@@ -1333,6 +1349,12 @@ export const PACKS = [
         "ops": false,
         "who": "Operators",
         "text": "Gives Crowns to the players picked (§e@a§r works); a negative amount takes them, down to 0. A balance tops out at 2,147,483,647, so a give stops there (the reply says §e(the most a balance can hold)§r)"
+      },
+      {
+        "usage": "/realm:crowns_audit",
+        "ops": false,
+        "who": "Operators and Game Directors",
+        "text": "A form with the newest 50 of the last 200 pays and gives, newest first (times in UTC)"
       }
     ]
   },
@@ -1439,7 +1461,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "In a party (Parties), the main story is shared. The party works on one main-story chapter at a time: the next one of the member online who is furthest behind. Everyone on it shares its progress, wherever they are: counts add up, time spent and distance ridden count for whoever is furthest along, a timed step only once someone finishes it in time, and a step one member finishes is done for all. A step only reaches mates it applies to: an either/or step done one way never finishes another way for a mate. One member accepting the party's chapter accepts it for every mate on it: the others watch the conversation in a popup that closes by itself, and chat lists the steps (§e[Party] Ann accepted The Drowned Bell, \"Salt and Silence\" for the party.§r). One report back counts for every mate who finished it too, with their own rewards, and a choice made there is made for everyone (chat says what was chosen), unless it doesn't fit a mate's own story (they chose another way earlier) or costs Crowns: then that mate is told and takes it on or reports back themselves. Items to have on you count for the party too: once one member carries them, the step is done for everyone on the chapter. A mate who still has a step of their own reports back themselves. When one of you starts a side story, mates who could start it too get §eParty: join a story?§r (Join / Not now, for 60 seconds). In a party the tracker keeps the party's chapter on top, unless you tracked another quest. Members who are past it get it as a party quest (§eParty: The Drowned Bell§r in Current quests, on the tracker): what they do for it (defeating, mining, fishing, delivering, talking, reaching places, keeping watch...) counts for the others, and their own main story waits, saved, until the party catches up. Steps about one player themselves (meeting a character, escorts, defenses, riddles) are for the members on the chapter. Offline members don't hold the party up, and neither does a member who can't start their next main story yet (it needs something else first): they help, and chat tells them what they need. Leaving the party gives you your own story back. Side stories and favors are your own; mates within 64 blocks on the same chapter still share defeat, survive, reach and items-to-have progress.",
+        "text": "In a party (Parties), the main story is shared. The party works on one main-story chapter at a time: the next one of the member online who is furthest behind. Everyone on it shares its progress, wherever they are: counts add up, time spent and distance ridden count for whoever is furthest along, a timed step only once someone finishes it in time, and a step one member finishes is done for all. A step only reaches mates it applies to: an either/or step done one way never finishes another way for a mate. One member accepting the party's chapter accepts it for every mate on it: the others watch the conversation in a popup that closes by itself, and chat lists the steps (§e[Party] Ann accepted The Drowned Bell, \"Salt and Silence\" for the party.§r). One report back counts for every mate who finished it too, with their own rewards, and a choice made there is made for everyone (chat says what was chosen), unless it doesn't fit a mate's own story (they chose another way earlier) or costs Crowns: then that mate is told and takes it on or reports back themselves. Items to have on you count for the party too: once one member carries them, the step is done for everyone on the chapter. These collect steps also count the player's saved Expansive Inventory pages, for solo stories as well. Hand-in steps still take only items actually carried; saved-page visibility is not free delivery credit. A mate who still has a step of their own reports back themselves. When one of you starts a side story, mates who could start it too get §eParty: join a story?§r (Join / Not now, for 60 seconds). In a party the tracker keeps the party's chapter on top, unless you tracked another quest. Members who are past it get it as a party quest (§eParty: The Drowned Bell§r in Current quests, on the tracker): what they do for it (defeating, mining, fishing, delivering, talking, reaching places, keeping watch...) counts for the others, and their own main story waits, saved, until the party catches up. Steps about one player themselves (meeting a character, escorts, defenses, riddles) are for the members on the chapter. Offline members don't hold the party up, and neither does a member who can't start their next main story yet (it needs something else first): they help, and chat tells them what they need. Leaving the party gives you your own story back. Side stories and favors are your own; mates within 64 blocks on the same chapter still share defeat, survive, reach and items-to-have progress.",
         "ops": false
       },
       {
@@ -1451,11 +1473,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lQuest spot outlines:§r the exact block or box a quest needs shows as a semi-clear colored outline, only for you (drawn by the Easy Building Guides resource pack). §lAmber§r is a standing box to walk to: the block under you, a 3x3 of floor tiles and, for steps with a zone (a vigil, a survive, a defense or a placing), a ring of tiles at its edge; also the escort and lead drop-off and the stealth goal. It turns §lemerald green§r while you stand inside it. §lCyan§r is a block to tap: the bell, altar or brazier of an Interact step, and the block of an Inspect clue (which also gets amber corner brackets in its air space). They show within about 40 blocks of the spot. Don't want them? Disable §lShow quest spot outlines§r in §e/realm:prefs§r.",
+        "text": "§lQuest spot outlines:§r the exact block or box a quest needs shows as a semi-clear colored outline, only for you (drawn by the Easy Building Guides resource pack). §lAmber§r is a standing box to walk to: the block under you, a 3x3 of floor tiles and, for steps with a zone (a vigil, a survive, a defense or a placing), a ring of tiles at its edge; also the escort and lead drop-off and the stealth goal. It turns §lemerald green§r while you stand inside it. §lCyan§r is a block to tap: the bell, altar or brazier of an Interact step, and the block of an Inspect clue (which also gets amber corner brackets in its air space). They show within about 40 blocks of the spot. The outline colors follow your own life, style and color values, so another player's outline is never recolored by yours. A cyan block's search runs in the background (at most 256 blocks a tick for each search, 4 searches at once, so at most 1,024 blocks a tick for the whole pack): the first draw uses the spot itself and the exact blocks appear a moment later, and blocks found are kept even if part of the area was not loaded. Tuning this limit still needs a measurement on a real server; it is a cap, not a measured speedup. Don't want them? Disable §lShow quest spot outlines§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. §e/realm:saga_places§r (also in §e/realm:saga§r) lists every place with its status and lets you §lTeleport§r, §lSet here§r, §lBuild here§r (a green outline preview with Build here, Rotate, Look around and Cancel), §lRebuild§r, §lRemove§r (puts the terrain back exactly) and §lRelocate§r. §e/realm:saga_place <name>§r sets a spot where you stand without building. §lOperator tools§r in §e/realm:saga§r finish a stuck player's current step or reset their stories. §e/realm:config§r -> §lStory Questlines§r has the switches.",
+        "text": "§lOperators:§r stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. §e/realm:saga_places§r (also in §e/realm:saga§r) lists every place with its status and lets you §lTeleport§r, §lSet here§r, §lBuild here§r (a green outline preview with Build here, Rotate, Look around and Cancel), §lRebuild§r, §lRemove§r (puts the terrain back exactly) and §lRelocate§r. §e/realm:saga_place <name>§r sets a spot where you stand without building. §lTown anchor:§r stand in the town square in the Overworld and run §e/realm:saga_place town§r (it saves where you stand and does not build anything). Seven town stories (§emayors_burden§r, §esinging_forge§r, §eheart_bram§r, §efest_judge§r, §efest_speech§r, §eact2_choir§r, §elost_lambs§r) count every near-town spot (the square, the farms, the forge, Pip's whole route) from that place; without it they use world spawn, as before. Every other story keeps counting from world spawn, and the hints name the place. The town can only be set in the Overworld. §lOperator tools§r in §e/realm:saga§r finish a stuck player's current step or reset their stories. §e/realm:config§r -> §lStory Questlines§r has the switches.",
         "ops": true
       }
     ],
@@ -1482,7 +1504,7 @@ export const PACKS = [
         "usage": "/realm:saga_place [name]",
         "ops": false,
         "who": "Operators",
-        "text": "Sets a story place where you stand, without a building (an earlier building of it is removed first). Without a name, lists the places in chat"
+        "text": "Sets a story place where you stand, without a building (an earlier building of it is removed first). Without a name, lists the places in chat. §etown§r (Overworld only) is the anchor for the seven town stories' near-town spots; it is not a place other packs show, and the list gives the stories that use it. No default location is stored: until set, world spawn is used"
       },
       {
         "usage": "/realm:saga_reset <player>",
@@ -1897,7 +1919,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:party§r to see every member with their health and where they are (or §eoffline§r), and to invite more players. The leader can also §lRemove a member§r. Leave with §e/realm:party_leave§r or §lLeave the party§r.",
+        "text": "Run §e/realm:party§r to see every member with their health and where they are (or §eoffline§r), and to invite more players. The leader can also §lRemove a member§r or §lMute or unmute a member§r (a muted member can still read the party chat, but their messages aren't sent, and they see §eThe party leader muted you: your party messages aren't sent.§r; the leader can't be muted). Leave with §e/realm:party_leave§r or §lLeave the party§r.",
         "ops": false
       },
       {
@@ -1961,7 +1983,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:titles§r also has §eGive a title or trail§r (pick a player online or type a name, then the title or §etrail:ember§r) and §eSettings§r (which points to §e/realm:config§r -> Titles & Trails). In chat, §e/realm:titles_give Steve \"Hero of the Realm\"§r gives a player a title, and §e/realm:titles_give Steve trail:ember§r a trail (players who are offline too, if they've played since the pack was added). §e/realm:config§r -> §lTitles & Trails§r switches the built-in titles and trails and sets how often trails puff.",
+        "text": "§lOperators:§r §e/realm:titles§r also has §eGive or take a title or trail§r (pick a player online or type a name, the title or §etrail:ember§r, and tick §lTake it away instead of giving it§r to remove it) and §eSettings§r (which points to §e/realm:config§r -> Titles & Trails). In chat, §e/realm:titles_give Steve \"Hero of the Realm\"§r gives a player a title, §e/realm:titles_give Steve trail:ember§r a trail, and §e/realm:titles_take Steve \"Hero of the Realm\"§r (or §etrail:ember§r) takes one away (players who are offline too, if they've played since the pack was added). Taking the title a player wears also clears it from under their name. §e/realm:config§r -> §lTitles & Trails§r switches the built-in titles and trails and sets how often trails puff.",
         "ops": true
       }
     ],
@@ -1970,13 +1992,19 @@ export const PACKS = [
         "usage": "/realm:titles",
         "ops": false,
         "who": "Everyone",
-        "text": "Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default §etrailTicks§r). Operators also get §eGive a title or trail§r (like §e/realm:titles_give§r) and §eSettings§r"
+        "text": "Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default §etrailTicks§r). Operators also get §eGive or take a title or trail§r (like §e/realm:titles_give§r and §e/realm:titles_take§r) and §eSettings§r"
       },
       {
         "usage": "/realm:titles_give <player> <title>",
         "ops": true,
         "who": "Ops",
         "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r, §etrail:hearts§r, §etrail:glyphs§r, §etrail:confetti§r or §etrail:notes§r. Works for offline players this pack has seen"
+      },
+      {
+        "usage": "/realm:titles_take <player:String> <title:String>",
+        "ops": true,
+        "who": "Ops",
+        "text": "Takes a title away from a player (quote names and titles with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r, §etrail:hearts§r, §etrail:glyphs§r, §etrail:confetti§r or §etrail:notes§r. Works for offline players this pack has seen. Says so, and changes nothing, when the player never had it; a player's worn title or active trail is cleared when it is the one taken."
       }
     ]
   },
@@ -2650,7 +2678,7 @@ export const PACKS = [
         "usage": "/realm:expedition_leave",
         "ops": false,
         "who": "Everyone",
-        "text": "Leave your expedition and go back to where you started it (also how to leave the treasure room early)"
+        "text": "Leave your expedition and go back to where you started it (also how to leave the treasure room early)  Also leaves your queued request."
       },
       {
         "usage": "/realm:expedition_site [x] [z]",
@@ -2785,7 +2813,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r (or the §lAdmin§r tab in §e/realm:build_settings§r) sets realm-wide limits and permissions. Prefer standard menus instead of 3D floating panels? Switch §lMenu Style§r to §lPlain§r under Controls in §e/realm:build_settings§r (or enable §eplainMenusForAll§r for everyone).",
+        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r (or the §lAdmin§r tab in §e/realm:build_settings§r) sets realm-wide limits and permissions. Prefer standard menus instead of 3D floating panels? Switch §lMenu Style§r to §lPlain§r under Controls in §e/realm:build_settings§r (or enable §eplainMenusForAll§r for everyone). Beds use Bedrock's §eminecraft:bed§r and §eminecraft:straw_bed§r, not Java color-specific ids. A complete bed is two blocks but costs one bed item. Placement, clipboard limits and undo keep both halves together; an unavailable partner rejects the pair. Native item data and supported facing states are retained. Preview and modifier loops close their tool-holder gate when nobody is using them; the exact server cost remains part of the measured audit, not a claimed speedup from a unit counter.",
         "ops": true
       }
     ],
@@ -3243,7 +3271,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lBlood Moon:§r outdoors the sky turns dark red and red motes drift up around you. Every 20 seconds a zombie, skeleton, spider or creeper or two appears 16 to 32 blocks away, never inside or next to anything built. Stay online from dusk to dawn without dying, and at dawn you get 3 levels and 25 Crowns (§eYou survived the Blood Moon!§r), plus the §lBlood Moon Survivor§r title the first time (with the Titles pack). Blood Moon monsters drop extra experience orbs, and the ones still around at dawn vanish.",
+        "text": "§lBlood Moon:§r outdoors the sky turns dark red and red motes drift up around you. Every 20 seconds a zombie, skeleton, spider or creeper or two appears 16 to 32 blocks away, never inside or next to anything built. Stay online from dusk to dawn without dying, and at dawn you get 3 levels and 25 Crowns (§eYou survived the Blood Moon!§r), plus the §lBlood Moon Survivor§r title the first time (with the Titles pack). Blood Moon monsters drop extra experience orbs, and the ones still around at dawn vanish, in every dimension, not only the Overworld. A clear 8-block cell is cached for the night after a padded check; cells containing construction are rechecked with the original 9x9x9 spot box. Placing a tracked construction block invalidates nearby clear cells. Commands, other packs' API placement, pistons, axe stripping and unreported second bed/door halves can leave a clear cache stale until the next night. Unloaded probes fail closed and are not cached.",
         "ops": false
       },
       {

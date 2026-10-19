@@ -4,20 +4,38 @@
     "name": "Realm Settings",
     "description": "Change every pack's settings in game: /realm:config for operators, /realm:prefs for your own.",
     "uuid": "ecf9196e-a6aa-4566-9de4-92089023bde0",
-    "version": [1, 4, 2],
-    "min_engine_version": [1, 21, 100]
+    "version": [
+      1,
+      4,
+      4
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      100
+    ]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
       "uuid": "cc34189d-ef5b-4523-83dd-bc67bf831fba",
-      "version": [1, 0, 0],
+      "version": [
+        1,
+        0,
+        0
+      ],
       "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.1.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
   ]
 }

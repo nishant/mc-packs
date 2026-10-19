@@ -35,6 +35,7 @@ import {
   skyEvent,
   skyHousekeeping,
   sweepChampions,
+  sweepLoadedChampion,
   talked,
   tickPlayer,
 } from "./objectives.js";
@@ -68,17 +69,21 @@ const PACK_SCAN_EVERY = 12000; // ...every 10 minutes
 let runs = 0;
 system.runInterval(() => {
   runs++;
+  // One list of players for the whole run (the send passes below and the player loop used to ask the game three times).
+  /** @type {Player[] | undefined} */
+  let roster;
+  const all = () => (roster ??= world.getAllPlayers());
   try {
     if (runs % SAVE_RUNS === 0) flushAll();
     tendActors();
     if (runs % 2 === 0) autoTick();
     if (runs % 60 === 0) expireAdds();
-    if (runs % 5 === 0) for (const p of world.getAllPlayers()) sendSeals(p);
-    if (runs % 5 === 2) for (const p of world.getAllPlayers()) {
+    if (runs % 5 === 0) for (const p of all()) sendSeals(p);
+    if (runs % 5 === 2) for (const p of all()) {
       sendFlags(p);
       sendProgress(p);
     }
-    if (runs % 5 === 3) for (const p of world.getAllPlayers()) sendWanderState(p);
+    if (runs % 5 === 3) for (const p of all()) sendWanderState(p);
     if (runs % 60 === 30) campUpkeep(Number(get("campDays")) || 7);
     skyHousekeeping();
   } catch (e) {
@@ -91,7 +96,7 @@ system.runInterval(() => {
   }
   if (get("enabled") !== true) return;
   beginRun();
-  for (const player of world.getAllPlayers()) {
+  for (const player of all()) {
     // Every 2 seconds per player, half the players each second (so a full server's tracker isn't drawn in one tick).
     // Split by the player's id, not their place in the list, so someone joining never shifts another's turn.
     const tracking = (runs + idSlot(player.id)) % TRACKER_RUNS === 0;
@@ -647,6 +652,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // ---------------------------------------------------------------------------
 // Housekeeping
 // ---------------------------------------------------------------------------
+
+// A champion that loads later than the startup sweep (a far chunk) and that this session did not spawn is removed too.
+world.afterEvents.entityLoad.subscribe((e) => sweepLoadedChampion(e.entity));
 
 world.afterEvents.worldLoad.subscribe(() => {
   initFar(STORIES, FAVORS, WANDERERS, WANDER_TEMPLATES);

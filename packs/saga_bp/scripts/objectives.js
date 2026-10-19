@@ -2,7 +2,8 @@
 // (story characters, guards, escorts, wisps, defenses, visions, riddles).
 import { EquipmentSlot, GameMode, ItemStack, MolangVariableMap, Player, system, world } from "@minecraft/server";
 import { ModalFormData } from "@minecraft/server-ui";
-import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, spawnFresh, updateActorLabels } from "./actors.js";
+import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, updateActorLabels } from "./actors.js";
+import { spawnFresh } from "./spawn.js";
 import {
   active,
   applyChoice,
@@ -23,6 +24,7 @@ import {
   reached,
   requires,
   sagaOf,
+  codexFits,
   partyViews,
   setFlag,
   target,
@@ -102,6 +104,31 @@ export const isNight = () => {
   return t >= 13000 && t < 23000;
 };
 
+/** Does the time of day move? False with the daylight cycle off (servers that keep it day), when no timed step could ever finish. */
+export function timeMoves() {
+  try {
+    return world.gameRules.doDayLightCycle !== false;
+  } catch {
+    return true; // can't tell: assume it moves
+  }
+}
+
+/** Night for a night-only step: also met while time is stopped, so those steps can finish. */
+function nightMet() {
+  return !timeMoves() || isNight();
+}
+
+/** Is the time of day inside a step's `timeOfDay` window? No window, or time stopped: yes. @param {Objective} obj */
+function inWindow(obj) {
+  if (!obj.timeOfDay || !timeMoves()) return true;
+  const t = world.getTimeOfDay();
+  const [a, b] = obj.timeOfDay;
+  return a <= b ? t >= a && t < b : t >= a || t < b;
+}
+
+/** A Minecraft day in real time (ms): what a `wait` day counts as while the daylight cycle is off. */
+const DAY_MS = 20 * 60000;
+
 /** A location with a height: the saved y, or the ground there (undefined when not loaded). @param {Loc} loc */
 function withY(loc) {
   if (loc.y !== undefined) return { x: loc.x, y: loc.y, z: loc.z };
@@ -139,9 +166,9 @@ const guidesOn = (player) => getFor(player, "spotGuides") !== false;
  */
 function guideVars(color, style = 0, life = 1.15) {
   const m = new MolangVariableMap();
-  m.setFloat("life", life);
-  m.setFloat("style", style);
-  m.setColorRGBA("color", { red: color.r, green: color.g, blue: color.b, alpha: color.a });
+  m.setFloat("variable.life", life);
+  m.setFloat("variable.style", style);
+  m.setColorRGBA("variable.color", { red: color.r, green: color.g, blue: color.b, alpha: color.a });
   return m;
 }
 
@@ -204,46 +231,111 @@ function drawStandingPad(player, dim, cx, cy, cz, color, ringRadius = 0) {
 const STAND_GUIDES = new Set(["reach", "vigil", "survive", "vision", "answer", "defend", "place"]);
 const ZONE_GUIDES = new Set(["vigil", "survive", "defend", "place"]);
 
-/** Up to 4 blocks of an interact objective near its spot, kept per scene. @param {SceneState} s @param {Player} player @param {Objective} obj @param {Loc} loc */
+/** Blocks one interact scan slice looks at; a scan runs one slice a tick, so its cost per tick is this many getBlock calls. */
+const SCAN_STEP = 256;
+/** Scans that may run at once, so the whole script's worst case is MAX_SCANS * SCAN_STEP getBlock calls a tick (1,024). */
+const MAX_SCANS = 4;
+/** What the interact scans did, for the profiler: blocks looked at, scans started, slices run, scans running now. */
+const interactScanStats = { blocks: 0, jobs: 0, slices: 0, active: 0 };
+
+/**
+ * Looks for the wanted blocks around a spot, yielding every SCAN_STEP blocks (the caller runs one step a tick). Stops early when
+ * alive() turns false. Fills out.found (nearest first, up to 4) and out.complete (false if any block could not be read: a chunk
+ * that isn't loaded makes getBlock return nothing or throw, and the matches found so far are kept).
+ * @param {(p: {x:number,y:number,z:number}) => {typeId: string} | undefined} getBlock @param {Loc} loc @param {number} r @param {number} cy @param {number} dy @param {string[]} wanted
+ * @param {{ found: { x: number, y: number, z: number, type: string }[], complete: boolean }} out @param {() => boolean} alive
+ */
+function* scanInteract(getBlock, loc, r, cy, dy, wanted, out, alive) {
+  /** @type {{ x: number, y: number, z: number, type: string, d: number }[]} */
+  const found = [];
+  let complete = true;
+  let n = 0;
+  for (let x = Math.floor(loc.x - r); x <= Math.floor(loc.x + r); x++) {
+    for (let z = Math.floor(loc.z - r); z <= Math.floor(loc.z + r); z++) {
+      if (across({ x: x + 0.5, z: z + 0.5 }, loc) > r) continue;
+      for (let y = cy - dy; y <= cy + dy; y++) {
+        interactScanStats.blocks++;
+        try {
+          const b = getBlock({ x, y, z });
+          if (!b) complete = false;
+          else if (wanted.includes(b.typeId)) found.push({ x, y, z, type: b.typeId, d: Math.hypot(x + 0.5 - loc.x, z + 0.5 - loc.z) + Math.abs(y - cy) });
+        } catch {
+          complete = false;
+        }
+        if (++n % SCAN_STEP === 0) {
+          yield;
+          if (!alive()) return;
+        }
+      }
+    }
+  }
+  found.sort((a, b) => a.d - b.d);
+  out.found = found.slice(0, 4).map(({ x, y, z, type }) => ({ x, y, z, type }));
+  out.complete = complete;
+}
+
+/** Up to 4 blocks of an interact objective near its spot, kept per scene; the search runs in the background, one slice a tick. @param {SceneState} s @param {Player} player @param {Objective} obj @param {Loc} loc */
 function interactBlocks(s, player, obj, loc) {
   const dim = player.dimension;
   /** @type {{ x: number, y: number, z: number, type?: string }[] | undefined} */
   let list = s.data.interactBlocks;
   if (list?.length && list.every((b) => !b.type || dim.getBlock(b)?.typeId === b.type)) return list;
   const now = system.currentTick;
+  const fallback = () => {
+    const gy = loc.y !== undefined ? Math.floor(loc.y) : Math.floor(groundAt(dim, loc.x, loc.z, player.location.y) ?? player.location.y) - 1;
+    return [{ x: Math.floor(loc.x), y: gy, z: Math.floor(loc.z) }];
+  };
+  if (s.data.interactJob) return list ?? fallback(); // a scan is still running
   if (list && now < (s.data.interactTry ?? 0)) return list;
+  const wanted = obj.blocks ?? [];
+  if (!wanted.length) {
+    s.data.interactTry = now + 100;
+    s.data.interactBlocks = list = fallback();
+    return list;
+  }
+  if (interactScanStats.active >= MAX_SCANS) {
+    s.data.interactTry = now + 20; // too many scans at once: this one waits its turn
+    return list ?? fallback();
+  }
   s.data.interactTry = now + 100;
   const r = Math.min(radiusOf(obj), 12);
   const cy = Math.floor(loc.y ?? player.location.y);
   const dy = loc.y === undefined ? 6 : Math.min(r, 8);
-  const wanted = obj.blocks ?? [];
-  /** @type {{ x: number, y: number, z: number, type: string, d: number }[]} */
-  const found = [];
-  let complete = true;
-  if (wanted.length) {
-    for (let x = Math.floor(loc.x - r); x <= Math.floor(loc.x + r); x++) {
-      for (let z = Math.floor(loc.z - r); z <= Math.floor(loc.z + r); z++) {
-        if (across({ x: x + 0.5, z: z + 0.5 }, loc) > r) continue;
-        for (let y = cy - dy; y <= cy + dy; y++) {
-          const b = dim.getBlock({ x, y, z });
-          if (!b) {
-            complete = false;
-            continue;
-          }
-          if (wanted.includes(b.typeId)) found.push({ x, y, z, type: b.typeId, d: Math.hypot(x + 0.5 - loc.x, z + 0.5 - loc.z) + Math.abs(y - cy) });
-        }
-      }
+  const token = {};
+  s.data.interactJob = token;
+  interactScanStats.jobs++;
+  interactScanStats.active++;
+  const out = { found: /** @type {{ x: number, y: number, z: number, type: string }[]} */ ([]), complete: false };
+  // The scan only goes on while the scene is still this player's, they are in the same dimension, and nothing ended or replaced it.
+  const alive = () => {
+    try {
+      return s.data.interactJob === token && scenes.get(sk(s.pid, s.key)) === s && player.isValid && player.dimension.id === dim.id;
+    } catch {
+      return false;
     }
-  }
-  found.sort((a, b) => a.d - b.d);
-  list = found.slice(0, 4).map(({ x, y, z, type }) => ({ x, y, z, type }));
-  if (!list.length) {
-    const gy = loc.y !== undefined ? Math.floor(loc.y) : Math.floor(groundAt(dim, loc.x, loc.z, player.location.y) ?? player.location.y) - 1;
-    list = [{ x: Math.floor(loc.x), y: gy, z: Math.floor(loc.z) }];
-    if (!complete) s.data.interactTry = now + 40;
-  }
-  s.data.interactBlocks = list;
-  return list;
+  };
+  const gen = scanInteract((p) => dim.getBlock(p), loc, r, cy, dy, wanted, out, alive);
+  const stop = () => {
+    system.clearRun(timer);
+    interactScanStats.active--;
+    if (s.data.interactJob === token) s.data.interactJob = undefined;
+  };
+  const timer = system.runInterval(() => {
+    try {
+      interactScanStats.slices++;
+      if (!alive()) return stop();
+      if (!gen.next().done) return;
+      if (alive()) {
+        // Blocks found are kept even when part of the box was unloaded; an empty, incomplete scan tries again soon.
+        s.data.interactBlocks = out.found.length ? out.found : fallback();
+        if (!out.found.length && !out.complete) s.data.interactTry = system.currentTick + 40;
+      }
+      stop();
+    } catch {
+      stop();
+    }
+  }, 1);
+  return list ?? fallback();
 }
 
 /**
@@ -548,6 +640,10 @@ function kitchenOk(stack, key) {
     if (stack.typeId === k.item && lore[0] === "§7Rare ingredient") return true;
     return !!k.alsoAny && stack.typeId === k.alsoAny && /^§7\d+ cm$/.test(lore[0] ?? ""); // a Storm Eel from Fishing
   }
+  // A dish made since the Kitchen marks its lore with its own name: a rare dish renamed to another of the same food fails.
+  // Older dishes have no mark and are still taken.
+  const mark = lore.find((l) => l.startsWith("§8Dish: "));
+  if (mark !== undefined && nameKey(mark.slice("§8Dish: ".length)) !== key) return false;
   return stack.typeId === k.item && lore.includes(k.rare ? "§6Rare dish" : "§8Kitchen dish");
 }
 
@@ -586,6 +682,119 @@ export function countItem(player, item, name) {
   }
   return n;
 }
+
+// stash-bridge:begin
+/**
+ * Items Expansive Inventory (stash_bp) keeps on saved pages count toward a collect step, which would otherwise never see
+ * what its page routing moved off the active page. It asks (realm:stash_count_ask { player, item?, name? }) and
+ * stash_bp answers with realm:stash_count { player, item?, name?, rev, part, parts, rows: [{ id, name?, lore?, n }] },
+ * one row per kind on saved pages, split over `parts` messages; a realm:stash_changed { player, rev } says the saved
+ * pages changed. A step with only a name is asked too: the rows are matched here with the same rules as live items.
+ * Parts of one revision are assembled and used only when complete; a reply of an older revision than the last notice
+ * is stale and dropped. countItem is untouched: deliveries and every other reader still see only the live inventory.
+ * Without stash_bp nothing answers: after one wait of STASH_WAIT ticks the step counts the live inventory alone.
+ * @type {Map<string, { id: string, name?: string, lore?: string[], n: number }[]>}
+ */
+const stashRows = new Map();
+/** When each unanswered ask was sent (tick). @type {Map<string, number>} */
+const stashAsked = new Map();
+/** Parts of an answer received so far. @type {Map<string, { rev?: string, parts: number, got: Map<number, { id: string, name?: string, lore?: string[], n: number }[]> }>} */
+const stashParts = new Map();
+/** The newest committed revision a notice named, per player. @type {Map<string, string>} */
+const stashRev = new Map();
+/** Ticks to wait for an answer before counting without it. */
+const STASH_WAIT = 40;
+
+/** @param {Player} player @param {Objective} obj */
+const stashKey = (player, obj) => `${player.id}|${obj.item ?? ""}|${obj.name ?? ""}`;
+
+/**
+ * What a collect step has: the live inventory plus the saved pages. Undefined while stash_bp's answer is pending,
+ * so a count taken between a page move and its answer can't make progress dip.
+ * @param {Player} player @param {Objective} obj @returns {number | undefined}
+ */
+function collectCount(player, obj) {
+  const live = countItem(player, obj.item, obj.name);
+  const key = stashKey(player, obj);
+  let rows = stashRows.get(key);
+  if (!rows) {
+    const now = system.currentTick;
+    const asked = stashAsked.get(key);
+    if (asked === undefined) {
+      stashAsked.set(key, now);
+      send("realm:stash_count_ask", { player: player.id, item: obj.item, name: obj.name });
+      return undefined;
+    }
+    if (now - asked < STASH_WAIT) return undefined;
+    stashAsked.delete(key);
+    stashParts.delete(key);
+    rows = [];
+    stashRows.set(key, rows);
+  }
+  let hidden = 0;
+  for (const r of rows) {
+    const lore = r.lore ?? [];
+    const stack = /** @type {ItemStack} */ (/** @type {unknown} */ ({ typeId: r.id, nameTag: r.name, getLore: () => lore }));
+    if (same(stack, obj.item, obj.name)) hidden += r.n;
+  }
+  return live + hidden;
+}
+
+/** @param {string} message */
+function stashCountReply(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string" || !Array.isArray(m.rows)) return;
+    const key = `${m.player}|${typeof m.item === "string" ? m.item : ""}|${typeof m.name === "string" ? m.name : ""}`;
+    const rev = typeof m.rev === "string" ? m.rev : undefined;
+    const known = stashRev.get(m.player);
+    if (known !== undefined && rev !== known) return;
+    const parts = Number.isInteger(m.parts) && m.parts > 1 ? m.parts : 1;
+    const part = Number.isInteger(m.part) && m.part >= 1 && m.part <= parts ? m.part : 1;
+    const rows = [];
+    for (const r of m.rows) {
+      if (r && typeof r.id === "string" && Number.isInteger(r.n) && r.n > 0) {
+        rows.push({ id: r.id, name: typeof r.name === "string" ? r.name : undefined, lore: Array.isArray(r.lore) ? r.lore.map(String) : undefined, n: r.n });
+      }
+    }
+    let pending = stashParts.get(key);
+    if (!pending || pending.rev !== rev || pending.parts !== parts) {
+      pending = { rev, parts, got: new Map() };
+      stashParts.set(key, pending);
+    }
+    pending.got.set(part, rows);
+    if (pending.got.size < parts) return;
+    stashParts.delete(key);
+    /** @type {typeof rows} */
+    const all = [];
+    for (let i = 1; i <= parts; i++) all.push(.../** @type {typeof rows} */ (pending.got.get(i)));
+    const was = JSON.stringify(stashRows.get(key));
+    stashRows.set(key, all);
+    stashAsked.delete(key);
+    if (was !== JSON.stringify(all)) invChanged.add(m.player);
+  } catch {
+    // an unreadable answer is ignored; the step keeps what it had
+  }
+}
+
+/** The saved pages changed: what stash_bp said before is stale until it answers again. @param {string} message */
+function stashChanged(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string") return;
+    if (typeof m.rev === "string") stashRev.set(m.player, m.rev);
+    for (const map of [stashRows, stashAsked, stashParts]) for (const key of [...map.keys()]) if (key.startsWith(`${m.player}|`)) map.delete(key);
+    invChanged.add(m.player);
+  } catch {
+    // ignored
+  }
+}
+// stash-bridge:end
+
+onScriptEvent(["realm:stash_count", "realm:stash_changed"], ({ id, message }) => {
+  if (id === "realm:stash_count") stashCountReply(message);
+  else if (id === "realm:stash_changed") stashChanged(message);
+});
 
 /**
  * Takes up to `max` of an item. Without `name`, renamed items are never taken; with it, only items
@@ -682,16 +891,26 @@ export function reward(player, r, source, penalty = 0) {
   if (r.skill && r.skill.amount > 0) send("realm:skill_xp", { player: player.id, skill: r.skill.skill, amount: Math.round(r.skill.amount * keep) });
   if (r.title) send("realm:title_unlock", { player: player.id, title: r.title, from: PACK });
   if (r.journal) send("realm:journal", { player: player.id, page: "story", entry: r.journal.entry, label: r.journal.label });
-  if (r.codex) {
-    const saga = sagaOf(player);
-    saga.cx ??= [];
-    if (!saga.cx.includes(r.codex.id)) {
-      saga.cx.push(r.codex.id);
-      markDirty(player);
-      player.sendMessage(`§d[Codex] New entry: ${r.codex.title} §7(read it in /realm:saga, Codex)`);
-    }
-  }
+  if (r.codex) grantCodex(player, sagaOf(player), r.codex);
   return given.join(", ") + (cut ? " (less for the hint)" : "");
+}
+
+/**
+ * Adds a codex entry unless the save could not hold it even after the trim flush() may do (the old tracking list, finished
+ * favors, the oldest codex entries), so a nearly full save still takes the newest entry. Stories, flags and the entry itself are never trimmed.
+ * @param {Player} player @param {Saga} saga @param {{ id: string, title: string }} codex
+ */
+export function grantCodex(player, saga, codex) {
+  saga.cx ??= [];
+  if (saga.cx.includes(codex.id)) return;
+  if (!codexFits(saga, codex.id)) {
+    console.warn(`[saga] ${player.name}: codex entry ${codex.id} refused, the save is full`);
+    player.sendMessage(`§c[Codex] Your saved progress is full, so "${codex.title}" was not added.`);
+    return;
+  }
+  saga.cx.push(codex.id);
+  markDirty(player);
+  player.sendMessage(`§d[Codex] New entry: ${codex.title} §7(read it in /realm:saga, Codex)`);
 }
 
 function crownsObjective() {
@@ -806,18 +1025,10 @@ export function weatherWait(obj) {
  */
 export function timeWait(obj) {
   if ((obj.type !== "survive" && obj.type !== "vigil") || !obj.timeOfDay) return undefined;
-  const [a, b] = obj.timeOfDay;
+  if (inWindow(obj)) return undefined;
+  const [a] = obj.timeOfDay;
   const t = world.getTimeOfDay();
-  if (a <= b ? t >= a && t < b : t >= a || t < b) return undefined;
   const what = a >= 12000 && a < 16000 ? "nightfall" : a >= 16000 && a < 20000 ? "midnight" : a < 1000 || a >= 23000 ? "dawn" : "the right time of day";
-  // With the daylight cycle off (common on servers that keep it day) the time never comes by itself: no countdown.
-  let cycle = true;
-  try {
-    cycle = world.gameRules.doDayLightCycle;
-  } catch {
-    // can't tell: count down
-  }
-  if (!cycle) return `wait for ${what} (the time of day is stopped on this world)`;
   return `wait for ${what} (in about ${Math.max(1, Math.ceil((((a - t + 24000) % 24000) / 1200)))} min)`;
 }
 
@@ -940,7 +1151,7 @@ function championNear(player, obj) {
   let at;
   const loc = locate(obj);
   if (loc === undefined) {
-    if (obj.night && !isNight()) return;
+    if (obj.night && !nightMet()) return;
     const p = player.location;
     const a = Math.random() * Math.PI * 2;
     const x = p.x + Math.cos(a) * 10;
@@ -973,6 +1184,7 @@ function championNear(player, obj) {
       const mob = spawnFresh(dim, champ.mob, spawnAt);
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
+      trackChampion(mob);
       mob.addTag(champ.tag);
       if (CHOIR.has(champ.tag) || champ.tag.startsWith("realm:saga:whc_")) mob.addTag("saga:choir");
       noBanner(mob);
@@ -1137,7 +1349,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     }
     if (!(killer instanceof Player) || !at || !dim) return;
     const type = deadEntity.typeId;
-    const night = isNight();
+    const night = nightMet();
     const where = at;
     const d = dim;
     /** @param {Objective} obj */
@@ -1241,10 +1453,27 @@ function used(player, item) {
   advance(player, "use", (obj) => (obj.item === item && playerIn(player, obj) ? 1 : 0));
 }
 
+/** Is a block a bed? @param {string} id */
+const isBed = (id) => id === "minecraft:bed" || id === "minecraft:straw_bed" || (!id.startsWith("minecraft:") && id.endsWith("_bed"));
+
+/**
+ * With the daylight cycle off, vanilla refuses the bed by day, so `isSleeping` never turns true: a tap on a
+ * bed counts as the night's sleep, and the step's vision waits for the next tick (queued like a real dream).
+ * @param {Player} player @param {import("@minecraft/server").Block} block
+ */
+function bedWhileStopped(player, block) {
+  if (timeMoves() || !isBed(block.typeId) || !counting(player)) return;
+  for (const { e, i, obj } of open(player, "sleep")) {
+    bump(player, e, i, 1);
+    if (obj.vision?.length) dreams.set(player.id, obj.vision);
+  }
+}
+
 world.afterEvents.playerInteractWithBlock.subscribe(({ player, block, isFirstEvent, beforeItemStack }) => {
   if (!isFirstEvent) return;
   try {
     touched(player, block);
+    bedWhileStopped(player, block);
     if (beforeItemStack) used(player, beforeItemStack.typeId);
   } catch (e) {
     console.warn(`[saga] ${e}`);
@@ -1481,6 +1710,8 @@ function sceneFor(player, e, i, kind) {
 
 /** Ends a scene: its characters and story mobs go. @param {string} pid @param {string} key @param {boolean} [effect] */
 export function endScene(pid, key, effect = false) {
+  const s = scenes.get(sk(pid, key));
+  if (s?.data) s.data.interactJob = undefined; // its background scan stops
   scenes.delete(sk(pid, key));
   removeActors({ owner: pid, key }, effect);
   // The animals fed or tamed for it count again next time (the same daily favor on a later day, a reset chapter).
@@ -1490,7 +1721,11 @@ export function endScene(pid, key, effect = false) {
 
 /** Ends every scene of a player (they left, or their stories were reset). @param {string} pid */
 export function endScenesOf(pid) {
-  for (const s of [...scenes.values()]) if (s.pid === pid) scenes.delete(sk(s.pid, s.key));
+  for (const s of [...scenes.values()]) {
+    if (s.pid !== pid) continue;
+    if (s.data) s.data.interactJob = undefined;
+    scenes.delete(sk(s.pid, s.key));
+  }
   removeActors({ owner: pid });
   for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
 }
@@ -2934,9 +3169,11 @@ export function tickPlayer(player, list) {
               // Counted again only when the inventory changed (or every 10 seconds, or for a step not counted yet).
               const key = objKey(e, i);
               if (!recount && collectSeen.get(player.id)?.has(key)) break;
+              const have = collectCount(player, obj);
+              if (have === undefined) break; // stash_bp's answer is pending: counted next second
               collected.push(key);
+              bump(player, e, i, have, true);
             }
-            bump(player, e, i, countItem(player, obj.item, obj.name), true);
             // Done: party mates on the same chapter nearby have it done too (the party's main chapter: party.js).
             if (reached(e, i)) share(player, new Set([objKey(e, i)]), "collect", (o) => target(o), new Set([player.id]));
             break;
@@ -2952,11 +3189,7 @@ export function tickPlayer(player, list) {
           case "vigil": {
             if (counts) weatherHelp(player, e, i, obj);
             if (!counts || !playerIn(player, obj) || !weatherOk(obj, dim)) break;
-            if (obj.timeOfDay) {
-              const t = world.getTimeOfDay();
-              const [a, b] = obj.timeOfDay;
-              if (!(a <= b ? t >= a && t < b : t >= a || t < b)) break;
-            }
+            if (!inWindow(obj)) break;
             if (obj.outdoors && !outdoors(player)) break;
             if (obj.sneaking && !sneaking(player)) break;
             bump(player, e, i, 1);
@@ -2995,11 +3228,7 @@ export function tickPlayer(player, list) {
             const x = (e.st.x ??= {});
             const k = String(i);
             if (obj.days) {
-              const now = world.getAbsoluteTime();
-              if (x[k] === undefined) {
-                x[k] = now;
-                markDirty(player);
-              } else if (now - x[k] >= obj.days * 24000) bump(player, e, i, 1);
+              if (waitDays(x, k, obj, world.getAbsoluteTime(), Date.now(), markDirty, player)) bump(player, e, i, 1);
             } else {
               const now = Date.now();
               if (x[k] === undefined) {
@@ -3150,6 +3379,28 @@ export function sceneFocus(pid, e, i) {
   return undefined;
 }
 
+/**
+ * One tick of a `wait` for days: `x[k]` is the world time it started at (kept as saved), `x[w<k>]` the real time (ms). With
+ * the daylight cycle off the world clock never moves, so the real clock counts instead, 20 minutes a day. True when done.
+ * @param {Record<string, any>} x @param {string} k @param {Objective} obj @param {number} absNow @param {number} msNow
+ * @param {(player: Player) => void} dirty @param {Player} player
+ */
+export function waitDays(x, k, obj, absNow, msNow, dirty, player) {
+  const w = `w${k}`;
+  if (x[k] === undefined) {
+    x[k] = absNow;
+    if (!timeMoves()) x[w] = msNow; // the real-time fallback only runs while the clock is stopped
+    dirty(player);
+    return false;
+  }
+  if (x[w] === undefined && !timeMoves()) {
+    x[w] = msNow; // progress saved before the fallback existed: it counts from here
+    dirty(player);
+  }
+  const days = obj.days ?? 1;
+  return absNow - x[k] >= days * 24000 || (!timeMoves() && x[w] !== undefined && msNow - x[w] >= days * DAY_MS);
+}
+
 /** Seconds left on a timed objective (or a wait), or undefined. @param {Entry} e @param {number} i */
 export function timeLeft(e, i) {
   const obj = e.chapter.objectives[i];
@@ -3158,7 +3409,12 @@ export function timeLeft(e, i) {
   const race = obj.race && x ? /** @type {Record<string, any>} */ (x)[`r${i}`] : undefined;
   if (race) return Math.max(0, (race.u - Date.now()) / 1000);
   if (obj.type === "wait" && x?.[String(i)] !== undefined) {
-    if (obj.days) return ((obj.days * 24000 - (world.getAbsoluteTime() - x[String(i)])) / 20) * 1;
+    if (obj.days) {
+      const world_ = (obj.days * 24000 - (world.getAbsoluteTime() - x[String(i)])) / 20;
+      if (timeMoves()) return world_;
+      const from = x[`w${i}`] ?? Date.now();
+      return Math.max(0, Math.min(world_, (obj.days * DAY_MS - (Date.now() - from)) / 1000));
+    }
     return ((obj.minutes ?? 1) * 60000 - (Date.now() - x[String(i)])) / 1000;
   }
   return undefined;
@@ -3192,6 +3448,24 @@ export function playerGone(pid) {
   ownUntil.delete(pid);
   for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
   for (const k of [...weatherAsked.keys()]) if (k.startsWith(`${pid}|`)) weatherAsked.delete(k);
+}
+
+const sessionChampions = new Set();
+/** @param {Entity} ent */
+function trackChampion(ent) {
+  sessionChampions.add(ent.id);
+}
+/** A tagged champion that this session did not spawn: a leftover from a chunk that was unloaded at world load. @param {Entity} ent */
+function staleChampion(ent) {
+  return ent.hasTag(CHAMPION_TAG) && !sessionChampions.has(ent.id);
+}
+/** Removes a leftover champion when its chunk loads. @param {Entity} ent */
+export function sweepLoadedChampion(ent) {
+  try {
+    if (staleChampion(ent)) ent.remove();
+  } catch {
+    // already gone
+  }
 }
 
 /** Every dimension's story champions this pack spawned are removed at world load. */

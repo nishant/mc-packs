@@ -62,7 +62,7 @@ test("CI runs the Realm Bundle smoke test after check and build, bounded, on a s
   assert.match(smoke, /needs: check\n/);
   assert.match(smoke, /runs-on: ubuntu-24\.04/);
   assert.match(smoke, /timeout-minutes: 25\n/);
-  assert.match(smoke, /BDS_DIR: \$\{\{ runner\.temp \}\}\/bds\n/, "BDS lives under the runner's temp, not /home/user");
+  assert.match(smoke, /echo "BDS_DIR=\$RUNNER_TEMP\/bds"/, "BDS lives under the allocated runner's temp, not /home/user");
   assert.ok(smoke.indexOf("node tools/test-bds/setup.mjs") < smoke.indexOf("node tools/bundle.mjs --all"));
   assert.ok(smoke.indexOf("node tools/bundle.mjs --all") < smoke.indexOf("node tools/test-bds/run.mjs"));
   const header = fs.readFileSync(path.join(harnessDir, "examples", "bundle-smoke.js"), "utf8").match(/node tools\/test-bds\/run\.mjs (.*)/)[1];

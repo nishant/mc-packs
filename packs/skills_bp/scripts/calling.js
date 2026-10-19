@@ -827,6 +827,24 @@ function daysLeft(st) {
 /** Who to see about a Calling. @param {Player} player */
 const whoToSee = (player) => (hollisLost.has(player.id) ? "Moss at the graveyard" : "Brother Hollis at the chapel");
 
+// Town news: at most one piece per in-game hour from this pack, each calling once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). The quest completion stays outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** @param {Player} player @param {Calling} calling @returns {string | undefined} why not */
 function choose(player, calling) {
   if (!on()) return "Callings are paused on this realm.";
@@ -855,7 +873,7 @@ function choose(player, calling) {
   player.playSound("random.levelup", { pitch: 0.7, volume: 0.9 });
   sendCalling(player);
   system.sendScriptEvent("realm:quest_done", JSON.stringify({ player: player.id, pack: "skills_bp", id: `skills:calling:${calling.id}`, label: `Became a ${calling.name}`, kind: "calling", guild: calling.guild }));
-  system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "calling", player: player.id, name: player.name, place: calling.name }));
+  gossip(`calling:${player.id}:${calling.id}`, { kind: "calling", player: player.id, name: player.name, place: calling.name });
   return undefined;
 }
 

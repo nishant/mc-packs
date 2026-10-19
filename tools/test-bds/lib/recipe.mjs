@@ -14,7 +14,7 @@ export function findBash({ platform = process.platform, env = process.env, exist
   }
   if (platform !== "win32") return "bash";
   const roots = new Set();
-  for (const dir of String(env.PATH ?? env.Path ?? "").split(path.delimiter).filter(Boolean)) {
+  for (const dir of String(env.PATH ?? env.Path ?? "").split(path.win32.delimiter).filter(Boolean)) {
     for (const exe of ["git.exe", "git.cmd"]) if (exists(path.win32.join(dir, exe))) roots.add(dir);
   }
   for (const key of ["ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"]) if (env[key]) roots.add(path.win32.join(env[key], "Git", "cmd"));
@@ -48,6 +48,7 @@ export function stagePrefix(stageDir) {
  * Here-document bodies are copied literally.
  */
 export function stageRecipe(recipe, stageDir) {
+  recipe = recipe.replace(/\r(?=\n|$)/g, "");
   const base = stagePrefix(stageDir);
   let out = "";
   let quote = null; // null | "'" | '"'

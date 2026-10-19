@@ -12,23 +12,23 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T1. Performance budget at 40 and 100 players
 
-- O1 (high) The bundle is 8.3-9.7 ms/tick at 40 simulated players against the 5 ms budget; map_bp alone is 3.96 ms
+- O1 **CODE ACCEPTED `42de58a5` (lossless hot-path cuts); actual 1 ms Map / 5 ms bundle acceptance remains UNVERIFIED.** Original target: (high) The bundle is 8.3-9.7 ms/tick at 40 simulated players against the 5 ms budget; map_bp alone is 3.96 ms
   against 1 ms (redraw, scan and passes: main.js around :749, :1280, :1380). Make map_bp's redraw cheaper.
-- O2 (medium) Packs over 0.15 ms/tick at 40 players: silly 0.38, wander 0.36, elytra 0.34, stash 0.26, saga 0.23,
+- O2 **CODE ACCEPTED `d23c1bed`: lossless Durability/Relics/Saga/Elytra native-read cuts and bound real-HUD regressions. Silly, Stash and Calendar retain documented source-based no-change reasons; every pack's actual 40-player budget remains MEASUREMENT REQUIRED.** Original target: (medium) Packs over 0.15 ms/tick at 40 players: silly 0.38, wander 0.36, elytra 0.34, stash 0.26, saga 0.23,
   relics 0.22, durability 0.18, calendar 0.15 (phase3-report.md table b).
-- O3 (medium) elite_bp and wander_bp cost rises 5-12x over a soak as night falls (elite auraLoop main.js:876, wander
+- O3 **CODE ACCEPTED `fce94f2a`; round-robin work and 0.8/player density (ceiling 80, nearby 3); actual night/scale timing remains UNVERIFIED.** Original target: (medium) elite_bp and wander_bp cost rises 5-12x over a soak as night falls (elite auraLoop main.js:876, wander
   updateLabels main.js:1510): cap the work per entity count. Champion density should scale with online players
   (`maxAlive` per player or per area) instead of a fixed 8 or 16.
-- O4 (medium, unverified) bedrock_server memory grew about 8.7 MiB/min (+126 MiB in 15 min) at 40 players without
+- O4 **REQUIRED: unprofiled 40-player 3600-second RSS observation, NOT started or passed.** Original target: (medium, unverified) bedrock_server memory grew about 8.7 MiB/min (+126 MiB in 15 min) at 40 players without
   leveling off: run a 60-minute soak to confirm or rule out a leak.
-- O5 100-player soak of map_bp and saga (keep-alive resends may use up drawBudget at 100; the story tracker is
+- O5 **REQUIRED: actual 100-player Map and Saga quest workloads, NOT passed.** Original target: 100-player soak of map_bp and saga (keep-alive resends may use up drawBudget at 100; the story tracker is
   about 0.8 ms/tick at 40 with quests).
-- O6 Split `realm:hud_state` into parts (it lists only 100 players; stats_bp and party_bp join the parts).
-- O7 Blood Moon at scale: an 8-block cell cache for "built" checks and a world monster cap (option, docs, Large preset).
-- O8 More expedition slots (5-6 within the ticking-area budget) or a queue.
-- O9 `suite.mjs --perf 10,40,100` fails over budget; add it and `weather-crowd.js` to WORKING.md's finishing order.
+- O6 **CODE ACCEPTED `a83dc571`; full multipart producer/Stats/Party assembly and bounds; native 100-player proof still queued.** Original target: Split `realm:hud_state` into parts (it lists only 100 players; stats_bp and party_bp join the parts).
+- O7 **CODE ACCEPTED `d910426d`; night cell cache, loaded-world cap and all-dimension dawn cleanup; actual native scale timing still queued.** Original target: Blood Moon at scale: an 8-block cell cache for "built" checks and a world monster cap (option, docs, Large preset).
+- O8 **CODE ACCEPTED `369d257b`; real bounded FIFO queue, unchanged 1-3 slots and shared 10-area limit; native queue/pending scenarios still required.** Original target: More expedition slots (5-6 within the ticking-area budget) or a queue.
+- O9 **CODE ACCEPTED `aa5a36fa`; real steady-window fail-closed 40-player budget gate and 8-block per-player sound bands; actual gate/weather runs still required.** Original target: `suite.mjs --perf 10,40,100` fails over budget; add it and `weather-crowd.js` to WORKING.md's finishing order.
   Batch tornado sounds by distance band.
-- O10 D rows to re-measure: npc_bp 10-tick label loop 0.20 ms; build_bp preview floor 0.38 ms (measure without the
+- O10 **MEASUREMENT REQUIRED; deferred labels/preview/rebuild/build hitches are not presumed solved by source cuts.** Original target: D rows to re-measure: npc_bp 10-tick label loop 0.20 ms; build_bp preview floor 0.38 ms (measure without the
   profiler); map_bp rebuild wave every 200 ticks; expedition build steps of 25-31 ms.
 
 ## T2. Real-client acceptance pass (phone and PC, private world)
@@ -43,45 +43,62 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T3. Expansive Inventory and item safety
 
-- O17 (high, perf) Index page contents (item ids and counts per page in the committed index), so Hotbar Refill from
-  pages, scans and the menu's usage load only the pages they need; add refill to perf-soak. Also rebuild closed
-  PR #86's genuine-pickup routing and manual fill-earlier-pages action on latest master, without sorting or
-  metadata/hotbar/cursor/control loss; share O73's transfer design. Closure alone does not finish this work.
-- O18 `/realm:inv_recover <player>` for pending inventory recovery.
-- O19 Close the Expeditions stash cart window (a disconnect plus broken carts re-places the structure, a copy).
-- O20 refill-pages.js: add "none on any page, many pages" and locked or named stack cases.
-- O21 Make `expedition-nether-carts.js` a real fail-before test (it passes on the old code; the bug needs a player who
-  spawned in the Nether and stayed there).
-- O22 Docs: cross-page refill can use a Flight 1 rocket stack for a Flight 3 one mid-glide (rockets are kept on purpose).
+- O17 **CODE DONE `d7390b7c24a8b31934c1177f65eac297f5b22612`; measured acceptance remains W1.** Snapshot-bound index, real earlier-page routing and all-later manual fill rebuilt; unit and real solo native collect/reward proofs retained.
+- O18 **DONE `f38d249a` (within reviewed W3 `2b48a310`).** Confirmed operator backup export, stale/permission/dimension guards and idempotent retry; strict native physical-restart/metadata/export/no-repeat PASS. Live inventory is not deduplicated.
+- O19 **CODE DONE `b1a1e3ce`; native durability limit explicit.** Seen carts are saved and a partial hand-back never re-places over survivors; strict native partial-cart PASS. A timed disconnect/break/restart interruption is not claimed as a native PASS; saved-seen restart behavior is covered offline.
+- O20 **DONE `58608132` / `d7390b7c`.** Indexed misses, named/locked stacks and refill workload added; strict native refill PASS, including move-not-copy, long lore, death, no-match and protected-stack cases.
+- O21 **WON'T CLAIM A REPRO `46a77a3d`.** The alleged Nether-spawn-and-stay fail-before could not be reproduced on BDS. Header claim withdrawn; the actual Nether round trip remains a regression, not fabricated RED.
+- O22 **DONE in this Wave2 documentation checkpoint, code context `58608132`.** Player docs explicitly warn that cross-page refill can replace Flight 3 with Flight 1; rockets intentionally remain eligible.
 
 ## T4. Bounded stores for offline players
 
-- O23 One per-player owed layout for cooking `cooking:owed`, relics `relics:pending`, bounty, guilds, town
-  `town:owed`, plus `fishing:owed` and `cooking:pending`; migrate on load, drop the oldest with a log line.
-- O24 Letters sent by packs (goals, town) expire or have a lower inbox cap than player letters, so 400 players who
-  never return can't fill the 5,000-letter realm cap.
-- O25 Prune `nick:g:*`, `titles:p:*` and party entries of players gone N days (forget only wipes a whole pack).
-- O26 An operator reset for map_bp `map:wp` and `map:marks` (player properties, which Pack diagnostics' forget keeps).
+- O23 **DONE `84d45df2e1e1ec77fda5caddae50ec691f58ead1` plus bounded probe `507e87ce`.** Per-player owed stores, lazy verified migration, unknown leftovers and partial-grant re-owe. Actual three-phase/two-restart native PASS has one deliberate caught grant-failure warning (official non-strict, not warning-free). Hard-crash take/grant and indivisible-part limits documented.
+- O24 **DONE `abbb1624`.** Live system inbox/expiry/reserve policy preserves player-written letters; focused 400x50 simulation and native mail/consumer regressions pass.
+- O25 **DONE `a7829ba9`.** Conservative live-config nickname/title/solo-party pruning preserves unknown and untimestamped records, skips online players and rechecks after yields. Defaults and destructive scope documented.
+- O26 **DONE `9c9fec57` / `68ae7b92`.** Real operator confirmation, online clear, persisted offline generation and stale-form protection; strict native owning-addon reset PASS.
 
 ## T5. Public-server protections
 
 - O27 Land Claims: tamed and farm animals, fire and liquids where the stable API allows (say what it can't do:
   pistons, endermen), a "visitors may open doors" switch, an operator audit list.
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not run, not PASS:**
+  `protectAnimals` and `protectedAnimals` cover leash, ride, feed, milk, shear, name, sit and tame through
+  cancellable interactions only. Animal damage, fire, external fluid flow, pistons and endermen are NOT protected:
+  stable 2.1 has no cancelable event for them. There is no tame-owner getter, so any tamed animal in a claim is
+  covered. The door switch and audit list were not re-verified in this batch.
 - O28 Chest Finder privacy (index only containers the player opened, owns or that are shared).
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not PASS:** the
+  `privateIndex` setting (default `true`) indexes only what the player opened, owns or shares. Worlds that already
+  had an index migrate to `false` once.
 - O29 Mail and party moderation: block list, operator purge by sender, per-sender unread cap, party chat mute and
   a 1 s cooldown; prune long-gone parties.
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not PASS:** Realm Mail
+  `senderUnreadCap` (default `5`, 0 = no cap) and `blockListMax` (default `30`). Party mute covers only
+  `/realm:party_chat` and the party form: stable 2.1 has no chatSend beforeEvent. The cooldown and purge were not
+  re-verified in this batch.
 - O30 Crowns ledger (`/realm:crowns_audit`, last 200 pays and gives) and a daily pay limit per player.
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not PASS:** the audit
+  form shows the newest 50 of the last 200 entries (times UTC). `dailyPayLimit` (default `250000`, 0 = no limit)
+  caps pays per player per UTC day.
 - O31 Reserved nickname list (Admin, Owner, Server, operators' gamertags).
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not PASS:**
+  `reservedNames` (default `"Admin, Owner, Server"`) and `reservedGamertags` (default `""`). Online operators
+  auto-reserve their gamertag. A never-seen offline operator is NOT reservable without `reservedGamertags`.
 
 ## T6. Story portability (saga_bp)
 
-- O32 Operator-set town anchor (`/realm:saga_place town`) for the 15 steps that assume the town is at world spawn.
-- O33 Stories with `doDaylightCycle` off (78 required steps can never finish).
-- O34 "needs <pack>" in the story log when a required pack was removed; Gristle's two-objective split (a `fallback:`
+- Wave 3a status (W6 `f500cb44`, core `c551f18c`; W8 core `470f8df3`; W10 core `ea39ff8e`, merge `4f93be85`; integrated at
+  `907fc492`). **Authoring proof only unless stated:** unit/source tests and review passed. Root's strict native Gristle
+  (28.0 s) and stopped-time vigil (16.5 s) PASS on W6 `f500cb44` with 0 script errors cover those two paths only; they do
+  NOT prove all 78 timesteps, the full native world, champion load or scan performance. Native W8 new-bundle ordering and
+  the manual checks stay UNVERIFIED. O52 Saga code is now done in `7b5dd77ee9ead783de858bb0f35d86976e11c391` after W6; its small source delta was directly reviewed.
+- O32 **DONE `c551f18cc83ec72347fb4112ffbd54cb898e6e3c` (authoring + native Gristle/vigil only).** `/realm:saga_place town` (Overworld, saved exact place, `usedBy` = the 7 town stories, default world spawn). Operator catalog gets the `town` value when root regenerates it. Original: Operator-set town anchor (`/realm:saga_place town`) for the 15 steps that assume the town is at world spawn.
+- O33 **DONE `c551f18cc83ec72347fb4112ffbd54cb898e6e3c` (authoring; vigil native PASS only).** Time windows/night are met while the cycle is stopped; classic and straw bed taps count as sleep/vision; wait steps count 20 real minutes a day only while the cycle is off, with no false ETA. Not all 78 steps were run natively. Original: Stories with `doDaylightCycle` off (78 required steps can never finish).
+- O34 **DONE `c551f18cc83ec72347fb4112ffbd54cb898e6e3c` (authoring; Gristle native PASS).** A started story shows the missing-pack `Needs <pack> to go on` line; Gristle's kill falls back with cooking on / elite off, or cooking off. Original: "needs <pack>" in the story log when a required pack was removed; Gristle's two-objective split (a `fallback:`
   objective or an OR in `when`), with a scenario for cooking on / elite off and a real kill.
-- O35 Match Kitchen dishes and Champion's Hearts by lore, not name only.
-- O36 Remove leftover fallback champions on entityLoad; second trim for saves past 30,000 characters.
-- O37 Rebuild closed PR #84's player-local `variable.life`, `variable.style` and `variable.color` outline
+- O35 **DONE `c551f18cc83ec72347fb4112ffbd54cb898e6e3c` (authoring).** Kitchen dishes carry a `Dish: <name>` lore line that stories check; dishes made before are still accepted, so a renamed old dish remains a known limit. Original: Match Kitchen dishes and Champion's Hearts by lore, not name only.
+- O36 **DONE `c551f18cc83ec72347fb4112ffbd54cb898e6e3c` (authoring; champion load not native-verified).** Stale champions are swept on entityLoad; saves past 30,000 UTF-8 bytes are trimmed in the allowed order and a codex entry that still doesn't fit is refused; unknown fields are kept. Original: Remove leftover fallback champions on entityLoad; second trim for saves past 30,000 characters.
+- O37 **DONE `c551f18cc83ec72347fb4112ffbd54cb898e6e3c` (authoring).** Player-local `variable.life/style/color`; interact scan bounded to 256 blocks per scan, max 4 scans, so 1,024 blocks per tick. Tuning measurement NOT done. The escort test fix is test-side and claims nothing physical. Original: Rebuild closed PR #84's player-local `variable.life`, `variable.style` and `variable.color` outline
   bindings on latest master with regression coverage, then the interact outline scan as a runJob; steady escort
   facing (saga-escort flake). No dependency on merging the old PR remains.
 
@@ -112,31 +129,28 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T8. Operator tools
 
-- O41 Titles take-away (`/realm:titles_take`, a toggle in Give a title).
-- O42 Big-server lists: page or search the nickname list; index title holders by lowercase name.
-- O43 A generic default welcome for new servers (the owner keeps the live Realm's text).
-- O44 Set up this world: the `resumed` flag left set by `showWaiting` (one extra tap) and an unhandled rejection
+- O41 **DONE `209bd5f9`, `5b9b1d42` (authoring).** `/realm:titles_take <player:String> <title:String>` and a give-or-take form over offline holders. README row updated. Original: Titles take-away (`/realm:titles_take`, a toggle in Give a title).
+- O42 **DONE `209bd5f9`, `5b9b1d42` (authoring).** Nickname operator list pages of 20 with search; title holders indexed by lowercase name (`titles:n:`). Original: Big-server lists: page or search the nickname list; index title holders by lowercase name.
+- O43 **Additional fix `3ab057f7`: real Finder-to-Welcome boot-order RED and 10 GREEN Realm/saved-text controls; exact startup key `find:mig` only. Full-bundle native proof remains queued, not inferred from the model.** **DONE `209bd5f9`, `5b9b1d42` (authoring).** A new world gets a generic welcome; a world with Realm or saved text keeps it. NEW CONFIG options are listed in PACKS with their code defaults. `welcome:profile` and the startup heuristic are tested on a fake-API harness; the full-bundle native path is UNVERIFIED. Original: A generic default welcome for new servers (the owner keeps the live Realm's text).
+- O44 **DONE `209bd5f9`, `5b9b1d42` (authoring).** The wizard's generation guards leave/death/respawn and busy pings. Original: Set up this world: the `resumed` flag left set by `showWaiting` (one extra tap) and an unhandled rejection
   when a player leaves mid-form.
-- O45 Pack diagnostics: a `diag_forgot` answer after 40 ticks shows "nothing was deleted" although it was; keys whose
+- O45 **DONE `5c8e727a` (canonical), `470f8df3` (authoring).** Untouched declared world prefixes have owners; unknown/ambiguous stay unowned; a late forget answer after 200 ticks, max 16 pending, 12,000-tick expiry. Native bundle behavior UNVERIFIED. Original: Pack diagnostics: a `diag_forgot` answer after 40 ticks shows "nothing was deleted" although it was; keys whose
   prefix no pack touched since reload stay unowned.
 
 ## T9. Easy Building (build_bp, build_rp)
 
-- O46 (owner decision) Credit Effortless Building v5.0 after confirming its license.
-- O47 Bedrock's single `bed` id: rewrite the 16 `<color>_bed` cases and test every mode.
-- O48 (medium, perf) The two runInterval(1) loops (Preview.js:1053, ModifierVisualizer.js:166) cost 0.4-1.1 ms/tick
-  with nobody holding a building tool: run them only while a tool is held.
-- O49 FloatingPanels.js:318 writes the action bar with no request or lock; `idleSkip` uses a shared tick (a loop
-  whose period is a multiple of 5 never sees idle players); `minecraft:end_gateway` (BlockDestroyer.js:19)
-  unconfirmed; elite_bp's built-block regex (main.js:519) has Java `note_block` (Bedrock `noteblock`).
-- O50 build_rp defines `eb.help.btn.guided` and `eb.set.book_language.tip` twice in every lang file.
-- O51 A world `defaultMaxBlocks` separate from `maxBlocksCap`, and a public-server preset.
+- O46 **OWNER-DIRECTED NO FURTHER WORK.** User reported talking to the owner and explicitly declined further licensing work. This is not independent legal verification; no new license/credit/grant/upstream copy or attribution removal.
+- O47 **PARTIAL (all-mode gap):** the Line-only native handler PASS does NOT satisfy the original every-build-mode requirement. The all-mode camera-setup gap ("yaw 0 not looking up") and a second physical input are UNVERIFIED; the handler proof is not a retail pixel or physical PASS. O47 **CODE DONE `534e8fd902745e6dc11c06db5d53de5ef785742f`.** Real Bedrock ids, paired placement/claims/caps/clipboard/undo and public-main boundary fixed; 21 focused tests/type pass. Strict native main-pipeline Line/item/undo/redo PASS uses one actual anchor event and one explicitly test-only confirm invocation. Second native input/physical acceptance stays UNVERIFIED under W2; bounded all-mode runtime matrix retained separately.
+- O48 **CODE DONE `534e8fd9`; W1 measurement REQUIRED.** Actual holder gate wired, dirty hints and negative resolve cache; unit zero-read counts are not a measured performance improvement.
+- O49 **DONE `d61e5441`, `534e8fd9`, `4636486919cba60811533890b1534f0060dd0197`.** Actionbar arbitration, per-loop cadence and native `noteblock` fixed. Actual BDS Script API resolves `end_gateway` although vanilla command grammar rejects it: keep unbreakable protection.
+- O50 **DONE `534e8fd9`.** Duplicate language keys removed with last-effective labels retained; new limit labels localized.
+- O51 **DONE `534e8fd9` plus this lead preset checkpoint.** Separate default/cap, immediate player clamp; Large is 2000, operator-only and no Infinite Reach. Existing gameplay default 50000 preserved.
 
 ## T10. Town news follow-ups
 
-- O52 Rate-limit gossip at the source in elite, calendar (Siege, carve_off, regatta), fishing, meteor, expedition,
+- O52 **CODE DONE: non-Saga `ea39ff8e`, serialized Saga `7b5dd77e` (authoring).** At most one gossip per pack per 1,000 ticks, 64-key dedupe, dropped not queued; rewards unaffected. `calendar.js` expects a second siege_lost gossip within the hour, so that assertion needs updating at native time. Original: Rate-limit gossip at the source in elite, calendar (Siege, carve_off, regatta), fishing, meteor, expedition,
   guilds, relics, skills and saga.
-- O53 npc_bp shows an empty `{name}` for a non-town kind sent without `player`; milestones re-sends up to 9 title
+- O53 **DONE `4b7c01a3`, `ea39ff8e` (authoring).** Nameless fallback line in Townsfolk; milestones records gain `tf: 1` so a later join doesn't resend old top-tier titles. Original: npc_bp shows an empty `{name}` for a non-town kind sent without `player`; milestones re-sends up to 9 title
   unlocks on every join (save a flag); add a scenario for LETTERS_MAX 10.
 
 ## T11. Script events and the action bar (cross-pack)
@@ -175,8 +189,14 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 - O58 Recurring `[elite] InvalidEntityError ... dimension` (console.warn catches around elite main.js 167, 176, 433,
   437, 646) and one `[moon] InvalidEntityError hasTag`: an isValid gap in a hot path.
+  **Code done in `6f85410bf00df1a220c3378eae2179522ea07045`, merged via `653ec2fc6ae9ebe295181399922d6398a0b257af`:**
+  InvalidEntity guards in elite and moon, plus `tools/invalid-entity-guards.test.mjs`. Native log check not run.
 - O59 `spawnFresh` exists as separate copies in elite, saga, atlas, domt, expedition, calendar and moon: one shared
   module with a sync tool (C14); the moon copy already broke once (5018ece).
+  **Code done in `fe651846b4154b90ba84cd8c4b7fc26d68bb03d1`: one shared `tools/spawn-shared.js`, synchronous, 8 attempts
+  by default. Only `fresh: true` (used by expedition) also checks position, dimension and tags; every other caller
+  verifies type. It is wired into all 7 consumers. Calendar (4 attempts, throws) and moon (4 attempts, warns) are
+  player-facing. Native run queued, not run, not PASS.
 - O60 Harness: `--flat` world templates get a random spawn point (meteor-edge and expedition-nether-carts depend on
   0,0), and a template race with `--jobs > 1` on a fresh cache (tools/test-bds/lib/server.mjs). Fresh Windows W0
   also reproduced 13 failing hook recipes with mangled backslashes/paths; resolve those in W12a, not by skipping
@@ -219,6 +239,14 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   checkpoint was canceled by user-directed decoupling: no source pin, GUI join or W2 acceptance is inferred.
   Final merged review/CI/matched-suite/soak gates remain.
 - O62 Expedition: an option to announce clears only from a chosen level; forget leaves saved structures behind.
+  **Code done in `d00a41dcdd676698ef7af36a8f7ac77a342127f4`; partial by design. Official strict native PASS on
+  `971e5533` (16.6 s, 0 errors, `tools/test-bds/examples/expedition-forget.js`): orphaned parcels deleted, stash and
+  foreign structures kept, exactly one ok answer. No other native PASS is claimed.**
+  `announceFromLevel` (default `"0"`) limits only the chat line. A forget deletes orphaned `expedition:parcel_<n>`
+  structures. The cleanup sweep waits for in-flight hand-overs and rechecks every 40 ticks; it is not a delivery retry. PLAYER-owned `expedition:stash_<n>` structures are
+  deliberately retained: stash refs live in player properties and offline players can't be enumerated, so deleting
+  one early loses native inventory. Saves stay blocked until `/reload`. No global protection, full cleanup or
+  native PASS is claimed.
 
 ## T13. Owner-reported bugs from the live Realm (October 19; screenshots in `media/`)
 
@@ -254,8 +282,11 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   Move to page uses one reusable transactional stack/row transfer, validates capacity before mutation and keeps native
   metadata, controls, hotbar and cursor. Genuine native RED/GREEN covers a full-page refusal, real shulker contents,
   potion auxiliary data, enchantments, Nether/End and no leaked stores. Two physical restarts preserve a twice-moved
-  opaque row exactly once, using the documented test-only simulated-ID adapter. W3/O17 and PR86 routing/index work
-  remain open and must reuse this primitive; real inventory mouse/touch acceptance remains W2.
+  opaque row exactly once, using the documented test-only simulated-ID adapter. The W3/O17 routing and index work
+  is code done at `d7390b7c24a8b31934c1177f65eac297f5b22612` (earlier-page routing, snapshot-bound index) and reuses this
+  primitive; its measured acceptance remains W1. PR86 was closed unmerged under O67 (commit `5413ec948b1dfc3d9f3450027021cfef82344aa6`);
+  that closure decision is recorded at O67 and is separate from any replacement proof. Real inventory mouse/touch
+  acceptance remains W2.
 - O74 (blocker) Signs in the Sky "Fallen Light" can't be finished: the crater's amethyst was mined out by players who
   finished it first, so a party mate catching up has nothing to gather. Reset or regrow per accept, or accept any
   shards; audit every step that depends on blocks built once.

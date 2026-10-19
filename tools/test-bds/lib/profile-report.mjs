@@ -141,6 +141,18 @@ export class Profile {
     return { ticks: per.length, avg: per.reduce((a, b) => a + b, 0) / Math.max(1, per.length), p50: pct(sorted, 0.5), p95: pct(sorted, 0.95), p99: pct(sorted, 0.99), max: sorted[sorted.length - 1] || 0, over50: per.filter((x) => x > 50).length };
   }
 
+  /** One pack's average ms/tick over a tick window from its already collected per-tick data; null if its data is incomplete. */
+  packWindowAvg(pack, from, to) {
+    const e = this.tickParts.get(pack);
+    if (!e || to <= from || e.parts.filter((x) => x !== undefined).length < e.n) return null;
+    let sum = 0;
+    e.parts.join("").split(",").forEach((v, i) => {
+      const tick = e.startTick + i;
+      if (v && tick >= from && tick < to) sum += Number(v);
+    });
+    return sum / (to - from);
+  }
+
   report() {
     const rows = this.packRows(this.final);
     const L = [];
@@ -166,7 +178,10 @@ export class Profile {
     let steady = null;
     if (this.workload) {
       const win = this.workload.soak;
-      if (win && Number.isFinite(win.startTick) && Number.isFinite(win.endTick)) steady = this.bundleTicks(win.startTick, win.endTick);
+      if (win && Number.isFinite(win.startTick) && Number.isFinite(win.endTick)) {
+        steady = this.bundleTicks(win.startTick, win.endTick);
+        for (const r of rows) r.steadyMsPerTick = this.packWindowAvg(r.pack, win.startTick, win.endTick);
+      }
       this.acceptance = evaluatePerf({ args: this.args, workload: this.workload, profile: { ticks, packs: rows } });
       L.push(`  perf acceptance: ${this.acceptance.ok ? "VALID" : "INVALID"} for ${this.acceptance.declared?.players ?? "?"} players over ${this.acceptance.declared?.seconds ?? "?"} s${this.acceptance.ok ? "" : ` - ${this.acceptance.reasons.join("; ")}`}`);
       if (steady) L.push(`  steady soak window only (${steady.ticks} ticks): ${f3(steady.avg)} ms/tick summed over packs, p95 ${steady.p95} / p99 ${steady.p99} / max ${steady.max} ms`);

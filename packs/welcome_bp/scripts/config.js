@@ -58,3 +58,31 @@ export const DEFAULTS = {
   /** Ticks to wait after spawn before trying to show the popup (20 ticks = 1 second). */
   delayTicks: 40,
 };
+
+/**
+ * What a server that is not this Realm sees until an operator edits the message: one line per installed pack
+ * (pack folder -> line). It names no town, character, location or rule. The built-in text above is kept for
+ * worlds that already ran it (see welcome:profile in main.js).
+ */
+export const GENERIC = {
+  title: "§l§6Welcome!",
+  intro: "Hey §b{player}§r, glad you're here! §7({online} online)§r",
+  closing: "§b/realm:help§r  everything this server adds\n§7An operator can change this message with §b/realm:welcome_edit§r.",
+  /** @type {Record<string, string>} */
+  lines: {
+    saga_bp: "Stories and quests to follow (§b/realm:saga§r)",
+    quests_bp: "Daily quests (§b/realm:quests§r)",
+    expedition_bp: "Expeditions (§b/realm:expedition§r)",
+    bounty_bp: "A bounty board (§b/realm:bounty§r)",
+    skills_bp: "Skills that grow as you play (§b/realm:skills§r)",
+    crowns_bp: "Crowns to earn and spend (§b/realm:crowns§r)",
+    claims_bp: "Land claims to keep your builds safe (§b/realm:claim§r)",
+    calendar_bp: "A calendar of seasons and festivals (§b/realm:calendar§r)",
+    party_bp: "Teams with friends (§b/realm:party§r)",
+    mail_bp: "Mail for other players (§b/realm:mail§r)",
+    map_bp: "A minimap (§b/realm:map§r)",
+    stats_bp: "Your play stats (§b/realm:stats§r)",
+    journal_bp: "A journal of what you have found (§b/realm:journal§r)",
+    settings_bp: "Your own settings (§b/realm:prefs§r)",
+  },
+};

@@ -13,6 +13,7 @@ const OPTIONS = [
   { key: "liveScanRadius", type: "int", scope: "world", label: "Live scan radius (blocks)", help: "Containers this close are read fresh; farther ones come from the index", min: 0, max: 32, step: 2 },
   { key: "maxResults", type: "int", scope: "world", label: "Results shown", min: 5, max: 50, step: 5 },
   { key: "highlightSeconds", type: "int", scope: "world", label: "Highlight time (seconds)", min: 3, max: 60, step: 1 },
+  { key: "privateIndex", type: "bool", scope: "world", label: "Private index", help: "Enabled: players find only containers they opened. Disabled: anyone finds any remembered container they may open" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

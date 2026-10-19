@@ -161,6 +161,24 @@ function unlockTitle(p, g, r) {
   if (title) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: p.id, title, from: "guilds_bp" }));
 }
 
+// Town news: at most one piece per in-game hour from this pack, each master once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Rank titles stay outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** @param {Player} p @param {Guild} g @param {number} from @param {number} to @param {number} rep */
 function rankedUp(p, g, from, to, rep) {
   const rank = RANKS[to].name;
@@ -173,7 +191,7 @@ function rankedUp(p, g, from, to, rep) {
   p.playSound("random.levelup", { pitch: 1.2, volume: 0.9 });
   for (let r = from + 2; r <= to + 1; r++) unlockTitle(p, g, r);
   // Townsfolk gossip (Hearth & Hearsay) about a new Master (the top rank).
-  if (to === RANKS.length - 1 && from < to) system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "guild_master", player: p.id, name: p.name, place: guildName(g) }));
+  if (to === RANKS.length - 1 && from < to) gossip(`guild:${p.id}:${g}`, { kind: "guild_master", player: p.id, name: p.name, place: guildName(g) });
   if (CONFIG.announceRanks.includes(to + 1)) {
     for (const other of world.getAllPlayers()) if (other.id !== p.id) other.sendMessage(`§6${p.name} reached ${rank} in the ${guildName(g)}!`);
   }

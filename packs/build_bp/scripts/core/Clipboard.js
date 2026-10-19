@@ -11,6 +11,7 @@ import { rotateStates } from "../utils/BlockStates.js";
 import { applyModifiersToEntries } from "./ModifierPipeline.js";
 import { deleteSlot } from "../utils/ClipboardStore.js";
 import { filterSafeZonePositions, inSafeZoneAt, isBuildBlockedForPlayer } from "./Protection.js";
+import { bedPartnerPos, chargeUnits, dropIncompleteBeds, isBedType } from "./beds.js";
 import { isOp } from "../utils/Permissions.js";
 import { get } from "../settings.js";
 import { lockActionBar } from "../utils/ActionBar.js";
@@ -29,6 +30,45 @@ function rotateOffset(dx, dz, n) {
     }
 }
 
+function samePos(a, b) {
+    return a.x === b.x && a.y === b.y && a.z === b.z;
+}
+function trimPasteEntries(entries, cap) {
+    const out = [];
+    const used = new Set();
+    let items = 0;
+    for (let i = 0; i < entries.length; i++) {
+        if (used.has(i)) continue;
+        const entry = entries[i];
+        const partner = isBedType(entry.typeId) ? bedPartnerPos(entry.pos, entry.permStates) : null;
+        let pair = -1;
+        if (partner) {
+            for (let j = 0; j < entries.length; j++) {
+                if (j === i || used.has(j)) continue;
+                if (entries[j].typeId === entry.typeId && samePos(entries[j].pos, partner)) { pair = j; break; }
+            }
+        }
+        if (isBedType(entry.typeId) && pair < 0) { used.add(i); continue; }
+        const blocks = pair >= 0 ? 2 : 1;
+        if (items + blocks > cap) break;
+        const group = out.length + 1;
+        if (pair >= 0) {
+            const head = entry.permStates?.head_piece_bit === true;
+            const other = entries[pair];
+            const otherHead = other.permStates?.head_piece_bit === true;
+            out.push(
+                { ...entry, _bedGroup: group, _bedHead: head, _bedItems: head ? 0 : 1, _bedBlocks: 1 },
+                { ...other, _bedGroup: group, _bedHead: otherHead, _bedItems: otherHead ? 0 : 1, _bedBlocks: 1 },
+            );
+            used.add(pair);
+        } else {
+            out.push(entry);
+        }
+        used.add(i);
+        items += blocks;
+    }
+    return out;
+}
 export function getRotatedEntries(clipboard, origin, pasteFacingIdx) {
     const n = (pasteFacingIdx - clipboard.captureFacing + 4) & 3;
     return clipboard.blocks.map(b => {
@@ -151,11 +191,14 @@ export function executePaste(player, origin) {
             } catch { return true; }
         })
         .sort((a, b) => a.pos.y - b.pos.y);
-    if (entries.length > cap) entries = entries.slice(0, cap);
+    entries = trimPasteEntries(entries, cap);
 
     if (!creative && !isCut) {
         const needed = new Map();
-        for (const e of entries) needed.set(e.typeId, (needed.get(e.typeId) ?? 0) + 1);
+        for (const e of entries) {
+            const units = chargeUnits(e.typeId, e.permStates);
+            if (units > 0) needed.set(e.typeId, (needed.get(e.typeId) ?? 0) + units);
+        }
         const available = new Map();
         for (const [tid] of needed) available.set(tid, countBlocks(player, tid));
         let totalAvailable = 0;
@@ -164,16 +207,23 @@ export function executePaste(player, origin) {
         if (totalAvailable < entries.length) {
             player.sendMessage(t("eb.place.limited_blocks", totalAvailable));
             const remaining = new Map(available);
-            entries = entries.filter(e => {
+            entries = dropIncompleteBeds(entries.filter(e => {
+                const units = chargeUnits(e.typeId, e.permStates);
+                if (units <= 0) return true;
                 const avail = remaining.get(e.typeId) ?? 0;
                 if (avail <= 0) return false;
                 remaining.set(e.typeId, avail - 1);
                 return true;
-            });
+            }));
         }
     }
 
-    const positions     = entries.map(e => e.pos);
+    const positions     = entries.map(e => ({
+        ...e.pos,
+        _resolvedStates: e.permStates,
+        _bedHead: isBedType(e.typeId) && e.permStates?.head_piece_bit === true,
+        _bedGroup: e._bedGroup,
+    }));
     const perPosTypeIds = entries.map(e => e.typeId);
 
     const undoThreshold = getUndoThreshold(player);
@@ -203,7 +253,10 @@ export function executePaste(player, origin) {
 
     if (!creative && !isCut) {
         const consumed = new Map();
-        for (const e of entries) consumed.set(e.typeId, (consumed.get(e.typeId) ?? 0) + 1);
+        for (const e of entries) {
+            const units = chargeUnits(e.typeId, e.permStates);
+            if (units > 0) consumed.set(e.typeId, (consumed.get(e.typeId) ?? 0) + units);
+        }
         for (const [tid, count] of consumed) removeBlocks(player, tid, count);
     }
 

@@ -4,20 +4,38 @@
     "name": "Tornadoes",
     "description": "Thunderstorms can spin up a dramatic swirling tornado that sucks up players, spins them up the funnel and shoots them high out the top; it never breaks blocks or touches mobs. /realm:tornado",
     "uuid": "c74975c0-c973-49bb-a127-4a0747a88beb",
-    "version": [1, 2, 7],
-    "min_engine_version": [1, 21, 100]
+    "version": [
+      1,
+      2,
+      10
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      100
+    ]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
       "uuid": "9ad8f161-4073-4e79-9c0f-adfa60f75430",
-      "version": [1, 1, 0],
+      "version": [
+        1,
+        1,
+        0
+      ],
       "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.1.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
   ]
 }

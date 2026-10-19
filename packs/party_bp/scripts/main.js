@@ -47,7 +47,14 @@ function parse(p) {
   /** @type {[string, string, number?][]} */
   const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => memberOf(m));
   if (!members.length) return undefined;
-  return { ...unknownFields(any, ["l", "m"]), l: members.some((m) => m[0] === any.l) ? any.l : members[0][0], m: members };
+  const l = members.some((m) => m[0] === any.l) ? any.l : members[0][0];
+  const out = { ...unknownFields(any, ["l", "m"]), l, m: members };
+  if (Array.isArray(any.mu)) {
+    const mu = any.mu.filter((/** @type {unknown} */ x) => x !== l); // a leader is never muted
+    if (mu.length) /** @type {any} */ (out).mu = mu;
+    else delete (/** @type {any} */ (out).mu);
+  }
+  return out;
 }
 
 /** @returns {Map<string, Party>} code -> party */
@@ -216,10 +223,19 @@ function remove(id, why) {
   if (!code) return;
   const p = /** @type {Party} */ (parties().get(code));
   p.m = p.m.filter((m) => m[0] !== id);
+  const anyP = /** @type {any} */ (p);
+  if (Array.isArray(anyP.mu)) {
+    anyP.mu = anyP.mu.filter((/** @type {unknown} */ x) => x !== id);
+    if (!anyP.mu.length) delete anyP.mu;
+  }
   if (!p.m.length) parties().delete(code);
   else if (p.l === id) {
     const next = p.m.find((m) => online(m[0])) ?? p.m[0];
     p.l = next[0];
+    if (Array.isArray(anyP.mu)) {
+      anyP.mu = anyP.mu.filter((/** @type {unknown} */ x) => x !== p.l);
+      if (!anyP.mu.length) delete anyP.mu;
+    }
     why += ` ${next[1]} leads the party now.`;
   }
   save(code);
@@ -279,6 +295,13 @@ function leave(player) {
   player.sendMessage("§dYou left the party.");
 }
 
+/** Ids of the members the leader muted (saved as the party's `mu`; only current members count). @param {string} code @returns {string[]} */
+function mutedIn(code) {
+  const p = /** @type {any} */ (parties().get(code));
+  if (!p || !Array.isArray(p.mu)) return [];
+  return p.mu.filter((/** @type {unknown} */ id) => typeof id === "string" && id !== p.l && p.m.some((/** @type {any[]} */ m) => m[0] === id));
+}
+
 /** Tick each player last sent a party chat message: one a second at most. @type {Map<string, number>} */
 const lastChat = new Map();
 
@@ -288,9 +311,11 @@ function chat(player, text) {
   if (!code) return player.sendMessage("§cYou're not in a party. Start one with /realm:party");
   const msg = text.replace(/§/g, "").trim().slice(0, get("chatMaxLength"));
   if (!msg) return player.sendMessage('§cType a message: /realm:party_chat "see you there"');
+  if (mutedIn(code).includes(player.id)) return player.sendMessage("§cThe party leader muted you: your party messages aren't sent.");
   const now = system.currentTick;
   if (now - (lastChat.get(player.id) ?? -Infinity) < 20) return player.sendMessage("§7Slow down: one party message a second.");
   lastChat.set(player.id, now);
+  if (lastChat.size > 32) for (const [id, at] of lastChat) if (now - at >= 20) lastChat.delete(id);
   tell(code, `§d[Party] ${player.name}: §f${msg}`);
 }
 
@@ -336,6 +361,39 @@ let hudPlayers = new Set();
 let hudHeard = -Infinity;
 /** The Coordinates HUD repeats its state every 5 seconds: after 10 without one, it's gone. */
 const HUD_STALE_TICKS = 200;
+const HUD_PART_TIMEOUT = 100;
+/** The realm:hud_state list still arriving: one `seq`, its parts so far. @type {{ parts: number, seq: unknown, got: Map<number, string[]>, tick: number } | null} */
+let hudAssembly = null;
+
+/** Seq and tick of the last completed list: an older publication replayed late must not replace it. @type {{ seq: number, tick: number } | null} */
+let hudDone = null;
+
+/** Takes one realm:hud_state part; the player list is replaced only when every part of one publication is here. Malformed messages change nothing. @param {any} msg */
+function takeHudState(msg) {
+  if (!Array.isArray(msg.players)) return;
+  const now = system.currentTick;
+  const parts = msg.parts === undefined ? 1 : msg.parts;
+  const part = msg.part === undefined ? 1 : msg.part;
+  if (typeof parts !== "number" || typeof part !== "number" || !Number.isInteger(parts) || !Number.isInteger(part)) return;
+  if (!(parts >= 1 && parts <= 1000 && part >= 1 && part <= parts)) return;
+  const seq = typeof msg.seq === "number" && Number.isFinite(msg.seq) ? msg.seq : undefined;
+  // Older than what is already whole (or arriving): a late replay. After HUD_STALE_TICKS a restarted HUD's low numbers are accepted again.
+  if (seq !== undefined && hudDone && now - hudDone.tick <= HUD_STALE_TICKS && seq < hudDone.seq) return;
+  const ids = msg.players.map(String);
+  const finish = (/** @type {string[]} */ list) => {
+    hudAssembly = null;
+    hudPlayers = new Set(list);
+    hudHeard = now;
+    hudDone = seq === undefined ? null : { seq, tick: now };
+  };
+  if (parts === 1) return finish(ids);
+  let a = hudAssembly;
+  if (a && now - a.tick <= HUD_PART_TIMEOUT && typeof a.seq === "number" && seq !== undefined && seq < a.seq) return; // a late part of an older publication
+  if (!a || a.parts !== parts || a.seq !== seq || now - a.tick > HUD_PART_TIMEOUT) a = hudAssembly = { parts, seq, got: new Map(), tick: now };
+  a.got.set(part, ids);
+  if (a.got.size < parts) return;
+  finish([...a.got.values()].flat());
+}
 
 // Other packs' notes and steady lines (an expedition's run line, the Elytra HUD) hold the bar: the
 // party line waits, so the two don't take turns.
@@ -346,10 +404,7 @@ onScriptEvent(
     try {
       const m = JSON.parse(message);
       if (id === "realm:hud_state") {
-        if (m && Array.isArray(m.players)) {
-          hudPlayers = new Set(m.players.map(String));
-          hudHeard = system.currentTick;
-        }
+        if (m && typeof m === "object") takeHudState(m);
         return;
       }
       if (!m || typeof m.player !== "string" || m.from === "party_bp") return;
@@ -406,7 +461,7 @@ system.runInterval(() => {
 }, HUD_TICKS);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
-  if (!initialSpawn) return;
+  if (!initialSpawn) return void bump(player.id);
   try {
     syncTag(player);
     const code = partyOf(player.id);
@@ -448,8 +503,18 @@ function* forgetOld() {
 system.runTimeout(() => system.runJob(forgetOld()), 1600);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
+/** Per-player counter, bumped when a player leaves, dies, respawns or changes dimension: forms opened before that are stale. @type {Map<string, number>} */
+const lives = new Map();
+const bump = (/** @type {string} */ id) => lives.set(id, (lives.get(id) ?? 0) + 1);
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => bump(player.id));
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+  if (deadEntity.typeId === "minecraft:player") bump(deadEntity.id);
+});
+
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  lastChat.delete(playerId);
+  bump(playerId);
+  // An active one-a-second cooldown outlives leaving and rejoining; an expired one is dropped.
+  if (system.currentTick - (lastChat.get(playerId) ?? -Infinity) >= 20) lastChat.delete(playerId);
   invites.delete(playerId);
   barHeld.delete(playerId);
 });
@@ -465,9 +530,11 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
  * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 async function show(player, form) {
+  const life = lives.get(player.id) ?? 0;
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (!player.isValid) return undefined;
+    if (!player.isValid || (lives.get(player.id) ?? 0) !== life) return undefined;
     const res = /** @type {any} */ (await form.show(player));
+    if (!player.isValid || (lives.get(player.id) ?? 0) !== life) return undefined;
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), 20));
   }
@@ -523,6 +590,10 @@ async function mainMenu(player) {
   if (leader && p.m.length > 1) {
     form.button("Remove a member\n§8Leader only");
     actions.push(() => kickMenu(player));
+  }
+  if (leader && p.m.length > 1) {
+    form.button("Mute or unmute a member\n§8Leader only");
+    actions.push(() => muteMenu(player));
   }
   form.button("Leave the party");
   actions.push(() => leave(player));
@@ -581,6 +652,33 @@ async function kickMenu(player) {
   remove(picked[0], `${player.name} removed ${picked[1]} from the party.`);
   online(picked[0])?.sendMessage(`§d${player.name} removed you from the party.`);
   player.sendMessage(`§dRemoved ${picked[1]}.`);
+}
+
+/** The leader toggles a member's party chat mute. @param {Player} player */
+async function muteMenu(player) {
+  const code = partyOf(player.id);
+  const p = code ? parties().get(code) : undefined;
+  if (!code || !p || p.l !== player.id) return;
+  const members = p.m.filter((m) => m[0] !== player.id);
+  if (!members.length) return;
+  const muted = mutedIn(code);
+  const form = new ActionFormData().title("§lMute a member").body("A muted member can still read the party chat but their messages aren't sent. Tap a member to mute or unmute them.");
+  for (const [id, name] of members) form.button(`${name}\n§8${muted.includes(id) ? "Muted: tap to unmute" : "Tap to mute"}`);
+  form.button("Back");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const picked = members[res.selection];
+  if (!picked) return mainMenu(player);
+  const now = /** @type {any} */ (parties().get(code));
+  if (!now || now.l !== player.id || !now.m.some((/** @type {any[]} */ m) => m[0] === picked[0])) return;
+  const list = mutedIn(code);
+  const was = list.includes(picked[0]);
+  const next = was ? list.filter((x) => x !== picked[0]) : [...list, picked[0]];
+  if (next.length) now.mu = next;
+  else delete now.mu;
+  save(code);
+  player.sendMessage(`§d${picked[1]} is ${was ? "unmuted" : "muted"} in the party chat.`);
+  online(picked[0])?.sendMessage(was ? "§dThe party leader unmuted you." : "§cThe party leader muted you in the party chat.");
 }
 
 // ---------------------------------------------------------------------------

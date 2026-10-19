@@ -7,7 +7,7 @@ import {
   world,
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
-import { DEFAULTS } from "./config.js";
+import { DEFAULTS, GENERIC } from "./config.js";
 import { getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -16,6 +16,7 @@ import { onScriptEvent } from "./script-events.js";
 const PROP_SETTINGS = "welcome:settings"; // world: JSON overrides saved by /realm:welcome_edit (and /realm:config, see settings.js)
 const PROP_REVISION = "welcome:revision"; // world: bumped on every save
 const PROP_SEEN = "welcome:seen"; // player: revision they last saw
+const PROP_PROFILE = "welcome:profile"; // world: "realm" (the built-in Realm text) or "generic" (built from the installed packs), decided once
 
 // The client rejects forms while it's still loading, or has chat/inventory open
 // (UserBusy). Keep retrying for ~30s before giving up.
@@ -23,24 +24,107 @@ const RETRY_INTERVAL_TICKS = 20;
 const MAX_ATTEMPTS = 30;
 
 // ---------------------------------------------------------------------------
+// Which default text: the Realm's, or one built from the installed packs
+// ---------------------------------------------------------------------------
+
+/** Saved data other packs write by themselves when a world loads, before any player has played: not a sign of an older world. */
+const BOOT_PREFIXES = ["diag:", "settings:", "admin:", "news:", "help:", "realm:", "weather:"];
+/** The same, for single keys (a pack that writes one key at load but keeps player data under the same prefix; find:mig is Chest Finder's load-time marker, saved even in an empty world). */
+const BOOT_KEYS = new Set(["atlas:origin", "expedition:migrated", "bounty:day", "caravan:last", "find:mig"]);
+
+/**
+ * Decided once, when the world loads (before any player joins and so before packs write player data):
+ * "generic" only when nothing is saved but this kind of load-time data; anything else (saved text, any
+ * player or progress data, a key nobody here recognizes) is an older world and keeps the built-in Realm text.
+ * @returns {"realm" | "generic" | undefined} undefined when the world can't be read now
+ */
+function decide() {
+  const saved = world.getDynamicProperty(PROP_PROFILE);
+  if (saved === "realm" || saved === "generic") return saved;
+  let kind = /** @type {"realm" | "generic"} */ ("realm");
+  try {
+    const ids = world.getDynamicPropertyIds().filter((k) => k !== PROP_PROFILE);
+    if (ids.every((k) => BOOT_PREFIXES.some((p) => k.startsWith(p)) || BOOT_KEYS.has(k))) kind = "generic";
+  } catch {
+    return undefined;
+  }
+  world.setDynamicProperty(PROP_PROFILE, kind);
+  return kind;
+}
+
+/** @returns {"realm" | "generic"} the saved decision; before the world loaded, the built-in text and nothing saved */
+function profile() {
+  const saved = world.getDynamicProperty(PROP_PROFILE);
+  return saved === "generic" ? "generic" : "realm";
+}
+
+world.afterEvents.worldLoad.subscribe(() => {
+  decide();
+});
+
+/** @type {Set<string>} the pack folders that answered the last realm:help_ping */
+let installed = new Set(["welcome_bp"]);
+let askedAt = -Infinity;
+/** @type {Set<Set<string>>} answer sets of pings still waiting */
+const pongs = new Set();
+
+/** Asks which packs are installed (each answers /realm:help's ping with its folder), at most once a minute. */
+async function askInstalled() {
+  if (system.currentTick - askedAt < 1200) return;
+  askedAt = system.currentTick;
+  /** @type {Set<string>} */
+  const got = new Set(["welcome_bp"]);
+  pongs.add(got);
+  try {
+    system.sendScriptEvent("realm:help_ping", "");
+    await system.waitTicks(10);
+  } finally {
+    pongs.delete(got);
+  }
+  installed = got;
+}
+
+onScriptEvent(
+  "realm:help_pong",
+  ({ id, message }) => {
+    if (id !== "realm:help_pong") return;
+    for (const set of pongs) set.add(String(message));
+  },
+);
+
+/** The default text of a world that is not the Realm: one line for each installed pack that has one. */
+function genericText() {
+  const lines = Object.keys(GENERIC.lines)
+    .filter((pack) => installed.has(pack))
+    .map((pack) => `§7-§r ${GENERIC.lines[pack]}`);
+  return `${GENERIC.intro}\n\n${lines.length ? `§l§6== What's here ==§r\n${lines.join("\n")}\n\n` : ""}${GENERIC.closing}`;
+}
+
+/** The defaults this world falls back to: config.js's, with the title and body of its profile. @returns {WelcomeSettings} */
+function effectiveDefaults() {
+  return profile() === "generic" ? { ...DEFAULTS, title: GENERIC.title, body: genericText() } : { ...DEFAULTS };
+}
+
+// ---------------------------------------------------------------------------
 // Settings storage
 // ---------------------------------------------------------------------------
 
 /** @returns {WelcomeSettings} */
 function getSettings() {
+  const base = effectiveDefaults();
   const raw = world.getDynamicProperty(PROP_SETTINGS);
-  if (typeof raw !== "string") return { ...DEFAULTS };
+  if (typeof raw !== "string") return base;
   try {
     const saved = JSON.parse(raw);
-    const s = { ...DEFAULTS, ...(saved && typeof saved === "object" ? saved : {}) };
+    const s = { ...base, ...(saved && typeof saved === "object" ? saved : {}) };
     // A value of the wrong type (a hand-edited or corrupt property) falls back to its default.
     for (const key of /** @type {(keyof WelcomeSettings)[]} */ (Object.keys(DEFAULTS))) {
-      if (typeof s[key] !== typeof DEFAULTS[key]) /** @type {any} */ (s)[key] = DEFAULTS[key];
+      if (typeof s[key] !== typeof DEFAULTS[key]) /** @type {any} */ (s)[key] = base[key];
     }
     return s;
   } catch {
     console.warn("[welcome] Saved settings are corrupt, using defaults.");
-    return { ...DEFAULTS };
+    return base;
   }
 }
 
@@ -117,6 +201,8 @@ async function showPopup(player, settings, attempt = 1) {
  */
 async function welcome(player, { force = false } = {}) {
   if (!player.isValid) return; // left during the join delay
+  if (profile() === "generic" && typeof savedOverrides().body !== "string") await askInstalled();
+  if (!player.isValid) return;
   const settings = getSettings();
   const revision = getRevision();
 
@@ -190,18 +276,21 @@ function splitBody(text) {
 
 /** @param {Player} player */
 async function openEditor(player) {
+  if (profile() === "generic") await askInstalled();
+  if (!player.isValid) return;
+  const DEF = effectiveDefaults();
   const s = getSettings();
   const parts = splitBody(escapeNewlines(s.body));
 
   const form = new ModalFormData()
     .title("Edit welcome message")
-    .textField("Title", DEFAULTS.title, { defaultValue: s.title })
+    .textField("Title", DEF.title, { defaultValue: s.title })
     .label(
       `§7Minecraft's text boxes take ${BODY_PART} characters each, so the body is split over ${parts.length} boxes that are joined in order, with nothing added between them. Type \\n for a new line, {player} for the player's name, {online} for how many are online, and § for colors. All boxes empty = the default text.`
     );
   parts.forEach((part, i) => form.textField(`Body, part ${i + 1}`, i === 0 ? "Message..." : "", { defaultValue: part }));
   form
-    .textField("Button text", DEFAULTS.button, { defaultValue: s.button })
+    .textField("Button text", DEF.button, { defaultValue: s.button })
     .toggle("Show only once per player (re-shows after each edit)", { defaultValue: s.showOnce })
     .toggle("Also post in chat", { defaultValue: s.chat })
     .toggle("Also flash big on-screen title", { defaultValue: s.screenTitle })
@@ -231,9 +320,9 @@ async function openEditor(player) {
   /** @type {WelcomeSettings} */
   const edited = {
     ...s,
-    title: str(title, DEFAULTS.title),
-    body: unescapeNewlines(str(body, escapeNewlines(DEFAULTS.body))),
-    button: str(button, DEFAULTS.button),
+    title: str(title, DEF.title),
+    body: unescapeNewlines(str(body, escapeNewlines(DEF.body))),
+    button: str(button, DEF.button),
     showOnce: showOnce === true,
     chat: chat === true,
     screenTitle: screenTitle === true,
@@ -243,7 +332,7 @@ async function openEditor(player) {
   const now = savedOverrides();
   for (const key of /** @type {(keyof WelcomeSettings)[]} */ (Object.keys(edited))) {
     if (edited[key] === s[key]) continue;
-    if (edited[key] === DEFAULTS[key]) delete now[key]; // back to config.js: a later change there applies
+    if (edited[key] === DEF[key]) delete now[key]; // back to the defaults: a later change there applies
     else /** @type {any} */ (now)[key] = edited[key];
   }
   saveSettings(Object.keys(now).length ? now : undefined, reshow !== false);

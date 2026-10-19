@@ -120,7 +120,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "wardens", amount: 10 }],
-        hint: "The three farms are marked on your tracker: the Marsh farm east of spawn, the Kettle farm south-west, the Haddock farm to the north. Clues show as faint particles; walk close and tap near them.",
+        hint: "The three farms are marked on your tracker: the Marsh farm east of town, the Kettle farm south-west, the Haddock farm to the north. Clues show as faint particles; walk close and tap near them.",
       },
 
       // 2. Pip Is Missing

@@ -1273,8 +1273,11 @@ function gossipLine(player, t) {
   const g = alive.filter((x) => !heard.includes(x.i)).sort((a, b) => b.i - a.i)[0];
   if (!g) return undefined;
   const self = !!g.p && g.p === player.id; // town news (no player) is never about the listener
-  const pool = [...(HEARTH[t.id]?.gossip?.[g.k] ?? []), ...(GOSSIP[g.k] ?? (g.p ? GOSSIP.other : GOSSIP.news))];
-  const pair = pick(pool);
+  // A playerless piece names nobody. Lines that need {name} fall back to the nameless news line, so the
+  // name is never left empty and no player is invented. A caravan line names a place, so it stays.
+  const voiced = [...(HEARTH[t.id]?.gossip?.[g.k] ?? []), ...(GOSSIP[g.k] ?? (g.p ? GOSSIP.other : GOSSIP.news))];
+  const pool = g.p ? voiced : voiced.filter((pair) => !pair[0].includes("{name}") && !pair[1].includes("{name}"));
+  const pair = pick(pool.length ? pool : GOSSIP.news);
   if (!pair) return undefined;
   const kept = heard.filter((i) => alive.some((x) => x.i === i));
   kept.push(g.i);

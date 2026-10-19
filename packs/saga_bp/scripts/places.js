@@ -117,6 +117,7 @@ export const placeLabel = (name) => {
  * built camp's x, y, z is where its wanderer stands. @param {string} name @param {string} [state]
  */
 export function placeReady(name, state) {
+  if (name === TOWN) return; // a map anchor for story spots, not a place other packs show
   const rec = placesOf()[name];
   /** @type {Record<string, unknown>} */
   const msg = { name };
@@ -195,9 +196,44 @@ function spawnXZ() {
   }
 }
 
+/** The place an operator sets (`/realm:saga_place town`) where the town is; the near-spawn story spots are counted from it. */
+export const TOWN = "town";
+
+/** The town's x/z: the operator's `town` place in the overworld, else world spawn. */
+export function townXZ() {
+  const t = placesOf()[TOWN];
+  return t && t.dim === OVERWORLD ? { x: Math.floor(t.x), z: Math.floor(t.z) } : spawnXZ();
+}
+
+/** The stories set in and around the town: every `offset` in them (the square, farms, the forge, Pip's whole route) is counted from the town, so a story's spots never split between two anchors. */
+export const TOWN_STORIES = ["mayors_burden", "singing_forge", "heart_bram", "fest_judge", "fest_speech", "act2_choir", "lost_lambs"];
+
+/** @type {WeakSet<object> | undefined} */
+let townOffsets;
+
+/** Whether an offset belongs to a town story. @param {object} offset */
+function townAnchored(offset) {
+  if (!townOffsets) {
+    townOffsets = new WeakSet();
+    const seen = new Set();
+    /** @param {any} v */
+    const walk = (v) => {
+      if (!v || typeof v !== "object" || seen.has(v)) return;
+      seen.add(v);
+      for (const [k, x] of Object.entries(v)) {
+        if (k === "offset" && x && typeof x === "object") townOffsets?.add(x);
+        walk(x);
+      }
+    };
+    for (const s of STORIES) if (TOWN_STORIES.includes(s.id)) walk(s);
+  }
+  return townOffsets.has(offset);
+}
+
 /**
  * Where a location (an objective, or a `from`/`to`/`spawnAt`) is: a Loc, the name of a place nobody
- * has set (a string), or undefined when it names no location.
+ * has set (a string), or undefined when it names no location. An `offset` in a town story
+ * (TOWN_STORIES) is counted from the town; any other stays counted from world spawn.
  * @param {Where | Objective | undefined} w @param {string} [label] @returns {Loc | string | undefined}
  */
 export function locate(w, label) {
@@ -209,7 +245,7 @@ export function locate(w, label) {
   }
   if (w.at) return { dim: w.at.dim ?? OVERWORLD, x: w.at.x, z: w.at.z, label: w.mark ?? label ?? "the spot" };
   if (w.offset) {
-    const s = spawnXZ();
+    const s = townAnchored(w.offset) ? townXZ() : spawnXZ();
     const o = farOffset(w.offset);
     return { dim: OVERWORLD, x: s.x + o.x, z: s.z + o.z, label: w.mark ?? label ?? "the spot" };
   }
@@ -878,7 +914,7 @@ export async function previewBuild(player, name, at) {
 
 /** Which stories (and favors) use a place. @param {string} name */
 export const usedBy = (name) => [
-  ...STORIES.filter((s) => s.chapters.some((c) => c.objectives.some((o) => placesIn(o).includes(name)))).map((s) => s.title),
+  ...STORIES.filter((s) => (name === TOWN && TOWN_STORIES.includes(s.id)) || s.chapters.some((c) => c.objectives.some((o) => placesIn(o).includes(name)))).map((s) => s.title),
   ...(FAVORS.some((f) => f.objective && placesIn(f.objective).includes(name)) ? ["Daily favors"] : []),
 ];
 
@@ -910,6 +946,10 @@ export function statusOf(rec) {
  * @param {Player} player @param {string} name
  */
 export function setHere(player, name) {
+  if (name === TOWN && player.dimension.id !== OVERWORLD) {
+    player.sendMessage("§c[Story] The town has to be in the Overworld: its story spots are counted from there.");
+    return;
+  }
   const old = placesOf()[name];
   if (old?.b) {
     restore(old);
@@ -984,7 +1024,7 @@ async function placePage(player, name) {
           player.sendMessage(`§a[Story] Removed ${named(name)}.`);
         },
       ]);
-    if (rec && !isCamp(name))
+    if (rec && !isCamp(name) && name !== TOWN)
       actions.push([
         "Relocate",
         async () => {

@@ -154,6 +154,8 @@ eb.settings.admin_destroy_creative=§cАдмин§r - Режим разруше�
 eb.settings.admin_allow_inf_reach=§cАдмин§r - Разрешить бесконечную дальность\n§7Если выкл, бесконечная дальность глобально отключена
 eb.settings.admin_max_reach_cap=§cАдмин§r - Максимальная дальность\n§7Текущее: §e%1  §70 = без ограничений
 eb.settings.admin_max_blocks_cap=§cАдмин§r - Потолок блоков (на игрока)\n§7Сейчас: §e%1  §7Максимум: §e%2
+eb.settings.admin_default_max_blocks=§cАдмин§r - Блоки по умолчанию (на постройку)\n§7Игроки без сохраненного предела. Сейчас: §e%1  §7Максимум: §e%2
+eb.set.admin_default_blocks=Блоки по умолчанию
 eb.settings.admin_auto_give_book=§cАдмин§r - Авто-выдача книги строителя\n§7Если вкл, игроки получают книгу при входе в мир
 eb.settings.admin_config_tag=Ограничить /config тегом\n§7Если включено, только игроки с тегом могут использовать /config.
 
@@ -397,7 +399,6 @@ eb.join.welcome=§a[Effortless Building] §rВы получили §6Книгу 
 eb.help.title=Помощь
 eb.help.body=§fКнига §6Обучение§f объясняет всё с картинками. Возьмите её в руку, и она откроется перед вами.
 eb.help.btn.book=§lКнига «Обучение»§r\n§8Получить её или узнать, как открыть
-eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
 eb.help.btn.setup=§lБыстрая настройка§r\n§8Подогнать аддон под ваше устройство
 eb.help.book_hold=§a[EB] §rКнига §6Обучение§r у вас уже есть. Возьмите её в руку, и она откроется перед вами.
 eb.help.book_given=§a[EB] §rВот книга §6Обучение§r. Возьмите её в руку, и она откроется перед вами.
@@ -449,7 +450,6 @@ eb.set.admin_auto_give_book=Выдавать книги при входе
 eb.set.admin_lock_quality=Закрепить качество предпросмотра
 eb.set.admin_vanilla_menus=Простые меню для всех
 eb.set.book_language=Язык книги
-eb.set.book_language.tip=Язык книги\n§7Язык книги «Обучение», а также\n§7подсказок и уроков в парящих меню.
 eb.help.btn.language=§lЯзык книги§r\n§8English, Español, Deutsch, 日本語 ...
 entity.eb:language_picker.name=Язык
 eb.palette.dist.dissolve_x=Растворение X

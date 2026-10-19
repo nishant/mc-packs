@@ -1,5 +1,7 @@
 // @ts-nocheck
 import { ItemStack, system, world } from "@minecraft/server";
+import { createIdleClock, idleDue } from "./idle-cadence.js";
+import { forgetHolder, markHolderDirty } from "./tool-gate.js";
 
 export const BOOK_ID          = "eb:building_book";
 export const LEGACY_BOOK_ID   = "realm:building_book";
@@ -77,19 +79,32 @@ export function handJustChanged(player) {
  * by their place in the player list, so a big server costs little while nobody builds.
  */
 export const IDLE_EVERY = 5;
-export function idleSkip(player, index, busy) {
-    if (busy.has(player)) return false;
+const idleClock = createIdleClock();
+/** One step of this loop's own clock. A period that divides the world tick still walks every idle index. */
+export function nextIdlePhase() {
+    return idleClock.tick();
+}
+export function idleSkip(player, index, busy, phase = playersTick, window = 1) {
     const now = playersTick; // the loops call allPlayers() first, this tick
-    return (now + index) % IDLE_EVERY !== 0 && (handTouched.get(player) ?? -Infinity) < now - 1;
+    const span = Math.max(1, Number(window) || 1);
+    const handFresh = (handTouched.get(player) ?? -Infinity) >= now - span;
+    return !idleDue(index, phase, busy.has(player), handFresh);
 }
 const touch = (player) => {
     heldCache.delete(player.id);
     handTouched.set(player, system.currentTick);
+    markHolderDirty(player.id);
 };
 try {
     world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player }) => touch(player));
     world.afterEvents.playerInventoryItemChange.subscribe(({ player }) => touch(player));
-    world.afterEvents.playerLeave.subscribe(({ playerId }) => heldCache.delete(playerId));
+    world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+        heldCache.delete(playerId);
+        forgetHolder(playerId);
+    });
+    world.afterEvents.playerSpawn.subscribe(({ player }) => {
+        if (player?.id) markHolderDirty(player.id);
+    });
 } catch {}
 
 export function hasItem(player, typeId) {
