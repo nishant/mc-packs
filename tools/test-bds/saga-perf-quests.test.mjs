@@ -15,6 +15,7 @@ function run(args, faults = {}) {
   const pending = new Map();
   const names = new Map();
   const lastKey = new Map();
+  const areas = new Set(faults.ownedAreas ? ["farm_production", "harness_1_1"] : []);
   const emit = (player, text) => listener({ id: "realm:side", message: JSON.stringify({ player, from: "saga", slot: "quest", text }) });
   const t = {
     args,
@@ -36,7 +37,20 @@ function run(args, faults = {}) {
         });
       },
     },
-    world: { getDefaultSpawnLocation: () => ({ x: 163, y: 70, z: 170 }), getDimension: () => ({ runCommand() {} }) },
+    world: {
+      getDefaultSpawnLocation: () => ({ x: 163, y: 70, z: 170 }),
+      getDynamicProperty: () => JSON.stringify(faults.ownedAreas ? [{ name: "harness_1_1", dimension: "minecraft:overworld" }] : []),
+      getDimension: () => ({
+        runCommand(command) {
+          if (command === "tickingarea remove_all") areas.clear();
+          else {
+            const name = /^tickingarea remove "([^"]+)"$/.exec(command)?.[1];
+            if (name) return { successCount: Number(areas.delete(name)) };
+          }
+          return { successCount: 1 };
+        },
+      }),
+    },
     server() {},
     log() {},
     report: (name, data) => reports.push({ name, data }),
@@ -60,7 +74,7 @@ function run(args, faults = {}) {
       return p;
     },
   };
-  const done = scenario(t).then(() => ({ reports, failed, thrown: null }), (e) => ({ reports, failed, thrown: e }));
+  const done = scenario(t).then(() => ({ reports, failed, areas: [...areas], thrown: null }), (e) => ({ reports, failed, areas: [...areas], thrown: e }));
   return done;
 }
 
@@ -108,4 +122,11 @@ test("a player who leaves mid-window fails retention", async () => {
   assert.equal(r.failed.length, 1);
   assert.match(r.failed[0], /retained: fewest 9, at the end 9 of 10/);
   assert.equal(r.reports.at(-1).data.minValid, 9);
+});
+
+test("population preparation preserves production loaders and removes only owned fixture areas", async () => {
+  const r = await run(base, { ownedAreas: true });
+  assert.equal(r.thrown, null);
+  assert.deepEqual(r.failed, []);
+  assert.deepEqual(r.areas, ["farm_production"]);
 });

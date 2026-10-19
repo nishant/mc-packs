@@ -30,8 +30,20 @@ export default async function (t) {
       }
     } catch {}
   }, { namespaces: ["realm"] });
+  const clearedAreas = new Set();
   const clearAreas = () => {
-    try { t.world.getDimension("overworld").runCommand("tickingarea remove_all"); } catch (e) { /* none */ }
+    const raw = t.world.getDynamicProperty("harness:tickingAreas");
+    const areas = raw === undefined ? [] : JSON.parse(raw);
+    if (!Array.isArray(areas)) throw new Error("The harness ticking-area list is not an array");
+    for (const area of areas) {
+      const key = `${area.dimension}|${area.name}`;
+      if (clearedAreas.has(key)) continue;
+      if (!/^harness_\d+_\d+$/.test(area.name) || !["minecraft:overworld", "minecraft:nether", "minecraft:the_end"].includes(area.dimension))
+        throw new Error("Refusing to remove an area not owned by the harness");
+      const result = t.world.getDimension(area.dimension).runCommand(`tickingarea remove "${area.name}"`);
+      if (!(result.successCount > 0)) throw new Error(`Could not remove fixture area ${area.name}`);
+      clearedAreas.add(key);
+    }
   };
   const choose = async (p, npc, key) => {
     let next = t.waitForm(p, { timeout: 400 });

@@ -365,19 +365,21 @@ Operators can change `giveToPlayers`, `giveToOperators`, `removeFromOthers`, `ch
 
 ## Welcome Message — `welcome_bp`
 
-Shows a popup when a player joins the Realm: by default a short introduction to the realm (the story, what there is to do, handy commands and the rules) under gold headings. A brand-new world with no other saved data gets a generic welcome instead (below). Operators can edit the popup in-game.
+Shows the same short, spoiler-free default welcome on every world, including this Realm. One scrolling popup introduces the story and the main features that are actually installed, then points to help, personal settings and the story journal. Operators can save their own text in-game.
 
 ### How to use
 
-1. Join the realm. The welcome popup appears after about 2 seconds; tap its button (`Let's go!` by default) to close it.
+1. Join the realm. The welcome popup appears after about 2 seconds; scroll through it and tap `Close`.
 2. Run `/realm:welcome` (or `/realm:welcome_show`) any time to see it again. Don't want the popup when you join? Disable **Welcome popup when I join** in `/realm:prefs`; the chat welcome and the title still come (before 1.5.3 that switch turned them off too).
 3. **Operators:** `/realm:welcome` opens the **Welcome Message** menu instead: `Show the welcome message`, `Edit the welcome message`, `Reset to the defaults` and `Settings` (which points to `/realm:config` → Welcome Message). The edit and reset buttons do the same as the commands below. Run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type `\n` for a new line. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
 
-On a **new world** (see `welcome:profile` under Saved data) the default is a generic welcome: the title `Welcome!`, a greeting, one line for each installed pack that has one (stories, daily quests, expeditions, bounty board, skills, crowns, land claims, calendar, parties, mail, minimap, stats, journal, prefs; installed packs are asked at most once a minute), and a closing line pointing to `/realm:help` and `/realm:welcome_edit`. It names no town, character or rule. `/realm:welcome_edit` and `/realm:welcome_reset` use these defaults there. A world that already ran, and any text an operator saved, keep their text. Full native verification of the new-world path in the full bundle is UNVERIFIED.
+The default has three normal-size bold gold headings: `The World`, `What You Can Do` (omitted when there are no listed features) and `Where To Go Next`. With Story Questlines installed, it introduces the harbor bell and the strange stars without revealing later events; with Townsfolk too, it names Old Tobin and Mara as the starting point. Without Story Questlines it simply welcomes players to explore and build together. Feature and help lines name only installed packs. Installed packs are asked at most once a minute; concurrent joins wait for the same discovery, rather than seeing an incomplete list.
+
+The old saved Realm welcome containing `Tap Old Tobin or Mara in town to begin` is migrated once to this default. Its old built-in title and button are removed only if they still match; other settings and unknown fields stay. Unrelated saved text is not changed. After that migration, later operator edits always win, even if they reuse the old words. `/realm:welcome_reset` returns to the new default, not the retired Realm-specific text.
 
 ### What players see
 
-- About 2 seconds after joining (`delayTicks`), a popup appears with a title, body text and one close button.
+- About 2 seconds after joining (`delayTicks`), one scrolling popup appears with three short sections and one close button. The all-installed default is about 151 words; form labels and content bounds are checked separately from real client rendering, which remains unverified.
 - If the player is still loading, or has chat or their inventory open, the game rejects the popup. The pack retries every second for up to 30 seconds.
 - Respawning after death does **not** show it. Only joining does.
 
@@ -405,37 +407,55 @@ These are defaults. Once an op saves with `/realm:welcome_edit`, the saved value
 
 | Option | Default | In-game? | Description |
 |---|---|---|---|
-| `title` | `§l§6Welcome to the Realm!` | ✅ | Popup title |
-| `body` | Greeting with the online count, then gold headings: **The Story** (how to start *The Lantern and the Hollow* with Old Tobin or Mara, `/realm:saga`), **Adventure**, **Life in Town**, **Sky and Seasons** (the main packs, with `/realm:expedition`, `/realm:bounty`, `/realm:skills`, `/realm:crowns`, `/realm:claim`, `/realm:calendar`), **Handy** (`/realm:help`, `/realm:prefs`, `/realm:party`) and **Rules** (3 rules) | ✅ | Popup body. Supports placeholders and formatting |
-| `button` | `§lLet's go!` | ✅ | Close button text |
+| `title` | `§l§6Welcome!` | ✅ | Popup title |
+| `body` | `""` | ✅ | Empty means the installed-pack default below. A saved body replaces it with the operator's text, supporting placeholders and formatting |
+| `button` | `§lClose` | ✅ | Close button text |
 | `showOnce` | `false` | ✅ | `true` = only once per player, shown again after each edit (unless the edit turns that off). `false` = every join |
 | `chat` | `false` | ✅ | Also post the title + body in that player's chat |
 | `screenTitle` | `false` | ✅ | Also flash the title as big on-screen text |
 | `delayTicks` | `40` | ❌ | Ticks after spawn before the first try (20 ticks = 1 s). Not editable in game, so a new value here always applies, edits or not |
 
 
-### Generic text defaults (`scripts/config.js` -> `GENERIC`)
+### Default text (`scripts/config.js` -> `GENERIC`)
 
-These file defaults apply only to `welcome:profile = generic`. Its title is `§l§6Welcome!`; they are not extra Realm Settings switches. Saved operator text wins.
+These file defaults apply to every world. They are not extra Realm Settings switches. Saved operator text wins after the one-time legacy migration.
 
 | Option | Default | Description |
 |---|---|---|
-| `intro` | `Hey §b{player}§r, glad you're here! §7({online} online)§r` | Greeting on a new generic world; supports the same player/online placeholders. |
-| `closing` | `§b/realm:help§r  everything this server adds\n§7An operator can change this message with §b/realm:welcome_edit§r.` | Closing help/editor directions on a new generic world. |
-| `lines.saga_bp` | `Stories and quests to follow (§b/realm:saga§r)` | Shown only when saga_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.quests_bp` | `Daily quests (§b/realm:quests§r)` | Shown only when quests_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.expedition_bp` | `Expeditions (§b/realm:expedition§r)` | Shown only when expedition_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.bounty_bp` | `A bounty board (§b/realm:bounty§r)` | Shown only when bounty_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.skills_bp` | `Skills that grow as you play (§b/realm:skills§r)` | Shown only when skills_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.crowns_bp` | `Crowns to earn and spend (§b/realm:crowns§r)` | Shown only when crowns_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.claims_bp` | `Land claims to keep your builds safe (§b/realm:claim§r)` | Shown only when claims_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.calendar_bp` | `A calendar of seasons and festivals (§b/realm:calendar§r)` | Shown only when calendar_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.party_bp` | `Teams with friends (§b/realm:party§r)` | Shown only when party_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.mail_bp` | `Mail for other players (§b/realm:mail§r)` | Shown only when mail_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.map_bp` | `A minimap (§b/realm:map§r)` | Shown only when map_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.stats_bp` | `Your play stats (§b/realm:stats§r)` | Shown only when stats_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.journal_bp` | `A journal of what you have found (§b/realm:journal§r)` | Shown only when journal_bp is installed; old Realm and operator-saved text are kept. |
-| `lines.settings_bp` | `Your own settings (§b/realm:prefs§r)` | Shown only when settings_bp is installed; old Realm and operator-saved text are kept. |
+| `title` | `§l§6Welcome!` | Default popup title |
+| `heading.world` | `The World` | First section |
+| `heading.features` | `What You Can Do` | Installed-feature section |
+| `heading.next` | `Where To Go Next` | Help and settings section |
+| `greeting` | `Hey §b{player}§r, glad you're here! §7({online} online)§r` | Supports the player and online placeholders |
+| `story` | A sleepy harbor town, its bell lost forty winters ago, ringing again, and strange stars | Exact spoiler-free paragraph in `config.js`; shown only with Story Questlines |
+| `storyStart` | Tap Old Tobin or Mara in town to begin The Lantern and the Hollow | Shown only with both Story Questlines and Townsfolk |
+| `noStory` | `A world to explore, build and play in together.` | Used without Story Questlines |
+| `lines.quests_bp` | `Daily quests (§b/realm:quests§r)` | Shown only with Daily Quests |
+| `lines.expedition_bp` | `Expeditions (§b/realm:expedition§r)` | Shown only with Expeditions |
+| `lines.bounty_bp` | `A bounty board (§b/realm:bounty§r)` | Shown only with Bounty Board |
+| `lines.skills_bp` | `Skills that grow as you play (§b/realm:skills§r)` | Shown only with Skills |
+| `lines.crowns_bp` | `Crowns to earn and spend (§b/realm:crowns§r)` | Shown only with Crowns |
+| `lines.claims_bp` | `Land claims to keep your builds safe (§b/realm:claim§r)` | Shown only with Land Claims |
+| `lines.calendar_bp` | `A calendar of seasons and festivals (§b/realm:calendar§r)` | Shown only with Realm Calendar |
+| `lines.party_bp` | `Teams with friends (§b/realm:party§r)` | Shown only with Parties |
+| `lines.mail_bp` | `Mail for other players (§b/realm:mail§r)` | Shown only with Realm Mail |
+| `lines.map_bp` | `A minimap (§b/realm:map§r)` | Shown only with Minimap |
+| `lines.stats_bp` | `Your play stats (§b/realm:stats§r)` | Shown only with Stats |
+| `lines.journal_bp` | `A journal of what you have found (§b/realm:journal§r)` | Shown only with Field Journal |
+| `next.help_bp` | `/realm:help lists everything this server adds.` | Shown only with Realm Help |
+| `next.settings_bp` | `/realm:prefs holds your own settings, this popup included.` | Shown only with My Preferences |
+| `next.saga_bp` | `/realm:saga opens your story log: quests, hints and the codex.` | Shown only with Story Questlines |
+| `operators` | `Operators: /realm:welcome_edit changes this message.` | Operator directions come last |
+
+### Legacy migration matcher (`scripts/config.js` -> `LEGACY_REALM`)
+
+These identify the retired built-in message, not additional operator settings. They are used only before `welcome:migrated` is set.
+
+| Option | Default | Description |
+|---|---|---|
+| `sentence` | `Tap Old Tobin or Mara in town to begin` | The saved body must contain this exact phrase after color codes are stripped |
+| `title` | `§l§6Welcome to the Realm!` | Only this old title is removed with the matching body |
+| `button` | `§lLet's go!` | Only this old button is removed with the matching body |
 
 ### Saved data
 
@@ -443,7 +463,8 @@ These file defaults apply only to `welcome:profile = generic`. Its title is `§l
 |---|---|---|
 | `welcome:settings` | World | JSON of in-game edits (only the fields that differ from `config.js`; a field set back to its `config.js` value is removed, so it follows later changes there) |
 | `welcome:revision` | World | Increases on every save or reset |
-| `welcome:profile` | World | `realm` or `generic`, decided once when the world loads: `generic` only when every saved world key is load-time data (`diag:`, `settings:`, `admin:`, `news:`, `help:`, `realm:`, `weather:` prefixes, plus `atlas:origin`, `expedition:migrated`, `bounty:day`, `caravan:last`, `find:mig`). Any other key (saved welcome text, player or progress data, a key this pack does not recognize) means an older world, which keeps the built-in Realm text. It is a heuristic: player/progress data or unknown keys keep the Realm text; an older empty world containing only startup markers cannot be distinguished from a fresh world. A saved profile and saved operator text always win. The generic text is built from the installed packs when shown and is never saved; operator-saved text is always kept |
+| `welcome:migrated` | World | `1` after the one-time legacy-body migration. Checked on load and before showing or editing; later operator saves are never migrated again |
+| `welcome:profile` | World | Retired. Older copies may remain saved, but no longer select a different default |
 | `welcome:seen` | Player | Last revision the player saw (used by `showOnce`) |
 | `welcome:pref` | Player | JSON `{ popup: false }` when the player turned the popup on join off in `/realm:prefs` |
 
@@ -962,7 +983,7 @@ Operators can change `defaultRadius` and `maxAreas` in game with `/realm:config`
 
 ## Quick Stack & Sort — `stash_bp`
 
-Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; holding a tool, weapon or armor opens its menu to sort, lock or quick stack into storage that already holds each item (like Terraria). The **5 native-persistent inventory pages** share your hotbar, have previous/menu/next controls together at the top right, and let you move a stack or whole row to a page you choose. New pickups fill earlier pages first; **Fill earlier pages** tidies all later pages without sorting them.
+Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; holding a tool, weapon or armor opens its menu to sort, lock or quick stack into storage that already holds each item (like Terraria). The **5 native-persistent inventory pages** share your hotbar, have previous/menu/next controls together at the top right, and let you move a stack or whole row to a page you choose. When the viewed page has at most one free slot, auto-store routes new pickups through the other pages; **Fill earlier pages** tidies all later pages on demand without sorting them.
 
 ### How to use
 
@@ -977,7 +998,7 @@ Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; 
 5. **Help:** run `/realm:stash_help` for a page that explains the menu, chest locks and every command with its usage. `/help realm:stash` and `/help realm:sort` also describe them.
 6. **Inventory pages:** open your inventory. The last three slots of the main inventory's top row hold `<` (previous page), the current page number/menu, and `>` (next page), together from left to right. A page change replaces the other 24 slots. The hotbar, armor and offhand are the same on every page. `/realm:inv` opens a menu with every page and how full it is, **Scan all items across pages** (pick an item to jump to a page that holds it), **Move to page**, **Sort this page**, **Quick stack to nearby chests** and **Inventory settings**. Click the menu button, then close your inventory, and the same menu opens. **Move to page** asks for a stack or a whole row of your current page, then a destination. The top row has six usable slots; the other two rows have nine each. Matching stacks fill first, then empty slots. The whole move is refused if it cannot fit, a chosen stack changed, or you left, died, changed dimension or switched page. Your hotbar, cursor and page controls never move.
 7. **Hotbar refill from other pages:** with [Hotbar Refill](#hotbar-refill--refill_bp) on, a hotbar stack you use up is refilled from another page when the page you're on has none (`realm:refill_need` `{ player, slot, id, name?, lore?, loreHash? }`, the lore cut to its first 1500 characters and `loreHash` a hash of all of it: the fullest stack on another page with the same item, name and lore moves into that empty hotbar slot, in one saved step like a page switch). Tipped arrows, ominous bottles, banners and firework stars never come from another page (what tells them apart isn't compared), and nothing is moved for a player who just died.
-8. **Auto-store:** genuinely new pickups fill the earliest earlier page with room, even while the page you are viewing has free slots. Each earlier page's compatible stacks fill first, then its empty slots, before the next page is tried. Overflow goes to later pages only when the viewed page is full or down to its last free slot. Your hotbar stays as it is. **Fill earlier pages** in `/realm:inv` pulls items from every later page toward page 1, in page and slot order without sorting; it also works with auto-store disabled.
+8. **Auto-store:** when the viewed page has at most one free slot, genuinely new pickup amounts try the other pages in order, each page's compatible stacks before its empty slots. Routing stops once the viewed page has two free slots; while it has more room, pickups stay there. Your hotbar stays as it is. **Fill earlier pages** in `/realm:inv` pulls items from every later page toward page 1, in page and slot order without sorting; it also works with auto-store disabled.
 9. **Settings:** in `/realm:prefs` or **Inventory settings**, turn the in-inventory buttons (`invButtons`) and auto-store (`autoStore`) off for yourself. With the buttons off you still switch pages with `/realm:inv`. **Expansive inventory (5 pages)** (`invOff`, on by default) switches the extra pages off entirely: you get a normal 27-slot inventory with no buttons, and the items on pages 2 and up move back to page 1 or your hotbar. If there is no room, overflow stays safely saved until you make room or re-enable those pages; it is not dropped on the ground. `/realm:inv` has a one-click **Use normal inventory (turn off pages)** button, and **Enable Expansive Inventory (5 pages)** brings the pages and buttons back. Operators' personal page count (`/realm:inv_pages`, or the slider in **Inventory settings**) also takes `1` for a normal inventory.
 10. **Operators:** sneak-tap someone else's locked container holding gear for **Remove the lock (operator)**. To switch chest locks off for the realm, disable **Chest locks** in `/realm:config` (existing locks are kept for when they're enabled again). `/realm:inv_pages <count>` gives you your own number of pages (2 to 25, `1` for a single page with no buttons, `0` to follow the realm again) without changing everyone else's; **Inventory pages** in `/realm:config` (`pages`, 1 to 15) sets the realm's. If a failed inventory save has paused a player's pages, back up the world, run `/realm:inv_recover <player>` for that online player, and read its confirmation carefully. It exports the retained before-image into empty chest spots near you; it does not remove anything the player still carries. Inspect both inventories before distributing recovered items.
 
@@ -987,8 +1008,8 @@ Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; 
 - **Native, durable pages:** every stack belongs to its page, including filled shulker boxes, bundles, potions, maps, books, fireworks and trimmed armor. Inactive pages preserve native item data in World structure snapshots, not a script's memory or a partial JSON item copy. They survive logging out, dying on another page and clean server restarts without being dropped. A page and both inventory images are saved and restored for readback before live slots change. An error cancels the switch and rolls the inventory back; if recovery itself fails, the durable recovery images are retained and the pack reports it rather than silently discarding data.
 - **Items on the cursor and button slots:** only a page-button item is cleared from the cursor; ordinary held items are untouched. A real item placed in a button slot is moved to the current page, hotbar or another page. If all storage is full, it stays in that slot and the pack asks you to move it; the button never overwrites it.
 - **Fewer pages:** when your page count goes down (an operator lowers `pages`, you run `/realm:inv_pages 1`, or you disable extra pages), you are moved to page 1 and saved items move into your current inventory, hotbar or remaining pages. Overflow stays durably saved on its original page and is retried once a second while your inventory is changing, and every 5 seconds otherwise; re-enabling the pages also makes it accessible. Merely hiding buttons does not remove pages. Slots 15, 16 and 17 are ordinary slots while buttons are absent.
-- **Auto-store** (`autoStore`) looks every half second while your inventory is changing (for a second after any change) and every 25 seconds otherwise. Only new amounts attributable to an acquisition move: earlier pages are tried in order, each page's compatible partial stacks before its empty slots. Later pages are tried only while the viewed page has 1 or no free slots. Hotbar pickups stay there; moving existing items between the hotbar, main slots, cursor or worn gear is not a pickup. Turning auto-store off and back on does not route items acquired while it was off. A failed save reports the error and discards its old pickup baseline rather than retrying it as another acquisition.
-- **Fill earlier pages:** available whenever you have more than one page, including while viewing page 1. It pulls from pages 2 through your last page in page/slot order, preserving names, lore and native data without alphabetical sorting. The hotbar and controls never move. All changed pages commit together or the move is rolled back.
+- **Auto-store** (`autoStore`) looks every half second while your inventory is changing (for a second after any change) and every 25 seconds otherwise. Only new amounts attributable to an acquisition move, and only while the viewed page has 1 or no free slots. Other pages are tried earliest first, each page's compatible partial stacks before its empty slots, until two viewed-page slots are free. Hotbar pickups stay there; moving existing items between the hotbar, main slots, cursor or worn gear is not a pickup. Turning auto-store off and back on does not route items acquired while it was off. A failed save reports the error and discards its old pickup baseline rather than retrying it as another acquisition.
+- **Fill earlier pages:** available whenever you have more than one page, including while viewing page 1. It pulls from pages 2 through your last page in page/slot order, preserving names, lore and native data without alphabetical sorting. Slot-locked stacks, the hotbar and controls never move. All changed pages commit together or the move is rolled back.
 - **The menu** shows how full the container is and how full your inventory is (`Barrel - 18 of 27 slots used`, `Your inventory - 22 of 27 slots used`). Close it to do nothing. Holding anything other than gear (a block, a hopper, honeycomb) skips both sorting and the menu, so sneak-placing a hopper on a chest or waxing a copper chest works as usual. To scrape a copper chest with an axe, don't sneak.
 - **Move to page** moves a selected stack or whole row without sorting either page. Native names, lore, enchantments, damage, filled shulker contents and potion data stay intact. A full or unreadable destination, changed stack, stale form or pending recovery leaves the source untouched. Slot-locked stacks are refused. The menu uses one ordinary durable page transaction, including verified snapshots and rollback/quarantine; manual moves do not create pickup signals.
 - **Ender chests** get the menu without **Sort this**: add-ons can't see inside an ender chest, so it can't be sorted or stashed into.
@@ -1038,7 +1059,7 @@ Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; 
 | `sortHotbar` | `false` | `/realm:sort` and the menu's **Sort my inventory** also sort the hotbar |
 | `pages` | `5` | Expansive Inventory: how many pages of the main inventory everyone has, 1 to 15 (`1` = the vanilla inventory, no buttons). Each page is 24 slots. Operators can set their own with `/realm:inv_pages` |
 | `invButtons` | `true` | The three page buttons together in slots 15, 16 and 17 of the inventory's top row. Each player can turn them off for themselves in `/realm:prefs` |
-| `autoStore` | `true` | Genuine new pickup amounts fill earlier pages first, even while the viewed page has room; later pages receive overflow only when it is nearly full. Each player can turn it off for themselves in `/realm:prefs` |
+| `autoStore` | `true` | Only when the viewed page has at most one free slot, route genuine pickup amounts through other pages earliest first until two slots are free. Each player can turn it off in `/realm:prefs` |
 | `cooldownTicks` | `20` | Minimum time between sorts and stashes per player (20 = 1 s). Opening the menu, the help page or a lock button doesn't count |
 | `locks` | `true` | Chest locks: the sneak-tap menu's **Lock this chest**. Disabled: no lock buttons and no lock is enforced; the locks are kept and apply again once it's enabled |
 | `maxLocks` | `50` | Most containers one player can have locked at a time (a double chest counts once) |

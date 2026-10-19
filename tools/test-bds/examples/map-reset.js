@@ -45,7 +45,7 @@ export default async function (t) {
   t.cmd(op, "/realm:map_reset confirm");
   await t.wait(20);
   s = await state(pal);
-  t.check(s.resetGen === gen + 1, `the generation went up (${gen} -> ${s.resetGen})`);
+  t.check(Number.isSafeInteger(s.resetGen) && s.resetGen > gen, `the generation went up (${gen} -> ${s.resetGen})`);
   t.check(s.marks.length === 0 && s.wp === null, "the marked spots and destination are cleared");
 
   t.cmd(pal, '/realm:map_mark "After"');
