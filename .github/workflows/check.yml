@@ -28,17 +28,21 @@ jobs:
     needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 25
-    env:
-      BDS_DIR: ${{ runner.temp }}/bds
-      BDS_HARNESS_CACHE: ${{ runner.temp }}/bds-harness-cache
-      BDS_HARNESS_TMP: ${{ runner.temp }}/bds-harness-tmp
-      BDS_HARNESS_LOGS: ${{ runner.temp }}/bds-harness-logs
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Set private BDS paths on the allocated runner
+        shell: bash
+        run: |
+          {
+            echo "BDS_DIR=$RUNNER_TEMP/bds"
+            echo "BDS_HARNESS_CACHE=$RUNNER_TEMP/bds-harness-cache"
+            echo "BDS_HARNESS_TMP=$RUNNER_TEMP/bds-harness-tmp"
+            echo "BDS_HARNESS_LOGS=$RUNNER_TEMP/bds-harness-logs"
+          } >> "$GITHUB_ENV"
       - run: npm ci
       - uses: actions/cache@v4
         with:
