@@ -17,6 +17,7 @@ const OPTIONS = [
   { key: "sentLimit", type: "int", scope: "world", label: "Letters kept in Sent", min: 0, max: 100, step: 10 },
   { key: "notifyOnJoin", type: "bool", scope: "world", label: "Unread letters notice on join", help: "A chat line on joining for players with unread letters" },
   { key: "sendCooldownSeconds", type: "int", scope: "world", label: "Seconds between letters", help: "Per player. 0 = no wait", min: 0, max: 120, step: 5 },
+  { key: "senderUnreadCap", type: "int", scope: "world", label: "Unread letters per sender", help: "Most unread letters from one player in one inbox. 0 = no cap", min: 0, max: 50, step: 1 },
   { key: "joinNotice", type: "bool", scope: "player", base: "notifyOnJoin", label: "Unread letters notice on join", help: "A chat line when you join with unread letters" },
 ];
 

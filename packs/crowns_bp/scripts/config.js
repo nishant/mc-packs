@@ -38,6 +38,9 @@ export const CONFIG = {
   /** Most Crowns one `/realm:crowns_pay` can send. */
   maxPay: 100000,
 
+  /** Most Crowns one player can send in a UTC day (00:00 to 24:00 UTC), added up over every `/realm:crowns_pay`. 0 = no limit. */
+  dailyPayLimit: 250000,
+
   /** The top of `/realm:crowns`: how many players it lists. */
   topCount: 10,
 

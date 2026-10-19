@@ -18,6 +18,12 @@ export const CONFIG = {
   /** On joining, players with unread letters get a chat line such as "You have 2 unread letters: /realm:mail". */
   notifyOnJoin: true,
 
+  /** Most unread letters from one player that one inbox holds; they can send again once some are read or deleted. 0 = no cap. Letters from packs aren't counted. */
+  senderUnreadCap: 5,
+
+  /** Most players one player can block (a blocked player's letters aren't delivered; letters from packs still are). */
+  blockListMax: 30,
+
   /** Seconds after joining before that chat line, so it comes after the welcome and news popups. */
   notifyDelaySeconds: 8,
 
