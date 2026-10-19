@@ -1,7 +1,9 @@
 // @ts-nocheck
 import { world, system } from "@minecraft/server";
 import { getState, getMirrorState, getRadialState, getArrayState } from "./PlayerState.js";
-import { idleSkip, allPlayers } from "../utils/Items.js";
+import { idleSkip, nextIdlePhase, allPlayers } from "../utils/Items.js";
+import { beginVisualizationTick } from "../utils/tool-gate.js";
+import { holdsBuildTool } from "../utils/build-tool.js";
 
 const OFFSET   = 0.525;
 const VIEW_CLIP = 24;
@@ -127,7 +129,9 @@ function drawHorizontalArms(player, mirror) {
 export function startModifierVisualizerLoop() {
 
     system.runInterval(() => {
-        for (const player of allPlayers()) {
+        const all = allPlayers();
+        if (!beginVisualizationTick(all, holdsBuildTool)) return;
+        for (const player of all) {
             try {
                 const mirror = getMirrorState(player);
                 const radial = getRadialState(player);
@@ -148,9 +152,12 @@ export function startModifierVisualizerLoop() {
     const mirrorBusy = new WeakSet();
     system.runInterval(() => {
         const all = allPlayers();
+        if (!beginVisualizationTick(all, holdsBuildTool)) return;
+        const phase = nextIdlePhase();
         for (let i = 0; i < all.length; i++) {
             const player = all[i];
-            if (idleSkip(player, i, mirrorBusy)) continue;
+            if (idleSkip(player, i, mirrorBusy, phase)) continue;
+            if (!holdsBuildTool(player)) { mirrorBusy.delete(player); continue; }
             try {
                 const mirror = getMirrorState(player);
                 if (!mirror.enabled || !(mirror.axisX || mirror.axisZ)) { mirrorBusy.delete(player); continue; }

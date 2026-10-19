@@ -6,6 +6,7 @@ import { getMaxBlocks, getUndoThreshold, getDestroyDrops, getBuildSpeed } from "
 import { recordSnapshot } from "./UndoRedo.js";
 import { lockActionBar } from "../utils/ActionBar.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
+import { bedPartnerPos, isBedType } from "./beds.js";
 
 export const UNBREAKABLE = new Set([
     "minecraft:bedrock",
@@ -16,7 +17,6 @@ export const UNBREAKABLE = new Set([
     "minecraft:structure_block",
     "minecraft:jigsaw",
     "minecraft:end_portal",
-    "minecraft:end_gateway",
     "minecraft:end_portal_frame",
     "minecraft:water",
     "minecraft:flowing_water",
@@ -448,6 +448,7 @@ export function destroyBlocks(player, positions, onComplete) {
     let idx           = 0;
     let pendingRetries = 0;
     const pending  = [];
+    const clearedBeds = new Set();
 
     const blocksPerTick = Math.ceil(capped.length / getBuildSpeed(player));
 
@@ -485,6 +486,8 @@ export function destroyBlocks(player, positions, onComplete) {
             }
             try {
                 const pos   = capped[idx];
+                const posKey = `${pos.x},${pos.y},${pos.z}`;
+                if (clearedBeds.has(posKey)) continue;
                 const block = dim.getBlock(pos);
                 if (!block) { pending.push(pos); continue; }
                 if (block.isAir || UNBREAKABLE.has(block.typeId)) continue;
@@ -507,7 +510,27 @@ export function destroyBlocks(player, positions, onComplete) {
                     const packed = block.typeId.startsWith("minecraft:") ? block.typeId.slice(10) : block.typeId;
                     snapBef = { x: pos.x, y: pos.y, z: pos.z, t: packed, s: block.permutation.getAllStates() };
                 }
+                const bedStates = isBedType(block.typeId) ? block.permutation.getAllStates() : null;
                 try { block.setType("minecraft:air"); } catch { continue; }
+                clearedBeds.add(posKey);
+                if (bedStates) {
+                    const partner = bedPartnerPos(pos, bedStates);
+                    const pk = partner ? `${partner.x},${partner.y},${partner.z}` : null;
+                    if (partner && pk && !clearedBeds.has(pk)) {
+                        try {
+                            const other = dim.getBlock(partner);
+                            if (other && isBedType(other.typeId)) {
+                                if (snapshot) {
+                                    const packed = other.typeId.startsWith("minecraft:") ? other.typeId.slice(10) : other.typeId;
+                                    snapshot.bef.push({ x: partner.x, y: partner.y, z: partner.z, t: packed, s: other.permutation.getAllStates() });
+                                    snapshot.aft.push({ x: partner.x, y: partner.y, z: partner.z, t: "air", s: {} });
+                                }
+                                other.setType("minecraft:air");
+                                clearedBeds.add(pk);
+                            }
+                        } catch {}
+                    }
+                }
 
                 totalXp += xpGain;
                 if (snapshot && snapBef) {

@@ -154,6 +154,8 @@ eb.settings.admin_destroy_creative=§cAdmin§r - Modo Destruir: Apenas Criativo\
 eb.settings.admin_allow_inf_reach=§cAdmin§r - Permitir Alcance Infinito\n§7Quando desativado, o Alcance Infinito está globalmente desativado
 eb.settings.admin_max_reach_cap=§cAdmin§r - Distância Máx. de Alcance Infinito\n§7Atual: §e%1  §70 = sem limite
 eb.settings.admin_max_blocks_cap=§cAdmin§r - Teto de blocos (por jogador)\n§7Atual: §e%1  §7Máximo: §e%2
+eb.settings.admin_default_max_blocks=§cAdmin§r - Default blocks per build\n§7Players with no saved limit. Current: §e%1  §7Cap: §e%2
+eb.set.admin_default_blocks=Default blocks per build
 eb.settings.admin_auto_give_book=§cAdmin§r - Auto-Dar Livro de Construção\n§7Quando ativado, jogadores recebem o livro ao entrar
 eb.settings.admin_config_tag=Restringir /config à tag requerida\n§7Se ativado, apenas jogadores com a tag requerida podem usar /config.
 
@@ -397,7 +399,6 @@ eb.join.welcome=§a[Effortless Building] §rRecebeu o §6Livro de Construção§
 eb.help.title=Ajuda
 eb.help.body=§fO livro §6Tutorial§f explica tudo com imagens. Segure-o na mão e ele abre à sua frente.
 eb.help.btn.book=§lLivro Tutorial§r\n§8Pegue-o ou veja como abri-lo
-eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
 eb.help.btn.setup=§lConfiguração rápida§r\n§8Adapte o addon ao seu aparelho
 eb.help.book_hold=§a[EB] §rJá tem o livro §6Tutorial§r. Segure-o na mão e ele abre à sua frente.
 eb.help.book_given=§a[EB] §rAqui está o livro §6Tutorial§r. Segure-o na mão e ele abre à sua frente.
@@ -449,7 +450,6 @@ eb.set.admin_auto_give_book=Dar livros ao entrar
 eb.set.admin_lock_quality=Bloquear qualidade da prévia
 eb.set.admin_vanilla_menus=Menus simples para todos
 eb.set.book_language=Idioma do livro
-eb.set.book_language.tip=Idioma do livro\n§7O idioma do livro Tutorial e das\n§7dicas e lições dos menus flutuantes.
 eb.help.btn.language=§lIdioma do livro§r\n§8English, Español, Deutsch, 日本語 ...
 entity.eb:language_picker.name=Idioma
 eb.palette.dist.dissolve_x=Dissolver X

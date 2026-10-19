@@ -10,14 +10,9 @@ import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern }
 import { getPlacementStatesFromAir } from "../modes/AirBuildMode.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
 import { lockActionBar } from "../utils/ActionBar.js";
+import { expandBeds, isBedType, directionFromStates, directionFromYaw, trimPlacement, placementItemCount } from "./beds.js";
 export const UNPLACEABLE = new Set([
     "minecraft:undyed_shulker_box",
-    "minecraft:white_bed", "minecraft:orange_bed", "minecraft:magenta_bed",
-    "minecraft:light_blue_bed", "minecraft:yellow_bed", "minecraft:lime_bed",
-    "minecraft:pink_bed", "minecraft:gray_bed", "minecraft:light_gray_bed",
-    "minecraft:cyan_bed", "minecraft:purple_bed", "minecraft:blue_bed",
-    "minecraft:brown_bed", "minecraft:green_bed", "minecraft:red_bed",
-    "minecraft:black_bed",
 ]);
 
 export const ALWAYS_REPLACEABLE = new Set([
@@ -65,7 +60,20 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
         catch { return true; }
     });
     const cap = getMaxBlocks(player);
-    if (toPlace.length > cap) toPlace = toPlace.slice(0, cap);
+    const bedBuild = isBedType(typeId);
+    if (!bedBuild && toPlace.length > cap) toPlace = toPlace.slice(0, cap);
+    const canPlaceBed = (p) => {
+        if (p.y < yMin || p.y > yMax) return false;
+        if (!filterSafeZonePositions(player, dim.id, [p], true).length) return false;
+        try {
+            const block = dim.getBlock(p);
+            if (block === null || block === undefined) return true;
+            const existing = block.typeId;
+            if (!creative && existing === "minecraft:bedrock") return false;
+            if (!replaceBlocks && !ALWAYS_REPLACEABLE.has(existing)) return false;
+            return existing !== typeId;
+        } catch { return true; }
+    };
     const palette      = getPaletteBlocks(player);
     const distribution = getDistributionMode(player);
     let assignments    = palette ? assignPalette(palette, toPlace, distribution) : null;
@@ -73,11 +81,30 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
         assignments = assignments.filter(a => !UNPLACEABLE.has(a.typeId));
         toPlace     = assignments.map(a => a.pos);
     }
+    if (bedBuild || (assignments && assignments.some(a => isBedType(a.typeId)))) {
+        let yaw = 0;
+        try { yaw = player.getRotation().y; } catch { yaw = 0; }
+        const entries = (assignments ?? toPlace.map(p => ({ pos: p, typeId }))).map(({ pos, typeId: tid }) => {
+            const raw = pos.states ?? blockStates ?? {};
+            const flipped = (pos._mx || pos._my || pos._mz) ? getFlippedStates(raw, !!pos._mx, !!pos._my, !!pos._mz) : raw;
+            return {
+                x: pos.x, y: pos.y, z: pos.z, typeId: tid,
+                states: flipped,
+                direction: directionFromStates(flipped) ?? directionFromYaw(yaw),
+                _alreadyHalf: flipped.head_piece_bit === true,
+            };
+        });
+        const expanded = expandBeds(entries, canPlaceBed);
+        const trimmed = trimPlacement(expanded.positions, cap);
+        toPlace = trimmed.positions;
+        if (assignments) assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeId }));
+    }
     if (!creative) {
         if (assignments) {
             const needed = new Map();
-            for (const { typeId: t } of assignments) {
-                needed.set(t, (needed.get(t) ?? 0) + 1);
+            for (const a of assignments) {
+                if (a.pos?._bedHead) continue;
+                needed.set(a.typeId, (needed.get(a.typeId) ?? 0) + 1);
             }
             let totalAvailable = 0;
             for (const [t, count] of needed) {
@@ -87,29 +114,31 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                 player.sendMessage(t("eb.place.no_palette_blocks"));
                 return 0;
             }
-            if (totalAvailable < toPlace.length) {
+            if (totalAvailable < placementItemCount(toPlace)) {
                 player.sendMessage(t("eb.place.limited_palette_blocks", totalAvailable));
-                toPlace    = toPlace.slice(0, totalAvailable);
-                assignments = assignPalette(palette, toPlace, distribution);
+                toPlace = trimPlacement(toPlace, undefined, totalAvailable).positions;
+                assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeId }));
             }
             const finalNeeded = new Map();
-            for (const { typeId: t } of assignments) {
-                finalNeeded.set(t, (finalNeeded.get(t) ?? 0) + 1);
+            for (const a of assignments) {
+                if (a.pos?._bedHead) continue;
+                finalNeeded.set(a.typeId, (finalNeeded.get(a.typeId) ?? 0) + 1);
             }
             for (const [t, count] of finalNeeded) {
                 removeBlocks(player, t, count);
             }
         } else {
             const available = countBlocks(player, typeId);
+            const need = placementItemCount(toPlace);
             if (available <= 0) {
                 player.sendMessage(t("eb.place.no_blocks"));
                 return 0;
             }
-            if (available < toPlace.length) {
+            if (available < need) {
                 player.sendMessage(t("eb.place.limited_blocks", available));
-                toPlace = toPlace.slice(0, available);
+                toPlace = trimPlacement(toPlace, undefined, available).positions;
             }
-            removeBlocks(player, typeId, toPlace.length);
+            removeBlocks(player, typeId, placementItemCount(toPlace));
         }
     }
     const total = toPlace.length;
@@ -169,7 +198,20 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
             ? (permMap.get(`${pos.x},${pos.y},${pos.z}`) ?? basePerm)
             : basePerm;
 
-        if (pos._mx || pos._my || pos._mz) {
+        if (pos._resolvedStates) {
+            try {
+                const base = assignments
+                    ? (posTypeMap.get(`${pos.x},${pos.y},${pos.z}`) ?? pos.typeId ?? typeId)
+                    : (pos.typeId ?? typeId);
+                try {
+                    perm = BlockPermutation.resolve(base, pos._resolvedStates);
+                } catch {
+                    const known = { ...pos._resolvedStates };
+                    delete known.color;
+                    perm = BlockPermutation.resolve(base, known);
+                }
+            } catch {  }
+        } else if (pos._mx || pos._my || pos._mz) {
             try {
                 const base = assignments
                     ? (posTypeMap.get(`${pos.x},${pos.y},${pos.z}`) ?? typeId)
@@ -279,6 +321,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                         const refund = new Map();
                         for (let r = idx; r < ordered.length; r++) {
                             const p = ordered[r];
+                            if (p._bedHead) continue;
                             const tid = assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? typeId) : typeId;
                             refund.set(tid, (refund.get(tid) ?? 0) + 1);
                         }

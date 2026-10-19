@@ -41,7 +41,7 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "./utils/Items.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, nextIdlePhase, IDLE_EVERY, allPlayers } from "./utils/Items.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -843,9 +843,10 @@ system.runInterval(() => {
 const sneakBusy = new WeakSet();
 system.runInterval(() => {
     const all = allPlayers();
+    const phase = nextIdlePhase();
     for (let i = 0; i < all.length; i++) {
         const player = all[i];
-        if (idleSkip(player, i, sneakBusy)) continue;
+        if (idleSkip(player, i, sneakBusy, phase)) continue;
         try {
             const item = heldItemCached(player, IDLE_EVERY);
             if (!isBook(item)) { sneakBusy.delete(player); prevSneakState.delete(player.id); continue; }

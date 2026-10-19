@@ -51,6 +51,24 @@ const OPTIONS = [
     write: writeWorld("eb:adminMaxBlocksCap"),
   },
   {
+    key: "defaultMaxBlocks",
+    type: "int",
+    scope: "world",
+    label: "Default blocks per build",
+    help: "Players with no saved limit. Raising the cap does not change this. Operators only.",
+    min: 64,
+    max: 300000,
+    step: 64,
+    read: readWorld("eb:defaultMaxBlocks"),
+    write: (v) => {
+      if (v === undefined) { writeWorld("eb:defaultMaxBlocks")(undefined); return; }
+      const capRaw = world.getDynamicProperty("eb:adminMaxBlocksCap");
+      const cap = typeof capRaw === "number" && capRaw >= 1 ? Math.min(Math.floor(capRaw), 300000) : Number(CONFIG.maxBlocksCap) || 50000;
+      const n = Math.max(1, Math.min(cap, Math.floor(Number(v))));
+      writeWorld("eb:defaultMaxBlocks")(n);
+    },
+  },
+  {
     key: "modeComplexity",
     type: "enum",
     scope: "world",
@@ -191,7 +209,7 @@ const OPTIONS = [
   { key: "flickPreview", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:flickPreview", default: false, label: "Flick preview (only flash when aim moves)" },
   { key: "simpleModes", type: "bool", scope: "player", lock: [["enabled", false], ["modeComplexity", "simple"], ["modeComplexity", "advanced"]], locked: (p) => cantBuild(p), prop: "eb:simpleModes", default: false, label: "Simple mode list (Line, Wall, Floor, Cube)" },
   { key: "buildSpeed", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:buildSpeed", default: 20, label: "Build speed (wave ticks, 1 = instant)", min: 1, max: 100, step: 1 },
-  { key: "maxBlocks", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:maxBlocks", base: "maxBlocksCap", label: "My max blocks per build", min: 64, max: 300000, step: 64 },
+  { key: "maxBlocks", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:maxBlocks", base: "defaultMaxBlocks", label: "My max blocks per build", min: 64, max: 300000, step: 64 },
   { key: "replaceBlocks", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:replaceBlocks", default: true, label: "Replace blocks in Creative mode" },
   { key: "infiniteReach", type: "bool", scope: "player", lock: [["enabled", false], ["allowInfiniteReach", false]], locked: (p) => cantBuild(p), prop: "eb:infiniteReach", default: false, label: "Infinite Reach" },
   { key: "infiniteReachDistance", type: "int", scope: "player", lock: [["enabled", false], ["allowInfiniteReach", false]], locked: (p) => cantBuild(p), prop: "eb:infiniteReachDistance", default: 64, label: "Infinite Reach distance (blocks)", min: 4, max: 256, step: 4 },

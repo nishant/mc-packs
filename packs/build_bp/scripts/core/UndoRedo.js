@@ -123,7 +123,7 @@ export function captureSnapshot(dim, toPlace, typeId, blockStates, perPosTypeIds
     const aft = toPlace.map((pos, i) => ({
         x: pos.x, y: pos.y, z: pos.z,
         t: pack(perPosTypeIds ? perPosTypeIds[i] : typeId),
-        s: perPosTypeIds ? {} : (blockStates ?? {}),
+        s: pos._resolvedStates ?? (perPosTypeIds ? {} : (blockStates ?? {})),
     }));
     return { dim: dim.id, bef, aft };
 }

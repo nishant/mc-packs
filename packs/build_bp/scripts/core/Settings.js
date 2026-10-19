@@ -2,6 +2,7 @@
 import { world } from "@minecraft/server";
 import { get } from "../settings.js";
 import { getCallingBonus } from "./Protection.js";
+import { applyBuildBonus, resolveCap, resolveDefaultMaxBlocks, resolvePlayerMaxBlocks } from "./block-limit.js";
 import { isOp } from "../utils/Permissions.js";
 export const HARD_MAX_BLOCKS = 300_000;
 const DP_PREVIEW_MODE   = "eb:previewMode";
@@ -103,30 +104,39 @@ export function setInfiniteReachDistance(player, value) {
 const DEFAULT_MAX_BLOCKS           = 50_000;
 const DEFAULT_ADMIN_MAX_BLOCKS_CAP = 50_000;
 const DP_MAX_BLOCKS                = "eb:maxBlocks";
+const DP_DEFAULT_MAX_BLOCKS        = "eb:defaultMaxBlocks";
 const DP_ADMIN_MAX_BLOCKS_CAP      = "eb:adminMaxBlocksCap";
 export function getAdminMaxBlocksCap() {
-    try {
-        const v = world.getDynamicProperty(DP_ADMIN_MAX_BLOCKS_CAP);
-        if (typeof v === "number" && v >= 1) return Math.min(Math.floor(v), HARD_MAX_BLOCKS);
-    } catch {}
-    const cfg = Number(get("maxBlocksCap"));
-    return Number.isFinite(cfg) && cfg >= 1 ? Math.min(Math.floor(cfg), HARD_MAX_BLOCKS) : DEFAULT_ADMIN_MAX_BLOCKS_CAP;
+    let saved;
+    try { saved = world.getDynamicProperty(DP_ADMIN_MAX_BLOCKS_CAP); } catch {}
+    return resolveCap(saved, Number(get("maxBlocksCap")));
 }
 export function setAdminMaxBlocksCap(value) {
     const v = Math.max(1, Math.min(HARD_MAX_BLOCKS, Math.floor(value)));
     try { world.setDynamicProperty(DP_ADMIN_MAX_BLOCKS_CAP, v); } catch {}
     return v;
 }
+export function getDefaultMaxBlocks() {
+    let saved;
+    try { saved = world.getDynamicProperty(DP_DEFAULT_MAX_BLOCKS); } catch {}
+    return resolveDefaultMaxBlocks({
+        saved,
+        configDefault: Number(get("defaultMaxBlocks")) || DEFAULT_MAX_BLOCKS,
+        cap: getAdminMaxBlocksCap(),
+    });
+}
+export function setDefaultMaxBlocks(value) {
+    const cap = getAdminMaxBlocksCap();
+    const v = Math.max(1, Math.min(cap, Math.floor(value)));
+    try { world.setDynamicProperty(DP_DEFAULT_MAX_BLOCKS, v); } catch {}
+    return v;
+}
 export function getMaxBlocks(player) {
-    const adminCap = getAdminMaxBlocksCap();
-    // No choice saved: the cap, which is also what /realm:prefs shows (and what it saves as "no choice").
-    let base = adminCap;
-    try {
-        const val = player.getDynamicProperty(DP_MAX_BLOCKS);
-        if (typeof val === "number" && val >= 1) base = Math.min(Math.floor(val), adminCap);
-    } catch {  }
-    const bonusPct = getCallingBonus(player, "buildEye");
-    return bonusPct > 0 ? Math.min(HARD_MAX_BLOCKS, Math.floor(base * (1 + bonusPct / 100))) : base;
+    const cap = getAdminMaxBlocksCap();
+    let saved;
+    try { saved = player.getDynamicProperty(DP_MAX_BLOCKS); } catch {}
+    const base = resolvePlayerMaxBlocks({ saved, fallback: getDefaultMaxBlocks(), cap });
+    return applyBuildBonus(base, getCallingBonus(player, "buildEye"));
 }
 export function setMaxBlocks(player, value) {
     const adminCap = getAdminMaxBlocksCap();

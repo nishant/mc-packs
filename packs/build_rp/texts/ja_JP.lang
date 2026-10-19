@@ -154,6 +154,8 @@ eb.settings.admin_destroy_creative=§c管理者§r - 破壊モード: クリエ�
 eb.settings.admin_allow_inf_reach=§c管理者§r - 無限リーチを許可\n§7オフ: 無限リーチがグローバルに無効
 eb.settings.admin_max_reach_cap=§c管理者§r - 最大無限リーチ距離\n§7現在: §e%1  §70 = 制限なし
 eb.settings.admin_max_blocks_cap=§c管理者§r - 最大ブロック数の上限（プレイヤーごと）\n§7現在: §e%1  §7上限: §e%2
+eb.settings.admin_default_max_blocks=§cAdmin§r - Default blocks per build\n§7Players with no saved limit. Current: §e%1  §7Cap: §e%2
+eb.set.admin_default_blocks=Default blocks per build
 eb.settings.admin_auto_give_book=§c管理者§r - 建築の書を自動配布\n§7オン: プレイヤーが参加時に自動的に受け取る
 eb.settings.admin_config_tag=configコマンドを特定のタグに制限する\n§7ONの場合、必要なタグを持つプレイヤーのみが /config を使用できます。
 
@@ -397,7 +399,6 @@ eb.join.welcome=§a[Effortless Building] §r§6建築の書§rと§6チュート
 eb.help.title=ヘルプ
 eb.help.body=§f§6チュートリアル§fの本は絵ですべてを説明します。手に持つと目の前で開きます。
 eb.help.btn.book=§lチュートリアルの本§r\n§8受け取る、または開き方を見る
-eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
 eb.help.btn.setup=§lクイック設定§r\n§8アドオンを端末に合わせる
 eb.help.book_hold=§a[EB] §r§6チュートリアル§rの本はすでに持っています。手に持つと目の前で開きます。
 eb.help.book_given=§a[EB] §r§6チュートリアル§rの本をどうぞ。手に持つと目の前で開きます。
@@ -449,7 +450,6 @@ eb.set.admin_auto_give_book=参加時に本を配る
 eb.set.admin_lock_quality=プレビュー品質を固定
 eb.set.admin_vanilla_menus=全員に標準メニュー
 eb.set.book_language=本の言語
-eb.set.book_language.tip=本の言語\n§7チュートリアルの本と、フローティングメニューの\n§7ヒントやレッスンの言語。
 eb.help.btn.language=§l本の言語§r\n§8English, Español, Deutsch, 日本語 ...
 entity.eb:language_picker.name=言語
 eb.palette.dist.dissolve_x=ディゾルブ X
