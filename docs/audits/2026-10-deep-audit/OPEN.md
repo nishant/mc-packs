@@ -309,6 +309,35 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   Camera/respawn-screen pixels and simultaneous unrelated add-on forms remain later private W2 human acceptance;
   headless results do not certify them.
 
+## Wave 1 packet status (accounting at `971ea5c6`)
+
+"CODE DONE" means a source or test commit is in this branch's history. It does not mean native, measurement or
+owner approval. Anything the packet brief describes but HEAD source does not contain is listed as not shipped.
+
+- O1 Map (`42de58a5`): CODE DONE, lossless work cuts only. Hard budget of 1 ms or less NOT proved; native and
+  measurement open.
+- O6 HUD (`a83dc571`): CODE DONE for stale and malformed `realm:hud_state` parts being rejected (stats_bp and
+  party_bp). Native and measurement open. Not verified at this HEAD: the full multipart contract as the brief writes
+  it (100-tick partial timeout, 200-tick completed-sequence window, 1900-byte batches); check before relying on it.
+- O7 Blood Moon (`d910426d`): CODE DONE for clear-cell invalidation on `playerPlaceBlock`, an exact 9x9x9 recheck
+  for built cells, and the dawn sweep of tagged mobs in all dimensions. NOT in HEAD: `blood.maxExtraWorld` (the
+  0 unlimited, 0..1000 step 10 option) and any always-live claim for API, piston, command, axe or door moves. The
+  Large 160 proposal is root-owned and has no native performance approval.
+- O8 Expedition (`369d257b`): test-only CRLF fix. The FIFO party queue, the 1..3 slot ticking budget and the stash
+  and sigil rules are NOT in HEAD source (`expedition_bp/scripts/main.js` has no queue code). Native open.
+- O3 Champions and Wanderers (`8f89f3f8`): test-only LF fix. The elite source (`9fabad89`, maxAlive 80, schema 160,
+  maxAlivePerPlayer, maxAliveNearby) is NOT an ancestor of HEAD; HEAD still has `maxAlive: 8`. Follow-up review:
+  not marked independently APPROVED.
+- O9 Tornado (`2030b19e`): CODE DONE for the perf-acceptance gate, which also touches `docs/WORKING.md` (owned by
+  O9). Wind, rumble and horn volume banding is a follow-up review; per-player calls are kept, with no true RPC batch
+  and no MPT claim.
+- O16 (`98012e88`): ready, but the original W2 integration is later. NOT merged.
+- O4 RSS 3600: NOT started and NOT passed. The earlier 40-fresh "before" attempts are INVALID as metrics. The old
+  VALID W0 run is kept only to identify targets, not as improvement evidence.
+- O1 hard budget of 1 ms or less: NOT proved.
+- Still queued: O2, O5, O10 and native runs; W5, O58, O59 and manual W2; the NPC second form; W8 new world; O47
+  every-mode checks. Each stays explicit until its own gate passes.
+
 ## Owner decisions (no task; for nishant)
 
 - O63 Public release packaging: ship build_bp and translucent_bp outside the bundle; slots_bp off by default; maybe

@@ -141,6 +141,9 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 | Realm Mail | `sendCooldownSeconds` | 10 | 30 | Less letter spam among many strangers |
 | AFK + Smart Sleep | `sleep.percent` | 100 | 50 | With 30 or more players, all of them asleep at once never happens, so the night would never skip |
 
+The Champions and Expeditions values above are the ones in this release's Large preset. A higher Large champion cap
+is planned but is not in the preset yet and has no performance approval, so these numbers claim none. The expedition queue is not in this release either.
+
 Measured with 40 simulated players, Large server took the whole bundle from 9.5 to 8.3 ms a tick (the Minimap from
 3.8 to 2.9 ms). Pick Small Realm again to put every value back. Each value can still be changed on its own in
 `/realm:config`.

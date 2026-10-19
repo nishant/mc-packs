@@ -28,6 +28,9 @@ entries below as a changelog.
 - Operators see the setup reminder once.
 - Nickname protection for an offline gamertag starts at that player's next join.
 - Town news is quieter: champions, sieges, fairs, legendary fish, meteors, nightmare expeditions, new guild Masters, Starlit relics and new Callings are told at most once an hour per pack, with the same rewards. News about nobody no longer shows a blank name, and milestone titles you already earned are not offered again on every join.
+- The minimap skips players who have just left the server.
+- Blood Moon: placing a block near a spot checked as clear makes the game check that spot again. Monsters left from a Blood Moon are removed at dawn in every dimension, not only the Overworld.
+- Side boxes for Stats and Parties ignore stale or malformed updates instead of showing them.
 
 ## Clear quests and safer inventory pages
 
