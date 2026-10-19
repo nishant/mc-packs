@@ -1,5 +1,5 @@
 {
-  "comment": "Live O38 findings the checker cannot fix in story files. Each entry is one finding: exact code and at, reason at least 40 characters, no wildcards. A reason says the data is not fixed. The four reward-scale rows are the approved O64 finale exceptions (owner decision 2026-10-19: keep the finale rewards as written, intentionally generous; see docs/STORY_BIBLE.md). Categories with no live hit (finite-interact, partial-family, reused-name, reused-wanderer-id, ungated-pack-item, unknown-trait, prefab-gather) stay enforced and are not listed here.",
+  "comment": "Live O38 findings the checker cannot fix in story files. Each entry is one finding: exact code and at, reason at least 40 characters, no wildcards. Each reason states why the finding stays. The four reward-scale rows are justified, owner-approved preservation: intended O64 finale exceptions (owner decision 2026-10-19: keep the finale rewards as written, intentionally generous; see docs/STORY_BIBLE.md), not unfixed defects. Categories with no live hit (finite-interact, partial-family, reused-name, reused-wanderer-id, ungated-pack-item, unknown-trait, prefab-gather) stay enforced and are not listed here.",
   "entries": [
     {
       "code": "reward-scale",
