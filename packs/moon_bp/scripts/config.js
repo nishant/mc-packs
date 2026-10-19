@@ -37,6 +37,11 @@ export const CONFIG = {
     /** No new waves around a player while this many Blood Moon monsters are alive within 48 blocks of them. */
     maxExtraPerPlayer: 8,
     /**
+     * No new waves anywhere while this many Blood Moon monsters are alive in the whole world (every dimension, counted once
+     * a second for all players' waves together, so waves in the same second can't overshoot it). 0 = no world cap.
+     */
+    maxExtraWorld: 0,
+    /**
      * The extra monsters and how often each is picked (a higher weight is more often).
      * @type {{ id: string, weight: number }[]}
      */

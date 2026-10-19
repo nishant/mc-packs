@@ -38,6 +38,10 @@ const CAP_RADIUS = 48; // monsters within this many blocks count toward a player
 const MOTES_EVERY = 3; // seconds between motes around each player
 const SPOT_TRIES = 4; // places tried per monster
 const CLEAR_RADIUS = 12; // no monster appears this close to any player
+const BUILT_CELL = 8; // blocks: the size of one cached "is it built here" cell
+const BUILT_PAD = 4; // blocks around a spot that must hold nothing player-made
+const BUILT_CELLS_MAX = 2048; // cells kept at once (a cell is a short string and a boolean); more starts the cache over
+const MOB_DIMENSIONS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"]; // where the world cap counts Blood Moon monsters
 
 /** @typedef {"blood" | "harvest" | "normal"} State */
 /** @typedef {{ d: number, s: State, a: number, alive: string[] }} Night */
@@ -120,6 +124,7 @@ function decide() {
 function startNight(day, state) {
   if (night?.a) stopEffects(night.s);
   seenTonight.clear();
+  dropBuiltCells();
   const players = world.getAllPlayers();
   night = { d: day, s: state, a: 1, alive: state === "blood" ? players.map((p) => p.id) : [] };
   saveNight();
@@ -149,6 +154,7 @@ function startNight(day, state) {
 
 /** Takes off what a moon put on: fogs, extra monsters, the faster growth. @param {State} state */
 function stopEffects(state) {
+  dropBuiltCells();
   for (const p of world.getAllPlayers()) setFog(p, "");
   if (state === "blood") removeMobs();
   if (state === "harvest") restoreTicks();
@@ -387,6 +393,8 @@ function during(n) {
   const fogId = blood ? "realm:sky_blood_moon" : "realm:sky_harvest_moon";
   const every = Math.max(5, Math.floor(Number(get("blood.spawnSeconds")) || 20));
   const spawning = blood && canSpawn();
+  /** The world cap's room, counted once for this second's waves and shared by them. @type {{ left?: number }} */
+  const budget = {};
   for (const p of world.getAllPlayers()) {
     try {
       if (p.dimension.id !== OVERWORLD) {
@@ -403,7 +411,7 @@ function during(n) {
       setFog(p, out && !wet ? fogId : "");
       if (out && (seconds + p.id.length) % MOTES_EVERY === 0) motes(p, blood ? "realm:sky_blood" : "realm:sky_harvest");
       // Each player's waves come at a second of their own, so one second doesn't carry everyone's (25-30 ms with 8 players).
-      if (spawning && (seconds + waveSlot(p.id)) % every === 0) spawnWave(p);
+      if (spawning && (seconds + waveSlot(p.id)) % every === 0) spawnWave(p, budget);
     } catch (e) {
       console.warn(`[moon] ${e}`); // usually an unloaded chunk
     }
@@ -543,15 +551,54 @@ function playerMadeBlocks() {
   return playerMade;
 }
 
-/** Anything player-made in the 9 x 9 columns around the spot, 4 blocks above and below it? @param {Dimension} dim @param {{ x: number, y: number, z: number }} at */
+/**
+ * Player-made blocks near a spot, asked once per 8-block cell for the whole night: dimension|cx|cy|cz -> was anything
+ * built within BUILT_PAD blocks of the cell. The cell's box covers every spot's own 9 x 9 x 9 box, so a spot is never
+ * allowed where the per-spot check refused it (a few spots next to a build are refused that the old check allowed).
+ * @type {Map<string, boolean>}
+ */
+const builtCells = new Map();
+let builtNight = ""; // the night the cells belong to; another night starts the cache over
+let nightSerial = 0; // bumped at every dusk and dawn, so a night that repeats its day number and moon is still another night
+
+function dropBuiltCells() {
+  nightSerial++;
+  builtCells.clear();
+  builtNight = "";
+}
+
+/**
+ * Anything player-made within BUILT_PAD blocks of the spot (its 8-block cell, padded)? Unknown (unloaded chunks, no
+ * block list) counts as built and is never cached. @param {Dimension} dim @param {{ x: number, y: number, z: number }} at
+ */
 function built(dim, at) {
   const types = playerMadeBlocks();
   if (!types.length) return true; // can't tell: don't spawn
+  const cx = Math.floor(at.x / BUILT_CELL) * BUILT_CELL, cy = Math.floor(at.y / BUILT_CELL) * BUILT_CELL, cz = Math.floor(at.z / BUILT_CELL) * BUILT_CELL;
+  const id = night?.a ? `${night.d}:${night.s}:${nightSerial}` : "";
+  if (id !== builtNight) {
+    builtCells.clear();
+    builtNight = id;
+  }
+  const key = `${dim.id}|${cx}|${cy}|${cz}`;
+  const known = id ? builtCells.get(key) : undefined;
+  if (known !== undefined) return known;
+  let found;
   try {
-    return dim.containsBlock(new BlockVolume({ x: at.x - 4, y: at.y - 4, z: at.z - 4 }, { x: at.x + 4, y: at.y + 4, z: at.z + 4 }), { includeTypes: types }, true);
+    // allowUnloadedChunks stays off: a box that reaches an unloaded chunk throws instead of reading as empty.
+    found = dim.containsBlock(
+      new BlockVolume({ x: cx - BUILT_PAD, y: cy - BUILT_PAD, z: cz - BUILT_PAD }, { x: cx + BUILT_CELL - 1 + BUILT_PAD, y: cy + BUILT_CELL - 1 + BUILT_PAD, z: cz + BUILT_CELL - 1 + BUILT_PAD }),
+      { includeTypes: types },
+      false,
+    );
   } catch {
     return true;
   }
+  if (id) {
+    if (builtCells.size >= BUILT_CELLS_MAX) builtCells.clear();
+    builtCells.set(key, found);
+  }
+  return found;
 }
 
 /** Ground monsters can't stand on, or shouldn't. */
@@ -612,15 +659,44 @@ function pickMob(safe = false) {
   return list.at(-1)?.id;
 }
 
-/** One wave around one player. @param {Player} p */
-function spawnWave(p) {
+/**
+ * How many more Blood Moon monsters the world cap allows: counted once per batch of waves (the first wave that needs
+ * it), in every dimension, skipping any entity that is already gone. Infinity = no world cap; 0 when a count fails, so
+ * an error never lets a wave go over. @param {{ left?: number }} budget
+ */
+function worldRoom(budget) {
+  if (budget.left !== undefined) return budget.left;
+  const cap = Math.max(0, Math.floor(Number(get("blood.maxExtraWorld")) || 0));
+  if (!cap) return (budget.left = Infinity);
+  let alive = 0;
+  try {
+    for (const id of MOB_DIMENSIONS) {
+      for (const e of world.getDimension(id).getEntities({ tags: [MOB_TAG] })) {
+        try {
+          if (e.isValid) alive++;
+        } catch {
+          // gone since it was listed
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[moon] world cap: ${e}`);
+    return (budget.left = 0);
+  }
+  return (budget.left = Math.max(0, cap - alive));
+}
+
+/** One wave around one player. @param {Player} p @param {{ left?: number }} [budget] the world cap's room this second, shared by every wave in it */
+function spawnWave(p, budget = {}) {
   const mode = p.getGameMode();
   if (mode === GameMode.Creative || mode === GameMode.Spectator) return;
   const max = Math.max(0, Math.floor(Number(get("blood.maxExtraPerPlayer")) || 0));
   if (!max) return;
   const near = p.dimension.getEntities({ tags: [MOB_TAG], location: p.location, maxDistance: CAP_RADIUS }).length;
   const lo = Math.max(0, Math.floor(CONFIG.blood.spawnMin)), hi = Math.max(lo, Math.floor(CONFIG.blood.spawnMax));
-  const n = Math.min(max - near, lo + Math.floor(Math.random() * (hi - lo + 1)));
+  let n = Math.min(max - near, lo + Math.floor(Math.random() * (hi - lo + 1)));
+  if (n <= 0) return;
+  n = Math.min(n, worldRoom(budget));
   for (let i = 0; i < n; i++) {
     const at = spot(p);
     if (!at) continue;
@@ -631,6 +707,7 @@ function spawnWave(p) {
     try {
       // Never an existing entity (a pet, an item): tagged, dawn would remove it.
       spawnFresh(p.dimension, id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, { attempts: 4 }).addTag(MOB_TAG);
+      if (budget.left !== undefined && budget.left !== Infinity) budget.left--;
     } catch (e) {
       console.warn(`[moon] spawn ${id}: ${e}`);
     }
