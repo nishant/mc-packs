@@ -113,19 +113,28 @@ Pack overlap to plan around:
 
 ### W0. Preconditions and cleanup (lead)
 
-- [ ] Fetch both repos and every branch. List the open PRs in nishant/mc-packs and nishant/hosting.
+- [x] Fetch both repos and every branch. List the open PRs in nishant/mc-packs and nishant/hosting.
+  At W0 start: source `7eb5f72c`, hosting `f6b4972f`; source had only #84/#86 open, hosting had none.
 - [x] **O67 disposition only:** the owner directed closing #84 and #86 unmerged and carrying their intentions
   into this audit. Both were archived and closed unmerged on October 19, 2026:
   [#84](https://github.com/nishant/mc-packs/pull/84), head `7801855e50d47decd7d1099b7ea6fb6cf6ae3bce`;
   [#86](https://github.com/nishant/mc-packs/pull/86), head `0e54ff14ea36bdba1e7bbb549d5dddd66e405788`.
   Their branches remain intact. W6/O37 and W3/O17 now implement and verify the preserved outcomes on current
   master; neither waits for an old PR merge. O73 and O17 share one item-transfer design.
-- [ ] Delete the stale remote branch `audit/integration` in mc-packs, after confirming it is fully in `master`.
-- [ ] Fresh baseline on current master: `npm run check`, `npm run build`,
+- [x] Delete the stale remote branch `audit/integration` in mc-packs, after confirming it is fully in `master`.
+  Exact head `24f1b547456e1dc70debce1f6f88039f540dbe65` was rechecked as an ancestor of `7eb5f72c` before deletion.
+- [x] Fresh baseline on current master: `npm run check`, `npm run build`,
   `node tools/test-bds/suite.mjs --jobs 2 --retry --json <out>`, and perf-soak with `--profile` at 10, 40 and
   100 players (300 s each). The owner approved 100 as the missing final before comparator. Freeze untouched
   latest-master pack bytes first; keep source/harness identities, per-file hashes, first failures, retries,
   skips and warnings. Exit zero is not an all-pass claim. These are the "before" numbers.
+  Fresh Windows results: check/build pass; 219 scenarios, 204 pass / 14 fail / 1 flaky / 0 skipped / 0 timed out.
+  Thirteen failures are Windows hook-recipe paths; `guilds-placed-restart` failed twice; `saga-escort` passed its
+  retry. At 10/40 players: 4.521/7.546 ms/tick, 19.92/19.80 TPS. The first requested 100 run spawned only 97
+  and is invalid as a 100-player comparator. An isolated retry with identical default geometry, packs and
+  300-second workload spawned and retained all 100: 11.748 ms/tick, 14.34 TPS. These are summed separate-pack
+  callback costs, not a one-context Realm Bundle measurement. All 2,435 tracked files, including 2,002 pack
+  files and 239 original harness files, hash-match the frozen source. Failures and warnings remain visible.
   The audit's historical after-numbers are in `phase3-report.md`: bundle 6.56 ms at
   10 players, 9.74 at 40, 8.28 as one bundle; map_bp 3.96 at 40; 219 scenarios, 216 pass after the recheck.
 
@@ -286,6 +295,9 @@ from this workstream's text).
   - pack-only items without a `pack:` gate
   - unknown champion traits
   - rewards above the scale in STORY_BIBLE.md and RPG_DESIGN.md
+  - gather items overlapping a once-built prefab without a signposted alternate, considering any objective
+    type that references that prefab in the chapter; keep finite interact targets as a separate warning
+    (the `seal_tide` sea lanterns can also be mined out)
 
   Fix or allowlist (with a reason) what it finds.
 - [ ] **O39** check-ids:

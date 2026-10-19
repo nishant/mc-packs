@@ -88,7 +88,10 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 ## T7. Checks and the story bible
 
 - O38 check-stories: partial color families, reused cast names and wanderer ids, ungated pack-only items, unknown
-  champion traits, rewards above the bible's scale.
+  champion traits, rewards above the bible's scale. Carry forward O74's finite-source check: any objective
+  referencing a prefab in the same chapter may establish the overlap; ordinary trees/logs, crafting, geodes,
+  inventory or party sources are alternates. Separately flag mined-out interact targets such as
+  `act4_seals/tide_echo`'s sea lanterns. The urgent release inventories these risks; it does not implement W7.
 - O39 check-ids: per-kind id sets, particle and sound ids from bedrock-samples, and bare ids in data lists and regex
   alternations (the `dead_bush` and `note_block` cases).
 - O40 docs/STORY_BIBLE.md "As shipped": Gristle and NO_KITCHEN, Prewitt, Brynn, Rosalind, Saltwife; add the writing
@@ -139,7 +142,14 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 - O59 `spawnFresh` exists as separate copies in elite, saga, atlas, domt, expedition, calendar and moon: one shared
   module with a sync tool (C14); the moon copy already broke once (5018ece).
 - O60 Harness: `--flat` world templates get a random spawn point (meteor-edge and expedition-nether-carts depend on
-  0,0), and a template race with `--jobs > 1` on a fresh cache (tools/test-bds/lib/server.mjs).
+  0,0), and a template race with `--jobs > 1` on a fresh cache (tools/test-bds/lib/server.mjs). Fresh Windows W0
+  also reproduced 13 failing hook recipes with mangled backslashes/paths; resolve those in W12a, not by skipping
+  them. The soak's `made > 0` guard accepted only 97 of 100 requested players: require the declared population
+  and window in its performance acceptance. A separately preserved unchanged-default retry reached all 100.
+  Triage `guilds-placed-restart` separately: it failed with 1, then 22 pumpkins left; do not assume a fixture cause.
+  Validate ticking-area inputs and surface command rejection: an invalid circle radius 6 in the first O74
+  fixture was swallowed and became a 400-tick chunk timeout. The urgent fixture now uses legal radius 4;
+  fail-fast harness validation remains W12a.
 - O61 Harness on the bundle as one script context (catches C13 canceled-event bugs); a BDS smoke test in CI;
   `tools/release.mjs` for the whole publish order.
 - O62 Expedition: an option to announce clears only from a chosen level; forget leaves saved structures behind.
@@ -168,7 +178,7 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   adds them back); the Parties migration can't be rolled back; existing operators see the setup reminder once;
   nickname protection for an offline gamertag starts at that player's next join.
 - O66 Upload both new bundles to the Realm together (diag.js and the shared copies changed in both).
-- O67 **Disposition executed; commit recorded in the release bookkeeping:** the owner directed closing
+- O67 **Disposition done in `5413ec948b1dfc3d9f3450027021cfef82344aa6`:** the owner directed closing
   [#84](https://github.com/nishant/mc-packs/pull/84) and
   [#86](https://github.com/nishant/mc-packs/pull/86) **unmerged**, not updating or merging them.
   Closed October 19, 2026, with heads `7801855e50d47decd7d1099b7ea6fb6cf6ae3bce` and
