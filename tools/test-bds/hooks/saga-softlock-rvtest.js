@@ -6,6 +6,8 @@
 //   sgs:ping                  -> sgs:pong {cancel}   (cancel: this copy has cancelInteractions, the fixed source)
 //   sgs:state {name,id,seq}   -> sgs:state_r {...}   (busy lock, health, dimension, inspect bits, progress, clue spots, and
 //                                what the server itself fired: its own subscriptions, not the pack's)
+//   sgs:digest {name,seq}     -> sgs:digest_r {...}  (hash of the story state, flags and codex, the Crowns, whether Signs in the
+//                                Sky is accepted: what a stale choice, flag, reward or progress write would change)
 //   sgs:tap {name,x,y,z}      -> the real touchedAt handler of playerInteractWithBlock (empty-hand taps of simulated
 //                                players fire no interact event, so the scenario calls the handler directly)
 //   sgs:cancel {name|id}      -> the pack's cancel function: a SYNTHETIC lifecycle notification (the source before the fix
@@ -80,6 +82,17 @@ sgsSystem.afterEvents.scriptEventReceive.subscribe(
       const m = message ? JSON.parse(message) : {};
       if (id === "sgs:ping") sgsOut("sgs:pong", { cancel: typeof cancelInteractions === "function" });
       else if (id === "sgs:state") sgsState(m);
+      else if (id === "sgs:digest") {
+        // Everything a stale choice, flag, reward or progress write would change: the story state, flags and codex, the Crowns.
+        const p = sgsFind(m);
+        if (!p) return;
+        const saga = sagaOf(p);
+        const text = JSON.stringify({ s: saga.s, g: saga.g, cx: saga.cx });
+        let h = 0x811c9dc5;
+        for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+        const st = saga.s.act1_signs;
+        sgsOut("sgs:digest_r", { seq: m.seq, hash: h, crowns: crownsOf(p), accepted: !!st?.a, st: JSON.stringify(st) });
+      }
       else if (id === "sgs:tap") {
         const p = sgsFind(m);
         if (p) touchedAt(p, m.type ?? "minecraft:dirt", p.dimension.id, { x: m.x, y: m.y, z: m.z });

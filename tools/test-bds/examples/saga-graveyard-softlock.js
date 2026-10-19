@@ -2,11 +2,13 @@
 // zombies rise). A clue used to open a form by itself, in the middle of the fight; the form had no way out (no death,
 // respawn, dimension or leave handling, no time limit), a leave cleaned the lock but nothing else did, and an old operation's
 // finally could clear a newer one's lock. Now a clue is a chat line only, and every form and lock belongs to one operation that
-// ends at once when the player dies, respawns, changes dimension, leaves, or after 90 seconds (FORM_TICKS).
+// ends at once when the player dies, respawns, changes dimension, leaves, or after 45 seconds (FORM_TICKS = 900 ticks).
+// The harness shim has its own 1200-tick fallback that answers an unanswered simulated form with UserClosed: the pack's limit
+// is under it so the timeout case can tell the pack's recovery (the hold ends with "undefined") from the shim's ("canceled").
 // Needs the hook copy of saga_bp (tools/test-bds/hooks/saga-softlock-rvtest.js appended to a test copy of objectives.js;
 // stage-saga-softlock.mjs builds it from any packs folder, so the same scenario runs on a before-the-fix checkout). The
 // suite runs the recipe below; on Windows or without bash, stage it directly (stage-saga-softlock.mjs <dir>) and use run.mjs
-// with --packs <dir>. About 3 minutes (one case waits out the 90 second limit); needs the End for the dimension case.
+// with --packs <dir>. About 3 minutes (one case waits out the 45 second limit); needs the End for the dimension cases.
 //   mkdir -p '/tmp/sgs' && node tools/test-bds/hooks/stage-saga-softlock.mjs '/tmp/sgs'
 //   node tools/test-bds/run.mjs --quiet --flat --packs '/tmp/sgs' --scenario tools/test-bds/examples/saga-graveyard-softlock.js --timeout 600
 // Evidence kinds, printed as LIFECYCLE lines: NATIVE = the server fired the event (entityDie, playerSpawn,
@@ -18,22 +20,29 @@ export default async function (t) {
   const sys = t.system;
   const X = 900;
   const Z = 900;
-  const FORM_TICKS = 1800; // saga_bp util.js FORM_TICKS
-  t.formTimeout = FORM_TICKS + 800; // the harness shim would close an unanswered form this late: the pack must act first
+  const FORM_TICKS = 900; // saga_bp util.js FORM_TICKS
+  const SHIM_TICKS = 1200; // tools/test-bds/lib/shim.js: an unanswered simulated form is closed with UserClosed after this
+  t.formTimeout = SHIM_TICKS + 200; // the harness's own close must not come first either
   t.server("/time set midnight");
   t.server("/gamerule doDaylightCycle false");
   t.server("/gamerule doMobSpawning false");
   t.server(`/tickingarea add circle ${X} 0 ${Z} 4 sgs_yard true`);
   await t.loadArea(X, Z, { radius: 2 });
+  // The End is ready (loaded, with a platform) before any form is open: the dimension cases must not wait on a cold dimension.
+  const endDim = t.world.getDimension("the_end");
+  t.server("/execute in the_end run tickingarea add circle 100 0 0 2 sgs_end true");
+  await t.waitUntil(() => endDim.getBlock({ x: 100, y: 48, z: 0 }), { timeout: 400, interval: 10, message: "the End chunk at 100, 0 is loaded" });
+  t.server("/execute in the_end run fill 98 48 -2 102 48 2 obsidian");
   await t.wait(40);
 
   const send = (id, m = {}) => sys.sendScriptEvent(id, JSON.stringify(m));
-  const inbox = { state: [], done: [], raw: [], offers: [], pong: undefined };
+  const inbox = { state: [], digest: [], done: [], raw: [], offers: [], pong: undefined };
   sys.afterEvents.scriptEventReceive.subscribe(
     ({ id, message }) => {
       try {
         const m = JSON.parse(message || "{}");
         if (id === "sgs:state_r") inbox.state.push(m);
+        else if (id === "sgs:digest_r") inbox.digest.push(m);
         else if (id === "sgs:hold_done") inbox.done.push({ tick: sys.currentTick, ...m });
         else if (id === "sgs:holdraw_done") inbox.raw.push({ tick: sys.currentTick, ...m });
         else if (id === "sgs:pong") inbox.pong = m;
@@ -71,24 +80,79 @@ export default async function (t) {
   // ---- the chapter: What Moss Saw, at a graveyard place where the player stands ------------------------------------
   let p = await t.player("Searcher", { op: true, x: X, z: Z, gameMode: "survival" });
   let who = { name: p.name, id: p.id };
+  const home = { x: p.location.x, y: p.location.y, z: p.location.z };
   await t.wait(20);
   t.cmd(p, "/realm:saga_place graveyard");
   await t.wait(20);
   send("realm:saga_debug", { player: p.id, action: "jump", story: "act1_signs", chapter: "graves" });
   await t.wait(5);
-  send("realm:npc_talk", { player: p.id, npc: "moss", req: "sg1" });
-  await t.wait(4);
-  t.assert(inbox.offers.some((o) => o.req === "sg1" && o.key === "start:act1_signs"), "Moss offers What Moss Saw");
-  const accept = (async () => {
-    for (;;) {
-      const f = await t.waitForm(p, { timeout: 200 });
-      if (f.buttons.some((b) => /^next$/i.test(b))) f.answer("Next");
-      else return f.answer("Accept");
+
+  const digest = async () => {
+    const n = ++seq;
+    send("sgs:digest", { ...who, seq: n });
+    return t.waitUntil(() => inbox.digest.find((d) => d.seq === n), { timeout: 60, message: "the hook answers sgs:digest" });
+  };
+  let offers = 0;
+  /** Opens Moss's intro and pages on to its Accept page, left unanswered; returns that form. */
+  const openIntro = async () => {
+    const req = `sg${++offers}`;
+    send("realm:npc_talk", { player: p.id, npc: "moss", req });
+    await t.wait(4);
+    t.assert(inbox.offers.some((o) => o.req === req && o.key === "start:act1_signs"), "Moss offers What Moss Saw");
+    let next = t.waitForm(p, { timeout: 200 });
+    send("realm:npc_choose", { pack: "saga_bp", player: p.id, key: "start:act1_signs" });
+    let f = await next;
+    while (f.buttons.some((b) => /^next$/i.test(b))) {
+      next = t.waitForm(p, { timeout: 200 });
+      f.answer("Next");
+      f = await next;
     }
-  })();
-  send("realm:npc_choose", { pack: "saga_bp", player: p.id, key: "start:act1_signs" });
-  await accept;
-  await t.waitMessage(p, /Search the Old Graveyard/, { since: t.tick - 40, timeout: 200 });
+    return f;
+  };
+  /**
+   * The production accept path (startChapter -> accept: chapter state, flags, choices, Crowns) with its dialogue cut and
+   * the Accept answered late by the harness: no state, flag, choice, progress or Crowns may change, and the chapter is
+   * not accepted.
+   */
+  const staleAccept = async (name, kindOf, cut, restore) => {
+    const f = await openIntro();
+    const before = await digest();
+    const from = t.tick;
+    await cut();
+    await t.wait(40);
+    const mid = await ask(who);
+    try {
+      f.answer("Accept");
+    } catch (e) {
+      t.log(`${name}: the harness refused the late answer: ${e}`);
+    }
+    await t.wait(40);
+    const after = await digest();
+    const said = t.messages(p, { since: from }).some((m) => /Signs in the Sky: What Moss Saw/.test(m.plain));
+    lifecycle(name, kindOf(mid.native), !mid.busy && after.hash === before.hash && after.crowns === before.crowns && !after.accepted && !said, `busy after the cut ${mid.busy}, story state ${after.hash === before.hash ? "unchanged" : `CHANGED ${before.st} -> ${after.st}`}, Crowns ${before.crowns} -> ${after.crowns}, accepted ${after.accepted}, accept line in chat ${said}`);
+    await restore();
+  };
+  const toEnd = () => {
+    p.addEffect("resistance", 1200, { amplifier: 4, showParticles: false });
+    p.addEffect("slow_falling", 1200, { showParticles: false });
+    p.teleport({ x: 100.5, y: 50, z: 0.5 }, { dimension: endDim });
+  };
+  const backHome = async () => {
+    p.teleport(home, { dimension: t.dimension });
+    await t.wait(40);
+  };
+  await staleAccept("stale accept/die", (n) => (n.die > 0 ? "NATIVE" : "WATCHDOG"), async () => p.kill(), async () => {
+    p.respawn();
+    await t.wait(40);
+    await backHome();
+  });
+  await staleAccept("stale accept/dim", (n) => (n.dimension > 0 ? "NATIVE" : "WATCHDOG"), async () => toEnd(), backHome);
+
+  // The real accept, once nothing stale is left.
+  const sinceAccept = t.tick;
+  const intro = await openIntro();
+  intro.answer("Accept");
+  await t.waitMessage(p, /Search the Old Graveyard/, { since: sinceAccept, timeout: 200 });
   const ready = await t.waitUntil(async () => {
     const s = await ask(who);
     return s.spots?.filter(Boolean).length === 4 ? s : undefined;
@@ -117,10 +181,9 @@ export default async function (t) {
   // ---- 2. the owner's path: zombies closing in, a clue found by walking up to it, then dying ----------------------------
   const zombies = [];
   const at1 = { x: spots[1].x, y: spots[1].y - 0.5, z: spots[1].z };
+  since = t.tick; // before the teleport: the walk-up can find the clue at once
   p.teleport(at1);
-  await t.wait(10);
   for (const [dx, dz] of [[6, 0], [-6, 0], [0, 6]]) zombies.push(t.dimension.spawnEntity("minecraft:zombie", { x: at1.x + dx, y: at1.y, z: at1.z + dz }));
-  since = t.tick;
   await poll(() => clueMessages(since).length > 0, 80);
   const discovered = clueMessages(since).length;
   p.getComponent("minecraft:health").setCurrentValue(2);
@@ -165,28 +228,16 @@ export default async function (t) {
   lifecycle("death+form", s.native.die > 0 ? "NATIVE" : "WATCHDOG", end?.result === "undefined" && end.tick - mark <= 20 && !s.busy && !form.answered, `pack ended it ${end ? end.tick - mark : "never"} ticks after the death (result ${end?.result}), busy ${s.busy}, harness form still unanswered ${!form.answered}, native entityDie ${s.native.die}`);
   p.respawn();
   await t.wait(40);
-  try {
-    form.answer("OK"); // the harness answers late: the pack must not act on it
-  } catch (e) {
-    t.log(`late answer was refused by the harness: ${e}`);
-  }
-  await t.wait(20);
-  lifecycle("late answer", "n/a", inbox.done.filter((d) => d.key === "death").length === 1, "an answer after the pack gave up changes nothing");
+  await backHome();
 
-  // dimension change with the form open
+  // dimension change with the form open (the End is already loaded and has its platform)
   form = await openHold("dimension");
-  t.server("/execute in the_end run tickingarea add circle 100 0 0 2 sgs_end true");
-  await t.wait(40);
-  t.server("/execute in the_end run fill 98 48 -2 102 48 2 obsidian");
-  p.addEffect("resistance", 1200, { amplifier: 4, showParticles: false });
-  p.addEffect("slow_falling", 1200, { showParticles: false });
   mark = t.tick;
-  p.teleport({ x: 100.5, y: 50, z: 0.5 }, { dimension: t.world.getDimension("the_end") });
+  toEnd();
   end = await poll(() => doneOf("dimension", mark), 60);
   s = await ask(who);
   lifecycle("dimension", s.native.dimension > 0 ? "NATIVE" : "WATCHDOG", end?.result === "undefined" && end.tick - mark <= 20 && !s.busy && !form.answered, `ended ${end ? end.tick - mark : "never"} ticks after the change (result ${end?.result}), busy ${s.busy}, native playerDimensionChange ${s.native.dimension}`);
-  p.teleport({ x: X + 0.5, y: spots[0].y, z: Z + 0.5 }, { dimension: t.dimension });
-  await t.wait(40);
+  await backHome();
 
   // UserBusy retries after a moment, UserClosed does not open it again
   const busyForm = await openHold("busy-closed");
@@ -235,7 +286,7 @@ export default async function (t) {
   s = await ask(who);
   lifecycle("rejoin", "n/a", p.id !== oldId && before.busy === false && end?.result === "selection:0" && !s.busy, `new id ${p.id.slice(0, 8)} differs from ${oldId.slice(0, 8)} ${p.id !== oldId}, old id busy ${before.busy}, the new player's dialogue works (${end?.result})`);
 
-  // the form nobody answers: the pack gives up after FORM_TICKS, before the harness's own fallback (last: it waits 90 s)
+  // the form nobody answers: the pack gives up after FORM_TICKS, before the shim's own 1200-tick fallback (last: it waits 45 s)
   const t0 = t.tick;
   const idle = await openHold("timeout");
   await t.wait(FORM_TICKS - 100 - (t.tick - t0));
@@ -243,7 +294,8 @@ export default async function (t) {
   t.check(s.busy === true && !doneOf("timeout"), "timeout: still within its lifetime 100 ticks early");
   end = await poll(() => doneOf("timeout"), 220);
   s = await ask(who);
-  lifecycle("timeout", "WATCHDOG", end?.result === "undefined" && end.tick - t0 >= FORM_TICKS - 20 && end.tick - t0 < t.formTimeout && !s.busy && !idle.answered, `gave up after ${end ? end.tick - t0 : "never"} ticks (limit ${FORM_TICKS}, harness fallback ${t.formTimeout}), busy ${s.busy}, harness form unanswered ${!idle.answered}`);
+  // The hold ends with "undefined" when the PACK gave up and with "canceled:UserClosed" when the shim's fallback came first.
+  lifecycle("timeout", "WATCHDOG", end?.result === "undefined" && end.tick - t0 >= FORM_TICKS - 20 && end.tick - t0 < SHIM_TICKS && !s.busy && !idle.answered, `gave up after ${end ? end.tick - t0 : "never"} ticks with result ${end?.result} (pack limit ${FORM_TICKS}, shim fallback ${SHIM_TICKS}), busy ${s.busy}`);
 
   for (const l of lines) t.log(l);
   t.log(`native events seen by the hook: ${JSON.stringify(s.native)}`);
