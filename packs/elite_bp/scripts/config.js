@@ -8,13 +8,16 @@ export const CONFIG = {
   /** During a Blood Moon (the `realm:moon` event from the Blood Moon pack) the chance is multiplied by this. */
   bloodMoonMultiplier: 3,
 
-  /** Natural champions only appear while fewer than this many champions are loaded in the world. Operators and other packs can still spawn more. */
-  maxAlive: 8,
+  /**
+   * The most champions loaded in the whole world for natural ones to stay appearing. The real limit scales with the
+   * players online (`maxAlivePerPlayer`), so this is only the ceiling: 80 lets 100 players meet 0.8 each. A value an
+   * operator saved earlier (8 or 16) stays the ceiling. Operators and other packs can still spawn more.
+   */
+  maxAlive: 80,
 
   /**
-   * Natural champions also stop at this many loaded champions for each player online, up to `maxAlive` (the most
-   * for the whole world): 0.8 is today's 8 for a Realm of about 10 players, so a quiet world meets fewer
-   * and a crowded one never more than `maxAlive`. At least one. 0 = no per-player limit (only `maxAlive`, as before).
+   * Natural champions stop at this many loaded champions for each player online, up to `maxAlive`: 0.8 is the old
+   * 8 for about 10 players, 1 player meets 1, 100 meet 80. At least one. 0 = no per-player limit (only `maxAlive`).
    */
   maxAlivePerPlayer: 0.8,
 

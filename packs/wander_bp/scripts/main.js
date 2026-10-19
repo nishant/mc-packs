@@ -47,12 +47,13 @@ const OVERWORLD = "minecraft:overworld";
 const NETHER = "minecraft:nether";
 const DIMENSIONS = [OVERWORLD, NETHER, "minecraft:the_end"];
 
+const LABEL_OBSERVER_RANGE = 36;
 const nameLabels = createNameLabels({
   labelType: LABEL_TYPE,
   ownerTag: OWNER_TAG,
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
-  observerRange: 36,
+  observerRange: LABEL_OBSERVER_RANGE,
   spectatorsExcluded: true,
 });
 
@@ -705,7 +706,7 @@ function updateLabels() {
 }
 
 /** Players further than this from every wanderer can't see a label (`nameLabels`' range, with room for a head's height). */
-const LABEL_REACH = 40;
+const LABEL_REACH = LABEL_OBSERVER_RANGE + 4;
 /** With this many players or fewer (or about as many as wanderers) every player is read: asking for the ones near each wanderer saves nothing. */
 const LABEL_QUERY_PLAYERS = 8;
 /** Asking per wanderer costs one native query each: never for more wanderers than this. */
@@ -919,7 +920,8 @@ function upkeep() {
     if (p && !far && hasOffer.get(`${ent.id}|${p.id}`) && across(p.location, rec) <= 32) sparkle(p, ent);
   }
   // At camps: there while someone on that chain is near, gone otherwise (and while an escort's copy walks).
-  const players = world.getAllPlayers().map((p) => ({ p, dim: p.dimension.id, at: p.location })); // read once, not once per camp
+  const players = [];
+  if (enabled && Object.keys(camps).length) for (const p of world.getAllPlayers()) players.push({ p, dim: p.dimension.id, at: p.location }); // read once, not once per camp
   for (const [wid, c] of Object.entries(camps)) {
     const ent = entityById(c.e);
     const needers = enabled ? players.filter((o) => o.dim === c.d && across(o.at, c) <= CONFIG.campRange && ["a", "o"].includes(states.get(o.p.id)?.ch[wid] ?? "")).map((o) => o.p) : [];

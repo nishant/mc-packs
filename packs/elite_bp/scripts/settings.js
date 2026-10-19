@@ -13,7 +13,7 @@ const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Champions appear on their own", help: "Disabled, only operators and other packs (the Bounty Board) make champions" },
   { key: "chance", type: "float", scope: "world", label: "Champion chance", help: "Share of hostile night spawns that become champions (0.025 = 1 in 40)", min: 0, max: 0.25, step: 0.005 },
   { key: "bloodMoonMultiplier", type: "float", scope: "world", label: "Blood Moon multiplier", help: "The chance is multiplied by this during a Blood Moon", min: 1, max: 10, step: 0.5 },
-  { key: "maxAlive", type: "int", scope: "world", label: "Most champions at once", help: "No new natural champions while this many are loaded (the most for the whole world)", min: 1, max: 32, step: 1 },
+  { key: "maxAlive", type: "int", scope: "world", label: "Most champions at once", help: "The ceiling for the whole world; the limit scales with players online (Champions per player online)", min: 1, max: 160, step: 1 },
   { key: "maxAlivePerPlayer", type: "float", scope: "world", label: "Champions per player online", help: "No new natural champions once this many for each player online are loaded, up to Most champions at once. 0 = no per-player limit", min: 0, max: 4, step: 0.1 },
   { key: "maxAliveNearby", type: "int", scope: "world", label: "Most champions in one area", help: "No new natural champion within 64 blocks of this many loaded champions. 0 = no limit", min: 0, max: 16, step: 1 },
   { key: "nightOnly", type: "bool", scope: "world", label: "Only at night" },

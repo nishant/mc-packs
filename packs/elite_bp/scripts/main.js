@@ -336,25 +336,32 @@ const auraCost = [0, 0, 0];
  */
 const AURA_PER_RUN = 12;
 const APPROACH_PER_RUN = 8;
-/** An approach step covers the time since the champion's last one, up to this many steps' worth (a champion seen every few runs keeps its pace). */
+/**
+ * An approach step covers the time since the champion's last one, up to this many steps' worth. A step never
+ * exceeds 0.9 block (the collision-safe bound), so with more champions than fit in a run the crowd walks slower
+ * than `approach.speed` (by up to the same factor) and detours and rests (counted in step-times) keep real time.
+ */
 const APPROACH_CATCHUP = 4;
-let auraCursor = 0;
-let approachCursor = 0;
+/** The last champion each round robin served (the next run continues after it, whatever was removed meanwhile). @type {string | undefined} */
+let auraCursor;
+/** @type {string | undefined} */
+let approachCursor;
 
 /**
- * The next `cap` of `ids` in a round robin that starts at `from`: with more ids than the cap, every id comes up
- * once every ceil(ids.length / cap) runs. No id is skipped for good, and none is looked at twice in a run.
- * @param {string[]} ids @param {number} from @param {number} cap @returns {{ batch: string[], next: number }}
+ * The next `cap` of `ids` in a round robin that continues after the id `after` (from the start if it is gone or
+ * unset): with more ids than the cap, every id comes up once every ceil(ids.length / cap) runs. No id is skipped
+ * for good, and none is looked at twice in a run.
+ * @param {string[]} ids @param {string | undefined} after @param {number} cap @returns {{ batch: string[], last: string | undefined }}
  */
-function turnOf(ids, from, cap) {
+function turnOf(ids, after, cap) {
   const n = ids.length;
-  if (!n) return { batch: [], next: 0 };
+  if (!n) return { batch: [], last: undefined };
   const take = Math.min(n, Math.max(1, Math.floor(cap) || 1));
-  const start = (((Math.floor(from) || 0) % n) + n) % n;
+  const start = (ids.indexOf(/** @type {string} */ (after)) + 1) % n;
   /** @type {string[]} */
   const batch = [];
   for (let i = 0; i < take; i++) batch.push(ids[(start + i) % n]);
-  return { batch, next: (start + take) % n };
+  return { batch, last: batch[take - 1] };
 }
 
 /** One aura puff for the champions whose turn it is, when a player is within 64 blocks. */
@@ -364,7 +371,7 @@ function aura() {
   if (!players.length) return;
   let n = 0;
   const turn = turnOf([...live.keys()], auraCursor, AURA_PER_RUN);
-  auraCursor = turn.next;
+  auraCursor = turn.last;
   for (const id of turn.batch) {
     const e = live.get(id);
     if (!e) continue;
@@ -507,8 +514,8 @@ function crowdedAround(infos, dim, at, limit) {
 function convert(e) {
   if (!e.isValid || e.hasTag(CHAMP) || e.hasTag(SPLIT)) return;
   if (loaded >= get("maxAlive")) return;
-  if (get("nightOnly") === true && !night()) return;
   if (loaded >= aliveCap(get("maxAlive"), get("maxAlivePerPlayer"), world.getAllPlayers().length)) return;
+  if (get("nightOnly") === true && !night()) return;
   const at = e.location;
   const dim = e.dimension;
   if (crowdedAround(known.values(), dim.id, at, get("maxAliveNearby"))) return;
@@ -776,9 +783,9 @@ const ownedElsewhere = (e) => e.getTags().some((t) => t.startsWith("realm:exp"))
 const BODY = 0.4;
 /** Its body's half width across the way it goes (the leading edge's two corners are looked at too). */
 const SIDE = 0.28;
-/** Steps a detour round something may take before the champion gives up for a while (60 s). */
+/** Step-times (`STEP_TICKS` each, counted by elapsed time) a detour round something may take before the champion gives up for a while (60 s). */
 const DETOUR_STEPS = 240;
-/** Steps it rests after a detour that led nowhere (20 s), before it tries the other way round. */
+/** Step-times it rests after a detour that led nowhere (20 s), before it tries the other way round. */
 const REST_STEPS = 80;
 /**
  * How far from the player a detour may take it (blocks): `LEASH`, or up to `LEASH_GRACE` further than
@@ -844,8 +851,12 @@ function feet(e) {
   return undefined;
 }
 
-/** One champion's step toward the nearest player in range, if any. @param {Entity} e @param {number} step */
-function approachStep(e, step) {
+/**
+ * One champion's step toward the nearest player in range, if any. `units` is the time since its last step in
+ * step-times (1 = `STEP_TICKS`): the detour and rest timers run on it, so they keep their real duration however
+ * seldom a crowd's turn comes. @param {Entity} e @param {number} step @param {number} [units]
+ */
+function approachStep(e, step, units = 1) {
   if (!e.isValid || ownedElsewhere(e)) return;
   if (e.isInWater) return;
   const dim = e.dimension;
@@ -871,7 +882,8 @@ function approachStep(e, step) {
     return;
   }
   if (d && d.rest !== undefined) {
-    if (--d.rest > 0) return;
+    d.rest -= units;
+    if (d.rest > 0) return;
     d = { side: -d.side, steps: 0 }; // rested: the other way round this time
     detours.set(e.id, d);
   }
@@ -910,7 +922,8 @@ function approachStep(e, step) {
     detours.delete(e.id);
     return;
   }
-  if (++d.steps > DETOUR_STEPS) {
+  d.steps += units;
+  if (d.steps > DETOUR_STEPS) {
     detours.set(e.id, { side: d.side, steps: 0, rest: REST_STEPS }); // a river or a cliff: rest, then the other way
     return;
   }
@@ -928,7 +941,7 @@ function approachStep(e, step) {
 /** @param {Vector3} a @param {Vector3} b */
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
-/** How far a champion steps after `elapsed` ticks since its last step: the pace times that time (at least one step's, at most `APPROACH_CATCHUP`), under a block. */
+/** How far a champion steps after `elapsed` ticks since its last step: the pace times that time (at least one step's, at most `APPROACH_CATCHUP`), but under 0.9 block (collision safety), so a pace above 0.9 block a step-time or a crowd bigger than a run slows the walk. */
 function stepFor(speed, elapsed) {
   const ticks = Math.min(Math.max(Number(elapsed) || 0, STEP_TICKS), STEP_TICKS * APPROACH_CATCHUP);
   return Math.min(0.9, (Math.max(0, Number(speed) || 0) * ticks) / 20);
@@ -944,14 +957,19 @@ function approachRun() {
   if (speed <= 0) return;
   const now = system.currentTick;
   const turn = turnOf([...live.keys()], approachCursor, APPROACH_PER_RUN);
-  approachCursor = turn.next;
+  approachCursor = turn.last;
   for (const id of turn.batch) {
     const e = live.get(id);
     if (!e) continue;
-    const last = approachSeen.get(id) ?? now - STEP_TICKS;
+    if (!e.isValid) {
+      live.delete(id);
+      approachSeen.delete(id);
+      continue;
+    }
+    const elapsed = Math.max(STEP_TICKS, now - (approachSeen.get(id) ?? now - STEP_TICKS));
     approachSeen.set(id, now);
     try {
-      approachStep(e, stepFor(speed, now - last));
+      approachStep(e, stepFor(speed, elapsed), elapsed / STEP_TICKS);
     } catch (err) {
       // an unloaded column or a champion that just died: try again next step
       if (!String(err).includes("LocationInUnloadedChunk") && !String(err).includes("InvalidEntity")) console.warn(`[elite] approach: ${err}`);
