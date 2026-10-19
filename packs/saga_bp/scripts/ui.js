@@ -50,7 +50,7 @@ import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn,
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
 import { QUEST_TEXT_BYTES, SLOTS, SLOT_NAMES, byteLength, isSlot, questCode } from "./side.js";
-import { PACK, across, busy, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
+import { PACK, across, busy, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, onCancel, online, plain, send, show } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -471,6 +471,12 @@ function closeForms(p) {
     // left meanwhile
   }
 }
+
+// A death, respawn, dimension change or leaving closes the party popups a player has open: one would hide the respawn screen.
+onCancel((id) => {
+  const p = popups.has(id) ? online(id) : undefined;
+  if (p) closeForms(p);
+});
 
 /** "- Catch 5 things with a fishing rod" lines: a chapter's required steps that apply for a player. @param {Chapter} chapter @param {Saga} saga @param {Story} story */
 const stepsFor = (chapter, saga, story) => chapter.objectives.filter((o) => !o.optional && matches(o.when, saga, story.id)).map((o) => `§e- ${o.label}§r`);

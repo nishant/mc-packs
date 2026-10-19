@@ -72,14 +72,16 @@ function fixture() {
     }
   }
   const FormCancelationReason = { UserBusy: "UserBusy", UserClosed: "UserClosed" };
+  const closed = [];
+  const uiManager = { closeAllForms(p) { closed.push(p); } };
   const context = {
     CommandPermissionLevel: { GameDirectors: 1 },
-    Player, system, world, ActionFormData, FormCancelationReason,
+    Player, system, world, ActionFormData, FormCancelationReason, uiManager,
     NPC_NAMES: {}, WANDERERS: [], console,
   };
   const source = utilSource.replace(/^import\s[\s\S]*?;\r?$/gm, "").replace(/^export\s+/gm, "");
-  const util = vm.runInNewContext(`${source}\n;({ show, exclusive, busy });`, context);
-  const flush = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
+  const util = vm.runInNewContext(`${source}\n;({ show, exclusive, busy, alive, lifecycle, claim, release, cancelInteractions, onCancel, FORM_TICKS });`, context);
+  const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
   async function advance(ticks) {
     for (let i = 0; i < ticks; i++) {
       system.currentTick++;
@@ -92,7 +94,7 @@ function fixture() {
       await flush();
     }
   }
-  return { player, world, system, forms, formResponses, ActionFormData, util, flush, advance };
+  return { player, world, system, forms, closed, formResponses, ActionFormData, util, flush, advance, timerCount: () => timers.size };
 }
 
 function deferred() {
@@ -190,4 +192,137 @@ test("UserBusy retries later while UserClosed does not reopen the form", async (
   assert.equal(f.forms.length, 2, "only UserBusy caused a retry");
   await f.advance(20);
   assert.equal(f.forms.length, 2);
+});
+
+test("a cancelled interaction closes the form it opened, answers undefined and ignores the late reply", async () => {
+  const f = fixture();
+  const response = deferred();
+  const showing = f.util.show(f.player, { show: () => response.promise });
+  await f.flush();
+  f.util.cancelInteractions(f.player.id);
+  assert.equal(await showing, undefined);
+  assert.equal(f.closed.length, 1, "only the form this show opened is closed");
+  assert.equal(f.closed[0], f.player);
+  response.resolve({ canceled: false, selection: 0 });
+  await f.flush();
+  assert.equal(f.closed.length, 1);
+  assert.equal(f.timerCount(), 0, "no watchdog or timeout is left running");
+});
+
+test("cancelling with no form of ours open closes nothing and only clears our own lock", async () => {
+  const f = fixture();
+  const token = f.util.claim(f.player.id);
+  assert.ok(token);
+  const seen = [];
+  f.util.onCancel((id) => seen.push(id));
+  f.util.cancelInteractions(f.player.id);
+  assert.equal(f.closed.length, 0, "another pack's form is never closed");
+  assert.equal(f.util.busy.has(f.player.id), false);
+  assert.deepEqual(seen, [f.player.id]);
+});
+
+test("an answered form closes nothing and leaves no timers behind", async () => {
+  const f = fixture();
+  f.formResponses.push({ canceled: false, selection: 1 });
+  const res = await f.util.show(f.player, new f.ActionFormData());
+  assert.equal(res.selection, 1);
+  assert.equal(f.closed.length, 0);
+  assert.equal(f.timerCount(), 0);
+});
+
+test("a form nobody answers is closed by the pack before any shim fallback", async () => {
+  const f = fixture();
+  const response = deferred();
+  const showing = f.util.show(f.player, { show: () => response.promise });
+  await f.advance(f.util.FORM_TICKS - 1);
+  assert.equal(f.closed.length, 0, "still within its lifetime");
+  await f.advance(1);
+  assert.equal(await showing, undefined);
+  assert.equal(f.closed.length, 1);
+  assert.equal(f.timerCount(), 0);
+});
+
+test("a death that fires no event (simulated players) is still noticed and closes the open form", async () => {
+  const f = fixture();
+  const response = deferred();
+  const showing = f.util.show(f.player, { show: () => response.promise });
+  await f.flush();
+  f.player.health = 0;
+  await f.advance(5);
+  assert.equal(await showing, undefined);
+  assert.equal(f.closed.length, 1);
+});
+
+test("a dead player is never given a form or a dialogue", async () => {
+  const f = fixture();
+  f.player.health = 0;
+  assert.equal(await f.util.show(f.player, new f.ActionFormData()), undefined);
+  assert.equal(f.forms.length, 0);
+  let ran = false;
+  assert.equal(await f.util.exclusive(f.player, async () => { ran = true; }), false);
+  assert.equal(ran, false);
+  assert.equal(f.util.busy.has(f.player.id), false);
+});
+
+test("after a cancel a second interaction starts normally and its answer counts", async () => {
+  const f = fixture();
+  const response = deferred();
+  const old = f.util.exclusive(f.player, async () => {
+    await f.util.show(f.player, { show: () => response.promise });
+  });
+  await f.flush();
+  f.util.cancelInteractions(f.player.id);
+  f.formResponses.push({ canceled: false, selection: 2 });
+  let picked;
+  const next = await f.util.exclusive(f.player, async () => {
+    picked = (await f.util.show(f.player, new f.ActionFormData()))?.selection;
+  });
+  await old;
+  assert.equal(next, true);
+  assert.equal(picked, 2);
+  assert.equal(f.util.busy.has(f.player.id), false);
+});
+
+test("a stale claim cannot release a newer one", () => {
+  const f = fixture();
+  const first = f.util.claim(f.player.id);
+  assert.equal(f.util.claim(f.player.id), undefined, "one operation at a time");
+  f.util.cancelInteractions(f.player.id);
+  const second = f.util.claim(f.player.id);
+  f.util.release(f.player.id, first);
+  assert.equal(f.util.busy.has(f.player.id), true);
+  f.util.release(f.player.id, second);
+  assert.equal(f.util.busy.has(f.player.id), false);
+});
+
+test("an inspect tap finds a clue only near it, once, and not for a dead player", () => {
+  const f = fixture();
+  const clueBody = objectivesSource.match(/^function clueFound\([\s\S]*?^\}/m)?.[0];
+  const touchBody = objectivesSource.match(/^function inspectTouch\([\s\S]*?^\}/m)?.[0];
+  assert.ok(clueBody && touchBody, "exercise the production tap handler");
+  const objective = { clues: [{ text: "First." }, { text: "Second." }], spots: [{ dim: "minecraft:overworld", x: 10.5, y: 64.5, z: 10.5 }, { dim: "minecraft:overworld", x: 40.5, y: 64.5, z: 40.5 }] };
+  const entry = { story: { id: "act1_signs" }, st: {} };
+  let progress = 0;
+  const { inspectTouch } = vm.runInNewContext(`${clueBody}\n${touchBody}\n;({ inspectTouch })`, {
+    alive: f.util.alive,
+    scenes: new Map([["p|k", { data: {} }]]),
+    sk: (pid, key) => `${pid}|${key}`,
+    objKey: () => "k",
+    clueSpot: (_s, obj, k) => obj.spots[k],
+    dist3: (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z),
+    sagaOf: () => ({}),
+    pagesFor: (pages) => pages,
+    bump: () => progress++,
+  });
+  f.player.id = "p";
+  const dim = "minecraft:overworld";
+  inspectTouch(f.player, entry, 0, objective, { x: 80, y: 64, z: 80 }, dim);
+  assert.equal(f.player.messages.length, 0, "a tap on unrelated ground does nothing");
+  inspectTouch(f.player, entry, 0, objective, { x: 10.5, y: 65, z: 11.5 }, dim);
+  inspectTouch(f.player, entry, 0, objective, { x: 10.5, y: 65, z: 11.5 }, dim);
+  assert.equal(f.player.messages.length, 1, "a tap next to a clue finds it once");
+  assert.equal(progress, 1);
+  f.player.health = 0;
+  inspectTouch(f.player, entry, 0, objective, { x: 40.5, y: 65, z: 40.5 }, dim);
+  assert.equal(f.player.messages.length, 1, "a dead player finds nothing");
 });
