@@ -309,6 +309,38 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   Camera/respawn-screen pixels and simultaneous unrelated add-on forms remain later private W2 human acceptance;
   headless results do not certify them.
 
+## Wave 1 packet status (accounting at `971ea5c6`)
+
+"CODE DONE" means a source or test commit is in this branch's history. It does not mean native, measurement or
+owner approval. Anything the packet brief describes but HEAD source does not contain is listed as not shipped.
+
+- O1 Map (`42de58a5`): CODE DONE, lossless work cuts only. Hard budget of 1 ms or less NOT proved; native and
+  measurement open.
+- O6 HUD (`a83dc571`): CODE DONE at packet head, NOT in this branch's HEAD yet; root merge pending. Multipart
+  `realm:hud_state` `{part, parts, seq, players}`, 1900 UTF-8 byte batches, no 100-part cap, complete-only assembly,
+  100-tick partial timeout, 200-tick completed-seq window with a bounded producer-restart gap. Native and
+  measurement open.
+- O7 Blood Moon (`d910426d`): CODE DONE at packet head, NOT in this branch's HEAD yet; root merge pending. Covers
+  per-cell clear-cache invalidation on `playerPlaceBlock`, the exact 9x9x9 recheck for built cells, the dawn sweep
+  of tagged mobs in all dimensions, and `blood.maxExtraWorld` (default 0 = unlimited, loaded-only, 0..1000 step 10).
+  No always-live claim for API, piston, command, axe or door moves. The Large 160 proposal is root-owned and has no
+  native performance approval.
+- O8 Expedition (`369d257b`): CODE DONE at packet head, NOT in this branch's HEAD yet; root merge pending. FIFO
+  queue of 8 parties, 30 min (36000 ticks) memory TTL, 1..3 slots (default 1) sharing a 10-tick budget, leave/reset/
+  operator-forget rules, queued reroll refused before debit. Native open.
+- O3 Champions and Wanderers (`fce94f2a`, test fix `8f89f3f8`): CODE DONE at packet head, NOT in this branch's HEAD
+  yet (HEAD still has `maxAlive: 8`); root merge pending. Covers maxAlive 80 (schema 160), maxAlivePerPlayer 0.8,
+  maxAliveNearby 3 within 64 blocks. Follow-up review: not marked independently APPROVED.
+- O9 Tornado (`2030b19e`): CODE DONE for the perf-acceptance gate, which also touches `docs/WORKING.md` (owned by
+  O9). Wind, rumble and horn volume banding is a follow-up review; per-player calls are kept, with no true RPC batch
+  and no MPT claim.
+- O16 (`98012e88`): ready, but the original W2 integration is later. NOT merged.
+- O4 RSS 3600: NOT started and NOT passed. The earlier 40-fresh "before" attempts are INVALID as metrics. The old
+  VALID W0 run is kept only to identify targets, not as improvement evidence.
+- O1 hard budget of 1 ms or less: NOT proved.
+- Still queued: O2, O5, O10 and native runs; W5, O58, O59 and manual W2; the NPC second form; W8 new world; O47
+  every-mode checks. Each stays explicit until its own gate passes.
+
 ## Owner decisions (no task; for nishant)
 
 - O63 Public release packaging: ship build_bp and translucent_bp outside the bundle; slots_bp off by default; maybe
