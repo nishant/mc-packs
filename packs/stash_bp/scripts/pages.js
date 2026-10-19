@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, onChange, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, exportPending, indexedKinds, InventoryRecoveryError, inventoryReady, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, saveSnapshot, signature, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, exportPending, indexedEntries, InventoryRecoveryError, inventoryReady, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, saveSnapshot, signature, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -281,7 +281,16 @@ export function storedCount(player, id) {
   }
   if (state.pending) return undefined;
   const cur = curPage(player);
-  const sig = `${cur}|${Object.entries(state.pages).map(([p, r]) => `${p}:${r.id}`).join(",")}`;
+  const pagesNow = new Set(Object.keys(state.pages).map(Number));
+  /** @type {string[]} */
+  const legacy = [];
+  for (let p = 1; p <= totalPages(player); p++) {
+    const raw = player.getDynamicProperty(PAGE_PROP + p);
+    if (raw === undefined) continue;
+    pagesNow.add(p);
+    if (!state.pages[p]) legacy.push(`${p}:L${typeof raw === "string" ? raw.length : "?"}`);
+  }
+  const sig = `${cur}|${Object.entries(state.pages).map(([p, r]) => `${p}:${r.id}`).join(",")}|${legacy.join(",")}`;
   let cache = storedCache.get(player.id);
   if (!cache || cache.sig !== sig) {
     cache = { sig, rows: new Map() };
@@ -291,7 +300,7 @@ export function storedCount(player, id) {
   if (known) return known;
   /** @type {Map<string, { id: string, name?: string, lore?: string[], n: number }>} */
   const out = new Map();
-  for (const p of Object.keys(state.pages).map(Number)) {
+  for (const p of [...pagesNow].sort((a, b) => a - b)) {
     if (p === cur || !mayHold(player, p, id)) continue;
     const entries = readPage(player, p);
     if (!entries) return undefined;
@@ -374,6 +383,23 @@ function addToEntries(entries, rec, mode) {
 }
 
 /**
+ * Could a saved page take this item (a matching stack or a free slot)? False only when the committed index and the
+ * page's saved stack count prove it can't; an unknown page is read, never skipped.
+ * @param {Player} player @param {number} page @param {string} id
+ */
+function mayTake(player, page, id) {
+  try {
+    const state = stateOf(player);
+    if (state.pending || !state.pages[page]) return true;
+    if (!indexedEntries(state, page)) return true;
+    const held = savedStacks(player, page);
+    return held === undefined || held < PAGE_SIZE || mayHold(player, page, id);
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Puts a stack onto saved pages: matching stacks first, then empty slots. Returns what didn't fit.
  * @param {Player} player @param {ItemStack} item @param {number[]} pages
  * @param {Map<number, Rec[]>} [edits]
@@ -391,6 +417,7 @@ function storeOnPages(player, item, pages, edits = new Map(), perPage = false) {
   /** @param {number} p @param {"merge" | "fill"} mode */
   const put = (p, mode) => {
     if (!left) return;
+    if (!loaded.has(p) && !edits.has(p) && !mayTake(player, p, rec.id)) return;
     if (!loaded.has(p)) loaded.set(p, edits.get(p) ?? readPage(player, p));
     const entries = loaded.get(p);
     if (!entries) throw new Error(`page ${p} can't be read; nothing moved`);
@@ -1154,10 +1181,9 @@ function savedStacks(player, page) {
 /** Could a saved page hold this item? False only when the committed index says it holds none; an unknown page may. @param {Player} player @param {number} page @param {string} id */
 function mayHold(player, page, id) {
   try {
-    const kinds = indexedKinds(stateOf(player), page);
+    const kinds = indexedEntries(stateOf(player), page);
     if (!kinds) return true;
-    for (const key of kinds.keys()) if (parseKind(key).id === id) return true;
-    return false;
+    return kinds.some((k) => k.id === id);
   } catch {
     return true;
   }
@@ -1242,10 +1268,11 @@ function autoStore(player) {
 }
 
 /**
- * Manual "Fill earlier pages": this page's stacks, in slot order and unsorted, go into the earliest earlier page with
- * room (matching stacks first, then free slots, page by page). The hotbar, cursor, buttons and slot-locked stacks
- * stay; what doesn't fit stays. One transaction like every page edit, so a failure changes nothing. Works with
- * auto-store disabled.
+ * Manual "Fill earlier pages": every page after page 1, hidden or active, pours into the pages before it. Source pages go
+ * in order (2, 3, ...), each source stack in slot order and unsorted, into the earliest earlier page that can take it
+ * (matching stacks first, then a free slot, destination by destination). The hotbar, cursor, buttons and slot-locked
+ * stacks stay; what doesn't fit stays. Everything, the active page included, is one transaction like every page edit,
+ * so a failure changes nothing. Works with auto-store disabled.
  * @param {Player} player
  * @returns {{ ok: true, stacks: number, items: number, left: number } | { ok: false, message: string }}
  */
@@ -1263,29 +1290,67 @@ export function fillEarlierPages(player) {
   switching.add(id);
   try {
     const cur = curPage(player);
-    if (cur <= 1 || cur > totalPages(player)) return { ok: false, message: "There is no earlier page to fill" };
-    /** @type {number[]} */
-    const earlier = [];
-    for (let p = 1; p < cur; p++) earlier.push(p);
+    const total = totalPages(player);
+    if (total <= 1 || cur > total) return { ok: false, message: "There is no earlier page to fill" };
     /** @type {Map<number, Rec[]>} */
     const edits = new Map();
-    /** @type {Map<number, ItemStack | undefined>} */
-    const changed = new Map();
+    /** @type {(Rec & { fixed?: boolean })[]} the live page as records, so it can be a destination too; slot-locked stacks can't be merged into */
+    const live = [];
+    /** @type {Map<number, number>} */
+    const liveWas = new Map();
+    for (const s of STORAGE_SLOTS) {
+      const item = inv.getItem(s);
+      if (!item || isButton(item)) continue;
+      liveWas.set(s, item.amount);
+      const fixed = item.lockMode === ItemLockMode.slot;
+      live.push({ s, ...toRecord(item), n: fixed ? Number.MAX_SAFE_INTEGER : item.amount, fixed });
+    }
+    if (cur < total) edits.set(cur, live);
     let stacks = 0;
     let items = 0;
     let left = 0;
-    for (const s of STORAGE_SLOTS) {
-      const item = inv.getItem(s);
-      if (!item || isButton(item) || item.lockMode === ItemLockMode.slot) continue;
-      const { rem } = storeOnPages(player, item, earlier, edits, true);
-      const n = item.amount - (rem?.amount ?? 0);
-      left += rem?.amount ?? 0;
-      if (!n) continue;
-      stacks++;
-      items += n;
-      changed.set(s, rem);
+    for (let p = 2; p <= total; p++) {
+      /** @type {Rec[] | undefined} */
+      let source;
+      if (p === cur) source = live;
+      else {
+        if (!stateOf(player).pages[p] && player.getDynamicProperty(PAGE_PROP + p) === undefined) continue;
+        source = edits.get(p) ?? readPage(player, p);
+        if (!source) return { ok: false, message: `Page ${p} can't be read. Nothing was moved` };
+      }
+      const earlier = Array.from({ length: p - 1 }, (_, i) => i + 1);
+      const kept = [];
+      let touched = false;
+      for (const rec of [...source].sort((a, b) => a.s - b.s)) {
+        const stackItem = /** @type {Rec & { fixed?: boolean }} */ (rec).fixed ? undefined : deserializeStack(rec);
+        if (!stackItem || stackItem.lockMode === ItemLockMode.slot) {
+          kept.push(rec);
+          continue;
+        }
+        const { rem } = storeOnPages(player, stackItem, earlier, edits, true);
+        const n = rec.n - (rem?.amount ?? 0);
+        left += rem?.amount ?? 0;
+        if (n) {
+          stacks++;
+          items += n;
+          touched = true;
+          rec.n -= n;
+        }
+        if (rec.n > 0) kept.push(rec);
+      }
+      if (touched && p !== cur) edits.set(p, kept);
     }
     if (!items) return { ok: false, message: "Nothing fit on the earlier pages. Nothing was moved" };
+    edits.delete(cur);
+    /** @type {Map<number, ItemStack | undefined>} */
+    const changed = new Map();
+    const liveNow = new Set();
+    for (const rec of live) {
+      liveNow.add(rec.s);
+      if (rec.n === liveWas.get(rec.s)) continue;
+      changed.set(rec.s, rec.n > 0 ? deserializeStack(rec) : undefined);
+    }
+    for (const s of liveWas.keys()) if (!liveNow.has(s)) changed.set(s, undefined);
     const after = carried(inv).filter((e) => !changed.has(e.s));
     for (const [s, item] of changed) if (item) after.push({ s, item });
     try {
@@ -1515,12 +1580,9 @@ function scanItems(player, inv) {
   }
   const state = stateOf(player);
   for (let p = 1; p <= total; p++) {
-    const kinds = indexedKinds(state, p);
+    const kinds = indexedEntries(state, p);
     if (kinds) {
-      for (const [key, n] of kinds) {
-        const { id, name } = parseKind(key);
-        add(`${id}|${name ?? ""}`, name ?? pretty(id), n, p);
-      }
+      for (const { id, name, n } of kinds) add(`${id}|${name ?? ""}`, name ?? pretty(id), n, p);
       continue;
     }
     for (const e of readPage(player, p) ?? []) add(`${e.id}|${e.name ?? ""}`, e.name ?? pretty(e.id), e.n, p);
@@ -1573,8 +1635,8 @@ function inventoryMenu(player) {
       }
       form.button("Scan all items across pages\n§8Find which page holds an item");
       actions.push(() => scanMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
-      if (cur > 1) {
-        form.button("Fill earlier pages\n§8Move this page's stacks into free space on earlier pages");
+      {
+        form.button("Fill earlier pages\n§8Pull every later page's stacks into free space on earlier pages");
         actions.push(() => {
           const r = fillEarlierPages(player);
           player.sendMessage(r.ok ? `§aMoved ${r.items} items (${r.stacks} stacks) to earlier pages${r.left ? `; ${r.left} did not fit and stayed here` : ""}.` : `§c${r.message}`);

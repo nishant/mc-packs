@@ -50,29 +50,35 @@ export function stateOf(player) {
  * stay under the property limit), is unknown: readers must open that page, never treat it as empty.
  * @typedef {{ r: string, k: Record<string, number> }} PageIndex
  */
-/** Longest a stored name is kept in a kind key. */
-const KEY_NAME = 40;
+/** Longest a name may be and still be indexed whole; a page holding a longer one stays unindexed (unknown, read when needed). */
+const KEY_NAME = 64;
 /** Bytes the whole index property may use: the dynamic property limit is 32767, and a recovery journal adds two refs. */
 const STATE_LIMIT = 30000;
+
+/** `%` and `|` are escaped so an id or a name is never mistaken for the separator. @param {string} text */
+const esc = (text) => text.replaceAll("%", "%25").replaceAll("|", "%7C");
+/** @param {string} text */
+const unesc = (text) => text.replaceAll("%7C", "|").replaceAll("%25", "%");
 
 /** @param {string} id @param {string | undefined} name @returns {string} */
 export function kindKey(id, name) {
   const short = id.startsWith("minecraft:") ? id.slice(10) : id;
-  return name ? `${short}|${name.slice(0, KEY_NAME)}` : short;
+  return name ? `${esc(short)}|${esc(name)}` : esc(short);
 }
 
 /** @param {string} key @returns {{ id: string, name: string | undefined }} */
 export function parseKind(key) {
   const bar = key.indexOf("|");
-  const id = bar < 0 ? key : key.slice(0, bar);
-  return { id: id.includes(":") ? id : `minecraft:${id}`, name: bar < 0 ? undefined : key.slice(bar + 1) };
+  const id = unesc(bar < 0 ? key : key.slice(0, bar));
+  return { id: id.includes(":") ? id : `minecraft:${id}`, name: bar < 0 ? undefined : unesc(key.slice(bar + 1)) };
 }
 
-/** @param {{ id: string, name?: string, n: number }[]} recs @returns {Record<string, number>} */
+/** The kinds a page holds, or undefined when one can't be keyed whole (a name over the cap), so the page stays unknown. @param {{ id: string, name?: string, n: number }[]} recs @returns {Record<string, number> | undefined} */
 export function kindsOfRecs(recs) {
   /** @type {Record<string, number>} */
   const k = {};
   for (const r of recs) {
+    if (r.name && r.name.length > KEY_NAME) return undefined;
     const key = kindKey(r.id, r.name);
     k[key] = (k[key] ?? 0) + r.n;
   }
@@ -97,9 +103,18 @@ export function indexedKinds(state, page) {
   return out;
 }
 
-/** Records one page's kinds against the snapshot it came from; forgets every entry for a page that changed or went away. @param {State} state @param {number} page @param {Ref} ref @param {Record<string, number>} kinds */
+/** The same committed index as records, so no name is ever re-split on a separator. @param {State} state @param {number} page @returns {{ id: string, name: string | undefined, n: number }[] | undefined} */
+export function indexedEntries(state, page) {
+  if (!indexedKinds(state, page)) return undefined;
+  return Object.entries(/** @type {PageIndex} */ (state.idx?.[page]).k).map(([key, n]) => ({ ...parseKind(key), n }));
+}
+
+/** Records one page's kinds against the snapshot it came from; forgets every entry for a page that changed or went away. @param {State} state @param {number} page @param {Ref} ref @param {Record<string, number> | undefined} kinds */
 export function recordIndex(state, page, ref, kinds) {
-  state.idx = { ...state.idx, [page]: { r: ref.id, k: kinds } };
+  const idx = { ...state.idx };
+  if (kinds) idx[page] = { r: ref.id, k: kinds };
+  else delete idx[page];
+  state.idx = idx;
 }
 
 /** @param {State} state */
