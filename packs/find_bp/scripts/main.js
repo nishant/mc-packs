@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get } from "./settings.js";
+import { get, set } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
 const PROP_SHARD = "find:idx:"; // world: find:idx:0, find:idx:1, … JSON shards of the index
@@ -40,9 +40,13 @@ const containerTypes = () => (types ??= new Set(CONFIG.containerTypes.filter((t)
 // ---------------------------------------------------------------------------
 
 /**
- * `t`: [item id without "minecraft:", count] pairs; `at`: epoch ms of the last look; `b`: block id, short.
- * @typedef {{ t: [string, number][], at: number, b: string }} Entry
+ * `t`: [item id without "minecraft:", count] pairs; `at`: epoch ms of the last look; `b`: block id, short;
+ * `w`: ids of the players who opened it (newest last, at most MAX_VIEWERS), who may find it while the index is private.
+ * @typedef {{ t: [string, number][], at: number, b: string, w?: string[] }} Entry
  */
+
+const MAX_VIEWERS = 8;
+const PROP_MIGRATED = "find:mig"; // world: set once the index mode was decided for this world
 
 /** @type {Map<string, Entry> | undefined} */
 let index;
@@ -51,10 +55,21 @@ let dirty = false;
 /** An entry as saved, checked so one damaged entry can't break every search. @param {any} v @returns {v is Entry} */
 const valid = (v) =>
   !!v && Array.isArray(v.t) && typeof v.at === "number" && typeof v.b === "string" &&
+  (v.w === undefined || (Array.isArray(v.w) && v.w.every((/** @type {any} */ x) => typeof x === "string"))) &&
   v.t.every((/** @type {any} */ p) => Array.isArray(p) && typeof p[0] === "string" && typeof p[1] === "number");
 
 /** The shards as last written, so a save only rewrites the ones that changed. @type {string[]} */
 let written = [];
+
+/** True when an operator already chose "Private index" (saved in find:cfg), so the migration must not overwrite it. */
+function hasOverride() {
+  try {
+    const raw = world.getDynamicProperty("find:cfg");
+    return typeof raw === "string" && Object.hasOwn(JSON.parse(raw), "privateIndex");
+  } catch {
+    return false;
+  }
+}
 
 /** @returns {Map<string, Entry>} */
 function getIndex() {
@@ -68,6 +83,16 @@ function getIndex() {
       for (const [k, v] of Object.entries(JSON.parse(raw))) if (valid(v)) index.set(k, v);
     } catch (e) {
       console.warn(`[find] shard ${i} unreadable: ${e}`);
+    }
+  }
+  // Decide the index mode once. A world that already had an index keeps the world-wide one it was promised
+  // (nothing changes for its players until an operator turns "Private index" on); a new world starts private.
+  if (world.getDynamicProperty(PROP_MIGRATED) === undefined) {
+    try {
+      if (written.length && !hasOverride()) set("privateIndex", false);
+      world.setDynamicProperty(PROP_MIGRATED, 1);
+    } catch (e) {
+      console.warn(`[find] index mode: ${e}`);
     }
   }
   return index;
@@ -218,10 +243,12 @@ function record(block, sigOf = signatures()) {
   const container = containerTypes().has(block.typeId) ? containerOf(block) : undefined;
   if (!container) {
     if (idx.delete(keyOf(block.dimension, block.location))) dirty = true;
-    return;
+    return undefined;
   }
   const { main, other } = canonical(block, container, sigOf);
-  if (other) idx.delete(keyOf(other.dimension, other.location));
+  const otherKey = other ? keyOf(other.dimension, other.location) : undefined;
+  const otherEntry = otherKey ? idx.get(otherKey) : undefined;
+  if (otherKey) idx.delete(otherKey);
   /** @type {Map<string, number>} */
   const counts = new Map();
   for (let i = 0; i < container.size; i++) {
@@ -229,28 +256,43 @@ function record(block, sigOf = signatures()) {
     if (it) counts.set(short(it.typeId), (counts.get(short(it.typeId)) ?? 0) + it.amount);
   }
   const key = keyOf(main.dimension, main.location);
-  if (counts.size) idx.set(key, { t: [...counts], at: Date.now(), b: short(main.typeId) });
-  else idx.delete(key);
+  if (counts.size) {
+    // Who opened it carries over, from the entry this one replaces and from the other half of a double chest.
+    const w = [...new Set([...(otherEntry?.w ?? []), ...(idx.get(key)?.w ?? [])])].slice(-MAX_VIEWERS);
+    idx.set(key, { ...idx.get(key), t: [...counts], at: Date.now(), b: short(main.typeId), ...(w.length ? { w } : {}) });
+  } else idx.delete(key);
   dirty = true;
+  return key;
 }
 
 /** @param {Dimension} dimension @param {import("@minecraft/server").Vector3} p @param {(b: Block) => string | undefined} [sigOf] */
 function recordAt(dimension, p, sigOf) {
   try {
     const b = dimension.getBlock(p);
-    if (b) record(b, sigOf);
+    return b ? record(b, sigOf) : undefined;
   } catch {
-    // chunk unloaded since: keep what we knew
+    return undefined; // chunk unloaded since: keep what we knew
   }
 }
 
-world.afterEvents.playerInteractWithBlock.subscribe(({ block }) => {
+/** Reads a container the player opened and notes that they opened it. @param {Dimension} dimension @param {import("@minecraft/server").Vector3} p @param {string} playerId */
+function seen(dimension, p, playerId) {
+  const key = recordAt(dimension, p);
+  const entry = key ? getIndex().get(key) : undefined;
+  if (!entry) return;
+  const w = [...(entry.w ?? []).filter((x) => x !== playerId), playerId].slice(-MAX_VIEWERS);
+  getIndex().set(key, { ...entry, w });
+  dirty = true;
+}
+
+world.afterEvents.playerInteractWithBlock.subscribe(({ block, player }) => {
   if (!containerTypes().has(block.typeId)) return;
   const { dimension } = block;
   const p = block.location;
-  recordAt(dimension, p);
-  system.runTimeout(() => recordAt(dimension, p), RECHECK_TICKS); // after the player put things in or took them out
-  system.runTimeout(() => recordAt(dimension, p), LATE_RECHECK_TICKS);
+  const id = player.id;
+  seen(dimension, p, id);
+  system.runTimeout(() => seen(dimension, p, id), RECHECK_TICKS); // after the player put things in or took them out
+  system.runTimeout(() => seen(dimension, p, id), LATE_RECHECK_TICKS);
 });
 
 world.afterEvents.playerBreakBlock.subscribe(({ block, brokenBlockPermutation }) => {
@@ -327,12 +369,15 @@ function normalize(query) {
  */
 function matches(player, q) {
   const here = short(player.dimension.id);
+  const idx = getIndex(); // first: it settles the index mode of a world that already had an index
+  const priv = get("privateIndex") === true;
   const { x: px, y: py, z: pz } = player.location;
   /** @type {Hit[]} */
   const exact = [];
   /** @type {Hit[]} */
   const partial = [];
-  for (const [key, entry] of getIndex()) {
+  for (const [key, entry] of idx) {
+    if (priv && !entry.w?.includes(player.id)) continue;
     const items = entry.t.filter(([id]) => id === q);
     const loose = items.length ? items : entry.t.filter(([id]) => id.includes(q));
     if (!loose.length) continue;
@@ -410,7 +455,9 @@ async function search(player, query) {
     player.sendMessage(
       closed.size
         ? `§7Only containers you can't open (locked, or in someone else's claim) have "${q}".`
-        : `§7No remembered container has "${q}". Containers are remembered once someone opens them, or when you search within ${get("liveScanRadius")} blocks.`
+        : get("privateIndex") === true
+          ? `§7None of the containers you opened has "${q}". Containers are listed once you've opened them (the index is private on this realm).`
+          : `§7No remembered container has "${q}". Containers are remembered once someone opens them, or when you search within ${get("liveScanRadius")} blocks.`
     );
     return;
   }
