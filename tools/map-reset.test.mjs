@@ -43,11 +43,11 @@ test("only the word confirm runs a reset", () => {
 });
 
 test("generations count up from missing or damaged values", () => {
-  assert.equal(R.nextGeneration(undefined), 1);
-  assert.equal(R.nextGeneration(3), 4);
-  assert.equal(R.nextGeneration("x"), 1);
-  assert.equal(R.nextGeneration(-4), 1);
-  assert.equal(R.nextGeneration(NaN), 1);
+  assert.equal(R.nextGeneration(undefined, 0), 1);
+  assert.equal(R.nextGeneration(3, 0), 4);
+  assert.equal(R.nextGeneration("x", 0), 1);
+  assert.equal(R.nextGeneration(-4, 0), 1);
+  assert.equal(R.nextGeneration(NaN, 0), 1);
 });
 
 test("a player is reset once per generation, offline players on their next join", () => {
