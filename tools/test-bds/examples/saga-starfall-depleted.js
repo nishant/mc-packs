@@ -115,7 +115,11 @@ export default async function (t) {
   }
   t.server("/gamerule doMobSpawning false");
   t.server("/gamerule keepInventory true");
-  await t.loadArea(500, 500, { radius: 6 });
+  // A circle ticking area accepts radius 1-4 only. Radius 6 is rejected, so the chunk never loads.
+  t.server("/tickingarea remove o74_crater");
+  const area = t.server("/tickingarea add circle 500 0 500 4 o74_crater true");
+  t.assert(area.ok, `fixture ticking area was rejected: ${area.error ?? "command failed"}`);
+  await t.loadArea(500, 500, { radius: 4 });
   const late = await t.player("LateSearcher", { op: true, x: 515, y: 65, z: 500 });
   if (t.phase === 1) {
     t.server("/fill 488 57 488 512 63 512 stone");
