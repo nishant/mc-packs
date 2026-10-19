@@ -392,6 +392,7 @@ test("two meteor craters found in one pass still journal both, and gossip once",
 test("a nightmare clear pays every member and gossips once", () => {
   const box = recorder();
   let paid = 0;
+  let announced = 0;
   const members = new Map([["a", { name: "Ada" }], ["b", { name: "Bea" }], ["c", { name: "Cal" }]]);
   const players = [...members].map(([id, m]) => ({
     id,
@@ -400,10 +401,10 @@ test("a nightmare clear pays every member and gossips once", () => {
     playSound() {},
     sendMessage() {},
   }));
-  const api = evalPack(pack("expedition_bp"), ["finish"], ["gossip"], {
+  const api = evalPack(pack("expedition_bp"), ["finish", "announceClear"], ["gossip"], {
     ...box,
     gameMs: () => 1000,
-    get: () => 30,
+    get: (key) => key === "announceFromLevel" ? 0 : 30,
     openDoor() {},
     fillTreasure() {},
     bestFor: () => ({}),
@@ -426,7 +427,7 @@ test("a nightmare clear pays every member and gossips once", () => {
     writePlayer() {},
     maxTier: () => 10,
     tell() {},
-    world: { sendMessage() {} },
+    world: { sendMessage() { announced++; } },
     dungeonLabel: () => "Crypt",
     saveRun() {},
     console,
@@ -449,6 +450,7 @@ test("a nightmare clear pays every member and gossips once", () => {
     cursed: false,
   });
   assert.equal(paid, 3, "Crowns are not gated");
+  assert.equal(announced, 1, "the default threshold still announces the clear");
   assert.equal(count(box.events, "realm:quest_done"), 3);
   assert.equal(count(box.events, "realm:journal"), 3);
   assert.equal(count(box.events, "realm:gossip"), 1);

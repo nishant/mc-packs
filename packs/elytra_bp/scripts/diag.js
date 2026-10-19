@@ -36,6 +36,8 @@
 //                                    (its caches in memory would write old data back), and replies
 //                                    realm:diag_forgot {id, pack, ok, removed, bytes} or {id, pack, ok: false,
 //                                    error}. Scoreboards, tags and data saved on players are not touched.
+//                                    A pack may register one cleanup for what it saves outside world properties (see forget());
+//                                    the answer is then {ok, removed, bytes, note?} or {ok: false, error}, still only one.
 // No listener of its own: the first realm: scriptEventReceive listener a pack subscribes carries the protocol
 // (diag.js subscribes one itself only if no pack did by the first tick, or after that one is unsubscribed).
 // Time is Date.now() (Bedrock has no finer clock): one call reads 0 or 1 ms, sums over many calls are fair.
@@ -43,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "elytra_bp";
-const VERSION = "1.3.16";
+const VERSION = "1.3.17";
 const NAME = "Elytra HUD";
 /** @type {string[]} */
 const PREFIXES = ["elytra"];
@@ -521,7 +523,23 @@ function forget(st, rid, pack, confirm) {
   }
   rec.forgotten = true;
   console.warn(`[diag] ${rec.pack}: forgot ${removed} saved world entries (${bytes} bytes). It saves nothing more until /reload or a restart.`);
-  send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: true, removed, bytes });
+  // A pack that saves more than world properties (structures...) registers one synchronous cleanup in
+  // globalThis.__realmDiagForgetHooks[pack]. It runs after the properties are gone and the pack's writes are blocked, and the
+  // single answer below reports its outcome: {error} makes it ok:false (the properties are gone either way), {note} is added.
+  const hook = G.__realmDiagForgetHooks?.[rec.pack];
+  if (typeof hook !== "function") return void send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: true, removed, bytes });
+  /** @type {any} */
+  let r;
+  try {
+    r = hook({ removed, bytes });
+  } catch (err) {
+    console.warn(`[diag] ${rec.pack}: its forget cleanup threw: ${err}`);
+    r = { error: String(err) };
+  }
+  const error = typeof r?.error === "string" && r.error ? r.error.slice(0, 300) : undefined;
+  const note = typeof r?.note === "string" && r.note ? r.note.slice(0, 300) : undefined;
+  if (error) send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: false, removed, bytes, error: `saved data forgotten, but ${error}` });
+  else send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: true, removed, bytes, ...(note ? { note } : {}) });
 }
 
 /** @param {State} st @param {string} id @param {string} message */

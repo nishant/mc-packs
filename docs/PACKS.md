@@ -1188,7 +1188,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `pro
 
 | Key | Scope | Contents |
 |---|---|---|
-| `claims:c:<id>` | World | One per claim: JSON `{ id, o, n, dim, x, z, r, s, pt?, pc? }`, the owner's id and name, the dimension, the center, the radius, the players it's shared with (`[{ i, n }]`), whether it's shared with the owner's party (`pt`) and the owner's party code (`pc`, `""` for none; access also needs the owner and the player on the Parties pack's current member list). The owner's and shared players' names are updated when they join with a new gamertag. `dr` (true when set) lets visitors open doors, trapdoors and gates. `lv` is the owner's last visit (ms), saved on join and leave and refreshed about every 60 seconds while they play; when it's missing the claim shows the owner's last visit as unknown |
+| `claims:c:<id>` | World | One per claim: JSON `{ id, o, n, dim, x, z, r, s, pt?, pc? }`, the owner's id and name, the dimension, the center, the radius, the players it's shared with (`[{ i, n }]`), whether it's shared with the owner's party (`pt`) and the owner's party code (`pc`, `""` for none; access also needs the owner and the player on the Parties pack's current member list). The owner's and shared players' names are updated when they join with a new gamertag. `dr` (true when set) lets visitors open doors, trapdoors and gates. `lv` is the owner's last visit (ms), refreshed at most once every 60 seconds while the owner is inside that claim; when it's missing the claim shows the owner's last visit as unknown |
 | `claims:next` | World | The next claim id |
 | `claims:cfg` | World | Settings changed in `/realm:config` |
 
