@@ -1501,6 +1501,24 @@ function materials(player) {
   return { container, essence, shards, glass: countOf(container, isGlass), crowns: crownsOf(player) };
 }
 
+// Town news: at most one piece per in-game hour from this pack, each starlit relic once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). The shard cost stays outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** Ascends the relic with this serial by one stage, taking the cost once. Returns why not, or undefined. @param {Player} player @param {number} serial */
 function ascend(player, serial) {
   if (get("ascension.enabled") !== true) return "Ascension is closed on this realm.";
@@ -1532,7 +1550,7 @@ function ascend(player, serial) {
   player.playSound(asc >= 3 ? "random.totem" : "random.anvil_use", { volume: 0.8 });
   player.sendMessage(`§d${r.def.name} is now +${asc} ${STAGES[asc]}: §f${stageText(r.def, asc)}.${asc >= 3 ? ` §6Starlit: ${ASC[r.def.id]?.star}.` : ""}`);
   if (asc >= 3) {
-    system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "relic_starlit", player: player.id, name: player.name, place: r.def.name }));
+    gossip(`relic:${player.id}:${r.def.id}`, { kind: "relic_starlit", player: player.id, name: player.name, place: r.def.name });
     if (CONFIG.ascension.announceStarlit) for (const p of world.getAllPlayers()) if (p.id !== player.id) p.sendMessage(`§6${player.name}'s ${r.def.name} is Starlit!`);
   }
   return undefined;

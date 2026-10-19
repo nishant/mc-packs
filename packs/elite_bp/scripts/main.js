@@ -417,7 +417,7 @@ function night() {
 
 world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
   try {
-    if (cause !== EntityInitializationCause.Spawned) return;
+    if (cause !== EntityInitializationCause.Spawned || !entity.isValid) return;
     if (entity.typeId === "minecraft:item") {
       noteItem(entity);
       return;
@@ -950,7 +950,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   if (!info) return;
   if (info.gear) purgeGear(info.dim, info.at, info.gear, fresh ? 2.5 : 6);
   try {
-    slain(info, damageSource.damagingEntity, hitters.get(id));
+    slain(info, damageSource.damagingEntity, hitters.get(id), id);
   } catch (e) {
     console.warn(`[elite] death: ${e}`);
   }
@@ -962,11 +962,30 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   loaded = Math.max(0, loaded - 1);
 });
 
+// Town news: at most one piece per in-game hour from this pack, each event once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Rewards stay outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /**
  * @param {Info} info
  * @param {Entity | undefined} killerEntity @param {Map<string, number> | undefined} hits
+ * @param {string} [entityId] the dead champion, so one kill is one story
  */
-function slain(info, killerEntity, hits) {
+function slain(info, killerEntity, hits, entityId) {
   const now = Date.now();
   const window = CONFIG.helperSeconds * 1000;
   // Players who hurt it lately, most recent first.
@@ -1016,8 +1035,11 @@ function slain(info, killerEntity, hits) {
   if (killerId) msg.player = killerId;
   if (info.tag) msg.tag = info.tag;
   system.sendScriptEvent("realm:champion_slain", JSON.stringify(msg));
-  // Townsfolk gossip (Hearth & Hearsay): the town talks about who brought it down.
-  if (killerId) system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "champion", player: killerId, place: String(info.name).replace(/§./g, "") }));
+  // Townsfolk gossip (Hearth & Hearsay): the town talks about who brought it down. One champion, once.
+  if (killerId) {
+    const spot = `${info.trait}:${Math.floor(info.at.x)}:${Math.floor(info.at.y)}:${Math.floor(info.at.z)}`;
+    gossip(`champ:${entityId || info.tag || spot}`, { kind: "champion", player: killerId, place: String(info.name).replace(/§./g, "") });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1030,6 +1052,7 @@ function slain(info, killerEntity, hits) {
  * @param {Entity} e
  */
 function upkeep(e) {
+  if (!e.isValid) return;
   const trait = traitOf(e);
   if (!trait) return;
   const name = nameOf(e);

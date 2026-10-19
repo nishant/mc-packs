@@ -676,8 +676,11 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       }
       return;
     }
-    if (!deadEntity.hasTag(MOB_TAG) || !(damageSource.damagingEntity instanceof Player)) return;
-    dropXp(deadEntity, damageSource.damagingEntity);
+    // A monster that is already gone has no tag to read; its kill can't be rewarded without the killer either.
+    if (!deadEntity.isValid || !deadEntity.hasTag(MOB_TAG)) return;
+    const killer = damageSource.damagingEntity;
+    if (!(killer instanceof Player) || !killer.isValid) return;
+    dropXp(deadEntity, killer);
   } catch (e) {
     console.warn(`[moon] ${e}`);
   }

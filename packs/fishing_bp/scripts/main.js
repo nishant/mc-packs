@@ -488,6 +488,24 @@ function notable(player, sp, size) {
   return !before || size > before[1] || !rec || size > rec[0];
 }
 
+// Town news: at most one piece per in-game hour from this pack, each catch once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Journal and fishing XP stay outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  send("realm:gossip", msg);
+  return true;
+}
+
 /** Records the catch and tells the player. @param {Player} player @param {Species} sp @param {number} size */
 function caught(player, sp, size) {
   const log = logOf(player);
@@ -522,7 +540,7 @@ function caught(player, sp, size) {
   if (sp.rarity === "legendary" && get("announceLegendary") === true) {
     for (const p of world.getAllPlayers()) if (p.id !== player.id) p.sendMessage(`§6${player.name} caught a legendary ${sp.name} (${size} cm)!`);
   }
-  if (sp.rarity === "legendary") send("realm:gossip", { kind: "fish_legendary", player: player.id, name: player.name, place: sp.name }); // Townsfolk gossip
+  if (sp.rarity === "legendary") gossip(`fish:${player.id}:${sp.id}:${log[sp.id][0]}`, { kind: "fish_legendary", player: player.id, name: player.name, place: sp.name }); // Townsfolk gossip
   send("realm:journal", { player: player.id, page: "fish", entry: sp.id, label: sp.name });
   send("realm:skill_xp", { player: player.id, skill: "fishing", amount: rarities.get(sp.rarity)?.xp ?? 0 });
 }

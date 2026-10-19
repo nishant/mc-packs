@@ -2320,6 +2320,24 @@ function bossAdds(run, count) {
 // Finishing
 // ---------------------------------------------------------------------------
 
+// Town news: at most one piece per in-game hour from this pack, each clear once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Crowns, quests and journals stay outside.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  send("realm:gossip", msg);
+  return true;
+}
+
 /** The boss fell: clock, leaderboard, progress, rewards, treasure. @param {Run} run */
 function finish(run) {
   if (run.phase !== "active") return;
@@ -2368,6 +2386,8 @@ function finish(run) {
   const crowns = Math.round(d.crowns * s.crowns * (blessed ? 1.25 : 1) * (run.cursed ? 1.25 : 1));
   // realm:quest_done extras (Story Questlines reads them): the dungeon, its level, the tier's name and Nightmare number.
   const doneFields = { dungeon: d.id, level: L, tier: L >= 3 ? "nightmare" : levelName(L).toLowerCase(), nightmare: tierOf(L), gauntlet: run.long === true };
+  /** @type {Player | undefined} */
+  let told;
   for (const [id] of run.members) {
     const p = online(id);
     if (!p) continue;
@@ -2379,7 +2399,7 @@ function finish(run) {
     send("realm:quest_done", { player: p.id, pack: "expedition_bp", id: `expedition_${d.id}`, label: `Expedition: ${d.name} cleared`, kind: "expedition", guild: "wardens", ...doneFields });
     if (CONFIG.rep > 0) send("realm:rep_add", { player: p.id, guild: "wardens", amount: Math.round(CONFIG.rep * (1 + 0.1 * s.t)), reason: `Expedition: ${d.name}` });
     send("realm:journal", { player: p.id, page: "places", entry: `expedition_${d.id}`, label: `Expedition: ${d.name}` });
-    if (doneFields.nightmare >= 5) send("realm:gossip", { kind: "expedition", player: p.id, name: p.name, place: d.name, n: doneFields.nightmare }); // Townsfolk gossip
+    if (!told && doneFields.nightmare >= 5) told = p;
     if (CONFIG.relics.length && Math.random() < Math.min(0.5, get("relicChance") + s.relic)) send("realm:relic_give", { player: p.id, relic: CONFIG.relics[Math.floor(Math.random() * CONFIG.relics.length)] });
     // Progress: clearing Hard unlocks Nightmare 1, clearing tier N unlocks N + 1.
     const prog = progressOf(p);
@@ -2398,6 +2418,7 @@ function finish(run) {
     if (!mine) tiers.push({ id: p.id, n: p.name, l: L, d: d.id, at: Date.now() });
     else if (L > mine.l) Object.assign(mine, { n: p.name, l: L, d: d.id, at: Date.now() });
   }
+  if (told) gossip(`exp:${run.id}`, { kind: "expedition", player: told.id, name: told.name, place: d.name, n: doneFields.nightmare });
   tiers = tiers.sort((a, b) => b.l - a.l || a.at - b.at).slice(0, Math.max(1, CONFIG.tierBoardSize));
   writeJson(PROP_TIERS, tiers);
   tell(run, `§a${d.name} cleared in ${clock(run.clearMs)}!${record} §eThe treasure room is open: you have ${get("exitSeconds")} seconds before you're taken back (opening a chest near the end gives you more). Press the gold button there to leave sooner; treasure left in the chests comes back with you.`);
