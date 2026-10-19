@@ -2,6 +2,7 @@
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
 import {
     getMaxBlocks, setMaxBlocks, HARD_MAX_BLOCKS, getAdminMaxBlocksCap, setAdminMaxBlocksCap,
+    getDefaultMaxBlocks, setDefaultMaxBlocks,
     getPreviewMode, setPreviewMode, PREVIEW_MODES, PREVIEW_LABELS,
     getDestroyPreviewMode, setDestroyPreviewMode, DESTROY_PREVIEW_MODES, DESTROY_PREVIEW_LABELS,
     getPreviewQuality, setPreviewQuality, PREVIEW_QUALITY_OPTIONS,
@@ -159,6 +160,8 @@ export const SETTINGS = {
             (p, v) => setMaxReachCap(v), { number: true, min: 0 }),
         entry("admin_blocks_cap", () => t("eb.settings.admin_max_blocks_cap", getAdminMaxBlocksCap().toLocaleString(), HARD_MAX_BLOCKS.toLocaleString()),
             () => getAdminMaxBlocksCap(), (p, v) => setAdminMaxBlocksCap(v), { number: true, min: 1 }),
+        entry("admin_default_blocks", () => t("eb.settings.admin_default_max_blocks", getDefaultMaxBlocks().toLocaleString(), getAdminMaxBlocksCap().toLocaleString()),
+            () => getDefaultMaxBlocks(), (p, v) => setDefaultMaxBlocks(v), { number: true, min: 1 }),
         toggle("admin_auto_give_book", "eb.settings.admin_auto_give_book", () => getAutoGiveBook(), (p, v) => setAutoGiveBook(v)),
         toggle("admin_lock_quality", "eb.settings.admin_config_tag", () => getConfigTagRequired(), (p, v) => setConfigTagRequired(v)),
         toggle("admin_vanilla_menus", "eb.settings.admin_custom_ui_toggle", () => !getGlobalCustomUI(), (p, v) => setGlobalCustomUI(!v)),

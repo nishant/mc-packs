@@ -5,7 +5,7 @@ import { StructureSaveMode, world } from "@minecraft/server";
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {{ s: number, item: ItemStack }} Entry */
 /** @typedef {{ id: string, slots: number[], layout?: 2 }} Ref */
-/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, pending?: { before: Ref, after: Ref } }} State */
+/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, idx?: Record<string, { r: string, k: Record<string, number> }>, pending?: { before: Ref, after: Ref, out?: { d: string, p: [number, number, number][] } } }} State */
 const STATE = "stash:native";
 const NEXT = "stash:snapshot_next";
 const ENTITY = "realm:stash_page_store";
@@ -42,9 +42,130 @@ export function stateOf(player) {
   return state;
 }
 
+/**
+ * The page-content index rides in the same property as the page refs, so one write commits both. `idx[page]` is
+ * `{ r, k }`: `r` is the id of the snapshot the counts were taken from, `k` maps a kind ("redstone" for
+ * minecraft:redstone, a custom id as is, "id|Name" for a named stack) to how many are on that page. An entry whose
+ * `r` is not the page's current snapshot, or a page without an entry (saved before the index existed, or dropped to
+ * stay under the property limit), is unknown: readers must open that page, never treat it as empty.
+ * @typedef {{ r: string, k: Record<string, number> }} PageIndex
+ */
+/** Longest a name may be and still be indexed whole; a page holding a longer one stays unindexed (unknown, read when needed). */
+const KEY_NAME = 64;
+/** Bytes the whole index property may use: the dynamic property limit is 32767, and a recovery journal adds two refs. */
+const STATE_LIMIT = 30000;
+
+/** `%` and `|` are escaped so an id or a name is never mistaken for the separator. @param {string} text */
+const esc = (text) => text.replaceAll("%", "%25").replaceAll("|", "%7C");
+/** @param {string} text */
+const unesc = (text) => text.replaceAll("%7C", "|").replaceAll("%25", "%");
+
+/** @param {string} id @param {string | undefined} name @returns {string} */
+export function kindKey(id, name) {
+  const short = id.startsWith("minecraft:") ? id.slice(10) : id;
+  return name ? `${esc(short)}|${esc(name)}` : esc(short);
+}
+
+/** @param {string} key @returns {{ id: string, name: string | undefined }} */
+export function parseKind(key) {
+  const bar = key.indexOf("|");
+  const id = unesc(bar < 0 ? key : key.slice(0, bar));
+  return { id: id.includes(":") ? id : `minecraft:${id}`, name: bar < 0 ? undefined : unesc(key.slice(bar + 1)) };
+}
+
+/** The kinds a page holds, or undefined when one can't be keyed whole (a name over the cap), so the page stays unknown. @param {{ id: string, name?: string, n: number }[]} recs @returns {Record<string, number> | undefined} */
+export function kindsOfRecs(recs) {
+  /** @type {Record<string, number>} */
+  const k = {};
+  for (const r of recs) {
+    if (r.name && r.name.length > KEY_NAME) return undefined;
+    const key = kindKey(r.id, r.name);
+    k[key] = (k[key] ?? 0) + r.n;
+  }
+  return k;
+}
+
+/**
+ * What the committed index says a saved page holds, as full item id (and "|name") -> count, or undefined when the
+ * page's contents are unknown (no entry, an entry for another snapshot, or an unreadable one).
+ * @param {State} state @param {number} page @returns {Map<string, number> | undefined}
+ */
+export function indexedKinds(state, page) {
+  const ref = state.pages?.[page];
+  const entry = state.idx?.[page];
+  if (!ref || !entry || entry.r !== ref.id || !entry.k || typeof entry.k !== "object") return undefined;
+  const out = new Map();
+  for (const [key, n] of Object.entries(entry.k)) {
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 1) return undefined;
+    const { id, name } = parseKind(key);
+    out.set(name === undefined ? id : `${id}|${name}`, n);
+  }
+  return out;
+}
+
+/** The same committed index as records, so no name is ever re-split on a separator. @param {State} state @param {number} page @returns {{ id: string, name: string | undefined, n: number }[] | undefined} */
+export function indexedEntries(state, page) {
+  if (!indexedKinds(state, page)) return undefined;
+  return Object.entries(/** @type {PageIndex} */ (state.idx?.[page]).k).map(([key, n]) => ({ ...parseKind(key), n }));
+}
+
+/** Records one page's kinds against the snapshot it came from; forgets every entry for a page that changed or went away. @param {State} state @param {number} page @param {Ref} ref @param {Record<string, number> | undefined} kinds */
+export function recordIndex(state, page, ref, kinds) {
+  const idx = { ...state.idx };
+  if (kinds) idx[page] = { r: ref.id, k: kinds };
+  else delete idx[page];
+  state.idx = idx;
+}
+
+/** @param {State} state */
+export function pruneIndex(state) {
+  if (!state.idx) return;
+  /** @type {Record<string, PageIndex>} */
+  const keep = {};
+  for (const [n, entry] of Object.entries(state.idx)) if (state.pages[n] && entry?.r === state.pages[n].id) keep[n] = entry;
+  if (Object.keys(keep).length) state.idx = keep;
+  else delete state.idx;
+}
+
+/** @param {string} text */
+function byteLength(text) {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff) {
+      n += 4;
+      i++;
+    } else n += 3;
+  }
+  return n;
+}
+
+/**
+ * Keeps the property under the dynamic property limit by dropping the largest index entries (those pages become
+ * unknown and are read when needed). Refs, the journal and unknown fields are never dropped.
+ * @param {State} state @returns {State}
+ */
+function fitIndex(state) {
+  let text = JSON.stringify(state);
+  if (byteLength(text) <= STATE_LIMIT || !state.idx) return state;
+  const idx = { ...state.idx };
+  const bySize = Object.keys(idx).sort((a, b) => JSON.stringify(idx[b]).length - JSON.stringify(idx[a]).length);
+  /** @type {State} */
+  const fit = { ...state, idx };
+  for (const n of bySize) {
+    delete idx[n];
+    text = JSON.stringify(fit);
+    if (byteLength(text) <= STATE_LIMIT) break;
+  }
+  if (!Object.keys(idx).length) delete fit.idx;
+  return fit;
+}
+
 /** A single property is the commit point for every page changed in an operation. @param {Player} player @param {State} state */
 function writeState(player, state) {
-  const text = JSON.stringify(state);
+  const text = JSON.stringify(fitIndex(state));
   player.setDynamicProperty(STATE, text);
   if (player.getDynamicProperty(STATE) !== text) throw new Error("page index readback failed");
 }
@@ -288,4 +409,125 @@ export function commitInventory(player, old, next, after) {
  */
 export function inventoryReady(player) {
   return !stateOf(player).pending;
+}
+
+const CHEST = "minecraft:chest";
+const CHEST_SLOTS = 27;
+
+/** What an operator is told before confirming, or undefined when nothing is pending. @param {Player} target @param {(e: Entry) => boolean} [skip] entries the exporter leaves out (the pack's own buttons) */
+export function pendingSummary(target, skip) {
+  const pending = stateOf(target).pending;
+  if (!pending) return undefined;
+  let items = pending.before.slots.length;
+  if (skip) {
+    try {
+      items = loadSnapshot(target, pending.before).filter((e) => !skip(e)).length;
+    } catch {
+      // the export reports an unreadable image itself
+    }
+  }
+  return { id: pending.before.id, items, chests: Math.max(1, Math.ceil(items / CHEST_SLOTS)), started: !!pending.out };
+}
+
+/** @param {import("@minecraft/server").Block | undefined} block @param {Entry[]} part */
+function chestMatches(block, part) {
+  if (block?.typeId !== CHEST) return false;
+  const box = block.getComponent("minecraft:inventory")?.container;
+  if (!box) return false;
+  for (let i = 0; i < CHEST_SLOTS; i++) {
+    const want = part[i]?.item;
+    if (signature(box.getItem(i)) !== signature(want)) return false;
+  }
+  return true;
+}
+
+/**
+ * A chest whose filled slots all hold what the export put there (an export that stopped half way): finished in place,
+ * never touching a chest that holds anything else.
+ * @param {import("@minecraft/server").Block} block @param {Entry[]} part
+ */
+function chestIsPrefixOf(block, part) {
+  const box = block.getComponent("minecraft:inventory")?.container;
+  if (!box) return false;
+  for (let i = 0; i < CHEST_SLOTS; i++) {
+    const have = box.getItem(i);
+    if (have && signature(have) !== signature(part[i]?.item)) return false;
+  }
+  return true;
+}
+
+/**
+ * Operator-confirmed export of a stuck recovery journal: the retained before-image goes into empty chests
+ * beside the operator (air blocks only, nothing overwritten), then the journal is cleared and both images
+ * discarded. The chest spots are journaled first, so a restart in between finishes the same export instead of
+ * making a second copy. Opaque stacks are carried as ItemStacks and never rebuilt from signatures.
+ * The target's live inventory is never touched. `skip` leaves out the pack's own page buttons (never real items).
+ * An export already started stays in the dimension it began in: from another dimension it is refused, so a second set
+ * of chests is never made.
+ * @param {Player} operator @param {Player} target @param {(e: Entry) => boolean} [skip]
+ * @returns {{ ok: boolean, message: string }}
+ */
+export function exportPending(operator, target, skip) {
+  const state = stateOf(target);
+  const pending = state.pending;
+  if (!pending) return { ok: false, message: "Nothing is waiting for recovery." };
+  let entries;
+  try {
+    entries = loadSnapshot(target, pending.before);
+    if (skip) entries = entries.filter((e) => !skip(e));
+  } catch (e) {
+    return { ok: false, message: `The saved images could not be read, nothing changed (${e}).` };
+  }
+  const parts = [];
+  for (let i = 0; i < entries.length; i += CHEST_SLOTS) parts.push(entries.slice(i, i + CHEST_SLOTS).map((e, j) => ({ s: j, item: e.item })));
+  if (!parts.length) parts.push([]);
+  try {
+    const dim = operator.dimension;
+    if (pending.out && pending.out.d !== dim.id) return { ok: false, message: `The export was started in ${pending.out.d}; finish it there. Nothing changed.` };
+    let spots = pending.out?.p;
+    if (!spots) {
+      spots = [];
+      const o = operator.location;
+      const bx = Math.floor(o.x);
+      const by = Math.floor(o.y);
+      const bz = Math.floor(o.z);
+      for (const r of [1, 2, 3, 4]) {
+        for (let dx = -r; dx <= r && spots.length < parts.length; dx++) {
+          for (let dz = -r; dz <= r && spots.length < parts.length; dz++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+            const at = { x: bx + dx, y: by, z: bz + dz };
+            if (dim.getBlock(at)?.isAir && dim.getBlock({ ...at, y: by - 1 })?.isAir === false) spots.push([at.x, at.y, at.z]);
+          }
+        }
+        if (spots.length >= parts.length) break;
+      }
+      if (spots.length < parts.length) return { ok: false, message: "There is no empty floor space next to you for the chests; move to open ground. Nothing changed." };
+      writeState(target, { ...state, pending: { ...pending, out: { d: dim.id, p: spots } } });
+    }
+    if (spots.length < parts.length) return { ok: false, message: "The saved export spots are incomplete; ask for help. Nothing changed." };
+    for (let i = 0; i < parts.length; i++) {
+      const block = dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] });
+      if (chestMatches(block, parts[i])) continue;
+      const partial = block?.typeId === CHEST && chestIsPrefixOf(block, parts[i]);
+      if (!block?.isAir && !partial) return { ok: false, message: `The export spot ${spots[i].join(" ")} is taken by something else; nothing was overwritten. Ask for help.` };
+      if (!partial) block.setType(CHEST);
+      const box = dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] })?.getComponent("minecraft:inventory")?.container;
+      if (!box) throw new Error("chest inventory is unavailable");
+      for (const e of parts[i]) box.setItem(e.s, e.item);
+      if (!chestMatches(dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] }), parts[i])) throw new Error("chest readback failed");
+    }
+  } catch (e) {
+    console.warn(`[stash] recovery export incomplete, journal kept: ${e}`);
+    return { ok: false, message: "The export did not finish. The saved images are kept; run it again." };
+  }
+  const { pending: _done, ...rest } = state;
+  try {
+    writeState(target, rest);
+  } catch (e) {
+    console.warn(`[stash] recovery journal not cleared, export is kept and will be recognized: ${e}`);
+    return { ok: false, message: "The chests are filled but the journal did not clear. Run it again; nothing will be copied twice." };
+  }
+  discardSnapshot(pending.before);
+  discardSnapshot(pending.after);
+  return { ok: true, message: `Exported ${entries.length} stacks into ${parts.length} chest(s) next to you. ${target.name}'s journal is cleared. Anything they still carried now exists twice: inspect their inventory and the chests, and back up what you need.` };
 }

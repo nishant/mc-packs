@@ -24,6 +24,16 @@ const writeWorld = (prop) => (/** @type {any} */ v) => {
   } catch {}
 };
 
+/** Live block cap. A missing save uses config.js. Raising this does not write a higher default. */
+function liveCap() {
+  try {
+    const saved = world.getDynamicProperty("eb:adminMaxBlocksCap");
+    if (typeof saved === "number" && Number.isFinite(saved) && saved >= 1) return Math.min(300000, Math.floor(saved));
+  } catch {}
+  const cfg = Number(CONFIG.maxBlocksCap);
+  return Number.isFinite(cfg) && cfg >= 1 ? Math.min(300000, Math.floor(cfg)) : 50000;
+}
+
 /**
  * Why a player can't use Easy Building at all right now (operators only, or a tag they don't have), for /realm:prefs.
  * @param {Player} p
@@ -48,7 +58,33 @@ const OPTIONS = [
     max: 300000,
     step: 64,
     read: readWorld("eb:adminMaxBlocksCap"),
-    write: writeWorld("eb:adminMaxBlocksCap"),
+    write: (v) => {
+      writeWorld("eb:adminMaxBlocksCap")(v);
+      syncBlockLimitPrefs();
+    },
+  },
+  {
+    key: "defaultMaxBlocks",
+    type: "int",
+    scope: "world",
+    label: "Default blocks per build",
+    help: "Players with no saved limit. Raising the cap does not change this. Operators only.",
+    min: 64,
+    get max() { return liveCap(); },
+    step: 64,
+    read: () => {
+      const cap = liveCap();
+      let saved;
+      try { saved = world.getDynamicProperty("eb:defaultMaxBlocks"); } catch {}
+      const chosen = typeof saved === "number" && Number.isFinite(saved) ? saved : Number(CONFIG.defaultMaxBlocks) || 50000;
+      return Math.max(1, Math.min(cap, Math.floor(chosen)));
+    },
+    write: (v) => {
+      if (v === undefined) { writeWorld("eb:defaultMaxBlocks")(undefined); return; }
+      const cap = liveCap();
+      const n = Math.max(1, Math.min(cap, Math.floor(Number(v))));
+      writeWorld("eb:defaultMaxBlocks")(n);
+    },
   },
   {
     key: "modeComplexity",
@@ -191,7 +227,7 @@ const OPTIONS = [
   { key: "flickPreview", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:flickPreview", default: false, label: "Flick preview (only flash when aim moves)" },
   { key: "simpleModes", type: "bool", scope: "player", lock: [["enabled", false], ["modeComplexity", "simple"], ["modeComplexity", "advanced"]], locked: (p) => cantBuild(p), prop: "eb:simpleModes", default: false, label: "Simple mode list (Line, Wall, Floor, Cube)" },
   { key: "buildSpeed", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:buildSpeed", default: 20, label: "Build speed (wave ticks, 1 = instant)", min: 1, max: 100, step: 1 },
-  { key: "maxBlocks", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:maxBlocks", base: "maxBlocksCap", label: "My max blocks per build", min: 64, max: 300000, step: 64 },
+  { key: "maxBlocks", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => { syncBlockLimitPrefs(p); return cantBuild(p); }, get prop() { syncBlockLimitPrefs(); return "eb:maxBlocks"; }, base: "defaultMaxBlocks", label: "My max blocks per build", min: 64, get max() { return liveCap(); }, step: 64 },
   { key: "replaceBlocks", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:replaceBlocks", default: true, label: "Replace blocks in Creative mode" },
   { key: "infiniteReach", type: "bool", scope: "player", lock: [["enabled", false], ["allowInfiniteReach", false]], locked: (p) => cantBuild(p), prop: "eb:infiniteReach", default: false, label: "Infinite Reach" },
   { key: "infiniteReachDistance", type: "int", scope: "player", lock: [["enabled", false], ["allowInfiniteReach", false]], locked: (p) => cantBuild(p), prop: "eb:infiniteReachDistance", default: 64, label: "Infinite Reach distance (blocks)", min: 4, max: 256, step: 4 },
@@ -240,6 +276,24 @@ const OPTIONS = [
   { key: "fovZoomEnabled", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:fovZoomEnabled", default: true, label: "Selection FOV zoom when aiming far away" },
   { key: "hintsEnabled", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:hintsEnabled", default: true, label: "Show gameplay hints" },
 ];
+
+/** Clamp a saved player limit that is above the live cap so prefs and builds agree. A later cap increase does not restore the old number. */
+/** @param {import("@minecraft/server").Player} [player] */
+export function syncBlockLimitPrefs(player) {
+  const cap = liveCap();
+  /** @param {import("@minecraft/server").Player} who */
+  const clampOne = (who) => {
+    try {
+      const v = who.getDynamicProperty("eb:maxBlocks");
+      if (typeof v === "number" && Number.isFinite(v) && v > cap) who.setDynamicProperty("eb:maxBlocks", cap);
+    } catch {}
+  };
+  if (player) { clampOne(player); return; }
+  try { for (const p of world.getAllPlayers()) clampOne(p); } catch {}
+}
+try {
+  world.afterEvents.playerSpawn.subscribe(({ player }) => syncBlockLimitPrefs(player));
+} catch {}
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
 
