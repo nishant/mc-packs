@@ -157,12 +157,39 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 ## T13. Owner-reported bugs from the live Realm (October 19; screenshots in `media/`)
 
 - O68 The quest box cuts text off with "..." ("Party quest: you finished it, so you're helping. Your party...",
-  "[x] Touch the crater's..."): wrap instead of truncating; shorten the party-quest line.
+  "[x] Touch the crater's..."). **Server text fix done in `a1a4ef301bc685d9293168728ecfafcd8810bd45`
+  and `70db7f4daa29835c1153dabaeb645119662ee812`:** whole lines wrap within 10 rows/502 text bytes,
+  lower-priority whole lines are omitted with a truthful count, and helpers are not falsely told they finished
+  the chapter. Exhaustive offline RED/GREEN and the native quest/preference-lifecycle scenario pass.
+  Actual crowded PC/phone layout acceptance remains W2, not a headless PASS.
 - O69 Turning the Minimap off (realm preference) leaves a black square: hide the whole radar, background included.
+  **Resource binding fix done in `374ce27343176786936d3954fb4c46a3769c3c1d`:** the empty radar literal is
+  1351 bytes, matching the producer, rather than 1354. Offline visibility checks cover backgrounds, compass and
+  quest panels; native personal/realm toggle and empty-segment guards pass. Actual pixels remain W2.
 - O70 Chest Finder's mark is barely visible: add a floating arrow or another obvious marker, plus direction and distance.
+  **Server marker and guide done in `26c91c05f7b427b190635b865f9b71530ac549cc`:** a bounded player-local bright
+  arrow and steady-ranked direction/distance line replace the faint outline. Genuine native RED/GREEN verifies
+  searcher-only output, arbitration, replacement, timeout, death, leave and dimension cleanup. Visual prominence
+  against chests/signs still needs the owner; it is not certified by particles on a headless server.
 - O71 The stats ticker is realm-wide only: make it a per-player preference in /realm:prefs (realm default on).
+  **Done in `1917982ec31f59ee9c224debfb60104d9a62fec8` and `70db7f4daa29835c1153dabaeb645119662ee812`:**
+  the existing personal switch now defaults on, the realm switch is explicitly an allowance, and an explicit on/off
+  stays saved even when matching a default. Native tests exercise both forms, actual owning-add-on saved data,
+  default flips, cache invalidation and disallow/reallow. Existing stored choices are preserved. An old off choice
+  erased by the old default-equal policy cannot be reconstructed; the player news explains choosing off once more.
 - O72 Shift-clicking (sneak-tapping) a chest doesn't sort it.
+  **Done in `abf8fc6eb09dd4274b498510a2876cccd0f95be1`:** empty-hand sneak-taps sort immediately; gear opens
+  the default menu. The access protocol runs before sorting or opening an editable storage menu. A native
+  Claims/stash mini-bundle genuinely fails before and passes after, including reversed load order, locked outsiders
+  and cooldown feedback. Simulated empty-hand events use an explicit relay, not a claim of physical mouse/touch proof.
 - O73 Items can't be moved from one Expansive Inventory page to another.
+  **Done in `351068d589312202f91cf722ceaa8213bd73aded` with native restart coverage in
+  `70db7f4daa29835c1153dabaeb645119662ee812` and `202874c29b38112c4b97ce817f5e1b72afc7cfc0`:**
+  Move to page uses one reusable transactional stack/row transfer, validates capacity before mutation and keeps native
+  metadata, controls, hotbar and cursor. Genuine native RED/GREEN covers a full-page refusal, real shulker contents,
+  potion auxiliary data, enchantments, Nether/End and no leaked stores. Two physical restarts preserve a twice-moved
+  opaque row exactly once, using the documented test-only simulated-ID adapter. W3/O17 and PR86 routing/index work
+  remain open and must reuse this primitive; real inventory mouse/touch acceptance remains W2.
 - O74 (blocker) Signs in the Sky "Fallen Light" can't be finished: the crater's amethyst was mined out by players who
   finished it first, so a party mate catching up has nothing to gather. Reset or regrow per accept, or accept any
   shards; audit every step that depends on blocks built once.
