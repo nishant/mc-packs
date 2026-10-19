@@ -31,10 +31,13 @@ decisions or the backlog. Finish every workstream, or record in `OPEN.md` why an
 3. **Shared copies.** `settings.js`, `zones.js`, `side.js`, `diag.js` and `name-labels.js` are synced from
    `tools/*-shared.js` by `tools/sync-*.mjs`. Never edit a pack's copy. Change the shared file and rerun the sync
    (only the workstream that owns that shared file does this).
-4. **The other contributor.** msftMyt's PRs #84 (saga_bp `objectives.js`) and #86 (stash_bp `pages.js`) are open.
-   Never revert or overwrite their work. Keep your changes away from their hunks
-   (`git diff origin/master...origin/msftmyt-inventory-page-filling`, `...origin/msftmyt-quest-objective-outlines`).
-   See W0.
+4. **The other contributor and the owner's amended decision.** Close msftMyt's PRs #84 and #86 **unmerged**,
+   preserve their heads, diffs and tests, and rebuild their intentions on latest master as part of this plan.
+   Do not push to or delete those branches, cherry-pick stale whole files, or undo master's performance fixes.
+   #84's player-local `variable.life`, `variable.style` and `variable.color` outline bindings belong to W6/O37.
+   #86's genuine-pickup routing and manual fill-earlier-pages action belong to W3/O17, preserving native item
+   metadata, slot order, hotbar, cursor, controls, recovery and idle fast paths. Reuse O73's transfer design.
+   Closing the PRs resolves O67's disposition only, not those replacement features. See W0.
 5. **Tests.** Every behavior fix gets a BDS scenario `tools/test-bds/examples/<pack>-<topic>.js` (with its run command
    in the header) that fails on the old code and passes on the new. Prove both. Unit-level logic goes in
    `tools/*.test.mjs` (run by `npm run test`).
@@ -42,7 +45,9 @@ decisions or the backlog. Finish every workstream, or record in `OPEN.md` why an
    the heaviest (Minimap, HUDs) 1 ms or less. Measure before and after with the profiler and change performance only
    when the measurement says so:
    `node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json <out> [--only <packs>] --scenario tools/test-bds/examples/perf-soak.js --arg players=N --arg seconds=S --timeout 4000`.
-   The machine has 4 cores: run at most 2 BDS jobs at once across all agents.
+   The historical audit host had 4 Linux cores. The follow-up host is Windows with a Ryzen 7 5800XT
+   (8 cores / 16 logical processors), Node 22.17.0 and BDS 1.26.52.3. Do not compare hosts as if matched.
+   Run at most 2 BDS jobs at once globally, coordinated with other sessions; performance runs alone.
 7. **Rules from CLAUDE.md that bit before.**
    - Stable APIs only (`@minecraft/server` 2.1.0, `@minecraft/server-ui` 2.0.0).
    - Game text is plain ASCII. Never use a form's `.header()`.
@@ -101,14 +106,19 @@ Pack overlap to plan around:
 ### W0. Preconditions and cleanup (lead)
 
 - [ ] Fetch both repos and every branch. List the open PRs in nishant/mc-packs and nishant/hosting.
-- [ ] **O67** msftMyt's PRs #84 and #86 conflict with master only in versions, catalogs, NEWS and PACKS.md; their code
-  merges cleanly. Do not push to their branches. Tell the owner, who decides whether msftMyt updates them or
-  whether a merge-from-master is done for them. After either lands, the merged pack needs a version above master's
-  and `node tools/sync-diag.mjs`. W6 (O37) waits for #84; W3 (O17) must stay compatible with #86.
+- [x] **O67 disposition only:** the owner directed closing #84 and #86 unmerged and carrying their intentions
+  into this audit. Both were archived and closed unmerged on October 19, 2026:
+  [#84](https://github.com/nishant/mc-packs/pull/84), head `7801855e50d47decd7d1099b7ea6fb6cf6ae3bce`;
+  [#86](https://github.com/nishant/mc-packs/pull/86), head `0e54ff14ea36bdba1e7bbb549d5dddd66e405788`.
+  Their branches remain intact. W6/O37 and W3/O17 now implement and verify the preserved outcomes on current
+  master; neither waits for an old PR merge. O73 and O17 share one item-transfer design.
 - [ ] Delete the stale remote branch `audit/integration` in mc-packs, after confirming it is fully in `master`.
 - [ ] Fresh baseline on current master: `npm run check`, `npm run build`,
-  `node tools/test-bds/suite.mjs --jobs 2 --retry --json <out>`, and perf-soak with `--profile` at 10 and 40 players
-  (300 s). These are the "before" numbers. The audit's after-numbers are in `phase3-report.md`: bundle 6.56 ms at
+  `node tools/test-bds/suite.mjs --jobs 2 --retry --json <out>`, and perf-soak with `--profile` at 10, 40 and
+  100 players (300 s each). The owner approved 100 as the missing final before comparator. Freeze untouched
+  latest-master pack bytes first; keep source/harness identities, per-file hashes, first failures, retries,
+  skips and warnings. Exit zero is not an all-pass claim. These are the "before" numbers.
+  The audit's historical after-numbers are in `phase3-report.md`: bundle 6.56 ms at
   10 players, 9.74 at 40, 8.28 as one bundle; map_bp 3.96 at 40; 219 scenarios, 216 pass after the recheck.
 
 ### W1. Performance budget at 40 and 100 players (suggested task 1)
@@ -175,7 +185,9 @@ Packs: stash_bp, refill_bp, expedition_bp (gauntlet.js only). Tools: `tools/stas
 - [ ] **O17 (high, perf)** `refillFromPages` (stash_bp pages.js) loads every other page's structure snapshot for each
   used-up stack, up to 24 loads; scans and the menu's usage figures load pages too. Record item ids and counts per page
   in the committed page index at save time, so these load only the pages that hold the item. Existing saved pages
-  must load unchanged. Add Hotbar Refill to perf-soak. Stay compatible with msftMyt's PR #86 (pages.js).
+  must load unchanged. Add Hotbar Refill to perf-soak. Rebuild closed PR #86's genuine-pickup routing to earliest
+  eligible pages and manual fill-earlier-pages action on current master, without sorting or losing metadata,
+  hotbar, cursor, reserved controls, recovery quarantine or idle fast paths. Reuse O73's transfer primitive.
 - [ ] **O18** `/realm:inv_recover <player>` (operators only, with a confirmation) restores a retained before-image into
   a chest next to the operator when a page's inventory recovery is pending. Document it in the Quick Stack & Sort
   section of PACKS.md.
@@ -250,9 +262,10 @@ Packs: saga_bp (engine and `scripts/stories/`), cooking_bp (O35 lore mark only).
   unloaded at world load: keep the ids spawned this session and remove any other `saga:champion` on entityLoad.
   Saves over 32,767 characters throw: trim codex order, old favors and `ut` past 30,000, then refuse new codex
   entries with a message. Add a maxed-save unit test.
-- [ ] **O37** After msftMyt's PR #84 lands: run the interact outline scan (up to 10,625 blocks in one tick) as a
-  runJob. Fix the saga-escort flake: the villager's look-at AI turns Pell, so suppress that goal during escorts or
-  check body yaw.
+- [ ] **O37** Rebuild closed PR #84's player-local outline binding fix on current master first:
+  `variable.life`, `variable.style` and `variable.color` must match the particle shader, with regression tests.
+  Then run the interact outline scan (up to 10,625 blocks in one tick) as a runJob. Fix the saga-escort flake:
+  the villager's look-at AI turns Pell, so suppress that goal during escorts or check body yaw.
 
 ### W7. Checks and the story bible (suggested task 7)
 
@@ -390,7 +403,10 @@ in W2.
     (`player.camera.fade(...)`, next to a "no camera control" comment). Look for a fade or camera set that is never
     cleared, input permissions that are never restored, or a modal or cutscene left waiting on a player who was hit,
     died or was busy.
-  - **Fix:** every camera, input or fade change is cleared on finish, on death, on leave and on a dimension change
+  - **Investigation constraint:** this graveyard step is `inspect`, not the separate `playVision` fade path.
+    Prove the automatic `clueFound` form/exclusive-lock lifecycle before attributing the reported freeze to a
+    camera fade. Stable UI 2.0.0 exports `uiManager.closeAllForms`; assess ownership before using it.
+  - **Fix:** every owned camera, input or fade change is cleared on finish, on death, on leave and on a dimension change
     (C17), with a safety timeout. A tap on empty ground does nothing. Grep all packs for camera.fade, camera.setCamera
     and input permissions, and apply the same rules (expedition_bp main.js:1629, waystone_bp main.js:627).
   - **Test:** a scenario that taps empty ground and a clue while a zombie hits the player and the player dies mid-reveal.
@@ -403,6 +419,10 @@ in W2.
     - place a per-player supply, or
     - credit shards a party mate already handed in, or
     - accept other sources (any amethyst shards in the inventory) and say so in the hint.
+  - **Approved least-destructive route:** collection already accepts any matching inventory shards. Make the
+    hint explicitly explain another geode or a party mate, and verify late players, existing/partial inventory,
+    restart and exactly-once rewards. Do not regenerate player-modified terrain or add repeatable free supplies.
+    The misleading hint must fail its before test; already-working inventory credit is not an engine bug.
   - Audit every story step that depends on blocks the world builds once (crater, ruins, caches) for the same problem.
     Add a check-stories rule for collect steps that rely on a built structure (W7).
 - [ ] **O68 The quest box cuts text off with "..."** (`media/quest-box-cut-off.png`, `media/crater-mined-out.webp`).
@@ -496,7 +516,8 @@ in W2.
 - [ ] **O66** Upload both new bundles (`realm-bundle-2026.1018.2238.mcpack`, `realm-resources-2026.1018.2238.mcpack`,
   from https://mc.nish.software/realm/) to the Realm together, since diag.js and the shared copies changed in both.
   Then upload the bundles from each later publish.
-- [ ] **O67** msftMyt's PRs #84 and #86: see W0.
+- [x] **O67 disposition:** close #84 and #86 unmerged, retain their branches, rebuild the outcomes in W6/O37 and
+  W3/O17 with O73. See W0; replacement feature acceptance remains open.
 - [ ] The live Realm's welcome text (O43) and the default size profile for the Realm.
 
 ## 6. Backlog (ideas from the audit; do them only if the owner picks them)

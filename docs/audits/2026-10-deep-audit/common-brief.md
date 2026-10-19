@@ -1,5 +1,27 @@
 # Common brief: mc-packs deep audit (every track reads this)
 
+## Follow-up execution amendment (October 19, 2026)
+
+The approved follow-up is governed by PLAN.md and OPEN.md, not historical deferrals below. W0 freezes untouched
+latest-master packs and runs the official check/build/full suite, then isolated 300-second 10/40/100-player
+profiles on Windows (Ryzen 7 5800XT, 8 cores / 16 threads; historical Linux numbers are not matched comparators).
+At most 3 workers/reviewers/publishers and 2 BDS jobs globally; performance runs alone.
+
+The owner superseded the old PR instructions: #84 and #86 are archived and closed **unmerged**, with branches
+retained. Rebuild their intentions on current master, never restore stale whole files or undo performance fixes:
+W6/O37 owns #84's player-local `variable.life/style/color` particle bindings, then bounded outline scans;
+W3/O17 owns #86's genuine-pickup and manual fill-earlier-pages behavior, preserving native metadata, order,
+hotbar/cursor/controls, recovery and idle fast paths. Reuse O73's transactional transfer design. O67's closure is
+separate from those still-open feature acceptance gates.
+
+Urgent scope is W0, then O75, then O74, followed by one reviewed source+hosting release before later waves.
+The graveyard is an Inspect clue/form path, not the separate Vision fade path: prove the trigger and use owned
+generation/cancellation guards. Collection already accepts amethyst from anywhere; clarify another geode or a
+party mate rather than rebuilding the crater. Keep real client camera/respawn pixels unverified until W2.
+Minecraft desktop automation is read-only; no input/interlock bypass or live Realm changes.
+
+The rest of this file records the original audit brief and historical state.
+
 Goal: the packs run today on a 10-player Realm; the end goal is a public release to anyone, including public
 servers with 30-100+ players. Judge everything by that: smooth for players, low script cost per tick, nothing
 that only works on our world, docs a stranger can install from.
@@ -30,10 +52,9 @@ Read first (all in the scratchpad ):
   docs/WORKING.md, other tools/ files and the generated catalogs (help_bp/scripts/catalog.js,
   admin_bp/scripts/catalog.js, news_bp release). If a fix needs one of those, describe it in your notes file.
 - Do NOT bump manifest versions; the lead bumps every changed pack once at integration.
-- Never revert or overwrite the second contributor's (msftMyt) work. Two of their PRs are open and must not be
-  conflicted with: #86 (stash_bp pages.js/main.js/config.js "Fill earlier inventory pages without sorting") and
-  #84 (saga_bp/scripts/objectives.js outline particle bindings). Avoid editing those regions; if you must touch
-  those files, keep changes minimal and away from the PR's hunks (`git diff origin/master...origin/msftmyt-inventory-page-filling`).
+- Never revert or overwrite the second contributor's (msftMyt) work. The original audit kept away from PR #86's
+  inventory filling and #84's outline bindings. For the follow-up, the owner's no-merge/rebuild amendment above
+  supersedes that old wait-for-PR assumption.
 - Stable APIs only (@minecraft/server 2.1.0, server-ui 2.0.0). Game text plain ASCII. No imports between packs.
   `realm:` namespace for commands and script events, messages < 2048 chars. Send `realm:actionbar` before every
   setActionBar. Never `.header()` in forms. Check ids against @minecraft/vanilla-data.

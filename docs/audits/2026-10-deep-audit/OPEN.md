@@ -6,8 +6,9 @@ fix, C follow-up, D won't fix), `phase3-report.md` (suites and soaks), `baseline
 `history.md` (recurring bug classes C1-C28, also in `docs/WORKING.md`). Paths under `/home/user/wt/...` in the notes
 were the audit's worktrees and no longer exist; the commits are on `master`.
 
-Status when this was written: A and B are done (B: 50 of 51 in mc-packs, the 51st in hosting 9170842f). Every C row
-and every item below is open. Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
+Original status: A and B are done (B: 50 of 51 in mc-packs, the 51st in hosting 9170842f). Follow-up dispositions
+are recorded below; everything without a disposition remains open. Historical D rows do not waive an active O item.
+Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T1. Performance budget at 40 and 100 players
 
@@ -43,7 +44,9 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
 ## T3. Expansive Inventory and item safety
 
 - O17 (high, perf) Index page contents (item ids and counts per page in the committed index), so Hotbar Refill from
-  pages, scans and the menu's usage load only the pages they need; add refill to perf-soak.
+  pages, scans and the menu's usage load only the pages they need; add refill to perf-soak. Also rebuild closed
+  PR #86's genuine-pickup routing and manual fill-earlier-pages action on latest master, without sorting or
+  metadata/hotbar/cursor/control loss; share O73's transfer design. Closure alone does not finish this work.
 - O18 `/realm:inv_recover <player>` for pending inventory recovery.
 - O19 Close the Expeditions stash cart window (a disconnect plus broken carts re-places the structure, a copy).
 - O20 refill-pages.js: add "none on any page, many pages" and locked or named stack cases.
@@ -78,7 +81,9 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
   objective or an OR in `when`), with a scenario for cooking on / elite off and a real kill.
 - O35 Match Kitchen dishes and Champion's Hearts by lore, not name only.
 - O36 Remove leftover fallback champions on entityLoad; second trim for saves past 30,000 characters.
-- O37 Interact outline scan as a runJob (after msftMyt's PR #84 lands); steady escort facing (saga-escort flake).
+- O37 Rebuild closed PR #84's player-local `variable.life`, `variable.style` and `variable.color` outline
+  bindings on latest master with regression coverage, then the interact outline scan as a runJob; steady escort
+  facing (saga-escort flake). No dependency on merging the old PR remains.
 
 ## T7. Checks and the story bible
 
@@ -163,8 +168,13 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
   adds them back); the Parties migration can't be rolled back; existing operators see the setup reminder once;
   nickname protection for an offline gamertag starts at that player's next join.
 - O66 Upload both new bundles to the Realm together (diag.js and the shared copies changed in both).
-- O67 msftMyt's PRs #84 and #86 now conflict with master in versions, catalogs, NEWS and PACKS.md only (their code
-  merges cleanly); after a merge they need a version bump above master's and `node tools/sync-diag.mjs`.
+- O67 **Disposition executed; commit recorded in the release bookkeeping:** the owner directed closing
+  [#84](https://github.com/nishant/mc-packs/pull/84) and
+  [#86](https://github.com/nishant/mc-packs/pull/86) **unmerged**, not updating or merging them.
+  Closed October 19, 2026, with heads `7801855e50d47decd7d1099b7ea6fb6cf6ae3bce` and
+  `0e54ff14ea36bdba1e7bbb549d5dddd66e405788` archived with complete patches/tests. Branches retained.
+  O37 and O17 still own implementation and verification of their preserved intentions; O73 shares the transfer
+  design. Their feature work is not complete merely because the old PRs are closed.
 
 ## Backlog (ideas from the audit, not commitments)
 
