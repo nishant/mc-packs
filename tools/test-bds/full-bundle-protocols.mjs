@@ -14,7 +14,7 @@ export function nativeHitReport(hits, signal) {
 }
 
 /** First non-diag, non-test `<pack>_bp/<file>.js` frame. Bundle stacks omit `scripts/`. Unknown stacks are not renamed. */
-export function subscriberOf(stack = "") {
+export function subscriberOf(stack = String(new Error().stack ?? "")) {
   const skip = new Set(["__c13_tap", "__events_count", "probe_bp"]);
   const lines = String(stack ?? "").split(/\r?\n/);
   for (const line of lines) {

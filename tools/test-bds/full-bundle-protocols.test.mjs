@@ -287,6 +287,15 @@ test("subscriber frames skip diag and do not require a scripts folder", async ()
   assert.doesNotMatch(src, /scripts\[\\\\\/\]\(\[A-Za-z0-9_\]\+\)/);
 });
 
+test("the generated relay captures its caller when no explicit stack is supplied", async () => {
+  const mod = await import("./full-bundle-protocols.mjs");
+  const vm = await import("node:vm");
+  const context = vm.createContext({});
+  vm.runInContext(`globalThis.identify = ${mod.subscriberOf.toString()};`, context, { filename: "__c13_tap/main.js" });
+  const result = vm.runInContext("identify()", context, { filename: "chairs_bp/main.js" });
+  assert.equal(result.pack, "chairs_bp");
+});
+
 test("overlapping help pings stay one counted burst, not a unique-name pass", async () => {
   const mod = await import("./full-bundle-protocols.mjs");
   assert.equal(typeof mod.helpFence, "function");
