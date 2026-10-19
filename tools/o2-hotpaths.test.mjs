@@ -202,22 +202,61 @@ test("saga: the once-a-second loop and its send passes share one player list, an
 // elytra_bp
 // ---------------------------------------------------------------------------------------------------------------
 
-test("elytra: a player who isn't gliding costs no setting reads, and a gliding one still gets the HUD", async () => {
+test("elytra: a player who isn't gliding costs no setting reads, and a gliding one still gets the HUD, drops it on landing and when turned off", async () => {
   const sim = createSim();
   const walker = sim.join("Walker");
   const glider = sim.join("Glider");
   await loadReal(sim, "elytra_bp");
-  const reads = { walker: 0, glider: 0 };
-  for (const [p, k] of [[walker, "walker"], [glider, "glider"]]) {
-    const get = p.getDynamicProperty?.bind(p);
-    p.getDynamicProperty = (...a) => (reads[k]++, get ? get(...a) : undefined);
+  const reads = { walker: 0 };
+  const getProp = walker.getDynamicProperty.bind(walker);
+  walker.getDynamicProperty = (k) => (reads.walker++, getProp(k));
+  const bars = [];
+  let speed = 0.5; // blocks per tick: under the slipstream's 1.2, so only the HUD interval draws
+  for (const p of [walker, glider]) {
+    p.isGliding = false;
+    p.isOnGround = true;
+    p.getVelocity = () => ({ x: p === glider ? speed : 0, y: 0, z: 0 });
+    p.getViewDirection = () => ({ x: 1, y: 0, z: 0 });
+    p.getHeadLocation = () => ({ x: 0, y: 65, z: 0 });
+    p.getComponent = () => undefined;
+    p.onScreenDisplay = { setTitle() {}, setActionBar: (t) => bars.push([p.name, String(t)]) };
   }
+  const prefs = (v) => glider.setDynamicProperty("elytra:pref", JSON.stringify({ where: "hotbar", ...v }));
+  prefs({});
+  const barsOf = (name) => bars.filter(([n]) => n === name).map(([, t]) => t);
+  const hud = (blocksPerSecond) => `§b${blocksPerSecond} blocks/s  §fY 64  §fElytra §7--  §7Rockets 0`;
   sim.boot();
+
   sim.step(100);
   assert.equal(reads.walker, 0, `${reads.walker} setting reads for a player on the ground`);
+  assert.deepEqual(bars, [], "nobody on the ground is shown a HUD");
+
   glider.isGliding = true;
   glider.isOnGround = false;
   sim.step(40);
-  assert.ok(reads.glider > 0, "a glider's settings are read");
+  assert.ok(barsOf("Glider").length >= 4, `a glider's HUD is drawn, got ${JSON.stringify(bars)}`);
+  assert.ok(barsOf("Glider").every((t) => t === hud("10.0")), JSON.stringify(barsOf("Glider")));
   assert.equal(reads.walker, 0);
+
+  glider.isGliding = false;
+  glider.isOnGround = true;
+  sim.step(2);
+  bars.length = 0;
+  sim.step(30);
+  assert.deepEqual(bars, [], "landing stops the HUD");
+  speed = 0.25;
+  glider.isGliding = true;
+  glider.isOnGround = false;
+  sim.step(6);
+  assert.equal(barsOf("Glider")[0], hud("5.0"), `landing forgot the old speed readings: ${JSON.stringify(bars)}`);
+
+  prefs({ off: true });
+  sim.step(2);
+  bars.length = 0;
+  sim.step(30);
+  assert.deepEqual(bars, [], "turning the HUD off stops it while still gliding");
+  speed = 0.75;
+  prefs({});
+  sim.step(6);
+  assert.equal(barsOf("Glider")[0], hud("15.0"), `turning it off forgot the old speed readings: ${JSON.stringify(bars)}`);
 });
