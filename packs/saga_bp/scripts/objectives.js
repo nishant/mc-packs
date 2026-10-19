@@ -230,14 +230,17 @@ function drawStandingPad(player, dim, cx, cy, cz, color, ringRadius = 0) {
 const STAND_GUIDES = new Set(["reach", "vigil", "survive", "vision", "answer", "defend", "place"]);
 const ZONE_GUIDES = new Set(["vigil", "survive", "defend", "place"]);
 
-/** Blocks one interact scan step looks at before it yields (a 12-block box is up to 10,625). */
+/** Blocks one interact scan slice looks at; a scan runs one slice a tick, so its cost per tick is this many getBlock calls. */
 const SCAN_STEP = 256;
-/** Blocks the interact scans have looked at, for the profiler. */
-const interactScanStats = { blocks: 0, jobs: 0 };
+/** Scans that may run at once, so the whole script's worst case is MAX_SCANS * SCAN_STEP getBlock calls a tick (1,024). */
+const MAX_SCANS = 4;
+/** What the interact scans did, for the profiler: blocks looked at, scans started, slices run, scans running now. */
+const interactScanStats = { blocks: 0, jobs: 0, slices: 0, active: 0 };
 
 /**
- * Looks for the wanted blocks around a spot, SCAN_STEP blocks per step (run with system.runJob). Stops early when
- * alive() turns false. Fills out.found (nearest first, up to 4) and out.complete (false if a chunk wasn't loaded).
+ * Looks for the wanted blocks around a spot, yielding every SCAN_STEP blocks (the caller runs one step a tick). Stops early when
+ * alive() turns false. Fills out.found (nearest first, up to 4) and out.complete (false if any block could not be read: a chunk
+ * that isn't loaded makes getBlock return nothing or throw, and the matches found so far are kept).
  * @param {(p: {x:number,y:number,z:number}) => {typeId: string} | undefined} getBlock @param {Loc} loc @param {number} r @param {number} cy @param {number} dy @param {string[]} wanted
  * @param {{ found: { x: number, y: number, z: number, type: string }[], complete: boolean }} out @param {() => boolean} alive
  */
@@ -250,10 +253,14 @@ function* scanInteract(getBlock, loc, r, cy, dy, wanted, out, alive) {
     for (let z = Math.floor(loc.z - r); z <= Math.floor(loc.z + r); z++) {
       if (across({ x: x + 0.5, z: z + 0.5 }, loc) > r) continue;
       for (let y = cy - dy; y <= cy + dy; y++) {
-        const b = getBlock({ x, y, z });
         interactScanStats.blocks++;
-        if (!b) complete = false;
-        else if (wanted.includes(b.typeId)) found.push({ x, y, z, type: b.typeId, d: Math.hypot(x + 0.5 - loc.x, z + 0.5 - loc.z) + Math.abs(y - cy) });
+        try {
+          const b = getBlock({ x, y, z });
+          if (!b) complete = false;
+          else if (wanted.includes(b.typeId)) found.push({ x, y, z, type: b.typeId, d: Math.hypot(x + 0.5 - loc.x, z + 0.5 - loc.z) + Math.abs(y - cy) });
+        } catch {
+          complete = false;
+        }
         if (++n % SCAN_STEP === 0) {
           yield;
           if (!alive()) return;
@@ -266,7 +273,7 @@ function* scanInteract(getBlock, loc, r, cy, dy, wanted, out, alive) {
   out.complete = complete;
 }
 
-/** Up to 4 blocks of an interact objective near its spot, kept per scene; the search runs in the background in small steps. @param {SceneState} s @param {Player} player @param {Objective} obj @param {Loc} loc */
+/** Up to 4 blocks of an interact objective near its spot, kept per scene; the search runs in the background, one slice a tick. @param {SceneState} s @param {Player} player @param {Objective} obj @param {Loc} loc */
 function interactBlocks(s, player, obj, loc) {
   const dim = player.dimension;
   /** @type {{ x: number, y: number, z: number, type?: string }[] | undefined} */
@@ -279,35 +286,55 @@ function interactBlocks(s, player, obj, loc) {
   };
   if (s.data.interactJob) return list ?? fallback(); // a scan is still running
   if (list && now < (s.data.interactTry ?? 0)) return list;
-  s.data.interactTry = now + 100;
   const wanted = obj.blocks ?? [];
   if (!wanted.length) {
+    s.data.interactTry = now + 100;
     s.data.interactBlocks = list = fallback();
     return list;
   }
+  if (interactScanStats.active >= MAX_SCANS) {
+    s.data.interactTry = now + 20; // too many scans at once: this one waits its turn
+    return list ?? fallback();
+  }
+  s.data.interactTry = now + 100;
   const r = Math.min(radiusOf(obj), 12);
   const cy = Math.floor(loc.y ?? player.location.y);
   const dy = loc.y === undefined ? 6 : Math.min(r, 8);
   const token = {};
   s.data.interactJob = token;
   interactScanStats.jobs++;
+  interactScanStats.active++;
   const out = { found: /** @type {{ x: number, y: number, z: number, type: string }[]} */ ([]), complete: false };
-  const alive = () => s.data.interactJob === token;
-  system.runJob(
-    (function* () {
-      try {
-        yield* scanInteract((p) => dim.getBlock(p), loc, r, cy, dy, wanted, out, alive);
-        if (!alive()) return;
+  // The scan only goes on while the scene is still this player's, they are in the same dimension, and nothing ended or replaced it.
+  const alive = () => {
+    try {
+      return s.data.interactJob === token && scenes.get(sk(s.pid, s.key)) === s && player.isValid && player.dimension.id === dim.id;
+    } catch {
+      return false;
+    }
+  };
+  const gen = scanInteract((p) => dim.getBlock(p), loc, r, cy, dy, wanted, out, alive);
+  const stop = () => {
+    system.clearRun(timer);
+    interactScanStats.active--;
+    if (s.data.interactJob === token) s.data.interactJob = undefined;
+  };
+  const timer = system.runInterval(() => {
+    try {
+      interactScanStats.slices++;
+      if (!alive()) return stop();
+      if (!gen.next().done) return;
+      if (alive()) {
+        // Blocks found are kept even when part of the box was unloaded; an empty, incomplete scan tries again soon.
         s.data.interactBlocks = out.found.length ? out.found : fallback();
         if (!out.found.length && !out.complete) s.data.interactTry = system.currentTick + 40;
-      } catch {
-        s.data.interactTry = system.currentTick + 40; // the dimension unloaded mid-scan
-      } finally {
-        if (alive()) s.data.interactJob = undefined;
       }
-    })(),
-  );
-  return fallback();
+      stop();
+    } catch {
+      stop();
+    }
+  }, 1);
+  return list ?? fallback();
 }
 
 /**
@@ -1682,6 +1709,8 @@ function sceneFor(player, e, i, kind) {
 
 /** Ends a scene: its characters and story mobs go. @param {string} pid @param {string} key @param {boolean} [effect] */
 export function endScene(pid, key, effect = false) {
+  const s = scenes.get(sk(pid, key));
+  if (s?.data) s.data.interactJob = undefined; // its background scan stops
   scenes.delete(sk(pid, key));
   removeActors({ owner: pid, key }, effect);
   // The animals fed or tamed for it count again next time (the same daily favor on a later day, a reset chapter).
@@ -1691,7 +1720,11 @@ export function endScene(pid, key, effect = false) {
 
 /** Ends every scene of a player (they left, or their stories were reset). @param {string} pid */
 export function endScenesOf(pid) {
-  for (const s of [...scenes.values()]) if (s.pid === pid) scenes.delete(sk(s.pid, s.key));
+  for (const s of [...scenes.values()]) {
+    if (s.pid !== pid) continue;
+    if (s.data) s.data.interactJob = undefined;
+    scenes.delete(sk(s.pid, s.key));
+  }
   removeActors({ owner: pid });
   for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
 }

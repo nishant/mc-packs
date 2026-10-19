@@ -16,14 +16,16 @@ const colors = {
 
 function fixture({ enabled, inside = false, location = { x: 0, y: 64, z: 0 } } = {}) {
   const calls = [];
-  const scene = { data: {} };
+  const scene = { data: {}, pid: "p", key: "k" };
+  const scenesMap = new Map([["p|k", scene]]);
+  const timers = new Set();
   const dimension = {
     id: "minecraft:overworld",
     getBlock: () => ({ typeId: "minecraft:bell" }),
     spawnParticle() { assert.fail("quest guides must stay player-local"); },
   };
   const player = {
-    location, dimension,
+    location, dimension, isValid: true,
     spawnParticle(id, at, vars) { calls.push({ id, at: { ...at }, vars: vars?.values }); },
   };
   // Records exactly the names passed to the native API: the particle shader reads variable.life, variable.style and variable.color.r/g/b/a.
@@ -41,13 +43,18 @@ function fixture({ enabled, inside = false, location = { x: 0, y: 64, z: 0 } } =
     locate: (obj) => obj.loc, playerIn: () => inside,
     across: (a, b) => Math.hypot(a.x - b.x, a.z - b.z),
     groundAt: () => 64, onBed: () => false, alive: () => true,
-    system: { currentTick: 0, runJob: (gen) => { for (const _ of gen); } }, sceneFor: () => scene,
+    system: {
+      currentTick: 0,
+      runInterval: (fn) => { const t = { fn }; timers.add(t); return t; },
+      clearRun: (t) => timers.delete(t),
+    },
+    scenes: scenesMap, sk: (pid, key) => `${pid}|${key}`, sceneFor: () => scene,
     clueSpot: (_s, obj, k) => obj.clues[k], clueFound: () => assert.fail("fixture is not standing on a clue"),
   };
   const api = runInNewContext(`${radiusSource}\n${guideSource}\n${inspectSource}
     ({ guideVars, drawBlockOutline, drawStandingPad, questGuides, inspectTick })`, context);
   const loc = { dim: dimension.id, x: 10.5, y: 64, z: 0.5 };
-  return { ...api, calls, dimension, player, loc };
+  return { ...api, calls, dimension, player, loc, tick() { for (const t of [...timers]) t.fn(); } };
 }
 
 const tint = (call) => ["r", "g", "b", "a"].map((key) => call.vars.get(`variable.color.${key}`));
@@ -115,6 +122,7 @@ test("interaction targets keep cyan full outlines on at most four matching block
   const f = fixture();
   const obj = { type: "interact", radius: 1, blocks: ["minecraft:bell"], loc: f.loc };
   f.questGuides(f.player, {}, 0, obj); // the first draw uses the spot while the background scan runs
+  for (let i = 0; i < 5; i++) f.tick(); // the scan is one slice a tick: a radius-1 box finishes in a few
   f.calls.length = 0;
   f.questGuides(f.player, {}, 0, obj);
   assert.equal(f.calls.length, 24);
