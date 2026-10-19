@@ -11,6 +11,7 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "dailyBonus", type: "int", scope: "world", label: "Daily login bonus (Crowns)", help: "Once per UTC day; 0 = none", min: 0, max: 100, step: 1 },
+  { key: "dailyPayLimit", type: "int", scope: "world", label: "Daily pay limit (Crowns)", help: "The most one player can send with /realm:crowns_pay per UTC day; 0 = no limit", min: 0, max: 1000000, step: 5000 },
   { key: "startBalance", type: "int", scope: "world", label: "Starting balance (Crowns)", help: "For players joining for the first time", min: 0, max: 1000, step: 5 },
   { key: "marketAnywhere", type: "bool", scope: "world", label: "Market from anywhere", help: "/realm:crowns_market opens the market without visiting a merchant" },
   { key: "marketEnabled", type: "bool", scope: "world", label: "Market", help: "Merchants offer the market, and /realm:crowns_market opens it" },
