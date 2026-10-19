@@ -1,6 +1,6 @@
 // Small helpers shared by the Story Questlines modules. Imports nothing from the other modules.
 import { CommandPermissionLevel, Player, system, world } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, uiManager } from "@minecraft/server-ui";
 import { NPC_NAMES } from "./stories.js";
 import { WANDERERS } from "./stories/index.js";
 
@@ -84,19 +84,142 @@ export function send(id, msg) {
 /** @param {number} ticks */
 export const wait = (ticks) => new Promise((r) => system.runTimeout(() => r(undefined), Math.max(1, Math.floor(ticks))));
 
+// ---------------------------------------------------------------------------
+// Interactions: a form or dialogue belongs to the player as they were when it opened. A death, respawn, dimension
+// change or leaving ends it, an unanswered form is given up after FORM_TICKS, and an old operation can never
+// release a newer one's lock or act on its late answer.
+// ---------------------------------------------------------------------------
+
+/** A form nobody answers is given up on (and closed) after this long: 45 seconds. Kept under the test harness's own 1200-tick fallback so a native run can tell the pack's recovery from the shim's. */
+export const FORM_TICKS = 900;
+/** How often an open form checks that its player is still the one it was shown to. */
+const WATCH_TICKS = 5;
+
+/** Never reused, so an interaction that began before a cancel or a leave can't match a later counter. */
+let lastEpoch = 0;
+/** Each player's current epoch (set when an interaction starts, replaced by a cancel, dropped on leave): an operation started under an older one is stale. @type {Map<string, number>} */
+const epochs = new Map();
+/** Open forms by player: each looks at its player again when asked, so a death closes it now, not at the next check. @type {Map<string, Set<() => void>>} */
+const waiting = new Map();
+
+/** Alive and in the world (a dead player stays valid until they respawn). @param {Player} player */
+export function alive(player) {
+  if (!player.isValid) return false;
+  try {
+    const hp = player.getComponent("minecraft:health");
+    return !hp || hp.currentValue > 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Shows a form, retrying while the player is busy (chat or another menu just closed).
+ * Ties work to the player as they are now. The returned check is true once they died, left, changed dimension or had
+ * their interactions cancelled (a respawn, a form that timed out): whatever started before that, menus that would
+ * reopen a parent page included, must stop and not act on a late answer.
+ * @param {Player} player @returns {() => boolean}
+ */
+export function lifecycle(player) {
+  if (!alive(player)) return () => true;
+  const id = player.id;
+  let epoch = epochs.get(id);
+  if (epoch === undefined) epochs.set(id, (epoch = ++lastEpoch));
+  const dim = player.dimension.id;
+  return () => !alive(player) || epochs.get(id) !== epoch || player.dimension.id !== dim;
+}
+
+/**
+ * Ends everything a player had going: the busy mark and the forms waiting on them. Death, respawn, dimension change,
+ * a form that timed out and leaving call it. An operation that started earlier ends without effect (show answers
+ * undefined, the lock stays with whoever holds it now).
+ * @param {string} playerId @param {boolean} [left] the player is gone for good: forget their epoch
+ */
+export function cancelInteractions(playerId, left = false) {
+  if (left) epochs.delete(playerId);
+  else epochs.set(playerId, ++lastEpoch);
+  holders.delete(playerId);
+  busy.delete(playerId);
+  for (const look of [...(waiting.get(playerId) ?? [])]) look();
+}
+
+/** Closes the form on a player's screen: only called for a form our own `show` put there and has no answer to. @param {Player} player */
+function closeOwnForm(player) {
+  try {
+    if (player.isValid) uiManager.closeAllForms(player);
+  } catch (e) {
+    console.warn(`[saga] close form: ${e}`);
+  }
+}
+
+/**
+ * One form.show that stops waiting once the player can't use the form any more (their form is closed then) or `limit`
+ * ticks passed (`cancelOnTimeout`: the player's other interactions end too, so a parent menu doesn't reopen for someone
+ * who isn't there). Undefined when it gave up.
+ * @param {Player} player @param {{ show(p: Player): Promise<any> }} form @param {() => boolean} stale @param {number} limit @param {boolean} cancelOnTimeout
+ */
+async function answered(player, form, stale, limit, cancelOnTimeout) {
+  const id = player.id;
+  /** @type {(why: string) => void} */
+  let giveUp = () => {};
+  const gone = new Promise((resolve) => {
+    giveUp = resolve;
+  });
+  const look = () => {
+    if (stale()) giveUp("changed");
+  };
+  let looks = waiting.get(id);
+  if (!looks) waiting.set(id, (looks = new Set()));
+  looks.add(look);
+  const watch = system.runInterval(look, WATCH_TICKS);
+  const timer = system.runTimeout(() => giveUp("timeout"), limit);
+  try {
+    const shown = form.show(player);
+    const out = await Promise.race([shown, gone]);
+    if (typeof out !== "string") return out;
+    if (out === "timeout") console.warn(`[saga] gave up on a form nobody answered for ${limit} ticks (player ${id})`);
+    closeOwnForm(player);
+    if (out === "timeout" && cancelOnTimeout) cancelInteractions(id);
+    shown.then(undefined, (e) => console.warn(`[saga] a dropped form failed: ${e}`));
+    return undefined;
+  } finally {
+    system.clearRun(watch);
+    system.clearRun(timer);
+    looks.delete(look);
+    if (!looks.size && waiting.get(id) === looks) waiting.delete(id);
+  }
+}
+
+/**
+ * Shows a form, retrying while the player is busy (chat or another menu just closed). Undefined when the player
+ * died, left, changed dimension or had their interactions cancelled meanwhile, or nobody answered for FORM_TICKS
+ * (which ends the player's other pending interactions too): a late answer is never acted on.
  * @template {{ show(p: Player): Promise<any> }} F
  * @param {Player} player @param {F} form @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 export async function show(player, form) {
+  const stale = lifecycle(player);
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (!player.isValid) return undefined;
-    const res = await form.show(player);
+    if (stale()) return undefined;
+    const res = await answered(player, form, stale, FORM_TICKS, true);
+    if (!res || stale()) return undefined;
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await wait(10);
   }
   return undefined;
+}
+
+/**
+ * One try at a form with a time limit and no retry: for popups that may simply not open when the player is busy. Undefined
+ * when the player died, left, changed dimension or had their interactions cancelled meanwhile, or `limit` passed; a late
+ * answer is never returned. A popup that times out ends nothing else of the player's.
+ * @template {{ show(p: Player): Promise<any> }} F
+ * @param {Player} player @param {F} form @param {number} limit ticks @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
+ */
+export async function showOnce(player, form, limit) {
+  const stale = lifecycle(player);
+  if (stale()) return undefined;
+  const res = await answered(player, form, stale, limit, false);
+  return res && !stale() ? res : undefined;
 }
 
 /** Block-rounded coordinates "12 64 -300". @param {{ x: number, y?: number, z: number }} p */
@@ -196,15 +319,34 @@ export function waterTop(dim, x, y, z) {
 
 /** Players in one of our dialogues (or a vision): one at a time. @type {Set<string>} */
 export const busy = new Set();
+/** The claim that set each busy mark: only that operation may clear it. @type {Map<string, object>} */
+const holders = new Map();
 
-/** Runs a dialogue unless the player is already in one. Returns false when they were busy. @param {Player} player @param {() => Promise<void>} fn */
+/** Marks a player busy for one operation: the claim to release with, or undefined when they already are busy. @param {string} id */
+export function claim(id) {
+  if (busy.has(id)) return undefined;
+  const token = {};
+  busy.add(id);
+  holders.set(id, token);
+  return token;
+}
+
+/** Clears the busy mark if `token` still holds it (a newer operation's mark stays). @param {string} id @param {object} token */
+export function release(id, token) {
+  if (holders.get(id) !== token) return;
+  holders.delete(id);
+  busy.delete(id);
+}
+
+/** Runs a dialogue unless the player is already in one (or dead). Returns false when they were. @param {Player} player @param {() => Promise<void>} fn */
 export async function exclusive(player, fn) {
-  if (busy.has(player.id)) return false;
-  busy.add(player.id);
+  if (!alive(player)) return false;
+  const token = claim(player.id);
+  if (!token) return false;
   try {
     await fn();
   } finally {
-    busy.delete(player.id);
+    release(player.id, token);
   }
   return true;
 }

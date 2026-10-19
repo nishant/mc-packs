@@ -46,7 +46,7 @@ import { PLACES, STORIES } from "./stories.js";
 import { FAVORS, WANDERERS, WANDER_TEMPLATES } from "./stories/index.js";
 import { choose, clearBox, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
 import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
-import { PACK, busy, online, send } from "./util.js";
+import { PACK, busy, cancelInteractions, online, send } from "./util.js";
 
 const LOOP_TICKS = 20; // the player loop runs once a second
 const TRACKER_RUNS = 2; // the tracker every 2 runs
@@ -646,7 +646,11 @@ world.afterEvents.worldLoad.subscribe(() => {
 });
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
-  if (!initialSpawn) return;
+  if (!initialSpawn) {
+    // A respawn ends whatever the player had open when they died (a form, a lock an old operation still held).
+    cancelInteractions(player.id);
+    return;
+  }
   system.run(() => {
     try {
       if (player.isValid) wanderJoined(player);
@@ -655,6 +659,9 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     }
   });
 });
+
+// Dying is cancelled in objectives.js (entityDie); a dimension change ends the forms and locks of the dimension they left.
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => cancelInteractions(player.id));
 
 world.beforeEvents.playerLeave.subscribe(({ player }) => {
   try {
@@ -665,6 +672,7 @@ world.beforeEvents.playerLeave.subscribe(({ player }) => {
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  cancelInteractions(playerId, true);
   playerGone(playerId);
   sealsSent.delete(playerId);
   flagsSent.delete(playerId);
@@ -673,7 +681,6 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   racesForget(playerId);
   partyForget(playerId);
   forget(playerId);
-  busy.delete(playerId);
 });
 
 /** Warns in the content log about mistakes in the stories, once at start (tools/check-stories.mjs checks more). */
