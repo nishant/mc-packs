@@ -14,8 +14,87 @@ const begin = mainSource.indexOf("// expedition queue begin");
 const end = mainSource.indexOf("// expedition queue end");
 assert.ok(begin >= 0 && end > begin, "production queue block");
 const block = mainSource.slice(begin, end);
+const fnSrc = (name) => {
+  const m = new RegExp(`^(async )?function ${name}\\(`, "m").exec(mainSource);
+  assert.ok(m, `production function ${name}`);
+  return mainSource.slice(m.index, mainSource.indexOf("\n}\n", m.index) + 3);
+};
+const forgetBegin = mainSource.indexOf("// forget hook begin");
+const forgetBlock = mainSource.slice(forgetBegin, mainSource.indexOf("// forget hook end"));
 
-function world({ slots = 3, site = true } = {}) {
+// The production start, cantStart, freeSlot, leave, preview, show, resetPending, prepare and the forget hook, run against fakes of
+// what they call; start stops at layout() (after the sigil and the slot), which is all the queue decisions need.
+function realParts(w, ctx, players, runs) {
+  w.sigilsUsed = [];
+  w.sentBack = [];
+  w.msgsToOps = [];
+  w.saving = [];
+  w.pending = new Map();
+  w.screens = [];
+  w.crowns = new Map();
+  w.removedAreas = [];
+  w.reset = true;
+  w.loaded = false;
+  w.foreign = undefined;
+  Object.assign(ctx, {
+    pending: w.pending,
+    PROP_NEXT: "next", PROP_RETURN: "return", PROP_RUN: "run", PROP_ROLLS: "rolls",
+    unlockedLevel: () => 9,
+    levelName: (L) => `L${L}`,
+    levelKey: (L) => `L${L}`,
+    slotFits: () => true,
+    maxSizeAt: () => 100,
+    useSigil: (p, line) => (w.sigilsUsed.push(line), { line }),
+    layout: () => { throw new Error("STOP"); },
+    world: {
+      getDynamicProperty: () => 1,
+      setDynamicProperty: () => {},
+      getAllPlayers: () => [...players.values()],
+      structureManager: { getWorldStructureIds: () => [] },
+    },
+    isOp: (p) => p.isOp === true,
+    forgetStructures: () => ({ deleted: 0, kept: 0 }),
+    handingOver: () => false,
+    setSaving: (on) => w.saving.push(on),
+    sendBack: (p) => w.sentBack.push(p.id),
+    tell: () => {},
+    dropMember: () => {},
+    sleep: () => Promise.resolve(),
+    FormCancelationReason: { UserBusy: "UserBusy" },
+    describe: () => "",
+    dungeonLabel: (d, L) => `${d.name} L${L}`,
+    prettyId: (s) => s,
+    rollAffixes: () => ["fresh"],
+    affixOf: () => ({}),
+    readPlayer: (p) => p.rolls ?? undefined,
+    writePlayer: (p, _k, v) => { p.rolls = v; },
+    crownsOf: (p) => w.crowns.get(p.id) ?? 0,
+    crownsObjective: () => ({ addScore: (p, n) => w.crowns.set(p.id, (w.crowns.get(p.id) ?? 0) + n) }),
+    ActionFormData: class {
+      constructor() { this.buttons = []; }
+      title() { return this; }
+      body() { return this; }
+      button(t) { this.buttons.push(t); return this; }
+      async show() {
+        const step = w.screens.shift();
+        const sel = step ? step(this.buttons) : undefined;
+        return sel === undefined ? { canceled: true } : { canceled: false, selection: sel };
+      }
+    },
+    rolled: (p, L) => p.rolls?.[`L${L}`] ?? ["old"],
+    resetBox: async () => w.reset,
+    writeJson: () => {},
+    addArea: () => true,
+    removeArea: (slot) => w.removedAreas.push(slot),
+    waitLoaded: async () => w.loaded,
+    findForeign: () => w.foreign,
+    refundSigil: () => {},
+  });
+  vm.runInContext("let resettingPending; const toldPending = new Set();", ctx);
+  vm.runInContext(["freeSlot", "cantStart", "start", "leave", "show", "preview", "resetPending", "prepare"].map(fnSrc).join("\n") + `\n${forgetBlock}`, ctx);
+}
+
+function world({ slots = 3, site = true, real = false } = {}) {
   const w = { tick: 0, interval: undefined, jobs: [], warns: [], resets: 0, started: [], cfg: { enabled: true, gauntletEnabled: true }, slots, site: site ? { x: 0, z: 0 } : undefined };
   const players = new Map();
   const runs = new Map();
@@ -25,7 +104,7 @@ function world({ slots = 3, site = true } = {}) {
     runInterval(fn) { w.interval = fn; },
   };
   w.player = (id, extra = {}) => {
-    const p = { id, name: id, msgs: [], sigils: [], sendMessage(m) { this.msgs.push(m); }, ...extra };
+    const p = { id, name: id, msgs: [], sigils: [], isValid: true, getDynamicProperty: (k) => p.props?.[k], sendMessage(m) { this.msgs.push(m); }, ...extra };
     players.set(id, p);
     return p;
   };
@@ -54,7 +133,8 @@ function world({ slots = 3, site = true } = {}) {
     },
   };
   vm.createContext(ctx);
-  vm.runInContext(`${block}\nglobalThis.q = { queue, enqueue, dequeue, clearQueue, pumpQueue, slotBusy, freeRun, queuePlace, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY };`, ctx);
+  if (!real) vm.runInContext("let forgotten = false;", ctx);  vm.runInContext(`${block}\nglobalThis.q = { queue, enqueue, dequeue, clearQueue, pumpQueue, slotBusy, freeRun, queuePlace, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY };`, ctx);
+  if (real) realParts(w, ctx, players, runs);
   w.q = ctx.q;
   w.ctx = ctx;
   w.free = (slot) => w.q.freeRun(slot);
@@ -244,5 +324,159 @@ test("wiring: the line is the only wait; slots stay 1-3, the release is the queu
   assert.match(mainSource, /playerLeave\.subscribe\(\(\{ playerId \}\) => \{\n {2}dequeue\(playerId\);/);
   assert.match(mainSource, /freeRun\(run\.slot, true\);[\s\S]{0,60}refundSigil\(run\);[\s\S]{0,40}return;\n {2}\}\n {2}run\.checked = true;/, "a site that can't be built on holds the line");
   assert.match(mainSource, /system\.run\(pumpQueue\);/, "a finished reset starts the next party");
+  assert.match(mainSource, /if \(!Array\.isArray\(kept\) \|\| \(kept\.length === affixes\.length[\s\S]{0,160}delete rolls\[levelKey\(L\)\]/, "a newer roll isn't deleted by a start that used older affixes");
   assert.match(mainSource, /async function opReset[\s\S]{0,200}clearQueue\(/);
+});
+
+const startReal = async (w, p, L = 1, affixes = [], sigil, g) => {
+  try {
+    await w.ctx.start(p, crypt, L, affixes, sigil, g);
+  } catch (e) {
+    assert.equal(e.message, "STOP", "production start ran up to layout()");
+    return "started";
+  }
+  return "returned";
+};
+
+test("production start: a full house queues before any sigil is taken; a free dungeon goes on to take it; hard blocks still refuse", async () => {
+  const w = world({ real: true });
+  w.fill(3);
+  const a = w.player("a", { sigils: ["line-1"] });
+  assert.equal(await startReal(w, a, 3, [], "line-1"), "returned");
+  assert.equal(w.q.queue.length, 1);
+  assert.deepEqual(w.sigilsUsed, [], "the sigil is not taken while waiting");
+  w.runs.delete(1);
+  assert.equal(await startReal(w, w.player("b", { sigils: ["line-2"] }), 3, [], "line-2"), "returned", "a new request goes behind the line");
+  assert.equal(w.q.queue.length, 2);
+  w.q.queue.splice(0);
+  assert.equal(await startReal(w, a, 3, [], "line-1"), "started");
+  assert.deepEqual(w.sigilsUsed, ["line-1"]);
+  w.cfg.enabled = false;
+  const c = w.player("c");
+  await w.ctx.start(c, crypt, 1, [], undefined, undefined);
+  assert.match(c.msgs.at(-1), /disabled/);
+  assert.equal(w.q.queue.length, 0);
+});
+
+test("production leave: leaves the line, says so, and still sends a returning player back", () => {
+  const w = world({ real: true });
+  w.fill(3);
+  const a = w.player("a");
+  w.q.enqueue(a, crypt, 1, [], undefined, undefined);
+  w.ctx.leave(a);
+  assert.equal(w.q.queue.length, 0);
+  assert.match(a.msgs.at(-1), /out of the line/);
+  w.ctx.leave(a);
+  assert.match(a.msgs.at(-1), /not on an expedition/);
+  const b = w.player("b", { props: { return: "{}" } });
+  w.q.enqueue(b, crypt, 1, [], undefined, undefined);
+  w.ctx.leave(b);
+  assert.equal(w.q.queue.length, 0);
+  assert.deepEqual(w.sentBack, ["b"]);
+});
+
+test("production preview: while queued a paid reroll is refused before any debit, also from a preview opened before the party was queued", async () => {
+  const w = world({ real: true });
+  w.fill(3);
+  w.cfg.rerollCost = 50;
+  const a = w.player("a", { rolls: { L3: ["x"] } });
+  w.crowns.set("a", 200);
+  const reroll = (btns) => btns.findIndex((b) => b.startsWith("Reroll"));
+  const back = (btns) => btns.length - 1;
+  // queued first, then a preview is opened and Reroll is tapped
+  w.q.enqueue(a, crypt, 3, ["x"], undefined, undefined);
+  w.screens.push((b) => { assert.ok(b.includes("Leave the line")); return reroll(b); }, (b) => back(b));
+  await w.ctx.preview(a, crypt, 3);
+  assert.equal(w.crowns.get("a"), 200, "no Crowns taken");
+  assert.deepEqual(a.rolls.L3, ["x"], "the queued affixes stay the shown roll");
+  assert.match(a.msgs.at(-1), /Leave the line before rerolling/, a.msgs.join(" | "));
+  // a preview opened while not queued, the party gets queued while the form is open
+  w.q.dequeue("a");
+  w.screens.push((b) => { w.q.enqueue(a, crypt, 3, ["x"], undefined, undefined); return reroll(b); }, (b) => back(b));
+  await w.ctx.preview(a, crypt, 3);
+  assert.equal(w.crowns.get("a"), 200, "a stale preview doesn't debit either");
+  assert.deepEqual(a.rolls.L3, ["x"]);
+  // not queued: the reroll is paid and rolled as before
+  w.q.dequeue("a");
+  w.screens.push((b) => reroll(b), (b) => back(b));
+  await w.ctx.preview(a, crypt, 3);
+  assert.equal(w.crowns.get("a"), 150);
+  assert.deepEqual(a.rolls.L3, ["fresh"]);
+});
+
+test("production preview: Update my request replaces the queued request; Leave the line leaves", async () => {
+  const w = world({ real: true });
+  w.fill(3);
+  const a = w.player("a");
+  w.q.enqueue(a, crypt, 1, [], undefined, undefined);
+  w.screens.push((b) => b.findIndex((t) => t.startsWith("Update my request")));
+  await w.ctx.preview(a, { id: "vault", name: "Vault" }, 2);
+  assert.equal(w.q.queue.length, 1);
+  assert.equal(w.q.queue[0].d.id, "vault", "the request was replaced, not duplicated");
+  w.screens.push((b) => b.indexOf("Leave the line"), (b) => b.findIndex((t) => t.startsWith("Wait for a dungeon")));
+  await w.ctx.preview(a, { id: "vault", name: "Vault" }, 2);
+  assert.equal(w.q.queue.length, 1, "left, then asked again");
+  assert.match(a.msgs.join("|"), /out of the line/);
+});
+
+test("production resetPending pumps the line itself when a box is filled in (no freeRun involved)", async () => {
+  const w = world({ real: true });
+  w.fill(0);
+  w.pending.set(1, { slot: 1 });
+  w.runs.set(0, { slot: 0, leader: "L0", members: new Set(["L0"]) });
+  w.runs.set(2, { slot: 2, leader: "L2", members: new Set(["L2"]) });
+  const a = w.player("a");
+  w.q.queue.push({ id: "a", name: "a", d: crypt, L: 1, affixes: [], sigilLine: undefined, g: undefined, at: 0 });
+  await w.ctx.resetPending();
+  assert.equal(w.pending.size, 0);
+  w.flush();
+  assert.deepEqual(w.started.length === 0 ? [] : w.started.map((s) => s.id), []);
+  assert.equal(w.q.queue.length, 0, "the waiting party was taken out of the line to start");
+  assert.match(a.msgs.at(-1), /dungeon is free now/);
+});
+
+test("production prepare: a dungeon area that can't load, or an unsafe site, frees the slot, holds the line a minute and starts nobody", async () => {
+  for (const mode of ["unloaded", "foreign"]) {
+    const w = world({ real: true });
+    w.fill(3);
+    const a = w.player("a");
+    w.q.queue.push({ id: "a", name: "a", d: crypt, L: 1, affixes: [], sigilLine: undefined, g: undefined, at: 0 });
+    const run = { slot: 1, phase: "gathering", o: { x: 0, y: 0, z: 0 }, size: 10, top: 5, lay: { n: 3 }, dungeon: crypt, level: 1, leaderId: "L1" };
+    w.runs.set(1, run);
+    w.loaded = mode === "foreign";
+    w.foreign = mode === "foreign" ? { at: { x: 1, y: 2, z: 3 }, type: "chest" } : undefined;
+    await w.ctx.prepare(run);
+    w.flush();
+    assert.equal(w.runs.has(1), false, `${mode}: slot released`);
+    assert.deepEqual(w.removedAreas, [1]);
+    w.tickTo(100);
+    assert.equal(a.msgs.some((m) => /dungeon is free now/.test(m)), false, `${mode}: held`);
+    assert.equal(w.q.queue.length, 1);
+    w.tickTo(1200);
+    assert.match(a.msgs.at(-1), /dungeon is free now/);
+  }
+});
+
+test("forget: the hook closes and empties the line and blocks every automatic and direct start until reload", async () => {
+  const w = world({ real: true });
+  w.fill(3);
+  const [a, b] = ["a", "b"].map((id) => w.player(id, { sigils: ["line-1"] }));
+  w.q.enqueue(a, crypt, 3, [], "line-1", undefined);
+  w.q.enqueue(b, crypt, 1, [], undefined, undefined);
+  const hook = w.ctx.__realmDiagForgetHooks.expedition_bp;
+  const r = hook();
+  assert.ok(r.note, "the forget answered");
+  assert.deepEqual(w.saving, [false]);
+  assert.equal(w.q.queue.length, 0, "the line is empty");
+  assert.match(a.msgs.at(-1), /forgotten/);
+  // a slot frees: nothing starts, neither from the line nor directly
+  w.runs.clear();
+  w.q.pumpQueue();
+  w.tickTo(200);
+  assert.equal(w.started.length, 0);
+  assert.equal(await startReal(w, a, 3, [], "line-1"), "returned");
+  assert.deepEqual(w.sigilsUsed, [], "no sigil taken");
+  assert.match(a.msgs.at(-1), /wait until the realm reloads/);
+  w.q.enqueue(b, crypt, 1, [], undefined, undefined);
+  assert.equal(w.q.queue.length, 0, "no new waiting either");
 });

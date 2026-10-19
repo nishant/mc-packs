@@ -370,6 +370,8 @@ onScriptEvent(
 // forget hook begin
 /** True from a confirmed forget until /reload: a parcel structure is still being swept (a hand-over was running). */
 let sweepPending = false;
+/** True from a confirmed forget until /reload: no run starts (its run record and counters can't be saved) and the line is closed. */
+let forgotten = false;
 
 /** Tells the operators online (and the log) how a deferred sweep ended. @param {string} text */
 function tellOps(text) {
@@ -402,7 +404,9 @@ function retrySweep() {
  * @returns {{ note?: string, error?: string }}
  */
 function onForget() {
+  forgotten = true;
   setSaving(false);
+  clearQueue("§eThe expedition data was forgotten, so the line for a dungeon is closed until the realm reloads.");
   const r = sweepParcels();
   const stashes = (() => {
     try {
@@ -1382,6 +1386,7 @@ function slotBusy(fromQueue = false) {
  * @param {Player} leader @param {Dungeon} d @param {number} L @param {string[]} affixes @param {string | undefined} sigilLine @param {{ loadout: boolean } | undefined} g
  */
 function enqueue(leader, d, L, affixes, sigilLine, g) {
+  if (forgotten) return leader.sendMessage(cantStart(leader));
   if (sigilLine && !sigilsOf(leader).some((s) => s.sig.line === sigilLine)) return leader.sendMessage("§cThat sigil isn't in your inventory any more.");
   const had = queuePlace(leader.id);
   if (had < 0 && queue.length >= QUEUE_MAX) return leader.sendMessage(`§eAll dungeons are busy and ${QUEUE_MAX} parties are already waiting. Try again later.`);
@@ -1400,6 +1405,7 @@ function enqueue(leader, d, L, affixes, sigilLine, g) {
 
 /** Drops parties that can't go on, then starts the next waiting parties while a dungeon is free. */
 function pumpQueue() {
+  if (forgotten) return void clearQueue("§eThe expedition data was forgotten, so the line for a dungeon is closed until the realm reloads.");
   if (!queue.length) return;
   const now = system.currentTick;
   const on = get("enabled") === true;
@@ -1490,6 +1496,7 @@ async function ask(p, leader, d, L, affixes, g) {
 
 /** Why a new run can't be asked for at all right now, or "". A full house isn't one: the request waits in line. @param {Player} leader */
 function cantStart(leader) {
+  if (forgotten) return "§cExpedition data was forgotten by the operators: new runs wait until the realm reloads.";
   if (get("enabled") !== true) return "§cNew expeditions are disabled on this realm right now.";
   if (!site()) return "§cThe operators haven't picked an expedition site yet (/realm:expedition_site).";
   if (runOf(leader.id)) return "§cYou're already on an expedition.";
@@ -1590,10 +1597,13 @@ async function start(leader, d, L, affixes, sigilLine, g, fromQueue = false) {
   };
   runs.set(slot, run);
   if (!sigilLine) {
-    // The affixes shown for this level are used up: next time there's a new roll.
+    // The affixes shown for this level are used up: next time there's a new roll (a newer roll than the ones used stays).
     const rolls = readPlayer(leader, PROP_ROLLS) ?? {};
-    delete rolls[levelKey(L)];
-    writePlayer(leader, PROP_ROLLS, rolls);
+    const kept = rolls[levelKey(L)];
+    if (!Array.isArray(kept) || (kept.length === affixes.length && kept.every((a, i) => a === affixes[i]))) {
+      delete rolls[levelKey(L)];
+      writePlayer(leader, PROP_ROLLS, rolls);
+    }
   }
   try {
     const invite = others.filter((p) => p.isValid && !runOf(p.id));
@@ -4152,6 +4162,10 @@ async function preview(player, d, L, fixed, sigilLine, long = false) {
     if (!sigilLine && L >= 3) {
       form.button(`Reroll affixes\n§8${cost ? `${cost} Crowns (you have ${crownsOf(player)})` : "free"}`);
       actions.push(() => {
+        if (queuePlace(player.id) >= 0) {
+          player.sendMessage("§cYour request is in line with these affixes. Leave the line before rerolling.");
+          return false;
+        }
         if (cost && crownsOf(player) < cost) {
           player.sendMessage(`§cRerolling costs ${cost} Crowns.`);
           return false;
