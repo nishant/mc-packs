@@ -130,6 +130,15 @@ test("a bed tap while the clock runs, a non-bed tap or a player who is not count
   assert.deepEqual([run.bumps, chest.bumps, away.bumps], [[], [], []]);
 });
 
+test("the pinned bed family counts, Java color beds and bedrock do not", () => {
+  const p = { id: "p1" };
+  const hit = (id) => { const w = bed(); w.bedWhileStopped(p, { typeId: id }); return w.bumps.length; };
+  assert.equal(hit("minecraft:bed"), 1);
+  assert.equal(hit("minecraft:straw_bed"), 1);
+  assert.equal(hit("minecraft:red_bed"), 0);
+  assert.equal(hit("minecraft:bedrock"), 0);
+});
+
 test("the interact handler calls the bed path, and the tick keeps the real isSleeping path", () => {
   assert.match(source, /touched\(player, block\);\s*bedWhileStopped\(player, block\);/);
   assert.match(source, /case "sleep":\s*if \(counts && player\.isSleeping\)/);
