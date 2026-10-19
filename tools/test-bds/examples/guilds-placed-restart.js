@@ -59,17 +59,28 @@ export default async function (t) {
   inv.setItem(0, new ItemStack("minecraft:diamond_axe", 1));
   p.selectedSlotIndex = 0;
   for (const e of dim.getEntities({ type: "minecraft:item" })) e.remove();
+  // Per-pumpkin diagnostics for the native triage (W0: 1 left, then 22 left on an isolated retry; guilds_bp only
+  // listens after the break, so it cannot stop one): what breakBlock answered and how the break went.
+  const tries = new Map();
+  const answers = [];
+  t.log(`stopBreakingBlock is ${typeof p.stopBreakingBlock}, held ${inv.getItem(0)?.typeId}, mode ${p.getGameMode?.() ?? "?"}`);
   for (let i = 0; i < N; i++) {
     const at = { x: X0 + i, y: Y, z: Z };
     for (let k = 0; k < 5 && dim.getBlock(at)?.typeId === "minecraft:pumpkin"; k++) {
       p.teleport({ x: X0 + i + 0.5, y: Y, z: Z - 1.5 }, { dimension: dim });
       await t.wait(3);
-      p.breakBlock(at);
-      await t.wait(10);
+      answers.push(p.breakBlock(at));
+      tries.set(i, k + 1);
+      // A diamond axe takes a few ticks on a pumpkin: wait for the block to go instead of a fixed 10 ticks.
+      await t.waitUntil(() => dim.getBlock(at)?.typeId !== "minecraft:pumpkin", { timeout: 60 }).catch(() => undefined);
       p.stopBreakingBlock?.();
     }
   }
   await t.wait(10);
+  const left = [...Array(N).keys()].filter((i) => dim.getBlock({ x: X0 + i, y: Y, z: Z })?.typeId === "minecraft:pumpkin");
+  t.log(`break attempts: ${[...tries.values()].reduce((a, b) => a + b, 0)}, breakBlock answered false ${answers.filter((a) => a === false).length} of ${answers.length}; pumpkins left at x offsets [${left.join(",")}]; max tries on one block ${Math.max(0, ...tries.values())}`);
+  const where = p.location;
+  t.log(`Pip2 at ${where.x.toFixed(1)}, ${where.y.toFixed(1)}, ${where.z.toFixed(1)} sneaking ${p.isSneaking}`);
   t.assert(pumpkins() === 0, `every pumpkin was broken (${pumpkins()} left)`);
   let dropped = 0;
   for (const e of dim.getEntities({ type: "minecraft:item" })) {
