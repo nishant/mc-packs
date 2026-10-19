@@ -214,6 +214,19 @@ test("replay uses the equipped mainhand as event.itemStack, and the scenario ref
   assert.ok(ownerInsert < visitorEject, "owner insertion stays before the ejection refusal");
 });
 
+test("the storm rod is placed by a native use, not setType", () => {
+  const scenario = fs.readFileSync(path.join(harness, "examples", "full-bundle-protocols.js"), "utf8");
+  const storm = scenario.slice(scenario.indexOf("Storm rod"), scenario.indexOf("Break and entity"));
+  assert.doesNotMatch(storm, /setType\("minecraft:lightning_rod"\)/);
+  assert.match(storm, /useItemInSlotOnBlock/);
+  assert.match(storm, /afterEvents\.playerPlaceBlock/);
+  const placeAt = storm.indexOf("afterEvents.playerPlaceBlock");
+  const boltAt = storm.indexOf("lightning_bolt");
+  assert.ok(placeAt >= 0 && boltAt > placeAt, "playerPlaceBlock is observed before the bolt");
+  assert.match(storm, /visitor collects no Storm Glass/);
+  assert.match(storm, /owner collects the glass/);
+});
+
 test("a Windows and a POSIX stack both name the pack that subscribed", () => {
   const dir = scratch("c13-stack-");
   const packed = path.join(dir, "src");

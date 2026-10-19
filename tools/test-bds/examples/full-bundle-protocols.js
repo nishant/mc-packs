@@ -213,10 +213,35 @@ export default async function (t) {
   await t.wait(20);
   t.check(groundDiscs() > beforeEject, `callback-replay: the owner ejects the disc (${groundDiscs()} on the ground)`);
 
-  // Storm rod, after claims. Production still requires isFirstEvent; the replay sets it. The script is not patched.
+  // Storm rod, after claims. storm.rods records afterEvents.playerPlaceBlock only. setType does not emit it.
+  // Placement is a native simulated use, observed before the bolt. The collect taps stay callback-replay.
   const rod = { x: base.x + 12, y: base.y, z: base.z };
-  dim.getBlock({ x: rod.x, y: rod.y - 1, z: rod.z }).setType("minecraft:stone");
-  dim.getBlock(rod).setType("minecraft:lightning_rod");
+  const floor = { x: rod.x, y: rod.y - 1, z: rod.z };
+  dim.getBlock(floor).setType("minecraft:stone");
+  dim.getBlock(rod).setType("minecraft:air");
+  const placed = [];
+  const onPlace = (ev) => {
+    placed.push({
+      type: ev.block?.typeId,
+      x: ev.block?.location?.x,
+      y: ev.block?.location?.y,
+      z: ev.block?.location?.z,
+      player: ev.player?.name,
+    });
+  };
+  t.world.afterEvents.playerPlaceBlock.subscribe(onPlace);
+  op.teleport({ x: rod.x - 2 + 0.5, y: rod.y, z: rod.z + 0.5 });
+  await t.wait(5);
+  op.giveItem(new t.mc.ItemStack("minecraft:lightning_rod", 1), true);
+  await t.wait(2);
+  const used = op.useItemInSlotOnBlock(op.selectedSlotIndex, floor, t.mc.Direction.Up);
+  await t.waitUntil(
+    () => placed.some((p) => p.player === "Owner" && p.type === "minecraft:lightning_rod" && p.x === rod.x && p.y === rod.y && p.z === rod.z),
+    { timeout: 40, message: "native playerPlaceBlock for the owner's lightning rod" },
+  );
+  t.world.afterEvents.playerPlaceBlock.unsubscribe(onPlace);
+  t.check(dim.getBlock(rod)?.typeId === "minecraft:lightning_rod", "the placed block is a lightning rod");
+  t.log(`native playerPlaceBlock observed before the bolt; useItemInSlotOnBlock returned ${used}. Collect taps are still callback-replay.`);
   op.teleport({ x: base.x + 0.5, y: base.y, z: base.z + 0.5 });
   visitor.teleport({ x: base.x + 1.5, y: base.y, z: base.z + 0.5 });
   dim.spawnEntity("minecraft:lightning_bolt", { x: rod.x + 0.5, y: rod.y + 1, z: rod.z + 0.5 });
