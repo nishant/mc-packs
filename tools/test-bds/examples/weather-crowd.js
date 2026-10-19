@@ -2,7 +2,7 @@
 // spawn while one of each weather event happens to all of them at once, so a profile shows whether an event's cost
 // grows with the players around it (one storm cell, one tornado, one meteor for everyone). Meant for --profile; it
 // checks only that the players stay in the world.
-//   node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/wc.json --only rain_bp,weather_bp,storm_bp,climate_bp,calendar_bp,tornado_bp,rainbow_bp,moon_bp,meteor_bp,night_bp,leaves_bp,translucent_bp --scenario tools/test-bds/examples/weather-crowd.js --arg players=10 --timeout 1500
+//   node tools/test-bds/run.mjs --quiet --no-relay --profile --only rain_bp,weather_bp,storm_bp,climate_bp,calendar_bp,tornado_bp,rainbow_bp,moon_bp,meteor_bp,night_bp,leaves_bp,translucent_bp --scenario tools/test-bds/examples/weather-crowd.js --arg players=10 --timeout 1500
 // Arguments: players (default 10), storm (seconds of the thunderstorm phase, default 60), clear (seconds of the clear
 // night phase, default 40).
 // Phase 1, thunderstorm at night: rain extras for everyone, a forced storm cell over the crowd, a tornado 40 blocks

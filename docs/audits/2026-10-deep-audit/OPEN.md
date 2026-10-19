@@ -144,9 +144,14 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 - O54 (medium, perf) 237 `scriptEventReceive` subscribers in the bundle wake on every `realm:` event (most of its
   ~550 calls/tick): one listener per pack that dispatches by id, with the test hooks and help_ping folded in.
   **Implemented in `fa75e390178e1b84a1bae680ff2ff19c50e06db3` and `d61e544196df98e29141af73cd6cfc9ee168b02f`, not yet terminal:** all 67
-  real pack modules execute with one listener each offline; native standalone protocols and the genuine 67-member
-  bundle's help/diag/shared-store smoke pass. Full counter/order/late/unsubscribe attribution and matched
-  W13-before/W11-after performance remain queued; callback-count reduction is not a measured speedup.
+  real pack modules execute with one listener each offline. Full-fidelity native runs show three genuine old
+  listener/source failures and all after assertions passing: 224 active production listeners become 67
+  (225/68 with the probe), distinct from the 237 static subscription sites. Help/config/diag, console-only source,
+  handler order, exception isolation, unsubscribe and late registration pass. The probe's own 24 ms is attributed
+  to its callback; another pack's ordinary interval work is not mislabeled as misattribution. Exactly one intended
+  probe exception is narrowly allowed, with no unexpected script errors. Fixture corrections are in
+  `d6b3d848cc49be5c87c6a7bb0612f50f807c935b`. Matched W13-before/W11-after performance remains queued
+  for W1; callback-count reduction is not a measured speedup.
 - O55 (medium) maps_bp's warmth line (main.js:571) redraws every 40 ticks with a 45-tick hold, without `steady` and
   without listening, so the steady lines (saga, build, expedition, relics, elytra) wait while a map is held.
   **Server behavior done in `537cbaff447c2429cffc9edd6d36f801832b9207`:** rank 35, a listening hold and continued announcements preserve notes
@@ -199,11 +204,20 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   Realm Bundle plus all resources passes with 67/67 help/diag replies and one shared 67-pack registry.
   The full-fidelity cancellation/protocol fixture was independently approved at
   `41d3540d3e5ddaa4c1d5e77c63ee87885bf4576d` and registered in the official suite by
-  `5250425951666d93e2e6aa283a187b8eac3fff8a`; its first native execution remains queued, not counted as a
-  PASS. Suite preparation now builds/instruments the genuine archive instead of running a literal `<stage>`
-  placeholder. Its review also exposed Townsfolk's missing canceled-entity guard:
+  `5250425951666d93e2e6aa283a187b8eac3fff8a`. After preserving and correcting failed fixture attempts,
+  strict native C13 passes at `d5b75e48fbec627fea99643f42b51a724f24f3ed`: real entity/item data, one
+  router per production pack plus probe, claim-before/after ordering, visitor refusals and owner positive
+  controls, native rod placement/charging, exactly-one disc accounting even after native pickups, shared-store
+  isolation and the real help form. Replay and actual native callback deliveries remain separately labeled:
+  this is not a physical-input/render test. Suite preparation builds/instruments the genuine archive instead of
+  running a literal `<stage>` placeholder. Its review also exposed Townsfolk's missing canceled-entity guard:
   `649795d3fcd68883b7007dcdbd4190a04671b515` fixes actual matching-NPC callbacks (two RED tests, four GREEN)
-  before any conversation or operator-editor work is scheduled. Final merged review/CI/native gates remain.
+  before any conversation or operator-editor work is scheduled. The 14 existing actionbar/weather regressions
+  pass without retries or skipped rows. `weather-crowd`'s profiling case is explicitly deferred to W1 because
+  the independent toolkit lane did not grant an exclusive host window; that is not a scenario PASS or removal.
+  Toolkit development has no Realm source/publication gate, only shared host capacity. A proposed private GUI
+  checkpoint was canceled by user-directed decoupling: no source pin, GUI join or W2 acceptance is inferred.
+  Final merged review/CI/matched-suite/soak gates remain.
 - O62 Expedition: an option to announce clears only from a chosen level; forget leaves saved structures behind.
 
 ## T13. Owner-reported bugs from the live Realm (October 19; screenshots in `media/`)
