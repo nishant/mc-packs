@@ -1,5 +1,5 @@
 import "./diag.js";
-import { CommandPermissionLevel, CustomCommandStatus, ItemStack, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, ItemStack, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./recipes.js";
@@ -596,18 +596,21 @@ function settle(pid, d, n) {
   return due;
 }
 
-/** Dishes that finished cooking after the player left (or that a restart interrupted). @param {Player} player */
-function applyOwed(player) {
-  const mine = owedStore.take(player.id);
+/** Dishes that finished cooking after the player left (or that a restart interrupted). `pid` and `failIds` are for the native test hook. @param {Player} player @param {string} [pid] @param {Set<string>} [failIds] */
+function applyOwed(player, pid = player.id, failIds) {
+  const mine = owedStore.take(pid);
   if (!mine || typeof mine !== "object" || Array.isArray(mine)) return;
   const parts = Object.entries(mine)
     .map(([id, n]) => /** @type {[string, number]} */ ([id, Math.floor(Number(n))]))
     .filter(([id, n]) => dishById.has(id) && n > 0);
   applyParts(
     parts,
-    ([id, n]) => deliver(player, /** @type {Dish} */ (dishById.get(id)), n),
+    ([id, n]) => {
+      if (failIds?.has(id)) throw new Error("test: grant failed");
+      deliver(player, /** @type {Dish} */ (dishById.get(id)), n);
+    },
     (failed) => {
-      for (const [id, n] of failed) owe(player.id, /** @type {Dish} */ (dishById.get(id)), n);
+      for (const [id, n] of failed) owe(pid, /** @type {Dish} */ (dishById.get(id)), n);
     },
     (m) => console.warn(`[cooking] ${m}`),
   );
@@ -1222,11 +1225,12 @@ const HANDLED = new Set([
   "realm:cooking_cook",
   "realm:cooking_eat",
   "realm:cooking_owed_ping",
+  "realm:cooking_owed_test",
 ]);
 
 onScriptEvent(
   [...HANDLED],
-  ({ id, message }) => {
+  ({ id, message, sourceType }) => {
     if (!HANDLED.has(id)) return;
     /** @type {any} */
     let msg;
@@ -1237,6 +1241,27 @@ onScriptEvent(
     }
     if (!msg || typeof msg !== "object") return;
     try {
+      if (id === "realm:cooking_owed_test") {
+        // Tests (console only): seed an old-layout owed map, hand a stored debt to a named player, report the saved keys.
+        if (sourceType !== ScriptEventSource.Server) return;
+        if (msg.seed && typeof msg.seed === "object") world.setDynamicProperty("cooking:owed", JSON.stringify(msg.seed));
+        if (typeof msg.claim === "string" && typeof msg.as === "string") {
+          const who = world.getPlayers({ name: msg.as })[0];
+          if (who) applyOwed(who, msg.claim, Array.isArray(msg.fail) ? new Set(msg.fail.map(String)) : undefined);
+        }
+        const ids = owedStore.ids().slice(0, 10);
+        /** @type {Record<string, unknown>} */
+        const values = {};
+        for (const pid of ids) values[pid] = owedStore.get(pid);
+        const legacy = world.getDynamicProperty("cooking:owed");
+        send("realm:cooking_owed_test_report", {
+          keys: world.getDynamicPropertyIds().filter((k) => k.startsWith("cooking:owed")).slice(0, 20),
+          index: ids,
+          values,
+          legacy: typeof legacy === "string" ? JSON.parse(legacy) : null,
+        });
+        return;
+      }
       if (id === "realm:cooking_owed_ping") {
         // Tests: how many players are owed dishes and how many batches in all.
         const lists = owedStore.ids().map((pid) => owedStore.get(pid)).filter((m) => m && typeof m === "object");
