@@ -2,7 +2,7 @@
 // behavior pack holds exactly one native listener (the hook counts them), each realm: protocol still reaches every pack
 // (help, settings, diagnostics, the console hooks and their source check), and the router keeps the order of its
 // handlers, isolates a handler that throws, drops what is unsubscribed and attributes a late registration to its pack.
-// Before O54 the same run fails the count (every pack holds 2 to 8 listeners, 237 in all).
+// Before O54 the same run fails the count (225 listeners for the 68 packs).
 // Other runs of the same scenario: a real bundle (npm run bundle -- --all, unzipped to <bundle dir>) with the counter and
 // the probe added by `node tools/test-bds/hooks/events-bundle.mjs <out dir> --inject <bundle dir>`, then run.mjs --packs
 // <out dir> as below; and standalone packs (each its own add-on, no counter, so only the protocol checks run):
@@ -12,7 +12,7 @@
 //   node tools/test-bds/run.mjs --quiet --packs /tmp/evb --scenario tools/test-bds/examples/script-events-dispatch.js --timeout 900
 export default async function (t) {
   // The probe's handler c throws on purpose, and the router rethrows it once the other handlers ran.
-  t.allowError(/on purpose/);
+  t.allowError(/probe handler c failed on purpose/);
   const op = await t.player("Tester", { op: true });
   await t.wait(60);
 
@@ -50,15 +50,39 @@ export default async function (t) {
     t.log("no counter in this run (standalone packs): only the protocol checks follow");
   }
 
-  // ---- Every pack still answers its protocols, once ----
+  // ---- Every pack still answers its protocols, once per request ----
+  // Other packs send realm:help_ping too (bounty_bp and atlas_bp at startup, more on their own schedules), and a pong names
+  // only its pack. So the round counts the requests it hears (the scenario's own is always one, whether or not this
+  // listener hears it back) and checks that every pack answered each of them once.
+  const HELP_OWN = { round: "scenario" };
+  const helpRound = (/** @type {number} */ since) => {
+    const payloads = of("realm:help_ping", since).map((e) => e.raw).filter((raw) => raw !== JSON.stringify(HELP_OWN));
+    /** @type {Record<string, number>} */
+    const perPack = {};
+    const answers = of("realm:help_pong", since).map((e) => e.raw);
+    for (const pack of answers) perPack[pack] = (perPack[pack] ?? 0) + 1;
+    return { requests: payloads.length + 1, payloads, answers: answers.length, perPack };
+  };
   first = mark();
-  send("realm:help_ping", "");
-  await t.wait(40);
-  const helps = of("realm:help_pong", first).map((e) => e.raw);
-  t.log(`help_pong: ${helps.length} answers`);
-  t.check(new Set(helps).size === helps.length, `no pack answers /realm:help twice (${helps.length} answers, ${new Set(helps).size} packs)`);
-  if (packs) t.check(helps.length === packs, `every pack (${packs}) answers /realm:help (${helps.length})`);
-  else t.check(helps.length >= 1, "a pack answers /realm:help");
+  send("realm:help_ping", HELP_OWN);
+  // Bounded: stops once every pack has answered every request heard so far and nothing changed for 5 ticks.
+  let last = "";
+  let quiet = 0;
+  for (let i = 0; i < 80 && quiet < 5; i++) {
+    await t.wait(1);
+    const now = helpRound(first);
+    const key = `${now.requests}:${now.answers}`;
+    quiet = now.answers >= now.requests * Math.max(packs, 1) && key === last ? quiet + 1 : 0;
+    last = key;
+  }
+  const round = helpRound(first);
+  const answered = Object.keys(round.perPack);
+  t.log(`/realm:help round: ${round.requests} requests (the scenario's and ${JSON.stringify(round.payloads)} from packs); ${round.answers} answers from ${answered.length} packs`);
+  const notOnce = answered.filter((p) => round.perPack[p] !== round.requests);
+  t.check(notOnce.length === 0, `every pack answers each /realm:help request once (${round.requests} requests${notOnce.length ? `; not once: ${notOnce.map((p) => `${p} ${round.perPack[p]}`).join(", ")}` : ""})`);
+  if (packs) t.check(answered.length === packs, `every pack (${packs}) answers /realm:help (${answered.length} packs answered)`);
+  else t.check(answered.length >= 1, "a pack answers /realm:help");
+  t.log("Limitation: a pong names only its pack, so this shows each pack answered each request once, not which request each answer belongs to.");
 
   first = mark();
   send("realm:cfg_ping", { id: "d1" });
@@ -136,8 +160,12 @@ export default async function (t) {
     t.log(`probe: ${w.probe_bp?.ms} ms in ${w.probe_bp?.calls} calls; ${top("probe_bp")}`);
     t.check(w.probe_bp && w.probe_bp.ms >= 15, `the late handler's time is the probe's (${w.probe_bp?.ms} ms)`);
     t.check(/scriptEventReceive/.test(top("probe_bp")), "as its pack's script event callback");
-    const heavy = Object.entries(w).filter(([p, m]) => p !== "probe_bp" && m.ms >= 10).map(([p, m]) => `${p}:${m.ms}`);
-    t.check(heavy.length === 0, `and nobody else's (${heavy.join(", ") || "no pack over 10 ms"})`);
+    // Attribution, not load: the probe's handler is charged to probe_bp, so no other pack's rows may name it. Other packs'
+    // own work is logged apart as unrelated; it is no evidence either way.
+    const named = Object.keys(w).filter((p) => p !== "probe_bp" && (w[p]?.top ?? []).some((/** @type {any} */ x) => /probe_bp/.test(x.k)));
+    t.check(named.length === 0, `no other pack's rows name the probe's handler (${named.join(", ") || "none"})`);
+    const unrelated = Object.keys(w).filter((p) => p !== "probe_bp" && (w[p]?.ms ?? 0) >= 10).map((p) => `${p} ${w[p].ms} ms (${top(p) || "no rows"})`);
+    t.log(`unrelated work over 10 ms in the window (not attribution evidence): ${unrelated.join("; ") || "none"}`);
     t.log("Limitation: each pack's script events show as one callback; the profiler's top list no longer names the handler.");
   }
 }
