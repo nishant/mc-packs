@@ -563,7 +563,7 @@ blocks.
 | `reach` | location, `radius`, or `dim` ("minecraft:nether" / "minecraft:the_end"), `belowY`, `aboveY` | Go somewhere, to a dimension, deep or high |
 | `deliver` | `npc`, `item` and/or `name` (an item's custom name, for quest items), `count` | Bring items to an NPC (taken on talk) |
 | `collect` | `item` and/or `name`, `count` | Have items in your inventory |
-| `defeat` | `mobs?`, `count`, location?, `night?`, `within?` (seconds, timed: progress resets if not done in time), `champion?`, or `bounty: true` (Bounty Board champion targets; with `race`, below) | Defeat mobs, or a champion at a place |
+| `defeat` | `mobs?`, `count`, location?, `night?`, `within?` (seconds, timed: progress resets if not done in time), `champion?`, or `bounty: true` (Bounty Board champion targets; with `race`, below), `spawn?: { count, every, mobs?, warn? }` (at a place: the pack brings the mobs; required when they don't come there by themselves, like illagers, vexes or bogged) | Defeat mobs, or a champion at a place |
 | `interact` | location, `blocks`, `count`, `radius` | Tap or hit blocks near a place |
 | `survive` | location?, `seconds`, `weather?` ("thunder" default, "rain", "any"), `radius` | Stay outdoors in weather |
 | `vigil` | location, `seconds`, `timeOfDay?: [from, to]` (ticks; 18000 = midnight), `outdoors?`, `sneaking?`, `weather?` (no default), `radius` | Stay at a place at a time of day |

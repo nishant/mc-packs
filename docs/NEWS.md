@@ -49,6 +49,12 @@ entries below as a changelog.
 - Story hints explain how to replace required bells, candles and other blocks if someone mined them out. Building steps accept poplar wood and the missing sapling types too.
 - Townsfolk no longer open conversations or start NPC-editor work after another protection handler has already canceled the tap.
 
+## Story fights that never started
+
+- The Gray Choir now shows up for its fights: the ambush at the Haddock farm, the Smugglers' Cove, the Gray Ring and the Hollow Gate. Before, nothing came and the quest could not be finished.
+- The same fix for the vexes and phantoms at the Sky Seal and the waking reeds in Vesna's Bargain.
+- Go to the place on your tracker and they come a few at a time until the step is done. Kills count even if the fight drifts a bit away.
+
 ## Clues without interruptions
 
 - Story clues, including the graveyard clues in Signs in the Sky, now go straight to chat instead of opening a popup while you fight. Conversations stop on death, respawn, leaving or changing dimension. An unanswered standard story menu closes after 45 seconds.

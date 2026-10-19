@@ -136,6 +136,9 @@
  * @property {boolean} [night] defeat: only at night
  * @property {number} [within] seconds to finish once started, or progress resets (timed)
  * @property {Champion} [champion]
+ * @property {{ count?: number, every?: number, mobs?: string[], warn?: string }} [spawn] defeat at a place: its mobs come there
+ *   while the player is in the area, `count` (default 3) alive at a time, topped up every `every` (default 20)
+ *   seconds; `mobs` (default the objective's) and a chat line `warn` when the first come
  * @property {boolean} [bounty] defeat: a Bounty Board champion target (any of the day's; nothing is spawned)
  * @property {number} [race] a race against a rival: defeat with `bounty` (a target within `radius`, default 300, of
  *   the player starts it) or event with `quest: { pack: "maps_bp" }` (the player's own last map leg within `radius`);
