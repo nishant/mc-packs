@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "silly_bp";
-const VERSION = "1.2.6";
+const VERSION = "1.2.7";
 const NAME = "Silly Enchants";
 
 const API = 1;

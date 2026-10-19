@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "cooking_bp";
-const VERSION = "1.1.9";
+const VERSION = "1.1.10";
 const NAME = "Kitchen";
 
 const API = 1;

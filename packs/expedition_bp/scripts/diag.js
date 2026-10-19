@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "expedition_bp";
-const VERSION = "2.4.6";
+const VERSION = "2.4.7";
 const NAME = "Expeditions";
 
 const API = 1;

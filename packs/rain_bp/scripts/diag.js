@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "rain_bp";
-const VERSION = "1.5.12";
+const VERSION = "1.5.13";
 const NAME = "Rain Extras";
 
 const API = 1;

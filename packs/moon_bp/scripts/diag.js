@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "moon_bp";
-const VERSION = "1.2.7";
+const VERSION = "1.2.8";
 const NAME = "Blood Moon & Harvest Moon";
 
 const API = 1;

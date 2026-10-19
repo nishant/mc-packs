@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "weather_bp";
-const VERSION = "1.3.7";
+const VERSION = "1.3.8";
 const NAME = "Weather Almanac";
 
 const API = 1;

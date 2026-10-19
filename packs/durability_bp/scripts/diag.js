@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "durability_bp";
-const VERSION = "1.2.6";
+const VERSION = "1.2.7";
 const NAME = "Low Durability Warning";
 
 const API = 1;

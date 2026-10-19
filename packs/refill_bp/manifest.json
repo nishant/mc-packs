@@ -4,7 +4,7 @@
     "name": "Hotbar Refill",
     "description": "Refills a hotbar slot from your inventory when its stack runs out or its tool breaks. /realm:refill",
     "uuid": "7a7dfda3-1127-4f7f-b82d-16748f0e5c89",
-    "version": [1, 1, 2],
+    "version": [1, 1, 3],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

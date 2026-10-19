@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "settings_bp";
-const VERSION = "1.4.1";
+const VERSION = "1.4.2";
 const NAME = "Realm Settings";
 
 const API = 1;

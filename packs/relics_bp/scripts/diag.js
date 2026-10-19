@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "relics_bp";
-const VERSION = "1.2.10";
+const VERSION = "1.2.11";
 const NAME = "Relics";
 
 const API = 1;

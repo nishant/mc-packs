@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "atlas_bp";
-const VERSION = "1.1.5";
+const VERSION = "1.1.6";
 const NAME = "Atlas of the Realm";
 
 const API = 1;

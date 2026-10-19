@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "stash_bp";
-const VERSION = "1.8.2";
+const VERSION = "1.8.3";
 const NAME = "Quick Stack & Sort";
 
 const API = 1;

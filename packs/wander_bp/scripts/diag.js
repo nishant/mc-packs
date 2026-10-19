@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "wander_bp";
-const VERSION = "1.2.12";
+const VERSION = "1.2.13";
 const NAME = "Wanderers of the Wilds";
 
 const API = 1;

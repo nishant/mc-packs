@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "mail_bp";
-const VERSION = "1.2.3";
+const VERSION = "1.2.4";
 const NAME = "Realm Mail";
 
 const API = 1;

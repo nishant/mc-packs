@@ -14,6 +14,9 @@ entries below as a changelog.
 - The stats ticker defaults on, and your own on/off choice stays yours even when the realm default changes. If an old off choice comes back, turn it off once more: choices matching the old default were not saved.
 - Sneak-tap storage with an empty hand to sort it. Hold a tool, weapon or armor to open its menu. Claims and locks are checked before sorting or opening an editable storage menu, whichever pack loads first.
 - Move a stack or a whole row to a chosen inventory page with Move to page in /realm:inv. A full destination refuses the whole move; your hotbar, cursor, controls and native item data stay intact.
+- A treasure map's Warmer / Colder line now waits for notes and gives way to Elytra, Relics and expedition lines instead of hiding them.
+- Rain, storm, tornado, aurora and moon effects can learn about a storm already under way when they are added to a world.
+- Story hints explain how to replace required bells, candles and other blocks if someone mined them out. Building steps accept poplar wood and the missing sapling types too.
 
 ## Clues without interruptions
 

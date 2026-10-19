@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "nick_bp";
-const VERSION = "1.1.4";
+const VERSION = "1.1.5";
 const NAME = "Nicknames";
 
 const API = 1;

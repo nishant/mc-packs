@@ -27,12 +27,15 @@ You install them one of two ways. **Pick one and keep it**:
   [mc.nish.software/realm](https://mc.nish.software/realm/), with its size and sha256. To build them yourself from
   this repository: `npm install`, then `npm run bundle -- --all` and `npm run bundle -- --resources`
   (`dist/realm_bundle.mcpack`, `dist/realm_resources.mcpack`) or `npm run build` (one `dist/<folder>.mcpack` per pack).
+- The repository's CI starts a private BDS with the genuine Realm Bundle as one script context after its checks
+  and build. This catches shared-store and cross-pack loading problems that separate-pack tests miss; it does
+  not certify client rendering, phone controls or a live Realm upload.
 
 ## Requirements
 
 | | |
 |---|---|
-| Minecraft | Bedrock **1.21.100 or newer** (`min_engine_version`); tested on Bedrock Dedicated Server **1.26.52** |
+| Minecraft | Bedrock **1.21.100 or newer** (`min_engine_version`); tested on Bedrock Dedicated Server **1.26.52.3** |
 | Script API | `@minecraft/server` 2.1.0 and `@minecraft/server-ui` 2.0.0, the stable versions |
 | Experiments, Beta APIs | **Not needed.** Leave every experimental toggle off; nothing uses beta modules |
 | Cheats | **Not needed** for any `/realm:` command. Operators' quick actions (weather, time, give...) work without cheats too |
