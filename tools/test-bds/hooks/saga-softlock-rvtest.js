@@ -6,8 +6,9 @@
 //   sgs:ping                  -> sgs:pong {cancel}   (cancel: this copy has cancelInteractions, the fixed source)
 //   sgs:state {name,id,seq}   -> sgs:state_r {...}   (busy lock, health, dimension, inspect bits, progress, clue spots, and
 //                                what the server itself fired: its own subscriptions, not the pack's)
-//   sgs:digest {name,seq}     -> sgs:digest_r {...}  (hash of the story state, flags and codex, the Crowns, whether Signs in the
-//                                Sky is accepted: what a stale choice, flag, reward or progress write would change)
+//   sgs:digest {name,seq}     -> sgs:digest_r {...}  (hash of the story state, flags and codex, the Crowns, levels, lanterns, whether
+//                                Signs in the Sky is accepted or What Moss Saw done: what a stale choice, flag, reward or
+//                                progress write would change)
 //   sgs:tap {name,x,y,z}      -> the real touchedAt handler of playerInteractWithBlock (empty-hand taps of simulated
 //                                players fire no interact event, so the scenario calls the handler directly)
 //   sgs:cancel {name|id}      -> the pack's cancel function: a SYNTHETIC lifecycle notification (the source before the fix
@@ -91,7 +92,13 @@ sgsSystem.afterEvents.scriptEventReceive.subscribe(
         let h = 0x811c9dc5;
         for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
         const st = saga.s.act1_signs;
-        sgsOut("sgs:digest_r", { seq: m.seq, hash: h, crowns: crownsOf(p), accepted: !!st?.a, st: JSON.stringify(st) });
+        let lanterns = 0;
+        const inv = p.getComponent("minecraft:inventory")?.container;
+        for (let i = 0; inv && i < inv.size; i++) {
+          const it = inv.getItem(i);
+          if (it?.typeId === "minecraft:lantern") lanterns += it.amount;
+        }
+        sgsOut("sgs:digest_r", { seq: m.seq, hash: h, crowns: crownsOf(p), level: p.level, lanterns, accepted: !!st?.a, done: !!st?.dn?.includes("graves"), st: JSON.stringify(st) });
       }
       else if (id === "sgs:tap") {
         const p = sgsFind(m);

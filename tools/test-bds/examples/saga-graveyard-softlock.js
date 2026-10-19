@@ -26,6 +26,7 @@ export default async function (t) {
   t.server("/time set midnight");
   t.server("/gamerule doDaylightCycle false");
   t.server("/gamerule doMobSpawning false");
+  t.server("/gamerule keepinventory true"); // a death must not change levels or the lantern: the stale-report guard reads them
   t.server(`/tickingarea add circle ${X} 0 ${Z} 4 sgs_yard true`);
   await t.loadArea(X, Z, { radius: 2 });
   // The End is ready (loaded, with a platform) before any form is open: the dimension cases must not wait on a cold dimension.
@@ -93,20 +94,15 @@ export default async function (t) {
     return t.waitUntil(() => inbox.digest.find((d) => d.seq === n), { timeout: 60, message: "the hook answers sgs:digest" });
   };
   let offers = 0;
-  /**
-   * Resets the chapter (a debug jump, so a previous stale accept that WAS applied on the old source can't hide the later
-   * probes), opens Moss's intro and pages on to its Accept page, left unanswered; returns that form.
-   */
-  const openIntro = async () => {
+  /** Opens a production dialogue from Moss (an offer key) and pages on to its last page, left unanswered; returns that form. */
+  const openDialog = async (key) => {
     const req = `sg${++offers}`;
-    send("realm:saga_debug", { player: p.id, action: "jump", story: "act1_signs", chapter: "graves" });
-    await t.wait(5);
     send("realm:npc_talk", { player: p.id, npc: "moss", req });
     await t.wait(4);
     const offered = inbox.offers.filter((o) => o.req === req).map((o) => o.key);
-    t.assert(offered.includes("start:act1_signs"), `Moss offers What Moss Saw (offers for ${req}: ${JSON.stringify(offered)})`);
+    t.assert(offered.includes(key), `Moss offers ${key} (offers for ${req}: ${JSON.stringify(offered)})`);
     let next = t.waitForm(p, { timeout: 200 });
-    send("realm:npc_choose", { pack: "saga_bp", player: p.id, key: "start:act1_signs" });
+    send("realm:npc_choose", { pack: "saga_bp", player: p.id, key });
     let f = await next;
     while (f.buttons.some((b) => /^next$/i.test(b))) {
       next = t.waitForm(p, { timeout: 200 });
@@ -115,6 +111,19 @@ export default async function (t) {
     }
     return f;
   };
+  /** SYNTHETIC fixture reset, never production recovery: a debug jump back to the chapter, run only AFTER a probe has been recorded, so a stale accept that WAS applied on the old source can't hide the later probes. */
+  const resetChapter = async () => {
+    t.log("SYNTHETIC fixture reset: debug jump to What Moss Saw");
+    send("realm:saga_debug", { player: p.id, action: "jump", story: "act1_signs", chapter: "graves" });
+    await t.wait(5);
+  };
+  const openIntro = async () => {
+    await resetChapter();
+    return openDialog("start:act1_signs");
+  };
+  /** What a stale write would change, compared before and after the late answer. */
+  const same = (a, b) => a.hash === b.hash && a.crowns === b.crowns && a.level === b.level && a.lanterns === b.lanterns;
+  const moved = (a, b) => `state ${a.hash === b.hash ? "unchanged" : `CHANGED ${a.st} -> ${b.st}`}, Crowns ${a.crowns} -> ${b.crowns}, levels ${a.level} -> ${b.level}, lanterns ${a.lanterns} -> ${b.lanterns}`;
   /**
    * The production accept path (startChapter -> accept: chapter state, flags, choices, Crowns) with its dialogue cut and
    * the Accept answered late by the harness: no state, flag, choice, progress or Crowns may change, and the chapter is
@@ -135,7 +144,36 @@ export default async function (t) {
     await t.wait(40);
     const after = await digest();
     const said = t.messages(p, { since: from }).some((m) => /Signs in the Sky: What Moss Saw/.test(m.plain));
-    lifecycle(name, kindOf(mid.native), !mid.busy && after.hash === before.hash && after.crowns === before.crowns && !after.accepted && !said, `busy after the cut ${mid.busy}, story state ${after.hash === before.hash ? "unchanged" : `CHANGED ${before.st} -> ${after.st}`}, Crowns ${before.crowns} -> ${after.crowns}, accepted ${after.accepted}, accept line in chat ${said}`);
+    lifecycle(name, kindOf(mid.native), !mid.busy && same(before, after) && !after.accepted && !said, `busy after the cut ${mid.busy}, ${moved(before, after)}, accepted ${after.accepted}, accept line in chat ${said}`);
+    await restore();
+  };
+  /**
+   * The production REPORT path (endChapter: outro, choice, rewards, chapter done) with its dialogue cut and Finish
+   * answered late. The chapter is accepted through the real intro and both objectives are completed with the debug bump
+   * action (SYNTHETIC setup, disclosed); the old source pays the Crowns, levels, lantern and codex and completes the
+   * chapter, the fixed source changes nothing.
+   */
+  const staleReport = async (name, kindOf, cut, restore) => {
+    (await openIntro()).answer("Accept");
+    await t.wait(30);
+    t.log(`${name}: SYNTHETIC setup, objectives completed with the debug bump action`);
+    send("realm:saga_debug", { player: p.id, action: "bump", story: "act1_signs", i: 0, n: 4 });
+    send("realm:saga_debug", { player: p.id, action: "bump", story: "act1_signs", i: 1, n: 6 });
+    await t.wait(10);
+    const f = await openDialog("end:act1_signs");
+    t.check(f.buttons.some((b) => /finish/i.test(b)), `${name}: the report dialogue ends on a Finish button (${JSON.stringify(f.buttons)})`);
+    const before = await digest();
+    await cut();
+    await t.wait(40);
+    const mid = await ask(who);
+    try {
+      f.answer("Finish");
+    } catch (e) {
+      t.log(`${name}: the harness refused the late answer: ${e}`);
+    }
+    await t.wait(40);
+    const after = await digest();
+    lifecycle(name, kindOf(mid.native), !mid.busy && same(before, after) && !after.done, `busy after the cut ${mid.busy}, ${moved(before, after)}, chapter done ${after.done}`);
     await restore();
   };
   const toEnd = () => {
@@ -153,6 +191,14 @@ export default async function (t) {
     await backHome();
   });
   await staleAccept("stale accept/dim", (n) => (n.dimension > 0 ? "NATIVE" : "WATCHDOG"), async () => toEnd(), backHome);
+  const die = async () => p.kill();
+  const afterDeath = async () => {
+    p.respawn();
+    await t.wait(40);
+    await backHome();
+  };
+  await staleReport("stale report/die", (n) => (n.die > 0 ? "NATIVE" : "WATCHDOG"), die, afterDeath);
+  await staleReport("stale report/dim", (n) => (n.dimension > 0 ? "NATIVE" : "WATCHDOG"), async () => toEnd(), backHome);
 
   // The real accept, once nothing stale is left.
   const sinceAccept = t.tick;
