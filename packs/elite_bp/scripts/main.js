@@ -329,13 +329,45 @@ const AURA_RANGE_SQ = 64 * 64;
 /** Time spent in the aura, shown to operators in the menu: [total ms, runs, champion puffs]. */
 const auraCost = [0, 0, 0];
 
-/** One aura puff for every loaded champion with a player within 64 blocks. */
+/**
+ * Most champions one aura run or one approach run looks at. The rest wait for the next runs, in a round robin
+ * (`turnOf`), so a crowd of champions costs no more per run than this many, and each one still comes up every
+ * ceil(champions / cap) runs.
+ */
+const AURA_PER_RUN = 12;
+const APPROACH_PER_RUN = 8;
+/** An approach step covers the time since the champion's last one, up to this many steps' worth (a champion seen every few runs keeps its pace). */
+const APPROACH_CATCHUP = 4;
+let auraCursor = 0;
+let approachCursor = 0;
+
+/**
+ * The next `cap` of `ids` in a round robin that starts at `from`: with more ids than the cap, every id comes up
+ * once every ceil(ids.length / cap) runs. No id is skipped for good, and none is looked at twice in a run.
+ * @param {string[]} ids @param {number} from @param {number} cap @returns {{ batch: string[], next: number }}
+ */
+function turnOf(ids, from, cap) {
+  const n = ids.length;
+  if (!n) return { batch: [], next: 0 };
+  const take = Math.min(n, Math.max(1, Math.floor(cap) || 1));
+  const start = (((Math.floor(from) || 0) % n) + n) % n;
+  /** @type {string[]} */
+  const batch = [];
+  for (let i = 0; i < take; i++) batch.push(ids[(start + i) % n]);
+  return { batch, next: (start + take) % n };
+}
+
+/** One aura puff for the champions whose turn it is, when a player is within 64 blocks. */
 function aura() {
   const started = Date.now();
   const players = world.getAllPlayers().map((p) => ({ dim: p.dimension.id, at: p.location }));
   if (!players.length) return;
   let n = 0;
-  for (const [id, e] of live) {
+  const turn = turnOf([...live.keys()], auraCursor, AURA_PER_RUN);
+  auraCursor = turn.next;
+  for (const id of turn.batch) {
+    const e = live.get(id);
+    if (!e) continue;
     try {
       if (!e.isValid) {
         live.delete(id);
@@ -440,13 +472,46 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
   }
 });
 
+/**
+ * How many natural champions may be loaded at once with `players` online: `maxAlive` is the ceiling for the
+ * whole world (what it always meant); `perPlayer` lets a quiet world stay below it (0 = no per-player limit, the
+ * fixed `maxAlive` of before). At least one, so a single player still meets champions.
+ * @param {unknown} maxAlive @param {unknown} perPlayer @param {number} players
+ */
+function aliveCap(maxAlive, perPlayer, players) {
+  const ceiling = typeof maxAlive === "number" && Number.isFinite(maxAlive) && maxAlive >= 1 ? Math.floor(maxAlive) : 1;
+  if (typeof perPlayer !== "number" || !Number.isFinite(perPlayer) || perPlayer <= 0) return ceiling;
+  const online = Number.isFinite(players) && players > 0 ? players : 0;
+  return Math.min(ceiling, Math.max(1, Math.ceil(online * perPlayer - 1e-9)));
+}
+
+/** Champions within this many blocks of a new one count as its neighbors (`maxAliveNearby`): about the reach of the approach. */
+const NEARBY_RADIUS = 64;
+
+/**
+ * Are there already `limit` champions near (x, z) in the same dimension? 0 (or no number) = no limit. Reads the
+ * last known spots only (no native calls): at most `maxAlive` entries, a few seconds old.
+ * @param {Iterable<{ dim: string, at: Vector3 }>} infos @param {string} dim @param {Vector3} at @param {unknown} limit
+ */
+function crowdedAround(infos, dim, at, limit) {
+  const most = typeof limit === "number" && Number.isFinite(limit) ? Math.floor(limit) : 0;
+  if (most <= 0) return false;
+  let near = 0;
+  for (const i of infos) {
+    if (i.dim === dim && (i.at.x - at.x) ** 2 + (i.at.z - at.z) ** 2 <= NEARBY_RADIUS * NEARBY_RADIUS && ++near >= most) return true;
+  }
+  return false;
+}
+
 /** Makes a natural spawn a champion if every rule allows it. @param {Entity} e */
 function convert(e) {
   if (!e.isValid || e.hasTag(CHAMP) || e.hasTag(SPLIT)) return;
   if (loaded >= get("maxAlive")) return;
   if (get("nightOnly") === true && !night()) return;
+  if (loaded >= aliveCap(get("maxAlive"), get("maxAlivePerPlayer"), world.getAllPlayers().length)) return;
   const at = e.location;
   const dim = e.dimension;
+  if (crowdedAround(known.values(), dim.id, at, get("maxAliveNearby"))) return;
   if (get("surfaceOnly") === true) {
     const top = dim.getTopmostBlock({ x: Math.floor(at.x), z: Math.floor(at.z) });
     if (top && top.y > Math.floor(at.y) + 1) return; // a roof or a cave ceiling above it
@@ -863,19 +928,38 @@ function approachStep(e, step) {
 /** @param {Vector3} a @param {Vector3} b */
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
-system.runInterval(() => {
+/** How far a champion steps after `elapsed` ticks since its last step: the pace times that time (at least one step's, at most `APPROACH_CATCHUP`), under a block. */
+function stepFor(speed, elapsed) {
+  const ticks = Math.min(Math.max(Number(elapsed) || 0, STEP_TICKS), STEP_TICKS * APPROACH_CATCHUP);
+  return Math.min(0.9, (Math.max(0, Number(speed) || 0) * ticks) / 20);
+}
+
+/** Tick of each champion's last approach step. @type {Map<string, number>} */
+const approachSeen = new Map();
+
+/** One approach run: a step for the champions whose turn it is (`APPROACH_PER_RUN` at most). */
+function approachRun() {
   if (get("approach.enabled") !== true || !live.size) return;
-  const step = (Math.max(0, Number(get("approach.speed")) || 0) * STEP_TICKS) / 20;
-  if (step <= 0) return;
-  for (const e of live.values()) {
+  const speed = Math.max(0, Number(get("approach.speed")) || 0);
+  if (speed <= 0) return;
+  const now = system.currentTick;
+  const turn = turnOf([...live.keys()], approachCursor, APPROACH_PER_RUN);
+  approachCursor = turn.next;
+  for (const id of turn.batch) {
+    const e = live.get(id);
+    if (!e) continue;
+    const last = approachSeen.get(id) ?? now - STEP_TICKS;
+    approachSeen.set(id, now);
     try {
-      approachStep(e, Math.min(step, 0.9));
+      approachStep(e, stepFor(speed, now - last));
     } catch (err) {
       // an unloaded column or a champion that just died: try again next step
       if (!String(err).includes("LocationInUnloadedChunk") && !String(err).includes("InvalidEntity")) console.warn(`[elite] approach: ${err}`);
     }
   }
-}, STEP_TICKS);
+}
+
+system.runInterval(approachRun, STEP_TICKS);
 
 // ---------------------------------------------------------------------------
 // Death
@@ -946,6 +1030,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   known.delete(id);
   live.delete(id);
   detours.delete(id);
+  approachSeen.delete(id);
   loaded = Math.max(0, loaded - 1);
 });
 
@@ -1096,6 +1181,7 @@ function refresh() {
   for (const id of known.keys()) if (!seen.has(id)) known.delete(id);
   for (const id of live.keys()) if (!seen.has(id)) live.delete(id);
   for (const id of detours.keys()) if (!seen.has(id)) detours.delete(id);
+  for (const id of approachSeen.keys()) if (!seen.has(id)) approachSeen.delete(id);
   for (const id of nextStrike.keys()) if (!seen.has(id)) nextStrike.delete(id);
   const now = Date.now();
   for (const [id, m] of hitters) {

@@ -701,7 +701,42 @@ function updateLabels() {
     const id = `camp:${wid}`;
     if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
   }
-  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
+  nameLabels.sync(targets, () => labelObservers(targets), dims);
+}
+
+/** Players further than this from every wanderer can't see a label (`nameLabels`' range, with room for a head's height). */
+const LABEL_REACH = 40;
+/** With this many players or fewer (or about as many as wanderers) every player is read: asking for the ones near each wanderer saves nothing. */
+const LABEL_QUERY_PLAYERS = 8;
+/** Asking per wanderer costs one native query each: never for more wanderers than this. */
+const LABEL_QUERY_TARGETS = 16;
+let onlineN = 0;
+let onlineAt = -Infinity;
+
+/**
+ * Who a label sync reads: every player, or, on a busy server, only the players near a wanderer (one native query
+ * per wanderer instead of a read of every player's place on every sync; the sync still measures the real
+ * distance, so what it does is the same).
+ * @param {{ entity: Entity }[]} targets
+ */
+function labelObservers(targets) {
+  const every = () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] });
+  const tick = system.currentTick;
+  if (tick - onlineAt >= 100 || tick < onlineAt) {
+    onlineN = world.getAllPlayers().length;
+    onlineAt = tick;
+  }
+  if (onlineN <= LABEL_QUERY_PLAYERS || onlineN <= targets.length * 2 || targets.length > LABEL_QUERY_TARGETS) return every();
+  /** @type {Map<string, Player>} */
+  const near = new Map();
+  for (const t of targets) {
+    try {
+      for (const p of t.entity.dimension.getPlayers({ location: t.entity.location, maxDistance: LABEL_REACH, excludeGameModes: [GameMode.Spectator] })) near.set(p.id, p);
+    } catch {
+      // unloaded or removed this tick: nobody can be near it
+    }
+  }
+  return [...near.values()];
 }
 
 /**
@@ -884,10 +919,10 @@ function upkeep() {
     if (p && !far && hasOffer.get(`${ent.id}|${p.id}`) && across(p.location, rec) <= 32) sparkle(p, ent);
   }
   // At camps: there while someone on that chain is near, gone otherwise (and while an escort's copy walks).
-  const players = world.getAllPlayers();
+  const players = world.getAllPlayers().map((p) => ({ p, dim: p.dimension.id, at: p.location })); // read once, not once per camp
   for (const [wid, c] of Object.entries(camps)) {
     const ent = entityById(c.e);
-    const needers = enabled ? players.filter((p) => p.dimension.id === c.d && across(p.location, c) <= CONFIG.campRange && ["a", "o"].includes(states.get(p.id)?.ch[wid] ?? "")) : [];
+    const needers = enabled ? players.filter((o) => o.dim === c.d && across(o.at, c) <= CONFIG.campRange && ["a", "o"].includes(states.get(o.p.id)?.ch[wid] ?? "")).map((o) => o.p) : [];
     const hide = (hidden.get(wid) ?? 0) > now;
     if (ent) {
       if (hide || !needers.length) {

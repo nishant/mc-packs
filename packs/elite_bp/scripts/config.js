@@ -11,6 +11,19 @@ export const CONFIG = {
   /** Natural champions only appear while fewer than this many champions are loaded in the world. Operators and other packs can still spawn more. */
   maxAlive: 8,
 
+  /**
+   * Natural champions also stop at this many loaded champions for each player online, up to `maxAlive` (the most
+   * for the whole world): 0.8 is today's 8 for a Realm of about 10 players, so a quiet world meets fewer
+   * and a crowded one never more than `maxAlive`. At least one. 0 = no per-player limit (only `maxAlive`, as before).
+   */
+  maxAlivePerPlayer: 0.8,
+
+  /**
+   * Natural champions don't appear within 64 blocks of this many loaded champions, so one area (a base, a
+   * crowd of players) doesn't fill the whole `maxAlive`. 0 = no limit. `areaSpacing` already keeps natural ones 48 blocks apart.
+   */
+  maxAliveNearby: 3,
+
   /** Natural champions only appear at night (time of day 13000 to 23000). */
   nightOnly: true,
 
