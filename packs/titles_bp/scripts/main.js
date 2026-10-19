@@ -128,6 +128,13 @@ function indexName(id, name, replace) {
   indexed.add(memo);
 }
 
+/** Removes a name's entry, and only if it points at this player. @param {string} id @param {string} name */
+function unindexName(id, name) {
+  indexed.delete(`${id}|${name.toLowerCase()}`);
+  const key = nameKey(name);
+  if (world.getDynamicProperty(key) === id) world.setDynamicProperty(key, undefined);
+}
+
 /** The saved gamertag of a record without keeping it in memory. @param {string} id @returns {string | undefined} */
 function peekName(id) {
   const cached = cache.get(id);
@@ -294,9 +301,16 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   const d = dataOf(player.id);
   const now = Date.now();
   if (d.n !== player.name || stale(d.ls, now)) {
+    const old = d.n;
     d.n = player.name;
     d.ls = now;
+    if (old && old.toLowerCase() !== player.name.toLowerCase()) unindexName(player.id, old);
     save(player.id);
+  }
+  try {
+    indexName(player.id, player.name, true); // the name they are using now is theirs
+  } catch (e) {
+    console.warn(`[titles] index: ${e}`);
   }
 });
 
@@ -318,7 +332,7 @@ function* forgetOld() {
     start: (key, v, now) => world.setDynamicProperty(key, JSON.stringify({ ...v, ls: now })),
     drop: (key, v, days) => {
       world.setDynamicProperty(key, undefined);
-      if (typeof v.n === "string" && v.n && world.getDynamicProperty(nameKey(v.n)) === key.slice(KEY_PREFIX.length)) world.setDynamicProperty(nameKey(v.n), undefined);
+      if (typeof v.n === "string" && v.n) unindexName(key.slice(KEY_PREFIX.length), v.n);
       console.warn(`[titles] forgot ${v.n || key.slice(KEY_PREFIX.length)}: not seen for over ${days} days (${Array.isArray(v.t) ? v.t.length : 0} titles)`);
     },
     warn: (e) => console.warn(`[titles] ${e}`),
@@ -607,6 +621,7 @@ function findPlayer(name) {
   }
   const found = scanForName(want);
   if (found) indexName(found.id, found.name, true);
+  else if (typeof hit === "string") world.setDynamicProperty(key, undefined); // it points at someone else now
   return found;
 }
 
@@ -644,12 +659,12 @@ function give(op, who, what) {
   if (/^trail:/i.test(t)) {
     const trail = trailId(t);
     if (!trail) return op.sendMessage(`§cTrails: ${Object.keys(TRAILS).map((k) => `trail:${k}`).join(", ")}`);
-    const isNew = unlockTrail(target.id, trail, undefined);
+    const isNew = unlockTrail(target.id, trail, target.name);
     return op.sendMessage(isNew ? `§aGave ${target.name} the ${TRAILS[trail].name} trail.` : `§7${target.name} already has the ${TRAILS[trail].name} trail.`);
   }
   const title = cleanTitle(t);
   if (!title) return op.sendMessage("§cA title needs letters (plain text, no color codes).");
-  const isNew = unlockTitle(target.id, title, undefined);
+  const isNew = unlockTitle(target.id, title, target.name);
   op.sendMessage(isNew ? `§aGave ${target.name} the title ${title}.` : `§7${target.name} already has the title ${title}.`);
 }
 

@@ -32,15 +32,24 @@ export const MAX_SECONDS = 60;
 const pongs = new Map();
 /** @type {Map<string, Forgot>} */
 const forgets = new Map();
-/** Forgets sent and not answered yet, by request id: who asked and for which pack, so a late answer still reaches them. @type {Map<string, { pack: string, operator: string, operatorName: string, name: string, at: number, waiting: boolean }>} */
+/** Forgets sent and not answered yet, by request id: who asked and for which pack, so a late answer still reaches them. @type {Map<string, { pack: string, operator: string, operatorName: string, name: string, at: number, waiting: boolean, pong: Pong }>} */
 const pending = new Map();
 const MAX_PENDING = 16;
 /** A forget with no answer after this long is dropped from the list (ticks). */
 export const PENDING_TICKS = 12000;
 let seq = 0;
 
-/** @param {{ pack: string, operator: string, operatorName: string, name: string }} w @param {Forgot} ans */
+/** The list page keeps this record: once the pack forgot, it must not offer to forget again. @param {Pong} p */
+function markForgotten(p) {
+  p.forgotten = true;
+  p.props = 0;
+  p.bytes = 0;
+  p.big = 0;
+}
+
+/** @param {{ pack: string, operator: string, operatorName: string, name: string, pong: Pong }} w @param {Forgot} ans */
 function lateAnswer(w, ans) {
+  if (ans.ok) markForgotten(w.pong);
   const who = world.getAllPlayers().find((pl) => pl.id === w.operator);
   const text = ans.ok
     ? `${w.name} forgot ${ans.removed ?? 0} saved entr${ans.removed === 1 ? "y" : "ies"} (${kb(ans.bytes ?? 0)}), after taking longer than expected. §eRun /reload or restart the server now.`
@@ -236,7 +245,7 @@ async function forgetPack(player, ctx, p) {
   for (const [k, w] of pending) if (!w.waiting && system.currentTick - w.at > PENDING_TICKS) pending.delete(k);
   if ([...pending.values()].some((w) => w.pack === p.pack)) return void player.sendMessage(`§e[${TITLE}] A forget for ${name} is still waiting for its answer. Check again in a minute.`);
   if (pending.size >= MAX_PENDING) return void player.sendMessage(`§e[${TITLE}] Too many forgets are waiting for an answer. Try again later.`);
-  const w = { pack: p.pack, operator: player.id, operatorName: player.name, name, at: system.currentTick, waiting: true };
+  const w = { pack: p.pack, operator: player.id, operatorName: player.name, name, at: system.currentTick, waiting: true, pong: p };
   pending.set(id, w);
   try {
     system.sendScriptEvent("realm:diag_forget", JSON.stringify({ id, pack: p.pack, confirm: `FORGET ${p.pack}` }));
@@ -250,10 +259,7 @@ async function forgetPack(player, ctx, p) {
   if (!player.isValid) return void (ans && lateAnswer(w, ans));
   if (!ans) return void player.sendMessage(`§e[${TITLE}] ${name} hasn't answered yet: it may still have deleted its data. You'll get a line here when it does.`);
   if (!ans.ok) return void player.sendMessage(`§c[${TITLE}] ${name} didn't forget its data: ${plain(ans.error).slice(0, 200)}`);
-  p.forgotten = true;
-  p.props = 0;
-  p.bytes = 0;
-  p.big = 0;
+  markForgotten(p);
   console.warn(`[admin] ${player.name} made ${p.pack} forget its saved data (${ans.removed ?? 0} entries, ${ans.bytes ?? 0} bytes)`);
   player.sendMessage(`§7[${TITLE}] ${name} forgot ${ans.removed ?? 0} saved entr${ans.removed === 1 ? "y" : "ies"} (${kb(ans.bytes ?? 0)}). §eRun /reload or restart the server now:§7 until then it keeps running from memory and saves nothing.`);
 }

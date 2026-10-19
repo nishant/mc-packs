@@ -9,6 +9,7 @@ async function world(seed = {}) {
   for (const [k, v] of Object.entries(seed)) sim.props.set(k, v);
   await sim.load("welcome_bp");
   sim.boot();
+  sim.game.emit("world.after.worldLoad", {});
   return sim;
 }
 
@@ -40,6 +41,25 @@ test("O43: a fresh world gets a generic welcome built from the installed packs",
   assert.doesNotMatch(form.bodyText, /realm:calendar|realm:crowns/, "packs that are not installed are not listed");
   assert.equal(sim.props.get("welcome:profile"), "generic");
   assert.equal(sim.props.has("welcome:settings"), false, "generated text is never saved");
+});
+
+test("O43: a new world stays generic when sibling packs write at load and at the first spawn", async () => {
+  const sim = await world({ "atlas:origin": "{}", "weather:cycle": "1", "weather:plan": "{}", "weather:current": "{}", "expedition:migrated": 1 });
+  installedPacks(sim, ["saga_bp"]);
+  const p = sim.join("Pat");
+  for (const k of ["titles:p:Pat", "titles:n:pat", "nick:g:pat", "mail:roster", "caravan:last", "milestones:p:Pat"]) sim.props.set(k, "x");
+  sim.game.emit("world.after.playerSpawn", { player: p, initialSpawn: true });
+  const w = await sim.nextForm(600);
+  assert.doesNotMatch(w.form.bodyText, /Old Tobin/);
+  assert.equal(sim.props.get("welcome:profile"), "generic");
+});
+
+test("O43: an older world with player data, even beside load-time keys, keeps the Realm text", async () => {
+  const sim = await world({ "atlas:origin": "{}", "titles:p:abc": "{}" });
+  installedPacks(sim, ["saga_bp"]);
+  const { form } = await joinAndRead(sim);
+  assert.match(form.bodyText, /Old Tobin/);
+  assert.equal(sim.props.get("welcome:profile"), "realm");
 });
 
 test("O43: a world that already has data keeps the built-in Realm text, and says so once", async () => {

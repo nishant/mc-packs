@@ -14,7 +14,7 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { ACTIONS, TITLE_MAX_SECONDS, showTitle } from "./actions.js";
 import { ENUMS, PACKS } from "./catalog.js";
-import { bump } from "./lifecycle.js";
+import { alive, bump, genOf } from "./lifecycle.js";
 import { CONFIG } from "./config.js";
 import { DEFAULT_SECONDS, MAX_SECONDS, diagnostics } from "./diagnostics.js";
 import { GROUPS, LINE, NAMES, OP_COLOR, OP_TEXT, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
@@ -124,9 +124,11 @@ async function available(player) {
  */
 async function show(player, form) {
   const once = resumed.delete(player.id);
+  const gen = genOf(player.id);
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (!player.isValid) return undefined;
+    if (!alive(player, gen)) return undefined;
     const res = /** @type {any} */ (await form.show(player));
+    if (!alive(player, gen)) return undefined;
     if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
       if (once) return undefined; // the command they just ran opened its own menu: that one stays
       await system.waitTicks(20);
@@ -134,7 +136,7 @@ async function show(player, form) {
     }
     return res.canceled ? undefined : res;
   }
-  if (player.isValid) player.sendMessage("§eCouldn't open the menu. Close chat or your inventory and try again.");
+  if (alive(player, gen)) player.sendMessage("§eCouldn't open the menu. Close chat or your inventory and try again.");
   return undefined;
 }
 
@@ -149,13 +151,14 @@ const resumed = new Set();
  */
 async function resume(player, back) {
   if (!back) return;
+  const gen = genOf(player.id);
   await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10) * 2 + 5); // Realm Settings pings twice before it opens
-  if (!player.isValid) return;
+  if (!alive(player, gen)) return;
   resumed.add(player.id);
   try {
     return await back();
   } finally {
-    resumed.delete(player.id);
+    if (alive(player, gen)) resumed.delete(player.id);
   }
 }
 

@@ -27,29 +27,40 @@ const MAX_ATTEMPTS = 30;
 // Which default text: the Realm's, or one built from the installed packs
 // ---------------------------------------------------------------------------
 
-/** Saved data of another pack that exists before any player has played: not a sign of an older world. */
-const BOOT_PREFIXES = ["welcome:", "diag:", "settings:", "admin:", "news:", "help:", "realm:"];
+/** Saved data other packs write by themselves when a world loads, before any player has played: not a sign of an older world. */
+const BOOT_PREFIXES = ["diag:", "settings:", "admin:", "news:", "help:", "realm:", "weather:"];
+/** The same, for single keys (a pack that writes one key at load but keeps player data under the same prefix). */
+const BOOT_KEYS = new Set(["atlas:origin", "expedition:migrated", "bounty:day", "caravan:last"]);
 
 /**
- * "realm" keeps the built-in text for worlds that already ran this pack (anything saved by it, or by any other
- * pack that is not boot-time data, counts); only a world with nothing saved gets "generic". Decided once.
- * @returns {"realm" | "generic"}
+ * Decided once, when the world loads (before any player joins and so before packs write player data):
+ * "generic" only when nothing is saved but this kind of load-time data; anything else (saved text, any
+ * player or progress data, a key nobody here recognizes) is an older world and keeps the built-in Realm text.
+ * @returns {"realm" | "generic" | undefined} undefined when the world can't be read now
  */
-function profile() {
+function decide() {
   const saved = world.getDynamicProperty(PROP_PROFILE);
   if (saved === "realm" || saved === "generic") return saved;
   let kind = /** @type {"realm" | "generic"} */ ("realm");
   try {
-    const ids = world.getDynamicPropertyIds();
-    const own = ids.some((k) => k.startsWith("welcome:") && k !== PROP_PROFILE);
-    const others = ids.some((k) => !BOOT_PREFIXES.some((p) => k.startsWith(p)));
-    if (!own && !others) kind = "generic";
+    const ids = world.getDynamicPropertyIds().filter((k) => k !== PROP_PROFILE);
+    if (ids.every((k) => BOOT_PREFIXES.some((p) => k.startsWith(p)) || BOOT_KEYS.has(k))) kind = "generic";
   } catch {
-    return "realm"; // not readable now: decide next time, show the old text meanwhile
+    return undefined;
   }
   world.setDynamicProperty(PROP_PROFILE, kind);
   return kind;
 }
+
+/** @returns {"realm" | "generic"} the saved decision; before the world loaded, the built-in text and nothing saved */
+function profile() {
+  const saved = world.getDynamicProperty(PROP_PROFILE);
+  return saved === "generic" ? "generic" : "realm";
+}
+
+world.afterEvents.worldLoad.subscribe(() => {
+  decide();
+});
 
 /** @type {Set<string>} the pack folders that answered the last realm:help_ping */
 let installed = new Set(["welcome_bp"]);

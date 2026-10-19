@@ -252,7 +252,7 @@ async function stepsFor(ctx, player) {
 /**
  * Shows a step page, waiting while another screen is open: the step's own menu (a command opened it), chat or the
  * inventory. Comes back when that closes, up to COME_BACK_TICKS.
- * @param {Player} player @param {ActionFormData} form
+ * @param {Ctx} ctx @param {Player} player @param {ActionFormData} form
  */
 async function showWaiting(ctx, player, form) {
   const until = system.currentTick + COME_BACK_TICKS;
@@ -287,8 +287,9 @@ function refuse(player) {
  */
 export async function wizard(ctx, player, back) {
   if (!isOp(player)) return refuse(player);
-  const steps = await stepsFor(ctx, player);
   const gen = genOf(player.id);
+  const steps = await stepsFor(ctx, player);
+  if (!alive(player, gen)) return;
   const f = await facts(ctx, player, true);
   if (!alive(player, gen)) return;
   if (!isOp(player)) return refuse(player);
@@ -410,7 +411,10 @@ async function stepPage(ctx, player, steps, i, back) {
  */
 async function summary(ctx, player, steps, back) {
   if (!isOp(player)) return refuse(player);
+  const gen = genOf(player.id);
   const f = await facts(ctx, player, true);
+  if (!alive(player, gen)) return;
+  if (!isOp(player)) return refuse(player);
   const st = state();
   const rows = steps.map(({ step }) => ({ step, s: statusOf(step, f, st), skipped: !!st.s[step.id] }));
   const done = rows.filter((r) => r.s.done).length;
@@ -477,7 +481,9 @@ async function sizeOptions(ctx) {
  */
 export async function sizePage(ctx, player, back) {
   if (!isOp(player)) return refuse(player);
+  const gen = genOf(player.id);
   const opts = await sizeOptions(ctx);
+  if (!alive(player, gen)) return;
   if (!isOp(player)) return refuse(player);
   const now = sizeOf(new Map(opts.map((o) => [`${o.pack}:${o.opt.key}`, o.opt])));
   const form = new ActionFormData()
@@ -497,6 +503,7 @@ export async function sizePage(ctx, player, back) {
  * @param {Ctx} ctx @param {Player} player @param {"small" | "large"} id @param {Awaited<ReturnType<typeof sizeOptions>>} opts @param {(() => Promise<unknown>) | undefined} back
  */
 async function applySize(ctx, player, id, opts, back) {
+  const gen = genOf(player.id);
   const size = /** @type {(typeof SIZES)[number]} */ (SIZES.find((s) => s.id === id));
   /** @type {Change[]} */
   const changes = [];
@@ -526,6 +533,7 @@ async function applySize(ctx, player, id, opts, back) {
   const list = changes.map((c) => `§r${c.title}: ${c.label}: §c${shown(c.opt, c.from)}§r -> §2${shown(c.opt, c.to)}`).join("\n");
   const body = `These ${changes.length} settings change, for the whole world:\n${list}${same ? `\n\n§7${same} more already match.` : ""}${out.length ? `\n§7Not changed: ${out.join("; ")}.` : ""}${missing.length ? `\n§7Not installed: ${missing.map((p) => ctx.names.get(p) ?? p).join(", ")}.` : ""}\n\n§r${size.help} Each one can be changed back in Realm Settings, or with the other size.`;
   const res = await ctx.show(player, new MessageFormData().title(`Apply ${size.title}?`).body(body).button1(`Yes, change ${changes.length}`).button2("Cancel"));
+  if (!alive(player, gen)) return;
   if (res?.selection !== 0) return back?.();
   if (!isOp(player)) return void player.sendMessage(`§c[${TITLE}] Server size didn't change: you aren't an operator any more.`);
 
@@ -546,7 +554,7 @@ async function applySize(ctx, player, id, opts, back) {
   const ok = changes.filter((c) => acks.get(`${c.pack}:${c.key}`)?.ok);
   const failed = changes.filter((c) => !acks.get(`${c.pack}:${c.key}`)?.ok);
   if (ok.length) save((s) => void (s.size = id));
-  if (!player.isValid) return;
+  if (!alive(player, gen)) return;
   player.sendMessage(`§6[${TITLE}] §rServer size: ${size.title}. Changed ${ok.length} setting${ok.length === 1 ? "" : "s"}${failed.length ? `; §c${failed.length} didn't change§r (${failed.map((c) => `${c.title}: ${c.label}: ${acks.get(`${c.pack}:${c.key}`)?.error ?? "no answer"}`).join("; ")})` : ""}.`);
   return back?.();
 }
