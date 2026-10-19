@@ -8,6 +8,9 @@ export const CONFIG = {
   /** Maximum blocks per build allowed on the realm (survival and creative). */
   maxBlocksCap: 50000,
 
+  /** Blocks per build for a player who has not saved their own limit. Raising the cap does not change this. */
+  defaultMaxBlocks: 50000,
+
   /** Mode list complexity: "player" (players choose), "simple" (force simple modes), or "advanced" (force all modes). */
   modeComplexity: "player",
 

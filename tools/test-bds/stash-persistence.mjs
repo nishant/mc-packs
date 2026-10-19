@@ -65,6 +65,12 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
       player.setDynamicProperty("stash:native", world.getDynamicProperty("stash:test:index"));
       const items = testLoad(player, JSON.parse(world.getDynamicProperty("stash:test:active")));
       for (let s = 0; s < inv.size; s++) inv.setItem(s, items.find((e) => e.s === s)?.item);
+    } else if (op === "force_pending") {
+      const state = testState(player);
+      const keep = testCarried(inv);
+      const before = testSave(player, keep);
+      const after = testSave(player, []);
+      player.setDynamicProperty("stash:native", JSON.stringify({ ...state, pending: { before, after } }));
     } else if (op === "status") {
       const state = testState(player);
       player.sendMessage("stash layout status " + JSON.stringify({ layout: state.layout, cur: state.cur, savedPlayerId: world.getDynamicProperty("stash:test:playerId"),

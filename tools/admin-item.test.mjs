@@ -3,6 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { SIZE_OPTIONS } from "../packs/admin_bp/scripts/presets.js";
+
+test("Large server uses the operator-only 2000-block public building preset with no Infinite Reach", () => {
+  const build = new Map(SIZE_OPTIONS.filter((option) => option.pack === "build_bp").map((option) => [option.key, option.large]));
+  assert.equal(build.get("maxBlocksCap"), 2000);
+  assert.equal(build.get("operatorsOnly"), true);
+  assert.equal(build.get("allowInfiniteReach"), false);
+});
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const adminDir = path.join(root, "packs/admin_bp/scripts");

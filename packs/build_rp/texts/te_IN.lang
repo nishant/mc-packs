@@ -154,6 +154,8 @@ eb.settings.admin_destroy_creative=§cఅడ్మిన్§r - Destroy: క్
 eb.settings.admin_allow_inf_reach=§cఅడ్మిన్§r - అనంత రేంజ్‌ను అనుమతించండి\n§7ఆఫ్‌లో ఉంటే, అనంత రేంజ్ అందరు ఆటగాళ్లకూ ఆపబడుతుంది
 eb.settings.admin_max_reach_cap=§cఅడ్మిన్§r - గరిష్ట అనంత పరిధి దూరం\n§7ప్రస్తుతం: §e%1  §70 = పరిమితి లేదు
 eb.settings.admin_max_blocks_cap=§cఅడ్మిన్§r - గరిష్ఠ బ్లాకుల పరిమితి (ఒక్కో ఆటగాడికి)\n§7ప్రస్తుతం: §e%1  §7గరిష్ఠం: §e%2
+eb.settings.admin_default_max_blocks=§cఅడ్మిన్§r - నిర్మాణానికి డిఫాల్ట్ బ్లాకులు\n§7సేవ్ చేసిన పరిమితి లేని ఆటగాళ్లు. ప్రస్తుతం: §e%1  §7గరిష్ఠం: §e%2
+eb.set.admin_default_blocks=డిఫాల్ట్ బ్లాకులు
 eb.settings.admin_auto_give_book=§cఅడ్మిన్§r - బిల్డింగ్ బుక్ స్వయంచాలకంగా ఇవ్వండి\n§7ఆన్‌లో ఉంటే, ఆటగాళ్లు చేరినప్పుడు బిల్డింగ్ బుక్ స్వయంచాలకంగా అందుతుంది
 eb.settings.admin_config_tag=కాన్ఫిగ్‌ని అవసరమైన ట్యాగ్‌కి పరిమితం చేయి\n§7ఆన్ చేస్తే, అవసరమైన ట్యాగ్ ఉన్న ప్లేయర్లు మాత్రమే /config ఉపయోగించగలరు.
 
@@ -397,7 +399,6 @@ eb.join.welcome=§a[Effortless Building] §rమీకు §6బిల్డి�
 eb.help.title=సహాయం
 eb.help.body=§f§6ట్యుటోరియల్§f బుక్ అన్నిటినీ బొమ్మలతో వివరిస్తుంది. చేతిలో పట్టుకుంటే అది మీ ముందు తెరుచుకుంటుంది.
 eb.help.btn.book=§lట్యుటోరియల్ బుక్§r\n§8తీసుకోండి, లేదా ఎలా తెరవాలో చూడండి
-eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
 eb.help.btn.setup=§lత్వరిత సెటప్§r\n§8యాడాన్‌ను మీ పరికరానికి సరిపెట్టండి
 eb.help.book_hold=§a[EB] §r§6ట్యుటోరియల్§r బుక్ మీ వద్ద ఇప్పటికే ఉంది. చేతిలో పట్టుకుంటే అది మీ ముందు తెరుచుకుంటుంది.
 eb.help.book_given=§a[EB] §rఇదిగో §6ట్యుటోరియల్§r బుక్. చేతిలో పట్టుకుంటే అది మీ ముందు తెరుచుకుంటుంది.
@@ -449,7 +450,6 @@ eb.set.admin_auto_give_book=చేరినప్పుడు బుక్‌ల
 eb.set.admin_lock_quality=ప్రివ్యూ నాణ్యతను లాక్ చేయి
 eb.set.admin_vanilla_menus=అందరికీ సాదా మెనూలు
 eb.set.book_language=బుక్ భాష
-eb.set.book_language.tip=బుక్ భాష\n§7ట్యుటోరియల్ బుక్, తేలియాడే మెనూల్లోని\n§7సూచనలు, పాఠాల భాష.
 eb.help.btn.language=§lబుక్ భాష§r\n§8English, Español, Deutsch, 日本語 ...
 entity.eb:language_picker.name=భాష
 eb.palette.dist.dissolve_x=కరిగించు X

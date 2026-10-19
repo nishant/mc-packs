@@ -587,6 +587,119 @@ export function countItem(player, item, name) {
   return n;
 }
 
+// stash-bridge:begin
+/**
+ * Items Expansive Inventory (stash_bp) keeps on saved pages count toward a collect step, which would otherwise never see
+ * what its page routing moved off the active page. It asks (realm:stash_count_ask { player, item?, name? }) and
+ * stash_bp answers with realm:stash_count { player, item?, name?, rev, part, parts, rows: [{ id, name?, lore?, n }] },
+ * one row per kind on saved pages, split over `parts` messages; a realm:stash_changed { player, rev } says the saved
+ * pages changed. A step with only a name is asked too: the rows are matched here with the same rules as live items.
+ * Parts of one revision are assembled and used only when complete; a reply of an older revision than the last notice
+ * is stale and dropped. countItem is untouched: deliveries and every other reader still see only the live inventory.
+ * Without stash_bp nothing answers: after one wait of STASH_WAIT ticks the step counts the live inventory alone.
+ * @type {Map<string, { id: string, name?: string, lore?: string[], n: number }[]>}
+ */
+const stashRows = new Map();
+/** When each unanswered ask was sent (tick). @type {Map<string, number>} */
+const stashAsked = new Map();
+/** Parts of an answer received so far. @type {Map<string, { rev?: string, parts: number, got: Map<number, { id: string, name?: string, lore?: string[], n: number }[]> }>} */
+const stashParts = new Map();
+/** The newest committed revision a notice named, per player. @type {Map<string, string>} */
+const stashRev = new Map();
+/** Ticks to wait for an answer before counting without it. */
+const STASH_WAIT = 40;
+
+/** @param {Player} player @param {Objective} obj */
+const stashKey = (player, obj) => `${player.id}|${obj.item ?? ""}|${obj.name ?? ""}`;
+
+/**
+ * What a collect step has: the live inventory plus the saved pages. Undefined while stash_bp's answer is pending,
+ * so a count taken between a page move and its answer can't make progress dip.
+ * @param {Player} player @param {Objective} obj @returns {number | undefined}
+ */
+function collectCount(player, obj) {
+  const live = countItem(player, obj.item, obj.name);
+  const key = stashKey(player, obj);
+  let rows = stashRows.get(key);
+  if (!rows) {
+    const now = system.currentTick;
+    const asked = stashAsked.get(key);
+    if (asked === undefined) {
+      stashAsked.set(key, now);
+      send("realm:stash_count_ask", { player: player.id, item: obj.item, name: obj.name });
+      return undefined;
+    }
+    if (now - asked < STASH_WAIT) return undefined;
+    stashAsked.delete(key);
+    stashParts.delete(key);
+    rows = [];
+    stashRows.set(key, rows);
+  }
+  let hidden = 0;
+  for (const r of rows) {
+    const lore = r.lore ?? [];
+    const stack = /** @type {ItemStack} */ (/** @type {unknown} */ ({ typeId: r.id, nameTag: r.name, getLore: () => lore }));
+    if (same(stack, obj.item, obj.name)) hidden += r.n;
+  }
+  return live + hidden;
+}
+
+/** @param {string} message */
+function stashCountReply(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string" || !Array.isArray(m.rows)) return;
+    const key = `${m.player}|${typeof m.item === "string" ? m.item : ""}|${typeof m.name === "string" ? m.name : ""}`;
+    const rev = typeof m.rev === "string" ? m.rev : undefined;
+    const known = stashRev.get(m.player);
+    if (known !== undefined && rev !== known) return;
+    const parts = Number.isInteger(m.parts) && m.parts > 1 ? m.parts : 1;
+    const part = Number.isInteger(m.part) && m.part >= 1 && m.part <= parts ? m.part : 1;
+    const rows = [];
+    for (const r of m.rows) {
+      if (r && typeof r.id === "string" && Number.isInteger(r.n) && r.n > 0) {
+        rows.push({ id: r.id, name: typeof r.name === "string" ? r.name : undefined, lore: Array.isArray(r.lore) ? r.lore.map(String) : undefined, n: r.n });
+      }
+    }
+    let pending = stashParts.get(key);
+    if (!pending || pending.rev !== rev || pending.parts !== parts) {
+      pending = { rev, parts, got: new Map() };
+      stashParts.set(key, pending);
+    }
+    pending.got.set(part, rows);
+    if (pending.got.size < parts) return;
+    stashParts.delete(key);
+    /** @type {typeof rows} */
+    const all = [];
+    for (let i = 1; i <= parts; i++) all.push(.../** @type {typeof rows} */ (pending.got.get(i)));
+    const was = JSON.stringify(stashRows.get(key));
+    stashRows.set(key, all);
+    stashAsked.delete(key);
+    if (was !== JSON.stringify(all)) invChanged.add(m.player);
+  } catch {
+    // an unreadable answer is ignored; the step keeps what it had
+  }
+}
+
+/** The saved pages changed: what stash_bp said before is stale until it answers again. @param {string} message */
+function stashChanged(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string") return;
+    if (typeof m.rev === "string") stashRev.set(m.player, m.rev);
+    for (const map of [stashRows, stashAsked, stashParts]) for (const key of [...map.keys()]) if (key.startsWith(`${m.player}|`)) map.delete(key);
+    invChanged.add(m.player);
+  } catch {
+    // ignored
+  }
+}
+// stash-bridge:end
+
+onScriptEvent(["realm:stash_count", "realm:stash_changed"], ({ id, message }) => {
+  if (id === "realm:stash_count") stashCountReply(message);
+  else if (id === "realm:stash_changed") stashChanged(message);
+});
+
 /**
  * Takes up to `max` of an item. Without `name`, renamed items are never taken; with it, only items
  * with that name are. Returns how many were taken.
@@ -2934,9 +3047,11 @@ export function tickPlayer(player, list) {
               // Counted again only when the inventory changed (or every 10 seconds, or for a step not counted yet).
               const key = objKey(e, i);
               if (!recount && collectSeen.get(player.id)?.has(key)) break;
+              const have = collectCount(player, obj);
+              if (have === undefined) break; // stash_bp's answer is pending: counted next second
               collected.push(key);
+              bump(player, e, i, have, true);
             }
-            bump(player, e, i, countItem(player, obj.item, obj.name), true);
             // Done: party mates on the same chapter nearby have it done too (the party's main chapter: party.js).
             if (reached(e, i)) share(player, new Set([objKey(e, i)]), "collect", (o) => target(o), new Set([player.id]));
             break;
