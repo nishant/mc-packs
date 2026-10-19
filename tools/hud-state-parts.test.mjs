@@ -181,6 +181,57 @@ test("party: more than 100 viewers, the player is far down the list", async () =
   assert.ok(lines(sim, "party").some((m) => m.player === "a"));
 });
 
+test("stats: a late full replay of an older publication does not replace the current list, but a restarted HUD recovers", async () => {
+  const sim = await stats(6);
+  const all = ids(0, 6);
+  send(sim, { part: 1, parts: 2, seq: 5, players: [all[0]] });
+  send(sim, { part: 2, parts: 2, seq: 5, players: [all[1]] });
+  send(sim, { part: 1, parts: 2, seq: 6, players: [all[2]] });
+  send(sim, { part: 2, parts: 2, seq: 6, players: [all[3]] });
+  send(sim, { part: 1, parts: 2, seq: 5, players: [all[0]] });
+  send(sim, { part: 2, parts: 2, seq: 5, players: [all[1]] });
+  send(sim, { part: 1, parts: 1, seq: 4, players: [all[4]] });
+  send(sim, { part: 1, parts: 1, seq: 1, players: [all[4]] }); // a restart, inside the window
+  assert.ok(statsHud(sim, all[3]), "seq 6 stays");
+  assert.equal(statsHud(sim, all[1]), false, "replayed seq 5 rejected");
+  assert.equal(statsHud(sim, all[4]), false, "replayed seq 4 and restarted seq 1 still rejected inside the window");
+  sim.step(220);
+  send(sim, { part: 1, parts: 1, seq: 1, players: [all[4]] });
+  assert.ok(statsHud(sim, all[4]), "restarted HUD accepted after the window");
+});
+
+test("stats: part and parts must be real integers; malformed messages leave an in-flight assembly alone", async () => {
+  const sim = await stats(6);
+  const all = ids(0, 6);
+  send(sim, { part: 1, parts: 2, seq: 1, players: [all[0]] });
+  for (const bad of [{ part: true, parts: 2 }, { part: 2.5, parts: 2 }, { part: "2", parts: 2 }, { part: 2, parts: "2" }, { part: 0, parts: 2 }, { part: 3, parts: 2 }, { part: 1, parts: 1.5 }, { part: 1, parts: 5000 }, { part: null, parts: 2 }])
+    send(sim, { seq: 1, players: [all[5]], ...bad });
+  assert.equal(statsHud(sim, all[5]), false, "no malformed part was accepted");
+  send(sim, { part: 2, parts: 2, seq: 1, players: [all[1]] });
+  assert.ok(statsHud(sim, all[0]), "the valid assembly survived");
+  assert.ok(statsHud(sim, all[1]));
+});
+
+test("party: late older replay is rejected, malformed fields are ignored", async () => {
+  const { sim } = await party(0);
+  const seen = () => {
+    sim.game.sent.length = 0;
+    sim.step(45);
+    return lines(sim, "party").some((m) => m.player === "a");
+  };
+  send(sim, { part: 1, parts: 2, seq: 3, players: ["z"] });
+  send(sim, { part: "2", parts: 2, seq: 3, players: ["a"] });
+  send(sim, { part: true, parts: 2, seq: 3, players: ["a"] });
+  assert.equal(seen(), false);
+  send(sim, { part: 2, parts: 2, seq: 3, players: ["a"] });
+  assert.ok(seen());
+  send(sim, { part: 1, parts: 2, seq: 4, players: ["z"] });
+  send(sim, { part: 2, parts: 2, seq: 4, players: [] });
+  send(sim, { part: 1, parts: 2, seq: 3, players: ["z"] });
+  send(sim, { part: 2, parts: 2, seq: 3, players: ["a"] });
+  assert.equal(seen(), false, "seq 3 replay cannot bring a back");
+});
+
 test("end to end: the real HUD's parts feed the real Stats", async () => {
   const hud = await producer(250);
   hud.game.sent.length = 0;
