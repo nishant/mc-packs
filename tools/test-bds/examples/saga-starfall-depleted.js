@@ -92,7 +92,7 @@ export default async function (t) {
       if (!form) await t.wait(1);
     }
     if (!form) {
-      t.log("duplicate report opened no form, so it was rejected before a payout");
+      t.log("duplicate report opened no form; the payout checks below decide");
       return;
     }
     t.log(`duplicate report opened "${form.title}"; answering Finish to prove it cannot pay again`);
