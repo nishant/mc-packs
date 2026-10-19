@@ -1,149 +1,29 @@
 {
-  "comment": "Live O38 findings the checker cannot fix in story files. Each entry is one finding: exact code and at, reason at least 40 characters, no wildcards. A reason says the data is not fixed. Categories with no live hit (reused-name, reused-wanderer-id, ungated-pack-item, unknown-trait, prefab-gather) stay enforced and are not listed here.",
+  "comment": "Live O38 findings the checker cannot fix in story files. Each entry is one finding: exact code and at, reason at least 40 characters, no wildcards. A reason says the data is not fixed. Only the four OWNER-PENDING O64 reward-scale rows remain: the owner has not decided those amounts, so the story data keeps them. Categories with no live hit (finite-interact, partial-family, reused-name, reused-wanderer-id, ungated-pack-item, unknown-trait, prefab-gather) stay enforced and are not listed here.",
   "entries": [
-    {
-      "code": "finite-interact",
-      "at": "drowned_bell/sunken objective 2",
-      "file": "packs/saga_bp/scripts/stories.js:174",
-      "reason": "Active O38 lead patch, not fixed. The sunken bell (bell x1) can be mined out and the hint only says to tap it. Add: place a bell if it is gone."
-    },
-    {
-      "code": "finite-interact",
-      "at": "act1_signs/keeper objective 1",
-      "file": "packs/saga_bp/scripts/stories/act1_signs.js:219",
-      "reason": "Active O38 lead patch, not fixed. Keeper lights 4 chapel candles (candle x6) with no replacement line. Add: place new ones if they are gone."
-    },
-    {
-      "code": "finite-interact",
-      "at": "act2_choir/double objective 3",
-      "file": "packs/saga_bp/scripts/stories/act2_choir.js:273",
-      "reason": "Active O38 lead patch, not fixed. The ledger barrel at sea_cave (barrel x5) can be mined. Add: place a barrel if it is gone."
-    },
-    {
-      "code": "finite-interact",
-      "at": "act2_choir/hollis_night objective 2",
-      "file": "packs/saga_bp/scripts/stories/act2_choir.js:597",
-      "reason": "Active O38 lead patch, not fixed. The chapel bell (bell x1) for the counter-song has no replacement line. Add: place a bell if it is gone."
-    },
-    {
-      "code": "finite-interact",
-      "at": "act2_choir/ring_burns objective 5",
-      "file": "packs/saga_bp/scripts/stories/act2_choir.js:703",
-      "reason": "Active O38 lead patch, not fixed. The Gray Ring bell (bell x1) can be mined before the strike step. Add: place a bell if it is gone."
-    },
-    {
-      "code": "finite-interact",
-      "at": "act4_seals/tide_echo objective 2",
-      "file": "packs/saga_bp/scripts/stories/act4_seals.js:296",
-      "reason": "Active O38 requirement, not fixed. seal_tide sea lanterns (x37) and the conduit (x1) can be mined out. Distinct from gather overlap. O74's amethyst hint did not fix this. Add a replacement signpost."
-    },
-    {
-      "code": "finite-interact",
-      "at": "act5_lantern/smugglers objective 1",
-      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:139",
-      "reason": "Active O38 lead patch, not fixed. Powder barrels at sea_cave (barrel x5) can be mined before Quill's fleet step. Add: place a barrel if they are gone."
-    },
-    {
-      "code": "partial-family",
-      "at": "act5_lantern/alone objective 1",
-      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:341",
-      "reason": "Active O38 lead patch, not fixed. BARRICADE in act5_lantern.js has 12 of 13 vanilla fences and misses poplar_fence (@minecraft/vanilla-data 1.26.52). Add poplar_fence. Story data was not edited."
-    },
     {
       "code": "reward-scale",
       "at": "act5_lantern/herald",
-      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:684",
+      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:594",
       "reason": "OWNER-PENDING O64, not rescaled. herald pays 10 levels, 200 Crowns, 1 totem and 6 diamonds, above main-chapter 8 levels / 120 Crowns. Preserve the amounts until the owner decides."
     },
     {
       "code": "reward-scale",
       "at": "act5_lantern/choice",
-      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:777",
+      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:700",
       "reason": "OWNER-PENDING O64, not rescaled. choice pays 8 levels and 150 Crowns, above main-chapter 40-120 Crowns. dawn_* follows, so this is not the act finale. Preserve the amounts."
-    },
-    {
-      "code": "finite-interact",
-      "at": "act5_lantern/choice objective 2",
-      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:698",
-      "reason": "Active O38 lead patch, not fixed. choice hits Sky Seal end rods (end_rod x29) with no replacement line. sky_vision's put-them-back hint does not cover this chapter. Add that signpost."
     },
     {
       "code": "reward-scale",
       "at": "act5_lantern/dawn_relight",
-      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:842",
+      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:791",
       "reason": "OWNER-PENDING O64, not rescaled. dawn_relight pays 10 levels and 400 Crowns, plus an enchanted golden apple and 16 emeralds, above the act-finale cap of 300 Crowns. Preserve the amounts."
-    },
-    {
-      "code": "partial-family",
-      "at": "act5_lantern/forty objective 1",
-      "file": "packs/saga_bp/scripts/stories/act5_lantern.js:968",
-      "reason": "Active O38 lead patch, not fixed. SAPLINGS in act5_lantern.js has 9 of 11 and misses bamboo_sapling and poplar_sapling. The step says plant a sapling. Add both ids. Not edited here."
-    },
-    {
-      "code": "finite-interact",
-      "at": "vesna_bargain/fen_mother objective 1",
-      "file": "packs/saga_bp/scripts/stories/side_dark.js:738",
-      "reason": "Active O38 lead patch, not fixed. The draught step uses witch_hut cauldrons (cauldron x2) with no replacement line. Add: place a cauldron if it is gone."
-    },
-    {
-      "code": "finite-interact",
-      "at": "vesna_bargain/break_heart objective 1",
-      "file": "packs/saga_bp/scripts/stories/side_dark.js:835",
-      "reason": "Active O38 lead patch, not fixed. Breaking the heart uses the same witch_hut cauldrons (cauldron x2). Add: place a cauldron if it is gone."
-    },
-    {
-      "code": "partial-family",
-      "at": "lost_lambs/shed objective 2",
-      "file": "packs/saga_bp/scripts/stories/side_bright.js:228",
-      "reason": "Active O38 lead patch, not fixed. FENCES in side_bright.js has 12 of 13 vanilla fences and misses poplar_fence. Add poplar_fence. Story data was not edited."
-    },
-    {
-      "code": "partial-family",
-      "at": "hatchlings/fence objective 1",
-      "file": "packs/saga_bp/scripts/stories/side_bright.js:546",
-      "reason": "Active O38 lead patch, not fixed. The hint says any wooden fence, but FENCES in side_bright.js misses poplar_fence. Add poplar_fence. Story data was not edited."
-    },
-    {
-      "code": "partial-family",
-      "at": "mayors_burden/feud objective 3",
-      "file": "packs/saga_bp/scripts/stories/side_bold.js:633",
-      "reason": "Active O38 lead patch, not fixed. FENCES in side_bold.js has 12 of 13 vanilla fences and misses poplar_fence. Add poplar_fence to that constant. Not edited here."
-    },
-    {
-      "code": "partial-family",
-      "at": "edges_of_map/mouth objective 2",
-      "file": "packs/saga_bp/scripts/stories/side_bold.js:1004",
-      "reason": "Active O38 lead patch, not fixed. PLANKS in side_bold.js misses poplar_planks though the hint says any wood. Add poplar_planks. Story data was not edited."
     },
     {
       "code": "reward-scale",
       "at": "listening_deep/last_listen",
-      "file": "packs/saga_bp/scripts/stories/side_deep.js:220",
+      "file": "packs/saga_bp/scripts/stories/side_deep.js:191",
       "reason": "OWNER-PENDING O64, not rescaled. last_listen pays 10 levels, 200 Crowns, title Deep-Listener, 4 echo shards and 4 diamonds, above side scale 2-5 levels / 20-60 Crowns. Preserve the amounts."
-    },
-    {
-      "code": "finite-interact",
-      "at": "heart_hollis/vigil objective 1",
-      "file": "packs/saga_bp/scripts/stories/side_heart.js:807",
-      "reason": "Active O38 lead patch, not fixed. The long vigil lights 4 chapel candles (candle x6) and does not say to place new ones if they are gone. Add that line."
-    },
-    {
-      "code": "finite-interact",
-      "at": "w_pell_road/chapel objective 3",
-      "file": "packs/saga_bp/scripts/stories/wanderers.js:82",
-      "reason": "Active O38 lead patch, not fixed. Pell's candle step does not say to place one if gone. The act5 chapel signpost does not cover this chapter. Add: place a candle if they are gone."
-    },
-    {
-      "code": "finite-interact",
-      "at": "w_anwen_survey/rest objective 1",
-      "file": "packs/saga_bp/scripts/stories/wanderers.js:218",
-      "reason": "Active O38 lead patch, not fixed. The observatory lodestone (lodestone x1) can be mined, and the hint only says to tap it. Add: place a lodestone if it is gone."
-    },
-    {
-      "code": "partial-family",
-      "at": "w_vesk_home/name objective 1",
-      "file": "packs/saga_bp/scripts/stories/wanderers.js:642",
-      "reason": "Active O38 lead patch, not fixed. SAPLINGS in wanderers.js misses bamboo_sapling and poplar_sapling though the hint says any sapling. Add both ids. Not edited here."
     }
   ]
 }

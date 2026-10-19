@@ -39,8 +39,8 @@ const WEST = { x: -1400, z: -120 };
 const FORGE = { x: -40, z: 28 };
 
 const NIGHT_MOBS = ["minecraft:zombie", "minecraft:skeleton", "minecraft:spider", "minecraft:creeper", "minecraft:husk", "minecraft:stray"];
-const FENCES = ["minecraft:oak_fence", "minecraft:spruce_fence", "minecraft:birch_fence", "minecraft:jungle_fence", "minecraft:acacia_fence", "minecraft:dark_oak_fence", "minecraft:mangrove_fence", "minecraft:cherry_fence", "minecraft:bamboo_fence", "minecraft:pale_oak_fence", "minecraft:crimson_fence", "minecraft:warped_fence"];
-const PLANKS = ["minecraft:oak_planks", "minecraft:spruce_planks", "minecraft:birch_planks", "minecraft:jungle_planks", "minecraft:acacia_planks", "minecraft:dark_oak_planks", "minecraft:mangrove_planks", "minecraft:cherry_planks", "minecraft:bamboo_planks", "minecraft:pale_oak_planks", "minecraft:crimson_planks", "minecraft:warped_planks"];
+const FENCES = ["minecraft:oak_fence", "minecraft:spruce_fence", "minecraft:birch_fence", "minecraft:jungle_fence", "minecraft:acacia_fence", "minecraft:dark_oak_fence", "minecraft:mangrove_fence", "minecraft:cherry_fence", "minecraft:bamboo_fence", "minecraft:pale_oak_fence", "minecraft:poplar_fence", "minecraft:crimson_fence", "minecraft:warped_fence"];
+const PLANKS = ["minecraft:oak_planks", "minecraft:spruce_planks", "minecraft:birch_planks", "minecraft:jungle_planks", "minecraft:acacia_planks", "minecraft:dark_oak_planks", "minecraft:mangrove_planks", "minecraft:cherry_planks", "minecraft:bamboo_planks", "minecraft:pale_oak_planks", "minecraft:poplar_planks", "minecraft:crimson_planks", "minecraft:warped_planks"];
 const BOATS = ["minecraft:boat", "minecraft:chest_boat"];
 
 /** @type {Story} */
