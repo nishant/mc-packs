@@ -37,3 +37,35 @@ test("O43: a saved profile and saved text are never changed", async () => {
     assert.equal(sim.props.get("welcome:settings"), saved);
   }
 });
+
+test("O43: two joins inside one ask window both get the complete generic list, from one ask", async () => {
+  const sim = await bundleWorld();
+  let pings = 0;
+  const sys = sim.server.system;
+  const orig = sys.sendScriptEvent;
+  sys.sendScriptEvent = (id, message) => {
+    orig(id, message);
+    if (id === "realm:help_ping") {
+      pings++;
+      for (const p of ["saga_bp", "claims_bp"]) orig("realm:help_pong", p);
+    }
+  };
+  const a = sim.join("Ann");
+  sim.game.emit("world.after.playerSpawn", { player: a, initialSpawn: true });
+  sim.step(3);
+  const b = sim.join("Bob");
+  sim.game.emit("world.after.playerSpawn", { player: b, initialSpawn: true });
+  const texts = [];
+  for (let i = 0; i < 2; i++) {
+    const w = await sim.nextForm(600);
+    texts.push(w.form.bodyText);
+    sim.answer({ canceled: false, selection: 0 });
+  }
+  for (const t of texts) {
+    assert.match(t, /realm:saga/);
+    assert.match(t, /realm:claim/);
+  }
+  assert.equal(pings, 1, "one ask for both joins");
+  assert.equal(sim.props.get("welcome:profile"), "generic");
+  assert.equal(sim.props.has("welcome:settings"), false);
+});

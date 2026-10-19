@@ -68,20 +68,28 @@ let askedAt = -Infinity;
 /** @type {Set<Set<string>>} answer sets of pings still waiting */
 const pongs = new Set();
 
+/** @type {Promise<void> | undefined} the ping in flight: a join during it waits for the same answer */
+let asking;
+
 /** Asks which packs are installed (each answers /realm:help's ping with its folder), at most once a minute. */
-async function askInstalled() {
-  if (system.currentTick - askedAt < 1200) return;
+function askInstalled() {
+  if (asking) return asking;
+  if (system.currentTick - askedAt < 1200) return Promise.resolve();
   askedAt = system.currentTick;
-  /** @type {Set<string>} */
-  const got = new Set(["welcome_bp"]);
-  pongs.add(got);
-  try {
-    system.sendScriptEvent("realm:help_ping", "");
-    await system.waitTicks(10);
-  } finally {
-    pongs.delete(got);
-  }
-  installed = got;
+  asking = (async () => {
+    /** @type {Set<string>} */
+    const got = new Set(["welcome_bp"]);
+    pongs.add(got);
+    try {
+      system.sendScriptEvent("realm:help_ping", "");
+      await system.waitTicks(10);
+      installed = got;
+    } finally {
+      pongs.delete(got);
+      asking = undefined;
+    }
+  })();
+  return asking;
 }
 
 onScriptEvent(
