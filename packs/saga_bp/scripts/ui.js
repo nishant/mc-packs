@@ -14,6 +14,7 @@ import {
   currentChapter,
   currentStep,
   entries,
+  packsNeeded,
   favorById,
   favorOfDay,
   favorShape,
@@ -1691,7 +1692,8 @@ export async function currentPage(player) {
     for (const story of stories) {
       const e = list.find((x) => x.story.id === story.id);
       const cur = currentChapter(saga, story);
-      const step = e ? stepLine(player, e, saga) : cur && onHold(player.id, story, cur.chapter.id) ? "Waiting for your party" : `Talk to ${npcName(cur?.chapter.npc ?? story.giver)} to go on`;
+      const needs = e || cur ? [] : packsNeeded(story, saga);
+      const step = e ? stepLine(player, e, saga) : cur && onHold(player.id, story, cur.chapter.id) ? "Waiting for your party" : needs.length ? `Needs ${needs.join(" and ")} to go on` : `Talk to ${npcName(cur?.chapter.npc ?? story.giver)} to go on`;
       form.button(`${mark(story.id)}${story.kind === "main" ? "§l" : ""}${e?.pq ? "Party: " : ""}${story.title}§r\n§8${plain(step).slice(0, 60)}`);
       acts.push(() => chapterInfo(player, story));
     }

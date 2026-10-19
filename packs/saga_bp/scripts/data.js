@@ -538,6 +538,21 @@ export function currentChapter(saga, story) {
   return index < 0 ? undefined : { chapter: story.chapters[index], index };
 }
 
+/**
+ * The packs a started story waits for: its next chapter is hidden only because a `pack:<folder>` "on" its `when`
+ * asks for is gone (removed after the story began). [] when a chapter is on offer, or before the first scan answered.
+ * @param {Story} story @param {Saga} saga
+ */
+export function packsNeeded(story, saga) {
+  const st = saga.s[story.id];
+  if (!installed.ready || !st || st.fin || currentChapter(saga, story)) return [];
+  const next = story.chapters.find((c) => !st.dn.includes(c.id));
+  if (!next?.when) return [];
+  return Object.entries(next.when)
+    .filter(([k, v]) => k.startsWith("pack:") && v === "on" && !installed.set.has(k.slice(5)))
+    .map(([k]) => k.slice(5));
+}
+
 /** "Chapter 3 of 9": the place among the chapters this player gets. @param {Saga} saga @param {Story} story @param {number} index */
 export function chapterNumber(saga, story, index) {
   const st = saga.s[story.id];
