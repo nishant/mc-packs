@@ -92,10 +92,23 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   referencing a prefab in the same chapter may establish the overlap; ordinary trees/logs, crafting, geodes,
   inventory or party sources are alternates. Separately flag mined-out interact targets such as
   `act4_seals/tide_echo`'s sea lanterns. The urgent release inventories these risks; it does not implement W7.
+  **Done in `fc79476fad977d0f416d8e076c47aa7f3ea8f466`, `5582b32c795a959feccd27ae497e5cb3bc33e9e2`
+  and `4a06bf364eaef4bab00d91ae793f318cb49cf40b`:** the checker enforces these rules, seven partial-family
+  findings and thirteen finite-interact hints are corrected, and only four explicitly owner-pending O64 rewards
+  remain allowed unchanged. Real story-data tests fail before and pass after. Native pre-content data produces
+  exactly five expected failures; the fixed data passes actual poplar fence/planks, bamboo/poplar sapling and
+  mined-out replacement controls (`bcf5b3db56069e48e39494c6718fedcc64c3fbd8`). Placements/mining are native;
+  candle taps replay the actual handler because native item taps report `isFirstEvent: false`, not physical acceptance.
 - O39 check-ids: per-kind id sets, particle and sound ids from bedrock-samples, and bare ids in data lists and regex
   alternations (the `dead_bush` and `note_block` cases).
+  **Checker done in `fc79476fad977d0f416d8e076c47aa7f3ea8f466`:** typed kinds and offline pinned,
+  attributed particle/sound catalogs are covered by RED/GREEN tests. Known individual exceptions remain explicit;
+  the Easy Building/Elite data corrections still belong to W9, not a claim that allowing an exception fixed it.
 - O40 docs/STORY_BIBLE.md "As shipped": Gristle and NO_KITCHEN, Prewitt, Brynn, Rosalind, Saltwife; add the writing
   rules (no reused names or wanderer ids; list every color and wood).
+  **Done in `5582b32c795a959feccd27ae497e5cb3bc33e9e2`:** the as-shipped facts, distinct character names and
+  writing rules match the real story data. Prewitt's `who.id` appears in `smugglers_run`; his vote-counting mention
+  in `mayors_burden` is not another objective id. The content/Bible checks pass with the four O64 amounts preserved.
 
 ## T8. Operator tools
 
@@ -130,10 +143,28 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 - O54 (medium, perf) 237 `scriptEventReceive` subscribers in the bundle wake on every `realm:` event (most of its
   ~550 calls/tick): one listener per pack that dispatches by id, with the test hooks and help_ping folded in.
+  **Implemented in `fa75e390178e1b84a1bae680ff2ff19c50e06db3` and `d61e544196df98e29141af73cd6cfc9ee168b02f`, not yet terminal:** all 67
+  real pack modules execute with one listener each offline; native standalone protocols and the genuine 67-member
+  bundle's help/diag/shared-store smoke pass. Full counter/order/late/unsubscribe attribution and matched
+  W13-before/W11-after performance remain queued; callback-count reduction is not a measured speedup.
 - O55 (medium) maps_bp's warmth line (main.js:571) redraws every 40 ticks with a 45-tick hold, without `steady` and
   without listening, so the steady lines (saga, build, expedition, relics, elytra) wait while a map is held.
+  **Server behavior done in `537cbaff447c2429cffc9edd6d36f801832b9207`:** rank 35, a listening hold and continued announcements preserve notes
+  and higher steady ranks. Identical fixed-harness native runs show five genuine before failures and all after
+  assertions passing, including lower/background ranks and putting the map away. Pixel acceptance remains W2.
 - O56 Tighten check-actionbar's helper detection so cases like O49's FloatingPanels.js:318 are caught.
+  **Done in `ce34c1ab0111cba0f0bbb8035c32a4101a245bb3`:** per-file/import/function matching, request-before-write order and alias checks catch
+  the old bypass fixtures and real build writes; all writes found are corrected, including O49's FloatingPanels.
+  Existing HUD/Stats exceptions remain explicitly pinned; an anonymous-function allowance is not a universal
+  proof against every possible future anonymous write.
 - O57 One shared weather listener (`realm:weather_plan` `now` plus `realm:weather_ask`) instead of 7 separate guesses.
+  **Done in `bb81fb931a1f276a7d303f6b6694ee962fb8aa2e`:** six packs that actually keep a weather guess
+  learn the enabled Almanac's plan and ask once after load; Rainbows has no saved guess and remains unchanged.
+  Genuine native old-data RED after restart keeps all six keys null with zero native weather changes; the fixed
+  code learns Thunder with zero native changes, and a separate strict no-Almanac restart/fallback case passes.
+  A fixture read/clear protocol mismatch was corrected in `1ff75be80d72126413a9066c8c8fd20a644e8ecf`;
+  the original failed attempt is retained. Startup ask coalescing has offline coverage; this late-attaching
+  native observer saw zero initial ask/plan messages, so that vacuous count is not native coalescing certification.
 
 ## T12. Stability, the harness and CI
 
@@ -150,8 +181,29 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   Validate ticking-area inputs and surface command rejection: an invalid circle radius 6 in the first O74
   fixture was swallowed and became a 400-tick chunk timeout. The urgent fixture now uses legal radius 4;
   fail-fast harness validation remains W12a.
+  **Implemented in `1659017eacb60cbc7adb53cdf28caca8061e06e4` and
+  `8ff1e461cefa3570db7a4163e59141299d2984f5`, performance acceptance still queued:** both real two-worker
+  cold-cache races generate exactly one ready template; controlled native legacy spawn 261,5 produces two RED
+  assertions and is re-pinned to 0,0 for GREEN. Radius/rejection native checks pass. All thirteen old Windows
+  recipe failures now pass on current source, without retry, flaky or skipped rows, in official suite mode.
+  The new fail-fast exposed restart-name collisions: only successfully recorded harness-owned ticking areas
+  are cleaned between phases. Rain's fixture now proves its own dry-sand/seabed classifier readiness rather
+  than assuming a terrain write was settled; no production Rain logic was changed. Its original first-push
+  transient cause was not determined by the old counters. Guilds now breaks all 30 pumpkins in 30 native
+  attempts after restart (zero left); original 1/22-left receipts remain preserved. Explicit-y player spawning's
+  pre-existing best-effort `loadArea` catch remains a disclosed harness limitation. Real matched full-window
+  population/performance gates remain the W1 performance stream (wave 5), not inferred from the guard's unit tests.
 - O61 Harness on the bundle as one script context (catches C13 canceled-event bugs); a BDS smoke test in CI;
   `tools/release.mjs` for the whole publish order.
+  **Implemented in `1659017eacb60cbc7adb53cdf28caca8061e06e4`, C13 still queued:** strict native real
+  Realm Bundle plus all resources passes with 67/67 help/diag replies and one shared 67-pack registry.
+  The full-fidelity cancellation/protocol fixture was independently approved at
+  `41d3540d3e5ddaa4c1d5e77c63ee87885bf4576d` and registered in the official suite by
+  `5250425951666d93e2e6aa283a187b8eac3fff8a`; its first native execution remains queued, not counted as a
+  PASS. Suite preparation now builds/instruments the genuine archive instead of running a literal `<stage>`
+  placeholder. Its review also exposed Townsfolk's missing canceled-entity guard:
+  `649795d3fcd68883b7007dcdbd4190a04671b515` fixes actual matching-NPC callbacks (two RED tests, four GREEN)
+  before any conversation or operator-editor work is scheduled. Final merged review/CI/native gates remain.
 - O62 Expedition: an option to announce clears only from a chosen level; forget leaves saved structures behind.
 
 ## T13. Owner-reported bugs from the live Realm (October 19; screenshots in `media/`)
