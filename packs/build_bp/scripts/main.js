@@ -43,6 +43,7 @@ import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
 import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "./utils/Items.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
+import { onScriptEvent } from "./script-events.js";
 
 const GETBOOK_COST = 5;
 const anchoredAtMs = new Map();
@@ -131,13 +132,13 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
     command(r, "realm:build_redo", "Redo the last undone Effortless Building placement", performRedo);
 });
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+    "realm:help_ping",
     ({ id }) => {
         if (id === "realm:help_ping") {
             system.sendScriptEvent("realm:help_pong", "build_bp");
         }
     },
-    { namespaces: ["realm"] }
 );
 
 function welcome(player) {
@@ -706,10 +707,10 @@ world.afterEvents.playerPlaceBlock.subscribe(ev => {
         } catch { }
     }
     setAnchor(player, facePos, blockTypeId, states);
+    lockActionBar(player.id, 1000);
     player.onScreenDisplay.setActionBar(
         t("eb.bar.anchor_set", facePos.x, facePos.y, facePos.z)
     );
-    lockActionBar(player.id, 1000);
 });
 let swingSupported = false;
 try {
@@ -861,8 +862,8 @@ system.runInterval(() => {
                 if (state.mode !== "disable") {
                     savedModeBeforeToggle.set(player.id, state.mode);
                     setMode(player, "disable");
-                    player.onScreenDisplay.setActionBar(t("eb.bar.toggle_disabled"));
                     lockActionBar(player.id, 2000);
+                    player.onScreenDisplay.setActionBar(t("eb.bar.toggle_disabled"));
                 } else {
                     const saved = savedModeBeforeToggle.get(player.id);
                     if (saved) {
@@ -870,8 +871,8 @@ system.runInterval(() => {
                         setMode(player, saved);
                         const entry = MODE_LIST.find(m => m.id === saved);
                         const label = entry ? entry.label.replace(/§./g, "") : saved;
-                        player.onScreenDisplay.setActionBar(t("eb.bar.toggle_restored", label));
                         lockActionBar(player.id, 2000);
+                        player.onScreenDisplay.setActionBar(t("eb.bar.toggle_restored", label));
                     }
                 }
             } else {

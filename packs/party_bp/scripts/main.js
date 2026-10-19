@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Pl
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Each party is one world property (party:p:<code>), so members who are offline stay in theirs and however many
 // parties a big server collects, none gets near a property's size limit. Every member
@@ -337,7 +338,8 @@ const HUD_STALE_TICKS = 200;
 
 // Other packs' notes and steady lines (an expedition's run line, the Elytra HUD) hold the bar: the
 // party line waits, so the two don't take turns.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:actionbar", "realm:hud_state"],
   ({ id, message }) => {
     if (id !== "realm:actionbar" && id !== "realm:hud_state") return;
     try {
@@ -357,7 +359,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // The HUD, every 2 seconds: mates within hudRange, nearest first. Nothing is written when nobody is
@@ -628,7 +629,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
 // players (a big server after a few months), save one party (`legacy`: its code) the way older versions did (read
 // after the next restart), or `report` in chat how many parties there are and whether that code is one.
 // /scriptevent realm:party_test {"fill":400}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:party_test",
   (ev) => {
     if (ev.id !== "realm:party_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -653,11 +655,11 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[party] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:party_members_ping"],
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "party_bp");
     else if (id === "realm:party_members_ping") {
@@ -668,5 +670,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

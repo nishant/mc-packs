@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } fr
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // A nickname shows above the player's head (Player.nameTag). The stable Script API has no chat
 // events, so chat, the player list and death messages keep the gamertag.
@@ -303,9 +304,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "nick_bp");
   },
-  { namespaces: ["realm"] }
 );

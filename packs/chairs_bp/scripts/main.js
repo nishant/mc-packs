@@ -2,6 +2,7 @@ import "./diag.js";
 import { Block, CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const SEAT = "realm:seat"; // entities/seat.json: invisible, invulnerable, one rider
 const BLOCK_TAG = "chairs:block"; // on seats placed on a stair or slab (not by /realm:sit)
@@ -242,7 +243,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:access_check_result"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "chairs_bp");
     else if (id === "realm:access_check_result") {
@@ -253,5 +255,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

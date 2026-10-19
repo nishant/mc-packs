@@ -34,6 +34,7 @@ import { holdTitle, isSlot, questCode, sideBoxes } from "./side.js";
 import { STORIES } from "./stories.js";
 import { FAVORS, WANDERERS } from "./stories/index.js";
 import { DIMENSIONS, OVERWORLD, PACK, across, alive, busy, cancelInteractions, claim, clock, dialog, dist3, exclusive, groundAt, itemName, lifecycle, npcName, online, open as openBlock, plain, release, send, show, wait, waterTop } from "./util.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -769,7 +770,8 @@ export function weatherOk(obj, dim) {
  * @type {{ next: { weather: string, at: number }[] } | undefined}
  */
 let weatherPlan;
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:weather_plan",
   ({ id, message }) => {
     if (id !== "realm:weather_plan") return;
     try {
@@ -779,7 +781,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       weatherPlan = undefined;
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /**

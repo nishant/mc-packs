@@ -369,12 +369,15 @@ const configUrl = dataUrl(readFileSync(new URL("../packs/stash_bp/scripts/config
 const { CONFIG } = await import(configUrl);
 Object.assign(mc.defaults, Object.fromEntries(["sneakTap", "sortHotbar", "locks", "cooldownTicks", "stashNamedItems", "stashGear", "maxLocks"].map((k) => [k, CONFIG[k]])));
 const mainServerUrl = dataUrl(`const m = globalThis.__mc.server; export const { Block, BlockTypes, BlockVolume, CommandPermissionLevel, Container, CustomCommandParamType, CustomCommandStatus, Dimension, Direction, ItemStack, Player, system, world } = m;`);
+// The router keeps its handlers in module state: each copy of main.js gets its own copy of script-events.js (a pack loads once in the game).
+const eventsSource = readFileSync(new URL("../packs/stash_bp/scripts/script-events.js", import.meta.url), "utf8").replace('"@minecraft/server"', JSON.stringify(mainServerUrl));
 const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const refillFromPages = () => undefined; export const setOpPages = () => ({ ok: true, message: "" });`);
 const mainSource = readFileSync(new URL("../packs/stash_bp/scripts/main.js", import.meta.url), "utf8")
   .replace('import "./diag.js";', "")
   .replace('"@minecraft/server-ui"', JSON.stringify(uiUrl))
   .replace('"@minecraft/server"', JSON.stringify(mainServerUrl))
   .replace('"./config.js"', JSON.stringify(configUrl))
+  .replace('"./script-events.js"', '"__events__"')
   .replace('"./pages.js"', JSON.stringify(pagesStubUrl))
   .replace('"./settings.js"', JSON.stringify(settingsUrl));
 const storeSource = readFileSync(new URL("../packs/stash_bp/scripts/page-store.js", import.meta.url), "utf8")
@@ -1928,7 +1931,8 @@ let mainCopies = 0;
 async function loadMain() {
   const before = Object.fromEntries(Object.entries(mc.after).map(([k, v]) => [k, v.length]));
   const intervals = mc.intervals.length;
-  await import(dataUrl(`${mainSource}\n// copy ${++mainCopies}`));
+  const copy = ++mainCopies;
+  await import(dataUrl(`${mainSource.replace('"__events__"', JSON.stringify(dataUrl(`${eventsSource}\n// copy ${copy}`)))}\n// copy ${copy}`));
   return () => {
     for (const k of Object.keys(mc.after)) mc.after[k].length = before[k] ?? 0;
     mc.intervals.length = intervals;

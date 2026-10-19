@@ -10,6 +10,7 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -724,7 +725,15 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   }
 });
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:help_pong",
+    "realm:bounty_targets_ping",
+    "realm:champion_slain",
+    "realm:npc_talk",
+    "realm:npc_choose",
+    "realm:bounty_rival",
+  ],
   ({ id, message }) => {
     if (id === "realm:help_pong") {
       if (message === "elite_bp") eliteSeen = true;
@@ -773,7 +782,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[bounty] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -972,9 +980,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "bounty_bp");
   },
-  { namespaces: ["realm"] },
 );

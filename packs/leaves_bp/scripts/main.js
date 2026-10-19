@@ -2,6 +2,7 @@ import "./diag.js";
 import { system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // After a player breaks a log, the natural leaves around it that no longer reach a log within
 // logDistance steps (through leaves, as vanilla counts) decay over the next few seconds, with their
@@ -268,9 +269,9 @@ system.runInterval(() => {
 }, 1);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "leaves_bp");
   },
-  { namespaces: ["realm"] }
 );

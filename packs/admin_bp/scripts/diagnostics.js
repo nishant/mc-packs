@@ -5,6 +5,7 @@
 // forget is sent.
 import { CommandPermissionLevel, system, world } from "@minecraft/server";
 import { ActionFormData, MessageFormData } from "@minecraft/server-ui";
+import { onScriptEvent } from "./script-events.js";
 
 const TITLE = "Realm Configuration";
 /** Over this many ms per tick a pack is over budget (a typical pack needs 0.15 or less). */
@@ -33,7 +34,8 @@ const forgets = new Map();
 const forgetWaits = new Set();
 let seq = 0;
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:diag_pong", "realm:diag_forgot"],
   ({ id, message }) => {
     if (id !== "realm:diag_pong" && id !== "realm:diag_forgot") return;
     /** @type {any} */
@@ -47,7 +49,6 @@ system.afterEvents.scriptEventReceive.subscribe(
     if (id === "realm:diag_pong") pongs.get(m.id)?.set(m.pack, m);
     else if (forgetWaits.has(m.id)) forgets.set(m.id, m);
   },
-  { namespaces: ["realm"] }
 );
 
 /** @param {import("@minecraft/server").Player} p */

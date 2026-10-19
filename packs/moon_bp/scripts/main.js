@@ -18,6 +18,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { isProtected } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Tonight is one world property, "moon:night" -> JSON { d: day number, s: state, a: 1 while the night is on,
 // alive: [player ids still in the running for the Blood Moon reward] }.
@@ -57,6 +58,8 @@ let seconds = 0;
 let ready = false;
 /** Is it raining or storming in the overworld? Clouds hide the moon: no moon fog then. */
 let wet = false;
+/** Has a weatherChange come in since the scripts started? It is newer than the saved weather and any plan. */
+let weatherSeen = false;
 /** Fog id we pushed per player ("" or absent = none). @type {Map<string, string>} */
 const fogs = new Map();
 /** Players already counted as having seen tonight's moon. @type {Set<string>} */
@@ -314,6 +317,7 @@ world.afterEvents.worldLoad.subscribe(() => {
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
   if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
+  weatherSeen = true;
   wet = newWeather !== WeatherType.Clear;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
@@ -321,6 +325,36 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
     console.warn(`[moon] ${e}`);
   }
 });
+
+/** The overworld weather a realm:weather_plan names right now, or undefined (the Almanac is off, another dimension, garbage). @param {string} message */
+function planNow(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || m.off === true) return undefined;
+    const dim = m.dim ?? m.dimension;
+    if (typeof dim === "string" && dim.replace(/^minecraft:/, "") !== "overworld") return undefined;
+    return m.now === WeatherType.Clear || m.now === WeatherType.Rain || m.now === WeatherType.Thunder ? /** @type {WeatherType} */ (m.now) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The Weather Almanac (if it's installed) knows the weather now: it sends its plan when it changes and answers
+// realm:weather_ask. Until a real weatherChange has come in, a pack added in the middle of a storm takes it from there.
+onScriptEvent("realm:weather_plan", ({ message }) => {
+  if (weatherSeen) return; // the game's own report is newer
+  const now = planNow(message);
+  if (!now || world.getDynamicProperty(PROP_WEATHER) === now) return;
+  wet = now !== WeatherType.Clear;
+  try {
+    world.setDynamicProperty(PROP_WEATHER, now);
+  } catch (e) {
+    console.warn(`[moon] ${e}`);
+  }
+});
+
+// Ask the Weather Almanac (if it's installed) for its plan a little later: every weather pack asks, and it answers once.
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:weather_ask", "{}"), 100));
 
 system.runInterval(() => {
   if (!ready) return;
@@ -847,7 +881,8 @@ function skyRequest(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:sky_request"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "moon_bp");
     else if (id === "realm:sky_request") {
@@ -858,5 +893,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, It
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // One world property per goal: "goals:g:<id>" -> JSON Goal. Contributions are kept per player id
 // ([name, amount]), a few dozen bytes each, so a goal stays far below the 32 KB property limit.
@@ -598,7 +599,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // Scenario tests (BDS harness): every open goal gets `donors` more contributors (offline players, 1 item each), as a
 // long goal on a big server does. Only from the server console: /scriptevent realm:goals_test {"donors":900}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:goals_test",
   (ev) => {
     if (ev.id !== "realm:goals_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -613,13 +615,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[goals] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "goals_bp");
   },
-  { namespaces: ["realm"] },
 );

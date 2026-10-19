@@ -47,6 +47,7 @@ import { FAVORS, WANDERERS, WANDER_TEMPLATES } from "./stories/index.js";
 import { choose, clearBox, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
 import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
 import { PACK, busy, cancelInteractions, online, send } from "./util.js";
+import { onScriptEvent } from "./script-events.js";
 
 const LOOP_TICKS = 20; // the player loop runs once a second
 const TRACKER_RUNS = 2; // the tracker every 2 runs
@@ -420,7 +421,32 @@ function debugFlags(player, st, flags) {
   }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:seals_ping",
+    "realm:help_pong",
+    "realm:npc_flags_ping",
+    "realm:saga_progress_ping",
+    "realm:wander_ping",
+    "realm:place_ping",
+    "realm:track_ping",
+    "realm:wander_spawn",
+    "realm:wander_turn",
+    "realm:wander_gone",
+    "realm:bounty_targets",
+    "realm:map_leg",
+    "realm:affinity",
+    "realm:calendar",
+    "realm:calling",
+    "realm:npc_talk",
+    "realm:npc_choose",
+    "realm:champion_slain",
+    "realm:actionbar",
+    "realm:saga_debug",
+    "realm:sky_event",
+    "realm:moon",
+    "realm:quest_done",
+  ],
   ({ id, message, sourceEntity }) => {
     if (id === "realm:seals_ping") {
       for (const p of world.getAllPlayers()) sendSeals(p, true);
@@ -532,7 +558,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[saga] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -703,9 +728,9 @@ function checkStories() {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "saga_bp");
   },
-  { namespaces: ["realm"] },
 );

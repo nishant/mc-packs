@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Player, WeatherType, syste
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Each player's journal is one player property, "journal:data" -> JSON
 // { e: { page: [entry ids] }, l: { "page:entry": label } (labels of entries not in config.js),
@@ -617,7 +618,8 @@ function witnesses(msg) {
   });
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:journal", "realm:sky_event", "realm:moon"],
   ({ id, message }) => {
     if (id !== "realm:journal" && id !== "realm:sky_event" && id !== "realm:moon") return;
     /** @type {any} */
@@ -650,7 +652,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[journal] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -760,9 +761,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "journal_bp");
   },
-  { namespaces: ["realm"] },
 );

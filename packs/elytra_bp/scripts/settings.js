@@ -267,6 +267,8 @@ function changed(key, player) {
 // Realm Settings protocol
 // ---------------------------------------------------------------------------
 
+import { onScriptEvent } from "./script-events.js";
+
 /**
  * Why a player's preference does nothing right now because of the operators, in words for /realm:prefs ("Coordinates
  * HUD is Disabled for the whole realm"), or undefined when the player's choice counts.
@@ -366,22 +368,19 @@ function applySet(req) {
   system.sendScriptEvent("realm:cfg_ack", JSON.stringify(ack));
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
-    if (id !== "realm:cfg_ping" && id !== "realm:cfg_set" && id !== "realm:cfg_reset") return;
-    try {
-      const req = JSON.parse(message);
-      if (!req || typeof req !== "object") return;
-      if (id === "realm:cfg_ping") answer(req);
-      else if (req.pack !== PACK) return;
-      else if (id === "realm:cfg_set") applySet(req);
-      else {
-        reset();
-        system.sendScriptEvent("realm:cfg_ack", JSON.stringify({ id: req.id, pack: PACK, key: "*", ok: true }));
-      }
-    } catch (e) {
-      console.warn(`[${PREFIX}] settings: ${e}`);
+onScriptEvent(["realm:cfg_ping", "realm:cfg_set", "realm:cfg_reset"], ({ id, message }) => {
+  if (id !== "realm:cfg_ping" && id !== "realm:cfg_set" && id !== "realm:cfg_reset") return;
+  try {
+    const req = JSON.parse(message);
+    if (!req || typeof req !== "object") return;
+    if (id === "realm:cfg_ping") answer(req);
+    else if (req.pack !== PACK) return;
+    else if (id === "realm:cfg_set") applySet(req);
+    else {
+      reset();
+      system.sendScriptEvent("realm:cfg_ack", JSON.stringify({ id: req.id, pack: PACK, key: "*", ok: true }));
     }
-  },
-  { namespaces: ["realm"] }
-);
+  } catch (e) {
+    console.warn(`[${PREFIX}] settings: ${e}`);
+  }
+});

@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Entity, Player, system, wo
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
 import { isSlot, sideBoxes } from "./side.js";
+import { onScriptEvent } from "./script-events.js";
 
 // The "on" preference (player property "mobhp:pref") and the world options live in settings.js.
 
@@ -221,9 +222,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "mobhp_bp");
   },
-  { namespaces: ["realm"] }
 );

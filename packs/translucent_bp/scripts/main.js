@@ -4,6 +4,7 @@
 import "./diag.js";
 import { Player, system, world } from "@minecraft/server";
 import { getFor, onChange } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP = "realm:solid_tools";
 
@@ -30,9 +31,9 @@ onChange((key, player) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "translucent_bp");
   },
-  { namespaces: ["realm"] },
 );

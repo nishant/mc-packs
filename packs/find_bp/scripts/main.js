@@ -17,6 +17,7 @@ import {
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_SHARD = "find:idx:"; // world: find:idx:0, find:idx:1, … JSON shards of the index
 const SHARD_CHARS = 30000; // Bedrock caps a string property at ~32k characters
@@ -791,7 +792,8 @@ world.afterEvents.worldLoad.subscribe(() =>
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:access_check_result", "realm:actionbar"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "find_bp");
     else if (id === "realm:access_check_result") {
@@ -808,5 +810,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

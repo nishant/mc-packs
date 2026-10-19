@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG, DEFAULTS } from "./config.js";
 import { RELEASE } from "./release.js";
 import { get, set } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_NEWS = "news:news"; // world: JSON { title, body }
 const PROP_REVISION = "news:revision"; // world: bumped when news should be re-shown
@@ -598,10 +599,10 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:help_pong"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "news_bp");
     else if (id === "realm:help_pong") for (const got of pongs) got.add(message); // askInstalled
   },
-  { namespaces: ["realm"] }
 );

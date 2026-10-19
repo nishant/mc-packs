@@ -12,6 +12,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { allZones, provideZones } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 // One world property per claim: "claims:c:<id>" → JSON Claim. A claim is a square, top to bottom of
 // its dimension, centered on x, z and reaching r blocks each way.
@@ -33,7 +34,8 @@ const partyCode = (player) => player.getTags().find((t) => t.startsWith(PARTY_TA
 // that got the same code, opens nothing. Kept in memory; asked for again when the world loads.
 /** @type {Map<string, Set<string>>} party code -> member ids */
 const partyMembers = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:party_members",
   ({ id, message }) => {
     if (id !== "realm:party_members") return;
     try {
@@ -46,7 +48,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[claims] party_members: ${e}`);
     }
   },
-  { namespaces: ["realm"] }
 );
 system.runTimeout(() => system.sendScriptEvent("realm:party_members_ping", "{}"), 60);
 
@@ -614,7 +615,8 @@ function answerAccess(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:claims_check", "realm:access_check"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "claims_bp");
     else if (id === "realm:claims_check" || id === "realm:access_check") {
@@ -626,5 +628,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

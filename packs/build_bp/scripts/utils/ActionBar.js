@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { system } from "@minecraft/server";
+import { onScriptEvent } from "../script-events.js";
 
 const PACK = "build_bp";
 const STEADY = 30;
@@ -60,7 +61,8 @@ export function cleanupActionBar(playerId) {
 }
 
 try {
-    system.afterEvents.scriptEventReceive.subscribe(
+    onScriptEvent(
+        "realm:actionbar",
         ({ id, message }) => {
             if (id !== "realm:actionbar") return;
             try {
@@ -72,6 +74,5 @@ try {
                 if ((externalLocks.get(req.player) ?? 0) < exp) externalLocks.set(req.player, exp);
             } catch {}
         },
-        { namespaces: ["realm"] }
     );
 } catch {}

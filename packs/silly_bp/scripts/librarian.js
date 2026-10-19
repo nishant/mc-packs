@@ -10,6 +10,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 export const PROP_LIB_BOOK = "silly:lib_book";
 export const LOCKED_TAG = "realm:locked_librarian";
@@ -389,7 +390,8 @@ export function initLibrarianBookLock(hooks = {}) {
   });
 
   // Headless BDS test hook: SimulatedPlayer.interactWithEntity returns false on villager_v2 when holding an Enchanted Book.
-  system.afterEvents.scriptEventReceive.subscribe(
+  onScriptEvent(
+    "realm:silly_villager_interact",
     ({ id, message }) => {
       if (id !== "realm:silly_villager_interact") return;
       try {
@@ -401,6 +403,5 @@ export function initLibrarianBookLock(hooks = {}) {
         console.warn(`[silly] librarian scriptevent: ${e}`);
       }
     },
-    { namespaces: ["realm"] },
   );
 }

@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Playe
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {"miners" | "growers" | "wardens" | "wayfarers"} Guild */
 /** @typedef {import("@minecraft/server").ScoreboardObjective} ScoreboardObjective */
@@ -289,7 +290,14 @@ function championSlain(m) {
   }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:quest_done",
+    "realm:rep_add",
+    "realm:champion_slain",
+    "realm:npc_talk",
+    "realm:npc_choose",
+  ],
   ({ id, message }) => {
     if (id !== "realm:quest_done" && id !== "realm:rep_add" && id !== "realm:champion_slain" && id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     let m;
@@ -314,7 +322,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[guilds] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -734,9 +741,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "guilds_bp");
   },
-  { namespaces: ["realm"] },
 );

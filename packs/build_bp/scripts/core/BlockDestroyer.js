@@ -550,8 +550,8 @@ export function destroyBlocks(player, positions, onComplete) {
 
         if (idx < capped.length) {
             try {
-                player.onScreenDisplay.setActionBar(t("eb.bar.destroying", (capped.length - idx) + pending.length));
                 lockActionBar(player.id, 200);
+                player.onScreenDisplay.setActionBar(t("eb.bar.destroying", (capped.length - idx) + pending.length));
             } catch { }
             return;
         }
@@ -561,8 +561,8 @@ export function destroyBlocks(player, positions, onComplete) {
             capped = pending.splice(0);
             idx    = 0;
             try {
-                player.onScreenDisplay.setActionBar(t("eb.bar.destroying", capped.length));
                 lockActionBar(player.id, 200);
+                player.onScreenDisplay.setActionBar(t("eb.bar.destroying", capped.length));
             } catch { }
             return;
         }

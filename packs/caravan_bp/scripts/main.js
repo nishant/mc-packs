@@ -17,6 +17,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // A visit is one saved object: where the caravan is, until when, its traders' entity ids and what's left
 // in stock. The traders are vanilla minecraft:npc entities with this pack as their owner tag (the Townsfolk
@@ -1227,7 +1228,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // Scenario tests (BDS harness): the caravan leaves now. Only from the server console:
 // /scriptevent realm:caravan_test {"action":"depart"}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:caravan_test",
   (ev) => {
     if (ev.id !== "realm:caravan_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -1236,13 +1238,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[caravan] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "caravan_bp");
   },
-  { namespaces: ["realm"] },
 );

@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { get } from "./settings.js";
 import { CONFIG } from "./config.js";
 import { allZones, provideZones, zoneHolds, zonesAt } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 // World properties:
 //   "zones:list"  JSON Zone[]: the safe zones made with /realm:zones
@@ -549,7 +550,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // realm:zones_open { player, action: "add" }: another pack's "Protect this area" button (Meteor Strikes).
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:zones_open",
   ({ id, message }) => {
     if (id !== "realm:zones_open") return;
     try {
@@ -562,13 +564,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[zones] ${e}`);
     }
   },
-  { namespaces: ["realm"] }
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "zones_bp");
   },
-  { namespaces: ["realm"] }
 );

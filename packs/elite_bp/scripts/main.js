@@ -15,6 +15,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { isProtected } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -1135,7 +1136,8 @@ function spawnRequested(req) {
   }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:moon", "realm:champion_spawn"],
   ({ id, message }) => {
     if (id !== "realm:moon" && id !== "realm:champion_spawn") return;
     let req;
@@ -1154,7 +1156,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[elite] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1416,9 +1417,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "elite_bp");
   },
-  { namespaces: ["realm"] },
 );

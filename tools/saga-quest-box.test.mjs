@@ -19,12 +19,13 @@ const objectivesSource = read("../packs/saga_bp/scripts/objectives.js");
 
 /** tools/side-shared.js run offline: the byte counting and the quest code the box is sent with. */
 function loadSide() {
-  const source = read("./side-shared.js").replace(/^import .*$/m, "").replace(/^export /gm, "");
+  const source = read("./side-shared.js").replace(/^import .*$/gm, "").replace(/^export /gm, "");
   const none = () => {};
   const signal = { subscribe: none };
   const context = {
     system: { currentTick: 0, afterEvents: { scriptEventReceive: signal }, runInterval: none, sendScriptEvent: none },
     world: { afterEvents: { playerLeave: signal }, getAllPlayers: () => [] },
+    onScriptEvent: none,
   };
   return vm.runInNewContext(`${source}\n;({ byteLength, questCode, QUEST_TEXT_BYTES })`, context);
 }

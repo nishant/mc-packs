@@ -18,6 +18,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { buttonSlots, initPages, openInvMenu, refillFromPages, setOpPages } from "./pages.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const containerTypes = new Set(CONFIG.containerTypes);
 const keepItems = new Set(CONFIG.keepItems);
@@ -1211,7 +1212,8 @@ function refillNeed(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:refill_need", "realm:access_check", "realm:access_check_result"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stash_bp");
     else if (id === "realm:refill_need") refillNeed(message);
@@ -1224,5 +1226,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

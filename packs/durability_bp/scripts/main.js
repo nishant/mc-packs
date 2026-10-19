@@ -2,6 +2,7 @@ import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Player property "durability:off" (true = warnings off) is the "off" preference in settings.js.
 
@@ -144,9 +145,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "durability_bp");
   },
-  { namespaces: ["realm"] }
 );

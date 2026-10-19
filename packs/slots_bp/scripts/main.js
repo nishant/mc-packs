@@ -12,6 +12,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { analyze, lineFor, payFor, spinReels } from "./reels.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // A slot machine: three reels drawn at random by the weights in config.js, paid from its table.
 // Played from the Slot Machine item or from a block an operator made a machine. Stakes are Crowns
@@ -806,10 +807,10 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "slots_bp");
   },
-  { namespaces: ["realm"] },
 );
 

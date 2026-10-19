@@ -14,6 +14,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, OPTIONS, set, setFor } from "./settings.js";
 import { COLORS, STATS } from "./stats.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("@minecraft/server").ScoreboardObjective} ScoreboardObjective */
 /** @typedef {(typeof STATS)[number]} Stat */
@@ -327,7 +328,8 @@ system.runInterval(() => {
   }
 }, 20);
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:actionbar", "realm:hud_state"],
   ({ id, message }) => {
     if (id !== "realm:actionbar" && id !== "realm:hud_state") return;
     try {
@@ -348,7 +350,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not for us
     }
   },
-  { namespaces: ["realm"] }
 );
 // Ask the HUD who sees it, rather than wait up to 5 seconds for its next update.
 world.afterEvents.worldLoad.subscribe(() => system.sendScriptEvent("realm:hud_ping", "{}"));
@@ -659,9 +660,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stats_bp");
   },
-  { namespaces: ["realm"] }
 );

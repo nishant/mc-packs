@@ -9,6 +9,7 @@
 import { CommandPermissionLevel, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { OP_COLOR, SETUP, SIZES, SIZE_OPTIONS } from "./presets.js";
+import { offScriptEvent, onScriptEvent } from "./script-events.js";
 
 const TITLE = "Realm Configuration";
 /** World: { d: {step: 1}, s: {step: 1}, f?: 1 finished, x?: 1 dismissed, size?: "small" | "large" } (only ids from SETUP). */
@@ -88,25 +89,22 @@ let listener;
 async function hearing(onEvent, fn) {
   waiting.add(onEvent);
   if (!listener) {
-    listener = system.afterEvents.scriptEventReceive.subscribe(
-      ({ id, message }) => {
-        for (const w of waiting) {
-          try {
-            w(id, message);
-          } catch {
-            // not a message for this one
-          }
+    listener = onScriptEvent("*", ({ id, message }) => {
+      for (const w of waiting) {
+        try {
+          w(id, message);
+        } catch {
+          // not a message for this one
         }
-      },
-      { namespaces: ["realm"] }
-    );
+      }
+    });
   }
   try {
     return await fn();
   } finally {
     waiting.delete(onEvent);
     if (!waiting.size && listener) {
-      system.afterEvents.scriptEventReceive.unsubscribe(listener);
+      offScriptEvent(listener);
       listener = undefined;
     }
   }

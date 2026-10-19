@@ -131,11 +131,16 @@ const diagSrc = readFileSync(new URL("../packs/find_bp/scripts/diag.js", import.
   'from "@minecraft/server"',
   `from ${JSON.stringify(serverUrl)}`,
 );
+const eventsSrc = readFileSync(new URL("../packs/find_bp/scripts/script-events.js", import.meta.url), "utf8").replace(
+  'from "@minecraft/server"',
+  `from ${JSON.stringify(serverUrl)}`,
+);
 const mainSrc = src
   .replace('import "./diag.js";', `import ${JSON.stringify(dataUrl(diagSrc))};`)
   .replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`)
   .replace('from "@minecraft/server-ui"', `from ${JSON.stringify(uiUrl)}`)
   .replace('from "./config.js"', `from ${JSON.stringify(new URL("../packs/find_bp/scripts/config.js", import.meta.url).href)}`)
+  .replace('from "./script-events.js"', `from ${JSON.stringify(dataUrl(eventsSrc))}`)
   .replace('from "./settings.js"', `from ${JSON.stringify(settingsUrl)}`);
 const find = await import(dataUrl(mainSrc + "\n// find marker test load"));
 

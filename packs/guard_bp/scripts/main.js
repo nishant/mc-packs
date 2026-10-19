@@ -11,6 +11,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { isProtected, protectedBox, zoneProviders, zonesAt } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_ZONES = "guard:zones"; // world: JSON Zone[]
 
@@ -347,9 +348,9 @@ async function mainMenu(player) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "guard_bp");
   },
-  { namespaces: ["realm"] }
 );

@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./recipes.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
@@ -1080,7 +1081,8 @@ async function kitchen(player, npcName) {
 // with Bea (`off`), on a level change and when the player joins; kept in memory only.
 /** @type {Map<string, number>} player id -> percent off */
 const beaOff = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:affinity",
   ({ id, message }) => {
     if (id !== "realm:affinity") return;
     try {
@@ -1092,7 +1094,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /** A recipe offer with Bea's friend price on its Crowns (rounded down). @template {{ crowns?: number }} O @param {Player} player @param {O} o @returns {O} */
@@ -1204,7 +1205,8 @@ const HANDLED = new Set([
   "realm:cooking_owed_ping",
 ]);
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [...HANDLED],
   ({ id, message }) => {
     if (!HANDLED.has(id)) return;
     /** @type {any} */
@@ -1290,7 +1292,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[cooking] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1318,7 +1319,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
 /** @type {Map<string, Record<string, number>>} */
 const callingBonus = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:calling",
   ({ id, message }) => {
     if (id !== "realm:calling") return;
     try {
@@ -1328,7 +1330,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -1340,9 +1341,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "cooking_bp");
   },
-  { namespaces: ["realm"] },
 );
