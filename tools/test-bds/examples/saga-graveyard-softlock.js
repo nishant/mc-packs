@@ -93,12 +93,18 @@ export default async function (t) {
     return t.waitUntil(() => inbox.digest.find((d) => d.seq === n), { timeout: 60, message: "the hook answers sgs:digest" });
   };
   let offers = 0;
-  /** Opens Moss's intro and pages on to its Accept page, left unanswered; returns that form. */
+  /**
+   * Resets the chapter (a debug jump, so a previous stale accept that WAS applied on the old source can't hide the later
+   * probes), opens Moss's intro and pages on to its Accept page, left unanswered; returns that form.
+   */
   const openIntro = async () => {
     const req = `sg${++offers}`;
+    send("realm:saga_debug", { player: p.id, action: "jump", story: "act1_signs", chapter: "graves" });
+    await t.wait(5);
     send("realm:npc_talk", { player: p.id, npc: "moss", req });
     await t.wait(4);
-    t.assert(inbox.offers.some((o) => o.req === req && o.key === "start:act1_signs"), "Moss offers What Moss Saw");
+    const offered = inbox.offers.filter((o) => o.req === req).map((o) => o.key);
+    t.assert(offered.includes("start:act1_signs"), `Moss offers What Moss Saw (offers for ${req}: ${JSON.stringify(offered)})`);
     let next = t.waitForm(p, { timeout: 200 });
     send("realm:npc_choose", { pack: "saga_bp", player: p.id, key: "start:act1_signs" });
     let f = await next;
