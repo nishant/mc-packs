@@ -139,9 +139,9 @@ const guidesOn = (player) => getFor(player, "spotGuides") !== false;
  */
 function guideVars(color, style = 0, life = 1.15) {
   const m = new MolangVariableMap();
-  m.setFloat("life", life);
-  m.setFloat("style", style);
-  m.setColorRGBA("color", { red: color.r, green: color.g, blue: color.b, alpha: color.a });
+  m.setFloat("variable.life", life);
+  m.setFloat("variable.style", style);
+  m.setColorRGBA("variable.color", { red: color.r, green: color.g, blue: color.b, alpha: color.a });
   return m;
 }
 
