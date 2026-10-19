@@ -42,7 +42,7 @@ export default async function (t) {
   t.check(chests().length === 0, "no chest before recovery");
   const since = t.system.currentTick;
   t.answerForm(p, "Recover inventory", (f) => f.buttons.findIndex((b) => /Export/.test(b)));
-  t.cmd(p, "/realm:inv_recover");
+  t.cmd(p, "/realm:inv_recover @s");
   const msg = (await t.waitMessage(p, /Exported \d+ stacks|nothing waiting|did not finish|changed while/i, { timeout: 400, since }).catch(() => undefined))?.plain;
   t.check(!!msg && /Exported \d+ stacks into 1 chest/.test(msg), `exported (${msg ?? "no message"})`);
   const placed = chests();
@@ -53,7 +53,7 @@ export default async function (t) {
   t.check(kinds.includes("minecraft:diamond_sword") && kinds.includes("minecraft:emerald"), `the real stacks are in the chest (${kinds.join(",")})`);
   t.check(!kinds.some((k) => k.startsWith("custom:inv_")), "no page button in the chest");
   const again = t.waitMessage(p, /nothing waiting/i, { timeout: 200 }).catch(() => undefined);
-  t.cmd(p, "/realm:inv_recover");
+  t.cmd(p, "/realm:inv_recover @s");
   t.check(!!(await again), "a second run finds nothing waiting");
   t.check(chests().length === 1, "a second run makes no second chest");
 }

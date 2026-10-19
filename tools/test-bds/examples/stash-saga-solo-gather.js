@@ -3,7 +3,7 @@
 // standing on a later page with the hotbar full of other items.
 // RED source: the commit "Stash: genuine pickups route to the earliest pages ..." (routing without the Saga bridge):
 // the routed paper never shows in Saga's live scan and "Have 8 paper" never completes. GREEN: with the bridge.
-// Not run by the author: queued for the lead. The reward-once check is only that the completion line appears once.
+// Not run by the author: queued for the lead. Reward-once is NOT checked here: only that the objective completion line is not repeated by a later pickup.
 //   node tools/test-bds/run.mjs --quiet --flat --only saga_bp,stash_bp --scenario tools/test-bds/examples/stash-saga-solo-gather.js --timeout 900
 export default async function (t) {
   const mc = t.mc;
@@ -34,20 +34,35 @@ export default async function (t) {
   fillers.forEach((id, slot) => inv.setItem(slot, new mc.ItemStack(`minecraft:${id}`, 1)));
   await t.wait(10);
 
-  // Not a pickup: a stack placed by hand stays where it is and is never routed.
-  inv.setItem(30, new mc.ItemStack("minecraft:paper", 1));
-  await t.wait(60);
-  t.assert(inv.getItem(30)?.typeId === "minecraft:paper", "a stack set by hand (not a pickup) stays where it is");
+  // Move an EXISTING stack: creating one with setItem would increase total ownership, not simulate rearrangement.
+  const moved = inv.getItem(0);
+  inv.setItem(0, undefined);
+  inv.setItem(30, moved);
+  await t.wait(120); // cover the existing quiet-player sampling cycle, not a production delay
+  t.assert(inv.getItem(30)?.typeId === "minecraft:stick", "moving an existing hotbar stack does not route it as a pickup");
+  inv.setItem(0, inv.getItem(30));
   inv.setItem(30, undefined);
   await t.wait(10);
   t.assert(pageNow() === 2, "still on page 2");
 
   // Partial, repeated pickups of real item entities: 2 + 1 + 1 more paper with 4 already on page 1 makes 8.
   const since = t.tick;
+  const paperOnPage = () => {
+    let count = 0;
+    for (let i = 9; i < inv.size; i++) {
+      if ([15, 16, 17].includes(i)) continue;
+      const item = inv.getItem(i);
+      if (item?.typeId === "minecraft:paper") count += item.amount;
+    }
+    return count;
+  };
   for (const n of [2, 1, 1]) {
-    ann.dimension.spawnItem(new mc.ItemStack("minecraft:paper", n), ann.location);
-    await t.wait(80);
+    const drop = ann.dimension.spawnItem(new mc.ItemStack("minecraft:paper", n), ann.location);
+    t.assert(drop.typeId === "minecraft:item", "the native pickup source is an item entity");
+    await t.waitUntil(() => !drop.isValid, { timeout: 200, message: "Ann actually collected the item entity" });
+    await t.waitUntil(() => paperOnPage() === 0, { timeout: 240, message: "pickup was routed off the viewed page" });
     t.assert(pageNow() === 2, "the player stays on page 2 while picking up");
+    t.log(`actual pickup ${n}, active-page paper ${paperOnPage()}, still page ${pageNow()}`);
   }
   await t.waitMessage(ann, /Have 8 paper: done/, { since, timeout: 600 });
   t.log(`counted across pages after ${t.tick - since} ticks`);
@@ -63,5 +78,5 @@ export default async function (t) {
   } catch {
     again = false;
   }
-  t.assert(!again, "the completion line is not repeated by a later pickup");
+  t.assert(!again, "the objective completion line is not repeated by a later pickup (objective-only; reward payout is not asserted)");
 }

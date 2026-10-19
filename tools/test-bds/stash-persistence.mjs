@@ -67,7 +67,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
       for (let s = 0; s < inv.size; s++) inv.setItem(s, items.find((e) => e.s === s)?.item);
     } else if (op === "force_pending") {
       const state = testState(player);
-      const keep = testCarried(inv).filter((e) => !testButtons.includes(e.s));
+      const keep = testCarried(inv);
       const before = testSave(player, keep);
       const after = testSave(player, []);
       player.setDynamicProperty("stash:native", JSON.stringify({ ...state, pending: { before, after } }));
