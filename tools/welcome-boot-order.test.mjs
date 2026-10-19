@@ -1,9 +1,11 @@
-// O43: in a bundle the packs run in folder order, so Chest Finder's world-load decision (it saves find:mig) happens
-// before Welcome decides the world's profile. That start-up marker alone must not make a new world look old.
-// Loads the real find_bp and welcome_bp into one world (one property store, bundle order).
+// O43: the default welcome in a real bundle: Chest Finder and Welcome run in one world (one property store, folder
+// order). Chest Finder's start-up marker (find:mig) no longer decides anything: a new world and an older one get the
+// same default, and two joins inside one ask window agree.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSim } from "./lib/pack-sim.mjs";
+
+const S = "\u00a7";
 
 async function bundleWorld(seed = {}) {
   const sim = createSim();
@@ -15,41 +17,57 @@ async function bundleWorld(seed = {}) {
   return sim;
 }
 
-test("O43: an empty new world is generic although Chest Finder saved find:mig first", async () => {
-  const sim = await bundleWorld();
-  assert.equal(sim.props.get("find:mig"), 1, "Chest Finder decided before Welcome, as in the bundle order");
-  assert.equal(sim.props.get("welcome:profile"), "generic");
-  assert.equal(sim.props.has("welcome:settings"), false);
-});
-
-test("O43: an older world keeps the Realm text whatever else it has beside find:mig", async () => {
-  for (const seed of [{ "stats:legacy": "x" }, { "find:idx:0": "[]" }, { "mystery:key": "1" }, { "welcome:settings": JSON.stringify({ body: "Saved old body" }) }]) {
-    const sim = await bundleWorld(seed);
-    assert.equal(sim.props.get("welcome:profile"), "realm", JSON.stringify(seed));
-  }
-});
-
-test("O43: a saved profile and saved text are never changed", async () => {
-  const saved = JSON.stringify({ body: "Saved old body" });
-  for (const profile of ["realm", "generic"]) {
-    const sim = await bundleWorld({ "welcome:profile": profile, "welcome:settings": saved });
-    assert.equal(sim.props.get("welcome:profile"), profile);
-    assert.equal(sim.props.get("welcome:settings"), saved);
-  }
-});
-
-test("O43: two joins inside one ask window both get the complete generic list, from one ask", async () => {
-  const sim = await bundleWorld();
-  let pings = 0;
+function ping(sim, packs) {
+  const counter = { pings: 0 };
   const sys = sim.server.system;
   const orig = sys.sendScriptEvent;
   sys.sendScriptEvent = (id, message) => {
     orig(id, message);
     if (id === "realm:help_ping") {
-      pings++;
-      for (const p of ["saga_bp", "claims_bp"]) orig("realm:help_pong", p);
+      counter.pings++;
+      for (const p of packs) orig("realm:help_pong", p);
     }
   };
+  return counter;
+}
+
+const text = (form) => form.parts.filter((p) => p.kind === "label").map((p) => p.text).join("\n");
+
+async function firstForm(sim) {
+  const p = sim.join("Pat");
+  sim.game.emit("world.after.playerSpawn", { player: p, initialSpawn: true });
+  return (await sim.nextForm(600)).form;
+}
+
+test("O43: a new bundle world and an older one show the same default, whatever Chest Finder saved first", async () => {
+  const texts = [];
+  for (const seed of [{}, { "stats:legacy": "x" }, { "mystery:key": "1" }]) {
+    const sim = await bundleWorld(seed);
+    assert.equal(sim.props.get("find:mig"), 1, "Chest Finder saved its marker before Welcome, as in the bundle order");
+    ping(sim, ["saga_bp", "claims_bp"]);
+    const form = await firstForm(sim);
+    texts.push(text(form));
+    assert.deepEqual(form.buttons, [`${S}lClose`]);
+  }
+  assert.equal(texts[1], texts[0]);
+  assert.equal(texts[2], texts[0]);
+  assert.match(texts[0], /realm:saga/);
+  assert.match(texts[0], /realm:claim/);
+});
+
+test("O43: the Realm's old saved welcome and an operator's later text, in a bundle world", async () => {
+  const legacy = JSON.stringify({ body: `Tap ${S}bOld Tobin${S}r or ${S}bMara${S}r in town to begin` });
+  const sim = await bundleWorld({ "welcome:settings": legacy, "welcome:revision": 1 });
+  assert.equal(sim.props.has("welcome:settings"), false);
+  const mine = JSON.stringify({ body: "Saved after" });
+  sim.props.set("welcome:settings", mine);
+  sim.game.emit("world.after.worldLoad", {});
+  assert.equal(sim.props.get("welcome:settings"), mine);
+});
+
+test("O43: two joins inside one ask window both get the complete list, from one ask", async () => {
+  const sim = await bundleWorld();
+  const counter = ping(sim, ["saga_bp", "claims_bp"]);
   const a = sim.join("Ann");
   sim.game.emit("world.after.playerSpawn", { player: a, initialSpawn: true });
   sim.step(3);
@@ -58,14 +76,12 @@ test("O43: two joins inside one ask window both get the complete generic list, f
   const texts = [];
   for (let i = 0; i < 2; i++) {
     const w = await sim.nextForm(600);
-    texts.push(w.form.bodyText);
+    texts.push(text(w.form));
     sim.answer({ canceled: false, selection: 0 });
   }
-  for (const t of texts) {
-    assert.match(t, /realm:saga/);
-    assert.match(t, /realm:claim/);
-  }
-  assert.equal(pings, 1, "one ask for both joins");
-  assert.equal(sim.props.get("welcome:profile"), "generic");
+  assert.equal(texts[1].replace("Bob", "Ann"), texts[0], "the two joins agree");
+  assert.match(texts[0], /realm:saga/);
+  assert.match(texts[0], /realm:claim/);
+  assert.equal(counter.pings, 1, "one ask for both joins");
   assert.equal(sim.props.has("welcome:settings"), false);
 });
