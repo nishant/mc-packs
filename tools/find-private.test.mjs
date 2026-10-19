@@ -17,8 +17,9 @@ function chest(dim, x, items) {
   return c;
 }
 
-async function world({ shards, items = {} } = {}) {
+async function world({ shards, items = {}, props = {}, load = true } = {}) {
   const sim = createSim();
+  for (const [k, v] of Object.entries(props)) sim.props.set(k, v);
   if (shards) shards.forEach((s, i) => sim.props.set(`find:idx:${i}`, s));
   const blocks = new Map();
   const dim = {
@@ -38,6 +39,7 @@ async function world({ shards, items = {} } = {}) {
   });
   await sim.load("find_bp");
   sim.boot();
+  if (load) sim.game.emit("world.after.worldLoad", {});
   const mk = (n) => {
     const p = sim.join(n, { id: `id-${n}` });
     p.dimension = dim;
@@ -108,4 +110,30 @@ test("opening a container records the player once, kept across saves with unknow
   const saved = JSON.parse(w.sim.props.get("find:idx:0"));
   assert.deepEqual(saved["overworld:10,64,0"].w, ["id-Ann"]);
   assert.equal(saved["overworld:10,64,0"].keep, "me");
+});
+
+const oldShard = JSON.stringify({ "overworld:10,64,0": { t: [["diamond", 5]], at: 1700000000000, b: "chest" } });
+
+test("migration: a world with only load-time data from other packs is new, so private", async () => {
+  const w = await world({ props: { "diag:x": "1", "settings:y": "2", "news:z": "3" } });
+  assert.equal(w.sim.props.get("find:cfg"), undefined);
+  assert.equal(w.sim.props.get("find:mig"), 1);
+});
+
+test("migration: an existing world with no find shard (other packs' player data) keeps the world-wide index", async () => {
+  const w = await world({ props: { "stats:p1": "{}" } });
+  assert.equal(JSON.parse(w.sim.props.get("find:cfg")).privateIndex, false);
+});
+
+test("migration: saved find settings alone mean an existing world, other settings kept", async () => {
+  const w = await world({ props: { "find:cfg": JSON.stringify({ maxResults: 10 }) } });
+  assert.deepEqual(JSON.parse(w.sim.props.get("find:cfg")), { maxResults: 10, privateIndex: false });
+});
+
+test("migration: an operator's explicit choice is never overwritten, and it runs once", async () => {
+  const w = await world({ shards: [oldShard], props: { "find:cfg": JSON.stringify({ privateIndex: true }) } });
+  assert.equal(JSON.parse(w.sim.props.get("find:cfg")).privateIndex, true);
+  w.sim.props.set("find:cfg", JSON.stringify({ privateIndex: true, maxResults: 5 }));
+  w.sim.game.emit("world.after.worldLoad", {});
+  assert.equal(JSON.parse(w.sim.props.get("find:cfg")).privateIndex, true);
 });

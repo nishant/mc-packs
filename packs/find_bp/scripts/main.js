@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get, set } from "./settings.js";
+import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
 const PROP_SHARD = "find:idx:"; // world: find:idx:0, find:idx:1, … JSON shards of the index
@@ -61,16 +61,45 @@ const valid = (v) =>
 /** The shards as last written, so a save only rewrites the ones that changed. @type {string[]} */
 let written = [];
 
-/** True when an operator already chose "Private index" (saved in find:cfg), so the migration must not overwrite it. */
-function hasOverride() {
+/** Saved data other packs write by themselves when a world loads: not a sign of an older world (as in Welcome's own check). */
+const BOOT_PREFIXES = ["diag:", "settings:", "admin:", "news:", "help:", "realm:", "weather:"];
+const BOOT_KEYS = new Set(["atlas:origin", "expedition:migrated", "bounty:day", "caravan:last"]);
+
+/**
+ * Decides the index mode once, when the world loads and before the settings cache is read. A world that already had
+ * data (a saved index, saved Chest Finder settings, or any player or progress data) keeps the world-wide index it was
+ * promised unless an operator already chose; a world with nothing saved but load-time data starts private.
+ * Written straight into find:cfg so the settings module only ever sees the final value.
+ */
+function decideMode() {
   try {
-    const raw = world.getDynamicProperty("find:cfg");
-    return typeof raw === "string" && Object.hasOwn(JSON.parse(raw), "privateIndex");
-  } catch {
-    return false;
+    if (world.getDynamicProperty(PROP_MIGRATED) !== undefined) return;
+    const cfgRaw = world.getDynamicProperty("find:cfg");
+    let cfg = {};
+    if (typeof cfgRaw === "string") {
+      try {
+        const p = JSON.parse(cfgRaw);
+        if (p && typeof p === "object" && !Array.isArray(p)) cfg = p;
+      } catch {
+        // damaged: leave it for the settings module to report
+      }
+    }
+    const existing =
+      typeof cfgRaw === "string" ||
+      world.getDynamicProperty(PROP_SHARD + 0) !== undefined ||
+      world
+        .getDynamicPropertyIds()
+        .some((k) => !k.startsWith("find:") && !BOOT_PREFIXES.some((p) => k.startsWith(p)) && !BOOT_KEYS.has(k));
+    if (existing && !Object.hasOwn(cfg, "privateIndex")) {
+      world.setDynamicProperty("find:cfg", JSON.stringify({ ...cfg, privateIndex: false }));
+    }
+    world.setDynamicProperty(PROP_MIGRATED, 1);
+  } catch (e) {
+    console.warn(`[find] index mode: ${e}`);
   }
 }
 
+world.afterEvents.worldLoad.subscribe(decideMode);
 /** @returns {Map<string, Entry>} */
 function getIndex() {
   if (index) return index;
@@ -83,16 +112,6 @@ function getIndex() {
       for (const [k, v] of Object.entries(JSON.parse(raw))) if (valid(v)) index.set(k, v);
     } catch (e) {
       console.warn(`[find] shard ${i} unreadable: ${e}`);
-    }
-  }
-  // Decide the index mode once. A world that already had an index keeps the world-wide one it was promised
-  // (nothing changes for its players until an operator turns "Private index" on); a new world starts private.
-  if (world.getDynamicProperty(PROP_MIGRATED) === undefined) {
-    try {
-      if (written.length && !hasOverride()) set("privateIndex", false);
-      world.setDynamicProperty(PROP_MIGRATED, 1);
-    } catch (e) {
-      console.warn(`[find] index mode: ${e}`);
     }
   }
   return index;
@@ -369,7 +388,7 @@ function normalize(query) {
  */
 function matches(player, q) {
   const here = short(player.dimension.id);
-  const idx = getIndex(); // first: it settles the index mode of a world that already had an index
+  const idx = getIndex();
   const priv = get("privateIndex") === true;
   const { x: px, y: py, z: pz } = player.location;
   /** @type {Hit[]} */
