@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 176 commands in 64 packs */
+/** @type {Pack[]} 178 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -278,6 +278,7 @@ export const PACKS = [
       {"name":"realm:map","description":"Minimap: get Mara's Field Map, pick a destination for your compass strip, mark spots","permission":"any","params":[]},
       {"name":"realm:map_clear","description":"Clear your destination (the strip follows your story again)","permission":"any","params":[]},
       {"name":"realm:map_mark","description":"Mark the spot where you stand, to pick it as a destination later","permission":"any","params":[{"name":"name","type":"String","optional":true}]},
+      {"name":"realm:map_reset","description":"Operators: clear every player's map destination and marked spots (offline players on their next join). Run it with confirm","permission":"op","params":[{"name":"confirm","type":"String","optional":true}]},
       {"name":"realm:minimap","description":"Toggle your minimap radar on or off","permission":"any","params":[]},
     ],
   },
@@ -475,6 +476,7 @@ export const PACKS = [
     commands: [
       {"name":"realm:inv","description":"Expansive Inventory: switch between your inventory pages, scan every page for an item, sort, quick stack and change the page buttons. More: /realm:stash_help","permission":"any","params":[]},
       {"name":"realm:inv_pages","description":"Operators: set how many inventory pages you have, 2 to 25 (1 = a single vanilla page, 0 or nothing = the realm's count). Only you; items on removed pages move to the pages left","permission":"op","params":[{"name":"pages","type":"Integer","optional":true}]},
+      {"name":"realm:inv_recover","description":"Operators: recover a player's stuck inventory move. Asks you to confirm, then puts their saved items into chests next to you","permission":"op","params":[{"name":"player","type":"PlayerSelector","optional":false}]},
       {"name":"realm:sort","description":"Sorts your inventory: merges stacks, then orders by item. The hotbar too if that's on in /realm:prefs. More: /realm:stash_help","permission":"any","params":[]},
       {"name":"realm:stash","description":"Quick stack: moves your main inventory into storage within 8 blocks that already holds the same items. More: /realm:stash_help","permission":"any","params":[]},
       {"name":"realm:stash_help","description":"How Quick Stack & Sort works: the sneak-tap menu, /realm:stash and /realm:sort, with usage","permission":"any","params":[]},

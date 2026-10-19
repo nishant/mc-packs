@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "titles_bp";
-const VERSION = "1.2.8";
+const VERSION = "1.2.9";
 const NAME = "Titles & Trails";
 
 const API = 1;

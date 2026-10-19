@@ -43,25 +43,19 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T3. Expansive Inventory and item safety
 
-- O17 (high, perf) Index page contents (item ids and counts per page in the committed index), so Hotbar Refill from
-  pages, scans and the menu's usage load only the pages they need; add refill to perf-soak. Also rebuild closed
-  PR #86's genuine-pickup routing and manual fill-earlier-pages action on latest master, without sorting or
-  metadata/hotbar/cursor/control loss; share O73's transfer design. Closure alone does not finish this work.
-- O18 `/realm:inv_recover <player>` for pending inventory recovery.
-- O19 Close the Expeditions stash cart window (a disconnect plus broken carts re-places the structure, a copy).
-- O20 refill-pages.js: add "none on any page, many pages" and locked or named stack cases.
-- O21 Make `expedition-nether-carts.js` a real fail-before test (it passes on the old code; the bug needs a player who
-  spawned in the Nether and stayed there).
-- O22 Docs: cross-page refill can use a Flight 1 rocket stack for a Flight 3 one mid-glide (rockets are kept on purpose).
+- O17 **CODE DONE `d7390b7c24a8b31934c1177f65eac297f5b22612`; measured acceptance remains W1.** Snapshot-bound index, real earlier-page routing and all-later manual fill rebuilt; unit and real solo native collect/reward proofs retained.
+- O18 **DONE `f38d249a` (within reviewed W3 `2b48a310`).** Confirmed operator backup export, stale/permission/dimension guards and idempotent retry; strict native physical-restart/metadata/export/no-repeat PASS. Live inventory is not deduplicated.
+- O19 **CODE DONE `b1a1e3ce`; native durability limit explicit.** Seen carts are saved and a partial hand-back never re-places over survivors; strict native partial-cart PASS. A timed disconnect/break/restart interruption is not claimed as a native PASS; saved-seen restart behavior is covered offline.
+- O20 **DONE `58608132` / `d7390b7c`.** Indexed misses, named/locked stacks and refill workload added; strict native refill PASS, including move-not-copy, long lore, death, no-match and protected-stack cases.
+- O21 **WON'T CLAIM A REPRO `46a77a3d`.** The alleged Nether-spawn-and-stay fail-before could not be reproduced on BDS. Header claim withdrawn; the actual Nether round trip remains a regression, not fabricated RED.
+- O22 **DONE in this Wave2 documentation checkpoint, code context `58608132`.** Player docs explicitly warn that cross-page refill can replace Flight 3 with Flight 1; rockets intentionally remain eligible.
 
 ## T4. Bounded stores for offline players
 
-- O23 One per-player owed layout for cooking `cooking:owed`, relics `relics:pending`, bounty, guilds, town
-  `town:owed`, plus `fishing:owed` and `cooking:pending`; migrate on load, drop the oldest with a log line.
-- O24 Letters sent by packs (goals, town) expire or have a lower inbox cap than player letters, so 400 players who
-  never return can't fill the 5,000-letter realm cap.
-- O25 Prune `nick:g:*`, `titles:p:*` and party entries of players gone N days (forget only wipes a whole pack).
-- O26 An operator reset for map_bp `map:wp` and `map:marks` (player properties, which Pack diagnostics' forget keeps).
+- O23 **DONE `84d45df2e1e1ec77fda5caddae50ec691f58ead1` plus bounded probe `507e87ce`.** Per-player owed stores, lazy verified migration, unknown leftovers and partial-grant re-owe. Actual three-phase/two-restart native PASS has one deliberate caught grant-failure warning (official non-strict, not warning-free). Hard-crash take/grant and indivisible-part limits documented.
+- O24 **DONE `abbb1624`.** Live system inbox/expiry/reserve policy preserves player-written letters; focused 400x50 simulation and native mail/consumer regressions pass.
+- O25 **DONE `a7829ba9`.** Conservative live-config nickname/title/solo-party pruning preserves unknown and untimestamped records, skips online players and rechecks after yields. Defaults and destructive scope documented.
+- O26 **DONE `9c9fec57` / `68ae7b92`.** Real operator confirmation, online clear, persisted offline generation and stale-form protection; strict native owning-addon reset PASS.
 
 ## T5. Public-server protections
 
@@ -122,15 +116,12 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T9. Easy Building (build_bp, build_rp)
 
-- O46 (owner decision) Credit Effortless Building v5.0 after confirming its license.
-- O47 Bedrock's single `bed` id: rewrite the 16 `<color>_bed` cases and test every mode.
-- O48 (medium, perf) The two runInterval(1) loops (Preview.js:1053, ModifierVisualizer.js:166) cost 0.4-1.1 ms/tick
-  with nobody holding a building tool: run them only while a tool is held.
-- O49 FloatingPanels.js:318 writes the action bar with no request or lock; `idleSkip` uses a shared tick (a loop
-  whose period is a multiple of 5 never sees idle players); `minecraft:end_gateway` (BlockDestroyer.js:19)
-  unconfirmed; elite_bp's built-block regex (main.js:519) has Java `note_block` (Bedrock `noteblock`).
-- O50 build_rp defines `eb.help.btn.guided` and `eb.set.book_language.tip` twice in every lang file.
-- O51 A world `defaultMaxBlocks` separate from `maxBlocksCap`, and a public-server preset.
+- O46 **OWNER-DIRECTED NO FURTHER WORK.** User reported talking to the owner and explicitly declined further licensing work. This is not independent legal verification; no new license/credit/grant/upstream copy or attribution removal.
+- O47 **CODE DONE `534e8fd902745e6dc11c06db5d53de5ef785742f`.** Real Bedrock ids, paired placement/claims/caps/clipboard/undo and public-main boundary fixed; 21 focused tests/type pass. Strict native main-pipeline Line/item/undo/redo PASS uses one actual anchor event and one explicitly test-only confirm invocation. Second native input/physical acceptance stays UNVERIFIED under W2; bounded all-mode runtime matrix retained separately.
+- O48 **CODE DONE `534e8fd9`; W1 measurement REQUIRED.** Actual holder gate wired, dirty hints and negative resolve cache; unit zero-read counts are not a measured performance improvement.
+- O49 **DONE `d61e5441`, `534e8fd9`, `4636486919cba60811533890b1534f0060dd0197`.** Actionbar arbitration, per-loop cadence and native `noteblock` fixed. Actual BDS Script API resolves `end_gateway` although vanilla command grammar rejects it: keep unbreakable protection.
+- O50 **DONE `534e8fd9`.** Duplicate language keys removed with last-effective labels retained; new limit labels localized.
+- O51 **DONE `534e8fd9` plus this lead preset checkpoint.** Separate default/cap, immediate player clamp; Large is 2000, operator-only and no Infinite Reach. Existing gameplay default 50000 preserved.
 
 ## T10. Town news follow-ups
 
