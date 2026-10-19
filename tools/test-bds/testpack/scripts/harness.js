@@ -4,7 +4,7 @@
 import * as mc from "@minecraft/server";
 import * as gt from "@minecraft/server-gametest";
 import scenario from "./scenario.js";
-import { afterTickingAreaAdd, radiusProblem, tickingAreaCommandProblem } from "./tickingarea.js";
+import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, ownedAreaName, radiusProblem, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
 
 const { world, system, GameMode, CommandPermissionLevel } = mc;
 
@@ -248,6 +248,29 @@ function runCmd(target, cmd) {
   }
 }
 
+/**
+ * Ticking areas are saved with the world, so the ones loadArea added in an earlier phase are still there after t.restart()
+ * (their chunks load in the first seconds of the new run). Removes them, only the ones this harness added (its saved
+ * list, checked name by name; a scenario's own areas are never touched) and says why when one cannot be removed.
+ */
+function removeEarlierAreas() {
+  let raw;
+  try {
+    raw = world.getDynamicProperty(OWNED_AREAS_KEY);
+  } catch (e) {
+    out({ type: "log", msg: `ticking area cleanup: the saved list could not be read: ${e}` });
+    return;
+  }
+  const { removed, problems } = releaseOwnedAreas(raw, (area) => runCmd(world.getDimension(area.dimension), `tickingarea remove ${area.name}`));
+  if (removed.length) out({ type: "log", msg: `ticking areas from earlier phases removed: ${removed.map((a) => a.name).join(", ")}` });
+  for (const problem of problems) out({ type: "log", msg: `ticking area cleanup: ${problem}` });
+  try {
+    world.setDynamicProperty(OWNED_AREAS_KEY, undefined); // this key only: a scenario's own saved data is not ours to clear
+  } catch (e) {
+    out({ type: "log", msg: `ticking area cleanup: the saved list could not be cleared: ${e}` });
+  }
+}
+
 function matches(text, pattern) {
   if (pattern === undefined) return true;
   if (pattern instanceof RegExp) return pattern.test(text);
@@ -271,6 +294,8 @@ function findGround(dimension, top) {
 function makeT(cfg) {
   const failures = [];
   let spawnArea = 0;
+  /** The areas loadArea added in this phase, saved so the next phase can remove them. @type {{ name: string, dimension: string }[]} */
+  let owned = [];
   const t = {
     mc, gt, world, system,
     config: cfg,
@@ -326,8 +351,16 @@ function makeT(cfg) {
     async loadArea(x, z, { dimension = world.getDimension("overworld"), radius = 2, timeout = 400 } = {}) {
       const badRadius = radiusProblem(radius);
       if (badRadius) throw new Stop(false, `loadArea(${x}, ${z}): ${badRadius}`);
-      const name = `harness_${++spawnArea}`;
+      const name = ownedAreaName(t.phase, ++spawnArea);
       const add = runCmd(dimension, `tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} ${radius} ${name} true`);
+      if (add.ok) {
+        try {
+          owned = addOwnedArea(owned, { name, dimension: dimension.id });
+          world.setDynamicProperty(OWNED_AREAS_KEY, JSON.stringify(owned));
+        } catch (e) {
+          out({ type: "log", msg: `ticking area ${name} is not in the harness's saved list, so the next phase will not remove it: ${e}` });
+        }
+      }
       // getTopmostBlock can answer before the chunk ticks (with y 319): also require that the
       // block can be read and that a standing spot below it can be found.
       const readGround = () => {
@@ -446,6 +479,7 @@ async function run(cfg) {
   started = true;
   const t = makeT(cfg);
   out({ type: "start", tick: system.currentTick });
+  removeEarlierAreas();
   let ok = true, msg = "scenario finished", restart = false;
   try {
     await scenario(t);

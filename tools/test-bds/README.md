@@ -194,6 +194,15 @@ to be swallowed and showed up 400 ticks later as "chunk did not load"), and a `t
 (for example the 10-area limit) fails at once with the game's own message unless the column is already readable.
 `examples/harness-tickingarea-inputs.js` shows both against the real game.
 
+Ticking areas are saved with the world, so they outlive `t.restart()`. `t.loadArea` names each area
+`harness_<phase>_<n>` and saves the list of the areas it added (the test pack's own `harness:tickingAreas` property,
+not any pack's data); the next phase removes those areas, and only those, before its scenario starts. A scenario's own
+areas are never touched, a list entry that is not a harness name is refused, and a removal the game rejects is logged
+as `ticking area cleanup: ...` and the run goes on. Before this, the second phase's first `t.player()` at the same spot
+failed with `tickingarea add circle ... failed: the command did not succeed` (the name was taken, and the old area's
+chunks were not readable yet). `lib/harness-lifecycle.test.mjs` runs `harness.js` against a fake game whose areas
+survive a restart; `lib/rain-seabed.test.mjs` runs Rain's real scripts, the scenario's hook and the scenario itself.
+
 ## Inventory persistence regression
 
 `node tools/test-bds/stash-persistence.mjs` stages a test-only copy of `stash_bp` and runs

@@ -32,3 +32,90 @@ export function afterTickingAreaAdd({ x, z, radius, add, readable }) {
   if (readable) return { action: "wait", message: `tickingarea add circle ${x} ${z} radius ${radius} failed (${why}) but the chunk is already readable` };
   return { action: "fail", message: `tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} ${radius} failed: ${why}` };
 }
+
+// Ticking areas outlive the server: the world saves them, so the areas a phase's loadArea added are still there when
+// t.restart() starts the next phase, and the game refuses a second area with the same name (the first native run of
+// rainbow-race failed its second phase with "tickingarea add circle 163 0 170 2 failed: the command did not succeed").
+// Two rules keep the phases apart: an area's name holds its phase, and the next phase removes the areas the harness
+// added itself (and only those: the harness saves a list of them, and a scenario's own areas are never touched).
+export const OWNED_AREAS_KEY = "harness:tickingAreas";
+const OWNED_NAME = /^harness_\d+_\d+$/;
+const DIMENSIONS = new Set(["minecraft:overworld", "minecraft:nether", "minecraft:the_end"]);
+// The game allows far fewer areas than this; the bound only keeps a damaged list from being walked forever.
+const MAX_OWNED_AREAS = 100;
+
+/** @typedef {{ name: string, dimension: string }} OwnedArea */
+
+/** The name of the n-th area (from 1) that loadArea adds in a phase (from 1). @param {number} phase @param {number} n */
+export const ownedAreaName = (phase, n) => `harness_${phase}_${n}`;
+
+/** Whether a name is one the harness gave an area. @param {unknown} name */
+export const isOwnedAreaName = (name) => typeof name === "string" && OWNED_NAME.test(name);
+
+const shown = (/** @type {unknown} */ value) => {
+  const text = JSON.stringify(value) ?? String(value);
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+};
+
+/**
+ * The areas in the saved list, and what was wrong with the rest. Anything that is not a harness-named area in a known
+ * dimension is refused, so a damaged or edited list cannot make the harness remove someone else's area.
+ * @param {unknown} raw the saved dynamic property
+ * @returns {{ areas: OwnedArea[], problems: string[] }}
+ */
+export function readOwnedAreas(raw) {
+  if (raw === undefined || raw === null) return { areas: [], problems: [] };
+  let list;
+  try {
+    if (typeof raw !== "string") throw new TypeError(`it is ${typeof raw}, not text`);
+    list = JSON.parse(raw);
+  } catch (e) {
+    return { areas: [], problems: [`the saved list is not valid JSON (${/** @type {Error} */ (e).message}): ignored, no area is removed`] };
+  }
+  if (!Array.isArray(list)) return { areas: [], problems: ["the saved list is not a list: ignored, no area is removed"] };
+  /** @type {OwnedArea[]} */
+  const areas = [];
+  /** @type {string[]} */
+  const problems = [];
+  for (const entry of list) {
+    const ok = entry && typeof entry === "object" && isOwnedAreaName(entry.name) && DIMENSIONS.has(entry.dimension);
+    if (!ok || areas.length >= MAX_OWNED_AREAS) {
+      problems.push(`refused ${shown(entry)}: not a ticking area the harness added`);
+      continue;
+    }
+    if (!areas.some((a) => a.name === entry.name && a.dimension === entry.dimension)) areas.push({ name: entry.name, dimension: entry.dimension });
+  }
+  return { areas, problems };
+}
+
+/** The list with one more area (a new list; the same area twice is one entry). @param {OwnedArea[]} areas @param {OwnedArea} area */
+export function addOwnedArea(areas, area) {
+  if (!isOwnedAreaName(area.name)) throw new Error(`${shown(area.name)} is not a harness area name (harness_<phase>_<n>)`);
+  if (!DIMENSIONS.has(area.dimension)) throw new Error(`${shown(area.dimension)} is not a known dimension for a harness area`);
+  if (areas.some((a) => a.name === area.name && a.dimension === area.dimension)) return areas;
+  return [...areas, { name: area.name, dimension: area.dimension }];
+}
+
+/**
+ * Removes every area in the saved list through `remove` (one call per area, never for a refused entry). A removal that
+ * fails or throws is reported with its reason and never stops the others; the caller decides what a report means.
+ * @param {unknown} raw the saved dynamic property
+ * @param {(area: OwnedArea) => { ok: boolean, error?: string }} remove
+ * @returns {{ removed: OwnedArea[], problems: string[] }}
+ */
+export function releaseOwnedAreas(raw, remove) {
+  const { areas, problems } = readOwnedAreas(raw);
+  /** @type {OwnedArea[]} */
+  const removed = [];
+  for (const area of areas) {
+    let result;
+    try {
+      result = remove(area);
+    } catch (e) {
+      result = { ok: false, error: String(/** @type {Error} */ (e)?.message ?? e) };
+    }
+    if (result.ok) removed.push(area);
+    else problems.push(`could not remove ${area.name} (${area.dimension}): ${result.error ? result.error : "the command did not succeed"}; it is left as it is`);
+  }
+  return { removed, problems };
+}
