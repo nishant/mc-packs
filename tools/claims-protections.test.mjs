@@ -21,8 +21,9 @@ async function world({ claims, cfg = {} } = {}) {
   return { sim, ann, bob, op };
 }
 
-const entityTap = (w, player, typeId, at = { x: 2, y: 64, z: 2 }) => {
-  const event = { player, target: { typeId, dimension: { id: OW }, location: at }, cancel: false };
+const entityTap = (w, player, typeId, at = { x: 2, y: 64, z: 2 }, { tags = [], tamed = false } = {}) => {
+  const target = { typeId, dimension: { id: OW }, location: at, hasTag: (t) => tags.includes(t), getComponent: (c) => (tamed && c === "minecraft:is_tamed" ? {} : undefined) };
+  const event = { player, target, cancel: false };
   w.sim.game.emit("world.before.playerInteractWithEntity", event);
   return event.cancel;
 };
@@ -33,6 +34,7 @@ const blockTap = (w, player, typeId, at = { x: 3, y: 64, z: 3 }, itemStack = und
 };
 
 const one = [claim(1, "id-Ann", "Ann", 0, 16)];
+const REAL_DOORS = ["minecraft:wooden_door", "minecraft:spruce_door", "minecraft:dark_oak_door", "minecraft:bamboo_door", "minecraft:cherry_door", "minecraft:trapdoor", "minecraft:mangrove_trapdoor", "minecraft:crimson_trapdoor", "minecraft:fence_gate", "minecraft:warped_fence_gate", "minecraft:pale_oak_fence_gate"];
 
 test("outsiders can't leash, milk, ride or feed farm and pet animals in a claim; the owner can", async () => {
   const w = await world({ claims: one });
@@ -52,7 +54,7 @@ test("the animal protection can be switched off", async () => {
 
 test("doors: closed to visitors by default, opened per claim by the owner's switch, chests still closed", async () => {
   const w = await world({ claims: one });
-  assert.equal(blockTap(w, w.bob, "minecraft:oak_door"), true);
+  assert.equal(blockTap(w, w.bob, "minecraft:wooden_door"), true);
   w.sim.run("realm:claim", w.ann);
   let f = await w.sim.nextForm();
   w.sim.answer({ selection: f.form.buttons.findIndex((b) => /My claim/.test(b)) });
@@ -63,15 +65,15 @@ test("doors: closed to visitors by default, opened per claim by the owner's swit
   await w.sim.settle();
   while (w.sim.pending.length) w.sim.answer({ canceled: true });
   assert.equal(JSON.parse(w.sim.props.get("claims:c:1")).dr, true);
-  for (const t of ["minecraft:oak_door", "minecraft:spruce_trapdoor", "minecraft:oak_fence_gate"]) assert.equal(blockTap(w, w.bob, t), false, t);
-  assert.equal(blockTap(w, w.bob, "minecraft:chest"), true);
-  assert.equal(blockTap(w, w.bob, "minecraft:oak_door", { x: 400, y: 64, z: 3 }), false, "outside");
+  for (const t of REAL_DOORS) assert.equal(blockTap(w, w.bob, t), false, t);
+  for (const t of ["minecraft:iron_door", "minecraft:iron_trapdoor", "minecraft:chest", "minecraft:iron_door"]) assert.equal(blockTap(w, w.bob, t), true, `${t} stays closed`);
+  assert.equal(blockTap(w, w.bob, "minecraft:wooden_door", { x: 400, y: 64, z: 3 }), false, "outside");
 });
 
 test("a door switch is per claim", async () => {
   const w = await world({ claims: [claim(1, "id-Ann", "Ann", 0, 16, { dr: true }), claim(2, "id-Bob", "Bob", 500, 16)] });
-  assert.equal(blockTap(w, w.op, "minecraft:oak_door"), false);
-  assert.equal(blockTap(w, w.ann, "minecraft:oak_door", { x: 503, y: 64, z: 3 }), true, "Ann is a visitor in Bob's claim");
+  assert.equal(blockTap(w, w.op, "minecraft:wooden_door"), false);
+  assert.equal(blockTap(w, w.ann, "minecraft:wooden_door", { x: 503, y: 64, z: 3 }), true, "Ann is a visitor in Bob's claim");
 });
 
 async function audit(w, sortWord) {
@@ -127,4 +129,59 @@ test("O28 access answer: the owner and a shared player get 'ours'; a stranger is
     const op = ask("id-Op");
     assert.deepEqual([op.closed, op.ours], [bypass ? [] : [0], []]);
   }
+});
+test("O27 review: the door switch needs a plain tap: sneaking, buckets, wax, axes and fire items still can't use a visitor's way in", async () => {
+  const w = await world({ claims: [claim(1, "id-Ann", "Ann", 0, 16, { dr: true })] });
+  assert.equal(blockTap(w, w.bob, "minecraft:wooden_door"), false, "empty hand opens");
+  assert.equal(blockTap(w, w.bob, "minecraft:wooden_door", undefined, { typeId: "minecraft:stick" }), false, "an ordinary item opens");
+  for (const item of ["minecraft:lava_bucket", "minecraft:water_bucket", "minecraft:honeycomb", "minecraft:iron_axe", "minecraft:flint_and_steel", "minecraft:fire_charge", "minecraft:shears"]) {
+    assert.equal(blockTap(w, w.bob, "minecraft:wooden_door", undefined, { typeId: item }), true, item);
+  }
+  w.bob.isSneaking = true;
+  assert.equal(blockTap(w, w.bob, "minecraft:wooden_door"), true, "sneaking places blocks instead of opening");
+  assert.equal(blockTap(w, w.bob, "minecraft:trapdoor", undefined, { typeId: "minecraft:cobblestone" }), true);
+});
+
+test("O27 review: story and townsfolk actors stay tappable in a claim; tamed pets and the extended list are protected", async () => {
+  const w = await world({ claims: one });
+  assert.equal(entityTap(w, w.bob, "minecraft:cat", undefined, { tags: ["saga:actor"] }), false, "a saga actor");
+  assert.equal(entityTap(w, w.bob, "minecraft:villager", undefined, { tags: ["realm:npc"] }), false);
+  assert.equal(entityTap(w, w.bob, "realm:npc_label"), false);
+  assert.equal(entityTap(w, w.bob, "minecraft:parrot", undefined, { tamed: true }), true);
+  assert.equal(entityTap(w, w.bob, "minecraft:allay"), true);
+  assert.equal(entityTap(w, w.bob, "minecraft:bat", undefined, { tamed: true }), true, "any tamed pet");
+  assert.equal(entityTap(w, w.bob, "minecraft:bat"), false);
+  assert.equal(entityTap(w, w.ann, "minecraft:bat", undefined, { tamed: true }), false, "the claim owner");
+});
+
+test("O27 review: a new claim starts with a last visit, and an owner standing in it keeps it fresh (throttled)", async () => {
+  const w = await world({ claims: [] });
+  w.ann.location = { x: 0, y: 64, z: 0 };
+  w.sim.run("realm:claim", w.ann);
+  let f = await w.sim.nextForm();
+  w.sim.answer({ selection: f.form.buttons.findIndex((b) => /Claim/i.test(b)) });
+  await w.sim.settle();
+  while (w.sim.pending.length) w.sim.answer({ canceled: true });
+  const key = [...w.sim.props.keys()].find((k) => k.startsWith("claims:c:"));
+  assert.ok(key, [...w.sim.props.keys()].join());
+  const made = JSON.parse(w.sim.props.get(key)).lv;
+  assert.ok(Math.abs(made - Date.now()) < 5000, "set on creation");
+  const old = { ...JSON.parse(w.sim.props.get(key)), lv: Date.now() - 3 * DAY };
+  w.sim.props.set(key, JSON.stringify(old));
+  w.sim.leave(w.bob);
+  const w2 = await world({ claims: [claim(1, "id-Ann", "Ann", 0, 16, { lv: Date.now() - 3 * DAY })] });
+  w2.ann.location = { x: 1, y: 64, z: 1 };
+  w2.sim.step(25);
+  assert.ok(JSON.parse(w2.sim.props.get("claims:c:1")).lv > Date.now() - 5000, "refreshed while inside");
+  const writes = w2.sim.props.get("claims:c:1");
+  w2.sim.step(100);
+  assert.equal(w2.sim.props.get("claims:c:1"), writes, "not rewritten within a minute");
+});
+
+test("O27 review: the audit list rechecks the operator when it opens", async () => {
+  const w = await world({ claims: one });
+  w.op.commandPermissionLevel = 0;
+  w.sim.run("realm:claim", w.op);
+  const f = await w.sim.nextForm();
+  assert.ok(!f.form.buttons.some((b) => /All claims/.test(b)));
 });

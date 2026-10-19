@@ -60,7 +60,12 @@ function partyAllowed(player, c) {
 
 const protectedEntities = new Set(CONFIG.protectedEntities);
 const protectedAnimals = new Set(CONFIG.protectedAnimals);
-const DOOR = /_(door|trapdoor|fence_gate)$/;
+/** Bedrock ids of doors, trapdoors and fence gates a hand can open: minecraft:wooden_door, spruce_door, trapdoor, bamboo_trapdoor, fence_gate, cherry_fence_gate... Iron ones only open with redstone. */
+const DOOR = /^minecraft:(?!iron_)(?:[a-z]+_)*(?:wooden_door|door|trapdoor|fence_gate)$/;
+/** Held items that do something else to a door than open it: pour, wax, scrape, light, dye, brush. */
+const NOT_OPENING = /bucket|honeycomb|(?:^|_)axe$|flint_and_steel|fire_charge|shears|brush|(?:^|_)dye$|ink_sac|lava|water/;
+/** Entities that belong to stories and townsfolk (the Saga and NPC packs): tapping them must keep working inside a claim. */
+const STORY_TAGS = ["saga:actor", "realm:npc"];
 const enabled = () => get("enabled") === true;
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
@@ -208,16 +213,37 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const dim = block.dimension.id;
   const here = closedTo(player, dim, block.location);
   // The owner's "visitors may open doors" switch: doors, trapdoors and gates only, never containers.
-  if (here?.dr === true && DOOR.test(block.typeId)) return;
+  // Only a plain, non-sneaking tap that opens it: sneaking or holding a bucket, wax, an axe or fire places or changes things.
+  if (here?.dr === true && DOOR.test(block.typeId) && !player.isSneaking && !(itemStack && NOT_OPENING.test(itemStack.typeId))) return;
   const c = here ?? (itemStack ? closedTo(player, dim, across(block, blockFace)) : undefined);
   if (!c) return;
   event.cancel = true;
   if (isFirstEvent) sayClaimed(player, c);
 });
 
+/** @param {import("@minecraft/server").Entity} target */
+function isStory(target) {
+  try {
+    return target.typeId.startsWith("realm:") || STORY_TAGS.some((tag) => target.hasTag(tag));
+  } catch {
+    return false;
+  }
+}
+
+/** A tamed pet of anyone, by the stable `minecraft:is_tamed` component (there is no stable getter for who tamed it). @param {import("@minecraft/server").Entity} target */
+function isTamed(target) {
+  try {
+    return target.getComponent("minecraft:is_tamed") !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 world.beforeEvents.playerInteractWithEntity.subscribe((event) => {
   const { player, target } = event;
-  if (!protectedEntities.has(target.typeId) && !(protectedAnimals.has(target.typeId) && get("protectAnimals") === true)) return;
+  if (isStory(target)) return;
+  const animal = get("protectAnimals") === true && (protectedAnimals.has(target.typeId) || isTamed(target));
+  if (!protectedEntities.has(target.typeId) && !animal) return;
   const c = closedTo(player, target.dimension.id, target.location);
   if (!c) return;
   event.cancel = true;
@@ -271,6 +297,7 @@ system.runInterval(() => {
   for (const player of world.getAllPlayers()) {
     try {
       const c = claimAt(player.dimension.id, player.location);
+      if (c?.o === player.id) refreshVisit(c);
       const before = inClaim.get(player.id);
       if (c?.id === before) continue;
       inClaim.set(player.id, c?.id);
@@ -282,6 +309,16 @@ system.runInterval(() => {
     }
   }
 }, 20);
+
+/** The owner is in their own claim: keep its last visit fresh, written at most once a minute. @param {Claim} c */
+function refreshVisit(c) {
+  const now = Date.now();
+  const last = /** @type {any} */ (c).lv;
+  if (typeof last === "number" && now - last < 60_000) return;
+  const next = { ...c, lv: now };
+  claims().set(c.id, next);
+  world.setDynamicProperty(CLAIM_PREFIX + c.id, JSON.stringify(next));
+}
 
 /** Owners' last visit, saved on join and on leave (a claim's `lv`, ms). @param {string} id */
 function touchOwner(id) {
@@ -452,7 +489,7 @@ function claimHere(player) {
   const id = typeof next === "number" ? next : 1;
   world.setDynamicProperty(PROP_NEXT, id + 1);
   /** @type {Claim} */
-  const c = { id, o: player.id, n: player.name, dim: player.dimension.id, x: Math.floor(player.location.x), z: Math.floor(player.location.z), r, s: [] };
+  const c = { id, o: player.id, n: player.name, dim: player.dimension.id, x: Math.floor(player.location.x), z: Math.floor(player.location.z), r, s: [], lv: Date.now() };
   saveClaim(c);
   player.sendMessage(`§aClaimed ${2 * r + 1} x ${2 * r + 1} blocks, ${span(c)} (${shortDim(c.dim)}), top to bottom. Only you can build, break or open things here.`);
   player.playSound("random.levelup", { pitch: 1.2, volume: 0.6 });
@@ -537,6 +574,7 @@ const SORT_NAMES = { name: "owner", size: "size, biggest first", visit: "owner's
 
 /** Operators: every claim, to audit and remove any. @param {Player} player @param {"name" | "size" | "visit"} [sort] */
 async function allClaims(player, sort = "name") {
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can see every claim.");
   /** @param {Claim} c */
   const seenAt = (c) => (world.getAllPlayers().some((p) => p.id === c.o) ? Infinity : typeof (/** @type {any} */ (c).lv) === "number" ? /** @type {any} */ (c).lv : -Infinity);
   const list = [...claims().values()].sort((a, b) =>
