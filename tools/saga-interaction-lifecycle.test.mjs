@@ -589,3 +589,75 @@ for (const [name, cut] of [
     f.util.release(f.player.id, newer);
   });
 }
+
+test("a vision cannot start over one that was cut and has not cleaned up yet, so the old cleanup never reaches a newer vision", async () => {
+  const f = fixture();
+  const watching = new Map();
+  const play = visionFor(f, watching, true);
+  const a = play(scenes);
+  await f.advance(30);
+  f.util.cancelInteractions(f.player.id); // the lock is free again, but vision A has not noticed yet
+  assert.equal(await play(scenes), false, "the watching mark still belongs to A: B cannot start");
+  assert.deepEqual(f.player.effects, ["darkness"], "B added nothing");
+  await f.advance(10);
+  assert.equal(await a, false);
+  assert.deepEqual(f.player.effects, [], "A removed only its own darkness, before B could exist");
+  const b = play(scenes);
+  await f.advance(30);
+  assert.deepEqual(f.player.effects, ["darkness"], "B's own darkness");
+  await f.advance(30);
+  assert.equal(await b, true);
+  assert.equal(watching.size, 0);
+});
+
+function opToolsFor(f, target, calls) {
+  class Modal extends f.ModalFormData {
+    dropdown() { return this; }
+  }
+  const entry = { story: { title: "Story" }, chapter: {} };
+  return vm.runInNewContext(`${body(uiSource, "pickPlayer")}\n${body(uiSource, "opTools")}\n;opTools`, {
+    show: f.util.show, ActionFormData: f.ActionFormData, ModalFormData: Modal, world: { getAllPlayers: () => [target] },
+    placesMenu: async () => { calls.places++; }, entries: () => [entry], plain: (s) => s, stepLine: () => "step", sagaOf: () => ({}),
+    isOp: () => true, completeStep: (_target, e) => { calls.complete.push(e); return true; }, resetPlayer: (t) => { calls.reset.push(t); },
+  });
+}
+
+const flows = [
+  ["Finish a step", [{ canceled: false, selection: 1 }, { canceled: false, formValues: [0] }, { canceled: false, selection: 0 }], "complete"],
+  ["Reset stories", [{ canceled: false, selection: 2 }, { canceled: false, formValues: [0] }, { canceled: false, selection: 0 }], "reset"],
+];
+
+for (const [flow, answers, what] of flows) {
+  test(`operator tools "${flow}" still apply their one change when nothing was cut`, async () => {
+    const f = fixture();
+    const calls = { places: 0, complete: [], reset: [] };
+    for (const a of answers) f.formResponses.push(a);
+    await opToolsFor(f, f.newPlayer("target"), calls)(f.player);
+    assert.equal(calls[what].length, 1);
+    assert.equal(f.forms.length, 3);
+  });
+
+  for (const step of [2, 3]) {
+    for (const [cutName, cut] of [
+      ["a dimension change", (f) => { f.player.dimension = { id: "minecraft:the_end" }; }],
+      ["a death", (f) => { f.player.health = 0; }],
+      ["a respawn cancel", (f) => f.util.cancelInteractions(f.player.id)],
+    ]) {
+      test(`operator tools "${flow}" open no further form and change nothing when ${cutName} lands as form ${step} is answered`, async () => {
+        const f = fixture();
+        const calls = { places: 0, complete: [], reset: [] };
+        const late = deferred();
+        for (const a of answers.slice(0, step - 1)) f.formResponses.push(a);
+        f.formResponses.push(late.promise);
+        const run = opToolsFor(f, f.newPlayer("target"), calls)(f.player);
+        for (let k = 0; k < step; k++) await f.flush();
+        assert.equal(f.forms.length, step);
+        cut(f);
+        late.resolve(answers[step - 1]);
+        await run;
+        assert.equal(f.forms.length, step, "no later form opens");
+        assert.equal(calls.complete.length + calls.reset.length, 0, "no mutation");
+      });
+    }
+  }
+}
