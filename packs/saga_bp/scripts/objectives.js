@@ -573,6 +573,10 @@ function kitchenOk(stack, key) {
     if (stack.typeId === k.item && lore[0] === "§7Rare ingredient") return true;
     return !!k.alsoAny && stack.typeId === k.alsoAny && /^§7\d+ cm$/.test(lore[0] ?? ""); // a Storm Eel from Fishing
   }
+  // A dish made since the Kitchen marks its lore with its own name: a rare dish renamed to another of the same food fails.
+  // Older dishes have no mark and are still taken.
+  const mark = lore.find((l) => l.startsWith("§8Dish: "));
+  if (mark !== undefined && nameKey(mark.slice("§8Dish: ".length)) !== key) return false;
   return stack.typeId === k.item && lore.includes(k.rare ? "§6Rare dish" : "§8Kitchen dish");
 }
 
