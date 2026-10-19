@@ -77,9 +77,21 @@ function fixture(saved) {
 }
 
 test("Fallen Light explains another geode or a party mate when the crater is depleted", () => {
+  const intro = fallen.intro.map((page) => (typeof page === "string" ? page : page.text)).join("\n");
   assert.match(fallen.hint, /\bgeodes?\b/i, "the real hint must name a renewable outside route");
   assert.match(fallen.hint, /party mate|friend/i, "the real hint must explain handed-over shards");
   assert.match(fallen.hint, /any source|anywhere|count|already have/i, "the real hint must say those shards count");
+  assert.match(fallen.hint, /touch/i, "the hint must still send the player to touch the crater");
+  assert.match(intro, /\bgeodes?\b/i, "the intro must name a renewable outside route before a paid hint");
+  assert.match(intro, /party mate|friend/i, "the intro must explain handed-over shards");
+  assert.match(intro, /count|already/i, "the intro must say those shards count");
+  assert.match(intro, /touch|glowing heart/i, "the intro must still require the crater visit");
+  for (const page of fallen.intro) {
+    const text = typeof page === "string" ? page : page.text;
+    assert.ok(text.replace(/§./g, "").length <= 450, "intro pages stay within the form limit");
+  }
+  const visible = `${fallen.hint}\n${intro}`.replace(/§/g, "");
+  assert.equal(visible, visible.replace(/[^\x00-\x7F]/g, ""), "game text stays plain ASCII");
 });
 
 test("Fallen Light keeps the published objective identity and source-independent item requirement", () => {
