@@ -236,10 +236,17 @@ function wanderContext(players, targetCount) {
       return players.filter((p) => (p.location.x - opts.location.x) ** 2 + (p.location.z - opts.location.z) ** 2 <= opts.maxDistance ** 2);
     },
   };
-  const targets = Array.from({ length: targetCount }, (_, i) => ({ id: `t${i}`, entity: { dimension, location: vec(i * 1000, 64, 0) } }));
+  const entities = new Map();
+  const liveRecords = {};
+  for (let i = 0; i < targetCount; i++) {
+    entities.set(`e${i}`, { dimension, location: vec(i * 1000, 64, 0) });
+    liveRecords[`w${i}`] = { e: `e${i}`, w: `w${i}`, n: `N${i}` };
+  }
   const ctx = {
     log,
-    targets,
+    entities,
+    liveRecords,
+    seen: undefined,
     GameMode: { Spectator: "spectator" },
     system: { currentTick: 5000 },
     world: {
@@ -251,9 +258,7 @@ function wanderContext(players, targetCount) {
     },
   };
   vm.createContext(ctx);
-  // the baseline's updateLabels read every player in the sync call; the new one asks labelObservers
-  const update = fn(wander, "updateLabels");
-  const observers = optFn(wander, "labelObservers");
+  // the real updateLabels builds the targets and hands the sync its observers; the sync here only calls them
   vm.runInContext(
     [
       "const LABEL_OBSERVER_RANGE = 36;",
@@ -261,11 +266,12 @@ function wanderContext(players, targetCount) {
       line(wander, "LABEL_QUERY_PLAYERS", "8"),
       line(wander, "LABEL_QUERY_TARGETS", "16"),
       "let onlineN = 0; let onlineAt = -Infinity;",
-      observers,
-      "let ready = true; const DIMENSIONS = []; const live = {}; const camps = {}; const NAMED_BY_ID = new Map();",
+      optFn(wander, "labelObservers"),
+      "let ready = true; const DIMENSIONS = []; const live = liveRecords; const camps = {}; const NAMED_BY_ID = new Map();",
       "const nameLabels = { sync(t, observers) { globalThis.seen = observers(); } };",
-      "const entityById = () => undefined;",
-      update,
+      "const entityById = (id) => entities.get(id);",
+      "const wandererLabel = (w, n) => n; const wandererMarker = (k) => k;",
+      fn(wander, "updateLabels"),
       "globalThis.updateLabels = updateLabels;",
     ].join("\n"),
     ctx,
@@ -273,38 +279,40 @@ function wanderContext(players, targetCount) {
   return ctx;
 }
 
-test("wander labels: a busy server reads only the players near a wanderer, a small one reads everyone", () => {
+test("wander labels: the real updateLabels reads only the players near a wanderer on a busy server, everyone on a small one", () => {
   const busy = Array.from({ length: 60 }, (_, i) => ({ id: `p${i}`, location: vec(i < 3 ? 5 + i : 100000 + i * 100, 64, 0) }));
-  const sync = (players, n) => {
+  const run = (players, n) => {
     const ctx = wanderContext(players, n);
-    // a sync with these wanderers as the live targets
-    vm.runInContext("globalThis.sync = (t) => nameLabels.sync(t, () => " + (/^function labelObservers\(/m.test(wander) ? "labelObservers(t)" : "world.getPlayers({ excludeGameModes: [GameMode.Spectator] })") + ");", ctx);
-    ctx.sync(ctx.targets);
+    ctx.updateLabels();
     return ctx;
   };
-  const ctx = sync(busy, 3);
+  const ctx = run(busy, 3);
   assert.deepEqual([...new Set(ctx.seen.map((p) => p.id))].sort(), ["p0", "p1", "p2"]);
   assert.equal(ctx.log.all, 0, "no read of every player");
   assert.equal(ctx.log.near, 3, "one query per wanderer");
 
-  const small = sync(busy.slice(0, 6), 3);
+  const small = run(busy.slice(0, 6), 3);
   assert.equal(small.seen.length, 6);
   assert.equal(small.log.near, 0);
 
-  const many = sync(busy, 20);
+  const many = run(busy, 20);
   assert.equal(many.log.near, 0, "more wanderers than the query cap reads everyone");
   assert.equal(many.log.all, 1);
 });
 
-test("wander upkeep: no camps or disabled reads no player's place", () => {
+// Regression guard: the original (971ea5c6) already read nothing without camps; 4b79281e read every player eagerly.
+test("wander upkeep: no camps, or the pack disabled, reads no player's place", () => {
   const m = wander.match(/^ {2}const players = \[\];\n[^\n]*\n/m) ?? wander.match(/^ {2}const players = world\.getAllPlayers\(\)[^\n]*\n/m);
   assert.ok(m, "production camp players read");
   let reads = 0;
-  const ctx = { world: { getAllPlayers: () => [{ get dimension() { reads++; return { id: "d" }; }, get location() { reads++; return vec(0); } }] }, camps: {}, enabled: true };
+  const player = { get dimension() { reads++; return { id: "d" }; }, get location() { reads++; return vec(0); } };
+  const ctx = { world: { getAllPlayers: () => [player] }, camps: {}, enabled: true };
   vm.createContext(ctx);
-  vm.runInContext("(() => {" + m[0] + "return players.length; })()", ctx);
+  const run = () => vm.runInContext("(() => {" + m[0] + "return players.length; })()", ctx);
+  run();
   assert.equal(reads, 0, "no camps: no reads");
   ctx.camps = { a: {} };
-  vm.runInContext("(() => {" + m[0] + "return players.length; })()", ctx);
-  assert.equal(reads > 0, true);
+  ctx.enabled = false;
+  run();
+  assert.equal(reads, 0, "disabled: no reads");
 });
