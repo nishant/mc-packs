@@ -5,6 +5,14 @@ import vm from "node:vm";
 
 const utilSource = readFileSync(new URL("../packs/saga_bp/scripts/util.js", import.meta.url), "utf8");
 const objectivesSource = readFileSync(new URL("../packs/saga_bp/scripts/objectives.js", import.meta.url), "utf8");
+const uiSource = readFileSync(new URL("../packs/saga_bp/scripts/ui.js", import.meta.url), "utf8");
+
+/** The production source of one top-level function (so the tests run the real code, not a copy). */
+function body(source, name) {
+  const found = source.match(new RegExp(`^(?:export )?(?:async )?function ${name}\\([\\s\\S]*?^\\}`, "m"))?.[0];
+  assert.ok(found, `find ${name} in the production source`);
+  return found.replace(/^export /, "");
+}
 
 function signal() {
   const listeners = new Set();
@@ -60,8 +68,14 @@ function fixture() {
     }
     sendMessage(text) { this.messages.push(text); }
     playSound() {}
+    camera = { fade() {} };
+    effects = [];
+    onScreenDisplay = { setTitle() {}, setActionBar() {} };
+    addEffect(id) { this.effects.push(id); }
+    removeEffect(id) { this.effects = this.effects.filter((e) => e !== id); }
   }
   const player = new Player();
+  const newPlayer = (id) => Object.assign(new Player(), { id, name: id });
   class ActionFormData {
     title() { return this; }
     body() { return this; }
@@ -70,6 +84,14 @@ function fixture() {
       forms.push({ player: p, form: this });
       return formResponses.length ? Promise.resolve(formResponses.shift()) : new Promise(() => {});
     }
+  }
+  class MessageFormData extends ActionFormData {
+    button1() { return this; }
+    button2() { return this; }
+  }
+  class ModalFormData extends ActionFormData {
+    textField() { return this; }
+    submitButton() { return this; }
   }
   const FormCancelationReason = { UserBusy: "UserBusy", UserClosed: "UserClosed" };
   const closed = [];
@@ -80,7 +102,7 @@ function fixture() {
     NPC_NAMES: {}, WANDERERS: [], console,
   };
   const source = utilSource.replace(/^import\s[\s\S]*?;\r?$/gm, "").replace(/^export\s+/gm, "");
-  const util = vm.runInNewContext(`${source}\n;({ show, exclusive, busy, alive, lifecycle, claim, release, cancelInteractions, onCancel, FORM_TICKS });`, context);
+  const util = vm.runInNewContext(`${source}\n;({ show, exclusive, busy, alive, lifecycle, claim, release, cancelInteractions, FORM_TICKS, wait, dialog, showOnce: typeof showOnce === "function" ? showOnce : undefined });`, context);
   const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
   async function advance(ticks) {
     for (let i = 0; i < ticks; i++) {
@@ -94,7 +116,7 @@ function fixture() {
       await flush();
     }
   }
-  return { player, world, system, forms, closed, formResponses, ActionFormData, util, flush, advance, timerCount: () => timers.size };
+  return { player, newPlayer, world, system, forms, closed, formResponses, ActionFormData, MessageFormData, ModalFormData, FormCancelationReason, util, flush, advance, timerCount: () => timers.size };
 }
 
 function deferred() {
@@ -213,12 +235,9 @@ test("cancelling with no form of ours open closes nothing and only clears our ow
   const f = fixture();
   const token = f.util.claim(f.player.id);
   assert.ok(token);
-  const seen = [];
-  f.util.onCancel((id) => seen.push(id));
   f.util.cancelInteractions(f.player.id);
   assert.equal(f.closed.length, 0, "another pack's form is never closed");
   assert.equal(f.util.busy.has(f.player.id), false);
-  assert.deepEqual(seen, [f.player.id]);
 });
 
 test("an answered form closes nothing and leaves no timers behind", async () => {
@@ -326,3 +345,247 @@ test("an inspect tap finds a clue only near it, once, and not for a dead player"
   inspectTouch(f.player, entry, 0, objective, { x: 40.5, y: 65, z: 40.5 }, dim);
   assert.equal(f.player.messages.length, 1, "a dead player finds nothing");
 });
+
+// ---- multi-step flows, popups, leave generation, riddle cooldown, visions (the second review's findings) ----------
+
+test("an interaction started before a leave stays stale even when the player was never cancelled before", () => {
+  const f = fixture();
+  const stale = f.util.lifecycle(f.player);
+  assert.equal(stale(), false);
+  f.util.cancelInteractions(f.player.id, true);
+  assert.equal(stale(), true, "the leave itself must end it, not only the player object turning invalid");
+});
+
+function codexPageFor(f) {
+  return vm.runInNewContext(`(${body(uiSource, "codexPage")})`, {
+    ...f.util,
+    ActionFormData: f.ActionFormData,
+    sagaOf: () => ({ cx: ["a"] }),
+    codexById: new Map([["a", { title: "Entry", story: "Story", text: "Text" }]]),
+  });
+}
+
+for (const [name, cut] of [
+  ["respawn", (f) => f.util.cancelInteractions(f.player.id)],
+  ["dimension change", (f) => { f.player.dimension = { id: "minecraft:the_end" }; }],
+]) {
+  test(`a menu does not reopen its parent page after its sub-form was cut by a ${name}`, async () => {
+    const f = fixture();
+    f.formResponses.push({ canceled: false, selection: 0 });
+    let finished = false;
+    codexPageFor(f)(f.player).then(() => { finished = true; });
+    await f.flush();
+    assert.equal(f.forms.length, 2, "the entry list, then one entry that is never answered");
+    cut(f);
+    await f.advance(6);
+    assert.equal(f.forms.length, 2, "the list must not come back in the new lifecycle");
+    assert.equal(finished, true);
+  });
+}
+
+test("a menu does not reopen its parent page after its sub-form timed out unanswered", async () => {
+  const f = fixture();
+  f.formResponses.push({ canceled: false, selection: 0 });
+  let finished = false;
+  codexPageFor(f)(f.player).then(() => { finished = true; });
+  await f.flush();
+  await f.advance(f.util.FORM_TICKS + 5);
+  assert.equal(f.forms.length, 2, "an AFK player is not shown the parent page again");
+  assert.equal(finished, true);
+});
+
+test("a timed-out form ends the player's other work started before it, but showOnce does not", async () => {
+  const f = fixture();
+  const before = f.util.lifecycle(f.player);
+  const pending = deferred();
+  const timedOut = f.util.show(f.player, { show: () => pending.promise });
+  await f.advance(f.util.FORM_TICKS);
+  assert.equal(await timedOut, undefined);
+  assert.equal(before(), true, "a menu loop that started earlier must stop too");
+  const after = f.util.lifecycle(f.player);
+  assert.equal(typeof f.util.showOnce, "function");
+  const popup = f.util.showOnce(f.player, { show: () => deferred().promise }, 100);
+  await f.advance(100);
+  assert.equal(await popup, undefined);
+  assert.equal(after(), false, "a popup timing out leaves the player's other interactions alone");
+  assert.equal(f.closed.length, 2, "each gave-up form is closed once");
+});
+
+function listenInFor(f, extra = {}) {
+  const popups = new Set();
+  const closes = [];
+  const listenIn = vm.runInNewContext(`(${body(uiSource, "listenIn")})`, {
+    popups, ActionFormData: f.ActionFormData, busy: f.util.busy, alive: f.util.alive, showOnce: f.util.showOnce, system: f.system,
+    closeForms: (p) => closes.push(p), LISTEN_TICKS: 2400, ...extra,
+  });
+  return { listenIn, popups, closes };
+}
+
+test("a dead party mate gets no listening-in popup over their respawn screen", async () => {
+  const f = fixture();
+  const mate = f.newPlayer("mate");
+  mate.health = 0;
+  const { listenIn, popups } = listenInFor(f);
+  listenIn([mate], "T", "B");
+  await f.flush();
+  assert.equal(f.forms.length, 0);
+  assert.equal(popups.size, 0);
+});
+
+test("a listening-in popup nobody answers is bounded and its mark is cleared", async () => {
+  const f = fixture();
+  const mate = f.newPlayer("mate");
+  const { listenIn, popups } = listenInFor(f);
+  listenIn([mate], "T", "B");
+  await f.flush();
+  assert.equal(popups.has("mate"), true);
+  await f.advance(2400 + 5);
+  assert.equal(popups.has("mate"), false, "a form that never answers cannot hold the popup mark forever");
+});
+
+function inviteFor(f) {
+  const popups = new Set();
+  const accepted = [];
+  const sent = [];
+  const inviteSide = vm.runInNewContext(`(${body(uiSource, "inviteSide")})`, {
+    popups, busy: f.util.busy, exclusive: f.util.exclusive, alive: f.util.alive, lifecycle: f.util.lifecycle, showOnce: f.util.showOnce,
+    system: f.system, closeForms: () => {}, MessageFormData: f.MessageFormData, FormCancelationReason: f.FormCancelationReason,
+    npcName: () => "Npc", stepsFor: () => [], sagaOf: () => ({}), canTake: () => true, INVITE_TICKS: 1200,
+    acceptFor: (...args) => { accepted.push(args); return true; },
+    console,
+  });
+  const by = { name: "Ann", isValid: true, sendMessage: (m) => sent.push(m) };
+  const story = { title: "Story" };
+  const chapter = { id: "c", title: "Chapter" };
+  return { inviteSide: (mates) => inviteSide(by, story, chapter, undefined, mates), popups, accepted };
+}
+
+test("a party invite accepted normally still starts the story", async () => {
+  const f = fixture();
+  const mate = f.newPlayer("mate");
+  f.formResponses.push({ canceled: false, selection: 0 });
+  const { inviteSide, accepted, popups } = inviteFor(f);
+  inviteSide([mate]);
+  await f.advance(3);
+  assert.equal(accepted.length, 1);
+  assert.equal(popups.size, 0);
+});
+
+test("a party invite is not shown to a dead mate", async () => {
+  const f = fixture();
+  const mate = f.newPlayer("mate");
+  mate.health = 0;
+  const { inviteSide, accepted } = inviteFor(f);
+  inviteSide([mate]);
+  await f.advance(3);
+  assert.equal(f.forms.length, 0);
+  assert.equal(accepted.length, 0);
+});
+
+for (const [name, cut] of [
+  ["respawn", (f, mate) => f.util.cancelInteractions(mate.id)],
+  ["dimension change", (f, mate) => { mate.dimension = { id: "minecraft:the_end" }; }],
+  ["death", (f, mate) => { mate.health = 0; }],
+]) {
+  test(`a party invite answered Join after a ${name} does not start the story`, async () => {
+    const f = fixture();
+    const mate = f.newPlayer("mate");
+    const answer = deferred();
+    f.formResponses.push(answer.promise);
+    const { inviteSide, accepted, popups } = inviteFor(f);
+    inviteSide([mate]);
+    await f.flush();
+    assert.equal(f.forms.length, 1);
+    cut(f, mate);
+    await f.advance(6);
+    answer.resolve({ canceled: false, selection: 0 });
+    await f.advance(3);
+    assert.equal(accepted.length, 0, "a late Join must not apply a choice or start the chapter");
+    assert.equal(popups.has("mate"), false);
+  });
+}
+
+test("a party invite nobody answers is closed after INVITE_TICKS and its mark cleared", async () => {
+  const f = fixture();
+  const mate = f.newPlayer("mate");
+  const { inviteSide, popups } = inviteFor(f);
+  inviteSide([mate]);
+  await f.flush();
+  await f.advance(1205);
+  assert.equal(popups.has("mate"), false);
+  assert.equal(f.util.busy.has("mate"), false);
+});
+
+function askFor(f, askCool) {
+  return vm.runInNewContext(`(${body(objectivesSource, "askAnswer")})`, {
+    exclusive: f.util.exclusive, show: f.util.show, alive: f.util.alive, ModalFormData: f.ModalFormData, system: f.system, askCool,
+    sagaOf: () => ({}), objDone: () => false, pagesFor: (pages) => pages, resolveAnswer: () => {},
+  });
+}
+const riddle = { story: { title: "S", id: "s" }, chapter: { objectives: [{ question: "Q?", label: "Riddle" }] } };
+
+test("a riddle form closed by the player still starts the re-ask cooldown", async () => {
+  const f = fixture();
+  const askCool = new Map();
+  f.formResponses.push({ canceled: true, cancelationReason: "UserClosed" });
+  await askFor(f, askCool)(f.player, riddle, 0);
+  assert.equal(askCool.has(f.player.id), true);
+});
+
+for (const [name, cut] of [
+  ["leave", (f) => { f.player.isValid = false; f.util.cancelInteractions(f.player.id, true); }],
+  ["death", (f) => { f.player.health = 0; f.util.cancelInteractions(f.player.id); }],
+]) {
+  test(`a riddle form cut by a ${name} leaves no cooldown behind`, async () => {
+    const f = fixture();
+    const askCool = new Map();
+    const run = askFor(f, askCool)(f.player, riddle, 0);
+    await f.flush();
+    assert.equal(f.forms.length, 1);
+    cut(f);
+    await run;
+    assert.equal(askCool.has(f.player.id), false, "a departed player's id must not be written back, and a respawned one is asked again at once");
+  });
+}
+
+function visionFor(f, watching, dark) {
+  const playVision = vm.runInNewContext(`(${body(objectivesSource, "playVision")})`, {
+    watching, claim: f.util.claim, release: f.util.release, lifecycle: f.util.lifecycle, alive: f.util.alive, wait: f.util.wait,
+    sneaking: () => false, holdTitle: () => {}, send: () => {}, PACK: "saga_bp",
+  });
+  return (list) => playVision(f.player, list, dark);
+}
+const scenes = [{ title: "T", text: "x", seconds: 1 }];
+
+test("a vision played to the end credits and releases its lock", async () => {
+  const f = fixture();
+  const play = visionFor(f, new Map(), true);
+  const done = play(scenes);
+  await f.advance(24 + 20 + 5);
+  assert.equal(await done, true);
+  assert.equal(f.util.busy.has(f.player.id), false);
+});
+
+for (const [name, cut] of [
+  ["respawn", (f) => f.util.cancelInteractions(f.player.id)],
+  ["death", (f) => { f.player.health = 0; }],
+  ["dimension change", (f) => { f.player.dimension = { id: "minecraft:the_end" }; }],
+]) {
+  test(`a vision cut short by a ${name} gives no credit, removes its own darkness and cannot release a newer lock`, async () => {
+    const f = fixture();
+    const watching = new Map();
+    const play = visionFor(f, watching, true);
+    const done = play(scenes);
+    await f.advance(30);
+    assert.deepEqual(f.player.effects, ["darkness"]);
+    cut(f);
+    f.util.busy.delete(f.player.id); // what a leave handler does: a newer operation can now take the lock
+    const newer = f.util.claim(f.player.id);
+    await f.advance(10);
+    assert.equal(await done, false, "no credit for a vision that was cut short");
+    assert.deepEqual(f.player.effects, [], "only the darkness this vision added is removed");
+    assert.equal(f.util.busy.has(f.player.id), true, "the older vision's finally cannot release the newer operation's lock");
+    assert.equal(watching.has(f.player.id), false);
+    f.util.release(f.player.id, newer);
+  });
+}
