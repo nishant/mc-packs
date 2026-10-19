@@ -14,11 +14,11 @@ export const CONFIG = {
   /** The stats the sidebar rotates through in "cycle" mode. */
   sidebarStats: ["playtime", "deaths", "mobkills", "pvpkills", "mined", "placed", "travelled", "flown", "joins"],
 
-  /** The stats ticker (each player's own stats above the hotbar) for the whole realm. Disabled: nobody sees it. */
+  /** Allow the stats ticker. Disabled: nobody sees it, whatever they chose. */
   tickerEnabled: true,
 
-  /** Players see the ticker before they ever choose. false: each player enables it in /realm:stats or /realm:prefs. */
-  tickerDefaultOn: false,
+  /** Players who never chose see the ticker. This Realm starts on; each player can turn it off. */
+  tickerDefaultOn: true,
 
   /** What players start with: "cycle" shows one stat at a time, "all" shows every chosen stat on one line. */
   tickerMode: "cycle",
