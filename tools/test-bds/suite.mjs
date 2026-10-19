@@ -284,8 +284,11 @@ async function perf() {
   const L = ["", `${"pack".padEnd(w)} | ${ns.map((n) => `@${n} ms/tick`.padStart(13)).join(" | ")} | budget | over at`, `${"-".repeat(w)}-|${ns.map(() => "-".repeat(15)).join("|")}|--------|--------`];
   L.push(`${"whole bundle".padEnd(w)} | ${ns.map((n) => f3(reports.get(n).bundle?.msPerTick).padStart(13)).join(" | ")} | ${"5".padStart(6)} | ${ns.filter((n) => n >= 40 && reports.get(n).bundle?.msPerTick > 5).join(",") || "-"}`);
   L.push(`${"server TPS".padEnd(w)} | ${ns.map((n) => (reports.get(n).server?.tps ?? 0).toFixed(1).padStart(13)).join(" | ")} |        |`);
+  const overBudget = [];
+  for (const n of ns) if (n >= 40 && reports.get(n).bundle?.msPerTick > 5) overBudget.push(`whole bundle @${n}`);
   for (const pack of rows) {
     const over = ns.filter((n) => (ms(reports.get(n), pack) ?? 0) > budget(pack));
+    for (const n of over) overBudget.push(`${pack} @${n}`);
     L.push(`${pack.padEnd(w)} | ${ns.map((n) => f3(ms(reports.get(n), pack)).padStart(13)).join(" | ")} | ${String(budget(pack)).padStart(6)} | ${over.join(",") || "-"}`);
   }
   L.push("", `reports: ${ns.map((n) => path.join(logDir, `perf-${n}.json`)).join(", ")}`);
@@ -295,7 +298,8 @@ async function perf() {
     fs.mkdirSync(path.dirname(path.resolve(args.json)), { recursive: true });
     fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, invalid, perf: Object.fromEntries([...reports].map(([n, r]) => [n, { acceptance: r.acceptance ?? null, bundle: r.bundle, server: r.server, packs: Object.fromEntries(r.packs.map((x) => [x.pack, x.msPerTick])) }])) }, null, 2));
   }
-  if (invalid.length) process.exitCode = 1;
+  if (overBudget.length) console.log(`OVER BUDGET: ${overBudget.join(", ")}`);
+  if (invalid.length || overBudget.length) process.exitCode = 1;
 }
 
 async function pool(items, n, fn) {
