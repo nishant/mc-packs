@@ -146,6 +146,7 @@ export const NAMES = {
   "realm:config": ["Realm Settings", "Every pack, for everyone"],
   "realm:cooking": ["Kitchen", "Recipes and the cookbook"],
   "realm:crowns": ["Crowns Menu", "Balance, pay, market"],
+  "realm:crowns_audit": ["Crowns Audit", "Recent pays and gives"],
   "realm:crowns_balance": ["Crowns Balance", "Yours and the richest"],
   "realm:crowns_give": ["Give Crowns", "Negative amounts take them"],
   "realm:crowns_market": ["Crowns Market", "Open the market"],

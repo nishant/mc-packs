@@ -626,11 +626,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Inside it, only you and the players you share it with can break or place blocks, open chests, doors and furnaces, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees §eThis land is claimed by Sam§r.",
+        "text": "Inside it, only you and the players you share it with can break or place blocks, open chests, furnaces and doors, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees §eThis land is claimed by Sam§r.",
         "ops": false
       },
       {
-        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). In a party, §lShare with my party§r shares it with everyone in your party, now and later, in one tap. The same menu stops sharing, shows its borders or removes the claim (it asks first).",
+        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). In a party, §lShare with my party§r shares it with everyone in your party, now and later, in one tap. The same menu stops sharing, shows its borders or removes the claim (it asks first). The same menu has §lVisitors may open doors§r, which lets visitors open doors, trapdoors and gates (off by default).",
         "ops": false
       },
       {
@@ -948,6 +948,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lBlock a sender:§r open one of their letters and tap §lBlock sender§r (their later letters to you aren't delivered). §lBlocked players§r in §e/realm:mail§r lists who you've blocked; tap a name to unblock it.",
+        "ops": false
+      },
+      {
         "text": "§lSee what you sent:§r §e/realm:mail§r -> §lSent§r shows your recent letters and whether each was read yet.",
         "ops": false
       },
@@ -956,7 +960,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lRealm Mail§r sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lRealm Mail§r sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining. §e/realm:mail§r -> §lDelete letters from a player§r (operators only) finds a writer by gamertag and removes all their letters from every inbox and Sent list after you confirm; it can't be undone.",
         "ops": true
       }
     ],
@@ -1332,7 +1336,7 @@ export const PACKS = [
         "usage": "/realm:crowns_pay <player> <amount>",
         "ops": false,
         "who": "Everyone",
-        "text": "Pays one online player from your balance (1 to 100,000, §emaxPay§r)"
+        "text": "Pays one online player from your balance (1 to 100,000, §emaxPay§r), up to §edailyPayLimit§r a UTC day"
       },
       {
         "usage": "/realm:crowns_market",
@@ -1345,6 +1349,12 @@ export const PACKS = [
         "ops": false,
         "who": "Operators",
         "text": "Gives Crowns to the players picked (§e@a§r works); a negative amount takes them, down to 0. A balance tops out at 2,147,483,647, so a give stops there (the reply says §e(the most a balance can hold)§r)"
+      },
+      {
+        "usage": "/realm:crowns_audit",
+        "ops": false,
+        "who": "Operators and Game Directors",
+        "text": "A form with the newest 50 of the last 200 pays and gives, newest first (times in UTC)"
       }
     ]
   },
@@ -1909,7 +1919,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:party§r to see every member with their health and where they are (or §eoffline§r), and to invite more players. The leader can also §lRemove a member§r. Leave with §e/realm:party_leave§r or §lLeave the party§r.",
+        "text": "Run §e/realm:party§r to see every member with their health and where they are (or §eoffline§r), and to invite more players. The leader can also §lRemove a member§r or §lMute or unmute a member§r (a muted member can still read the party chat, but their messages aren't sent, and they see §eThe party leader muted you: your party messages aren't sent.§r; the leader can't be muted). Leave with §e/realm:party_leave§r or §lLeave the party§r.",
         "ops": false
       },
       {
