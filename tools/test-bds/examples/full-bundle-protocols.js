@@ -196,6 +196,17 @@ export default async function (t) {
   const DISC = "custom:music_disc_run_away";
   const groundDiscs = () => dim.getEntities({ type: "minecraft:item", location: { x: juke.x + 0.5, y: juke.y + 1, z: juke.z + 0.5 }, maxDistance: 4 })
     .filter((e) => e.getComponent("minecraft:item")?.itemStack?.typeId === DISC).length;
+  const availableDiscs = () => {
+    let count = groundDiscs();
+    for (const p of [op, visitor]) {
+      const inv = p.getComponent("minecraft:inventory").container;
+      for (let i = 0; i < inv.size; i++) {
+        const stack = inv.getItem(i);
+        if (stack?.typeId === DISC) count += stack.amount;
+      }
+    }
+    return count;
+  };
   const handIds = (p) => {
     const equip = p.getComponent("minecraft:equippable")?.getEquipment(t.mc.EquipmentSlot.Mainhand)?.typeId;
     const held = p.getComponent("minecraft:inventory").container.getItem(p.selectedSlotIndex)?.typeId;
@@ -222,10 +233,11 @@ export default async function (t) {
   r = await replay(visitor, juke, { hand: "pickaxe", sneaking: false });
   await t.wait(20);
   t.check(row(r, "elytra_bp")?.before === true, "elytra saw the claim cancel on ejection");
-  t.check(groundDiscs() === beforeEject, `callback-replay: the visitor does not eject the disc (${groundDiscs()} on the ground)`);
+  t.check(availableDiscs() === beforeEject, `callback-replay: the visitor does not eject or pick up the disc (${availableDiscs()} available, ${groundDiscs()} on the ground)`);
+  const beforeOwnerEject = availableDiscs();
   r = await replay(op, juke, { hand: "pickaxe", sneaking: false });
   await t.wait(20);
-  t.check(groundDiscs() > beforeEject, `callback-replay: the owner ejects the disc (${groundDiscs()} on the ground)`);
+  t.check(availableDiscs() === beforeOwnerEject + 1, `callback-replay: the owner ejects exactly one disc (${availableDiscs()} available, ${groundDiscs()} on the ground; either player may pick it up)`);
 
   // Storm rod, after claims. storm.rods records afterEvents.playerPlaceBlock only. setType does not emit it.
   // Placement is a native simulated use, observed before the bolt. The collect taps stay callback-replay.
@@ -280,8 +292,8 @@ export default async function (t) {
   // Break and entity interact stay callback-replay of the shared event object.
   // No dungeon is started. expedition_bp returns at once when there is no active run, so entry cancel state
   // does not prove expedition honors cancel on a block it would otherwise refuse.
-  // npc_bp has no initial ev.cancel guard. An armor stand is not a townsfolk, so this does not prove a claim
-  // stops a talk. That production gap is recorded for the lead and is not edited here.
+  // An armor stand is not a townsfolk, so this proves shared cancel-state propagation, not a blocked conversation.
+  // Matching-NPC cancellation is covered separately by npc-cancel.test.mjs.
   const stone = { x: base.x + 3, y: base.y - 1, z: base.z + 3 };
   dim.getBlock(stone).setType("minecraft:stone");
   r = await replay(visitor, stone, { signal: "playerBreakBlock", sneaking: false });
@@ -294,7 +306,7 @@ export default async function (t) {
   t.assert(stand?.isValid, "armor stand spawned");
   r = await replay(visitor, { x: base.x + 5, y: base.y, z: base.z + 5 }, { signal: "playerInteractWithEntity", entity: "minecraft:armor_stand", sneaking: false });
   t.check(row(r, "claims_bp")?.after === true, "callback-replay entity: claims cancels an armor stand in the claim");
-  t.check(before(r, "npc_bp") > before(r, "claims_bp") && row(r, "npc_bp")?.before === true, "npc_bp was entered with cancel already true; an armor stand is not a townsfolk, and npc_bp has no initial ev.cancel guard");
+  t.check(before(r, "npc_bp") > before(r, "claims_bp") && row(r, "npc_bp")?.before === true, "npc_bp was entered with cancel already true; this armor-stand trace does not prove a blocked townsfolk conversation");
 
   // Honest native attempt. A zero count is not a pass of the engine path.
   const hitsBefore = await nativeCount(t, send, native, "playerInteractWithBlock");
@@ -321,7 +333,7 @@ export default async function (t) {
   t.check(typeof saved === "string" && /showGamertag/.test(saved), `the probe, in the bundle add-on, reads nick:cfg (${saved})`);
   t.check(t.world.getDynamicProperty("nick:cfg") == null, "the harness add-on does not see the bundle's dynamic properties");
 
-  const help = t.waitForm(op, { title: /realm commands/, timeout: 80 });
+  const help = t.waitForm(op, { title: /^Realm help$/, timeout: 80 });
   t.check(t.cmd(op, "/realm:help").ok, "/realm:help ran");
   const helpForm = await help;
   t.check(helpForm.pack === bundle.folder, `the help form is relayed as the one add-on (${helpForm.pack})`);

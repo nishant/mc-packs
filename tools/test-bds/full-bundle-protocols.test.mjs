@@ -209,9 +209,30 @@ test("replay uses the equipped mainhand as event.itemStack, and the scenario ref
   const juke = scenario.slice(scenario.indexOf("minecraft:jukebox"), scenario.indexOf("Storm rod"));
   const visitorInsert = juke.indexOf("visitor does not insert the disc into an empty jukebox");
   const ownerInsert = juke.indexOf("the owner's disc went into the jukebox");
-  const visitorEject = juke.indexOf("the visitor does not eject the disc");
+  const visitorEject = juke.indexOf("the visitor does not eject or pick up the disc");
   assert.ok(visitorInsert > 0 && visitorInsert < ownerInsert, "visitor insertion refusal is asserted before the owner insert");
   assert.ok(ownerInsert < visitorEject, "owner insertion stays before the ejection refusal");
+});
+
+test("ejection accounting includes the actual counter's ground and either player's picked-up discs", () => {
+  const scenario = fs.readFileSync(path.join(harness, "examples", "full-bundle-protocols.js"), "utf8");
+  const start = scenario.indexOf("const availableDiscs =");
+  const body = scenario.slice(start, scenario.indexOf("const handIds", start));
+  assert.ok(start >= 0);
+  const player = (items) => ({
+    getComponent: () => ({ container: { size: items.length, getItem: (slot) => items[slot] } }),
+  });
+  const disc = { typeId: "custom:music_disc_run_away", amount: 1 };
+  const count = (ground, own, visitor) => new Function("op", "visitor", "groundDiscs", "DISC", `${body}; return availableDiscs();`)(
+    player(own), player(visitor), () => ground, disc.typeId,
+  );
+  assert.equal(count(1, [], []), 1);
+  assert.equal(count(0, [disc], []), 1);
+  assert.equal(count(0, [], [disc]), 1);
+  assert.equal(count(0, [], []), 0);
+  assert.equal(count(1, [disc], []), 2, "a duplicate cannot pass the exactly-one assertion");
+  assert.match(scenario, /availableDiscs\(\) === beforeOwnerEject \+ 1/);
+  assert.match(scenario, /title: \/\^Realm help\$\//);
 });
 
 test("the storm rod is placed by a native use, not setType", () => {
@@ -238,7 +259,8 @@ test("chairs must match the stair, and expedition and npc claims stay within wha
   assert.match(rest, /no active run/);
   assert.match(rest, /does not prove expedition honors cancel/);
   assert.match(rest, /armor stand is not a townsfolk/);
-  assert.match(rest, /no initial ev\.cancel guard/);
+  assert.match(rest, /Matching-NPC cancellation is covered separately by npc-cancel\.test\.mjs/);
+  assert.doesNotMatch(rest, /no initial ev\.cancel guard/);
   assert.doesNotMatch(rest, /expedition \(after claims\) saw the break cancel/);
   assert.doesNotMatch(rest, /npc_bp \(after claims\) saw the entity cancel/);
 });
