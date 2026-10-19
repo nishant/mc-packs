@@ -1384,7 +1384,7 @@ export function fillEarlierPages(player) {
     const liveNow = new Set();
     for (const rec of live) {
       liveNow.add(rec.s);
-      if (rec.n === liveWas.get(rec.s)) continue;
+      if (/** @type {Rec & { fixed?: boolean }} */ (rec).fixed || rec.n === liveWas.get(rec.s)) continue;
       changed.set(rec.s, rec.n > 0 ? deserializeStack(rec) : undefined);
     }
     for (const s of liveWas.keys()) if (!liveNow.has(s)) changed.set(s, undefined);

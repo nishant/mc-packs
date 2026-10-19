@@ -2428,6 +2428,28 @@ test("F1 fill: every later page (hidden and active) pours into earlier pages, sl
   assertIndexExact(p, "after fill");
 });
 
+test("fill: a slot-locked stack on the active page keeps its real amount and slot while another stack moves", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:emerald", 3) }, 3: { 9: Object.assign(stack("minecraft:stone", 11), { lockMode: "slot" }) } });
+  switchPage(p, 2);
+  const lockedStack = Object.assign(stack("minecraft:stone", 7), { lockMode: "slot", nameTag: "Pinned", lore: ["§7keep"] });
+  p.container.setItem(9, lockedStack);
+  p.container.setItem(10, Object.assign(stack("minecraft:emerald", 4), { nameTag: "Mine" }));
+  const before = census(p);
+  const r = pages.fillEarlierPages(p);
+  assert.equal(r.ok, true);
+  const kept = p.container.getItem(9);
+  assert.equal(kept?.typeId, "minecraft:stone");
+  assert.equal(kept?.amount, 7, "locked stack keeps its amount (never the merge sentinel)");
+  assert.equal(kept?.lockMode, "slot");
+  assert.equal(kept?.nameTag, "Pinned");
+  assert.equal(p.container.getItem(10), undefined, "the unlocked stack moved");
+  assert.equal(savedPage(p, 3).get(9)?.amount, 11, "a locked stack on a saved page is untouched");
+  assert.deepEqual(census(p), before);
+  assertIndexExact(p, "locked fill");
+});
+
 test("F1 fill: from page 1 it pulls later pages into the live page's free slots", () => {
   const p = joined();
   mc.players = [p];
