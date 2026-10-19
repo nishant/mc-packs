@@ -23,6 +23,7 @@ import {
   reached,
   requires,
   sagaOf,
+  saveRoom,
   partyViews,
   setFlag,
   target,
@@ -828,9 +829,14 @@ export function reward(player, r, source, penalty = 0) {
     const saga = sagaOf(player);
     saga.cx ??= [];
     if (!saga.cx.includes(r.codex.id)) {
-      saga.cx.push(r.codex.id);
-      markDirty(player);
-      player.sendMessage(`§d[Codex] New entry: ${r.codex.title} §7(read it in /realm:saga, Codex)`);
+      if (saveRoom(saga) < 200) {
+        console.warn(`[saga] ${player.name}: codex entry ${r.codex.id} refused, the save is full`);
+        player.sendMessage(`§c[Codex] Your saved progress is full, so "${r.codex.title}" was not added.`);
+      } else {
+        saga.cx.push(r.codex.id);
+        markDirty(player);
+        player.sendMessage(`§d[Codex] New entry: ${r.codex.title} §7(read it in /realm:saga, Codex)`);
+      }
     }
   }
   return given.join(", ") + (cut ? " (less for the hint)" : "");
@@ -1107,6 +1113,7 @@ function championNear(player, obj) {
       const mob = spawnFresh(dim, champ.mob, spawnAt);
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
+      trackChampion(mob);
       mob.addTag(champ.tag);
       if (CHOIR.has(champ.tag) || champ.tag.startsWith("realm:saga:whc_")) mob.addTag("saga:choir");
       noBanner(mob);
@@ -3347,6 +3354,24 @@ export function playerGone(pid) {
   ownUntil.delete(pid);
   for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
   for (const k of [...weatherAsked.keys()]) if (k.startsWith(`${pid}|`)) weatherAsked.delete(k);
+}
+
+const sessionChampions = new Set();
+/** @param {Entity} ent */
+function trackChampion(ent) {
+  sessionChampions.add(ent.id);
+}
+/** A tagged champion that this session did not spawn: a leftover from a chunk that was unloaded at world load. @param {Entity} ent */
+function staleChampion(ent) {
+  return ent.hasTag(CHAMPION_TAG) && !sessionChampions.has(ent.id);
+}
+/** Removes a leftover champion when its chunk loads. @param {Entity} ent */
+export function sweepLoadedChampion(ent) {
+  try {
+    if (staleChampion(ent)) ent.remove();
+  } catch {
+    // already gone
+  }
 }
 
 /** Every dimension's story champions this pack spawned are removed at world load. */
