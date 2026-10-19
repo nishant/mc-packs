@@ -8,7 +8,7 @@ import { get } from "./settings.js";
 import { farDist, farOffset, refresh as refreshFar, setPlaceDist } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
-import { OVERWORLD, across, coords, dimName, groundAt, hash, isOp, itemName, num, send, show, wait } from "./util.js";
+import { OVERWORLD, across, coords, dimName, groundAt, hash, isOp, itemName, lifecycle, num, send, show, wait } from "./util.js";
 import { WANDERERS } from "./stories/index.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -814,6 +814,7 @@ const FACINGS = ["as drawn", "turned right", "turned around", "turned left"];
  * @param {Player} player @param {string} name @param {Vector3} [at] origin (default: where the player stands)
  */
 export async function previewBuild(player, name, at) {
+  const stale = lifecycle(player);
   const dim = player.dimension;
   const l = at ?? player.location;
   const origin = { x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z) };
@@ -829,7 +830,7 @@ export async function previewBuild(player, name, at) {
   }, 10);
   try {
     const info = infoOf(name);
-    while (player.isValid) {
+    while (!stale()) {
       until = system.currentTick + PREVIEW_TICKS;
       const box = boxOf(name, origin, facing);
       const w = box.max.x - box.min.x + 1;
@@ -937,7 +938,8 @@ async function confirm(player, question) {
 
 /** One place's page in the operators' menu. @param {Player} player @param {string} name */
 async function placePage(player, name) {
-  while (player.isValid) {
+  const stale = lifecycle(player);
+  while (!stale()) {
     const rec = placesOf()[name];
     const info = infoOf(name);
     const users = isCamp(name) ? [`${Object.keys(rec?.u ?? {}).length} player(s) on this wanderer's chain`] : usedBy(name);
@@ -1011,7 +1013,8 @@ async function placePage(player, name) {
 
 /** The operators' places menu: every place with its status. @param {Player} player */
 export async function placesMenu(player) {
-  while (player.isValid) {
+  const stale = lifecycle(player);
+  while (!stale()) {
     const saved = placesOf();
     const names = [...new Set([...Object.keys(PLACES), ...Object.keys(PREFABS), ...Object.keys(saved)])].filter((n) => !CAMPS[n]);
     const form = new ActionFormData()

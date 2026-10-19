@@ -1,7 +1,7 @@
 // Objectives: what counts for each objective type, the per-second and fast loops, and the scenes
 // (story characters, guards, escorts, wisps, defenses, visions, riddles).
 import { EquipmentSlot, GameMode, ItemStack, MolangVariableMap, Player, system, world } from "@minecraft/server";
-import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
+import { ModalFormData } from "@minecraft/server-ui";
 import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, spawnFresh, updateActorLabels } from "./actors.js";
 import {
   active,
@@ -33,7 +33,7 @@ import { get, getFor } from "./settings.js";
 import { holdTitle, isSlot, questCode, sideBoxes } from "./side.js";
 import { STORIES } from "./stories.js";
 import { FAVORS, WANDERERS } from "./stories/index.js";
-import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, open as openBlock, plain, send, show, wait, waterTop } from "./util.js";
+import { DIMENSIONS, OVERWORLD, PACK, across, alive, busy, cancelInteractions, claim, clock, dialog, dist3, exclusive, groundAt, itemName, lifecycle, npcName, online, open as openBlock, plain, release, send, show, wait, waterTop } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -1106,6 +1106,7 @@ export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
 world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   try {
     if (deadEntity instanceof Player) {
+      cancelInteractions(deadEntity.id); // a form open when they died would hide the respawn screen
       for (const s of scenes.values()) if (s.pid === deadEntity.id && s.kind === "defend" && s.state === "run") defendFail(s, "You fell.");
       return;
     }
@@ -1612,6 +1613,7 @@ function clueSpot(s, obj, k) {
 /** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
 function inspectTick(player, e, i, obj) {
   const s = sceneFor(player, e, i, "inspect");
+  if (!alive(player)) return;
   const loc = locate(obj);
   if (!loc || typeof loc === "string" || loc.pending || player.dimension.id !== loc.dim || across(player.location, loc) > 48) return;
   const bits = e.st.x?.[String(i)] ?? 0;
@@ -1636,6 +1638,7 @@ function inspectTick(player, e, i, obj) {
 
 /** A tap or hit near a clue. @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj @param {Vector3} at @param {string} dim */
 function inspectTouch(player, e, i, obj, at, dim) {
+  if (!alive(player)) return;
   const s = scenes.get(sk(player.id, objKey(e, i)));
   if (!s) return;
   const bits = e.st.x?.[String(i)] ?? 0;
@@ -1646,7 +1649,11 @@ function inspectTouch(player, e, i, obj, at, dim) {
   });
 }
 
-/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj @param {number} k */
+/**
+ * A clue found: saved, counted, and told in chat (the whole text stays in the chat history). No form: it would open by
+ * itself, in the middle of a fight, and hold the player (and their respawn screen) until they answered.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj @param {number} k
+ */
 function clueFound(player, e, i, obj, k) {
   const x = (e.st.x ??= {});
   const bits = x[String(i)] ?? 0;
@@ -1660,7 +1667,6 @@ function clueFound(player, e, i, obj, k) {
   player.playSound("random.orb", { pitch: 1.6, volume: 0.5 });
   player.sendMessage(`§e[Clue ${n}/${total}]§r ${text}`);
   bump(player, e, i, 1);
-  if (!busy.has(player.id)) exclusive(player, async () => void (await show(player, new ActionFormData().title(`Clue ${n} of ${total}`).body(text).button("OK")))).catch(() => {});
 }
 
 // ---- stealth -----------------------------------------------------------
@@ -2265,21 +2271,25 @@ function followFast(s, player) {
 
 // ---- vision ------------------------------------------------------------
 
-/** Players watching a vision. @type {Set<string>} */
-const watching = new Set();
+/** Players watching a vision, by the claim that holds their busy mark. @type {Map<string, object>} */
+const watching = new Map();
 /** Dreams waiting for the sleeper to wake. @type {Map<string, VisionScene[]>} */
 const dreams = new Map();
 
 /**
  * Plays a short cutscene: a fade, a title and subtitle per scene (also in chat), sounds, darkness.
- * Sneaking skips it. Resolves when it ends.
+ * Sneaking skips it. Resolves true when it ended (or was skipped), false when it never started or was cut short by the
+ * player dying, leaving or changing dimension (no credit then).
  * @param {Player} player @param {VisionScene[]} list @param {boolean} [dark]
  */
 export async function playVision(player, list, dark = false) {
-  if (watching.has(player.id) || busy.has(player.id)) return false;
-  watching.add(player.id);
-  busy.add(player.id);
+  if (watching.has(player.id) || !alive(player)) return false;
+  const claimed = claim(player.id);
+  if (!claimed) return false;
+  watching.set(player.id, claimed);
+  const stale = lifecycle(player);
   let skipped = false;
+  let cut = false;
   try {
     const total = list.reduce((n, sc) => n + (sc.seconds ?? 5), 0);
     try {
@@ -2291,7 +2301,11 @@ export async function playVision(player, list, dark = false) {
     await wait(24);
     let released = !sneaking(player);
     for (const sc of list) {
-      if (!player.isValid || skipped) break;
+      if (stale()) {
+        cut = true;
+        break;
+      }
+      if (skipped) break;
       const secs = Math.max(1, sc.seconds ?? 5);
       holdTitle(player, secs * 20 + 20);
       player.onScreenDisplay.setTitle(sc.title ? `§l${sc.title}` : " ", { subtitle: sc.text, fadeInDuration: 10, stayDuration: secs * 20, fadeOutDuration: 10 });
@@ -2299,7 +2313,10 @@ export async function playVision(player, list, dark = false) {
       if (sc.sound) player.playSound(sc.sound, { volume: 0.8 });
       for (let t = 0; t < secs * 4; t++) {
         await wait(5);
-        if (!player.isValid) return true;
+        if (stale()) {
+          cut = true;
+          break;
+        }
         if (t % 8 === 0) {
           send("realm:actionbar", { player: player.id, ticks: 45, from: PACK });
           player.onScreenDisplay.setActionBar("§8Sneak to skip");
@@ -2311,21 +2328,23 @@ export async function playVision(player, list, dark = false) {
           break;
         }
       }
+      if (cut) break;
     }
+    cut ||= stale();
   } finally {
-    watching.delete(player.id);
-    busy.delete(player.id);
+    if (watching.get(player.id) === claimed) watching.delete(player.id);
+    release(player.id, claimed);
     try {
       if (player.isValid) {
         holdTitle(player, 6);
         player.onScreenDisplay.setTitle(" ", { subtitle: " ", fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 5 });
-        if (skipped && dark) player.removeEffect("darkness");
+        if ((skipped || cut) && dark) player.removeEffect("darkness");
       }
     } catch {
       // gone
     }
   }
-  return true;
+  return !cut;
 }
 
 /** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
@@ -2337,7 +2356,7 @@ function visionTick(player, e, i, obj) {
   }
   playVision(player, obj.scenes ?? [], !!obj.dark)
     .then((played) => {
-      if (played && player.isValid && counting(player)) bump(player, e, i, 1);
+      if (played && alive(player) && counting(player)) bump(player, e, i, 1);
     })
     .catch((err) => console.warn(`[saga] vision: ${err}`));
 }
@@ -2375,7 +2394,7 @@ export async function askAnswer(player, e, i) {
     const q = obj.question ? pagesFor([obj.question], saga, e.story.id, player.name)[0] ?? obj.label : obj.label;
     const form = new ModalFormData().title(e.story.title).textField(`${q}\n\n§7Type your answer (capitals and spaces don't matter):`, "Your answer").submitButton("Answer");
     const res = await show(player, form);
-    askCool.set(player.id, system.currentTick + 400);
+    if (alive(player)) askCool.set(player.id, system.currentTick + 400); // not for a player who left or died: no id written back, asked again at once after a respawn
     if (!res || res.canceled || !player.isValid) return;
     const input = String(res.formValues?.[0] ?? "");
     if (!input.trim()) return;

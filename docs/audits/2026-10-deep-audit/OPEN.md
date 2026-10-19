@@ -6,8 +6,9 @@ fix, C follow-up, D won't fix), `phase3-report.md` (suites and soaks), `baseline
 `history.md` (recurring bug classes C1-C28, also in `docs/WORKING.md`). Paths under `/home/user/wt/...` in the notes
 were the audit's worktrees and no longer exist; the commits are on `master`.
 
-Status when this was written: A and B are done (B: 50 of 51 in mc-packs, the 51st in hosting 9170842f). Every C row
-and every item below is open. Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
+Original status: A and B are done (B: 50 of 51 in mc-packs, the 51st in hosting 9170842f). Follow-up dispositions
+are recorded below; everything without a disposition remains open. Historical D rows do not waive an active O item.
+Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T1. Performance budget at 40 and 100 players
 
@@ -43,7 +44,9 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
 ## T3. Expansive Inventory and item safety
 
 - O17 (high, perf) Index page contents (item ids and counts per page in the committed index), so Hotbar Refill from
-  pages, scans and the menu's usage load only the pages they need; add refill to perf-soak.
+  pages, scans and the menu's usage load only the pages they need; add refill to perf-soak. Also rebuild closed
+  PR #86's genuine-pickup routing and manual fill-earlier-pages action on latest master, without sorting or
+  metadata/hotbar/cursor/control loss; share O73's transfer design. Closure alone does not finish this work.
 - O18 `/realm:inv_recover <player>` for pending inventory recovery.
 - O19 Close the Expeditions stash cart window (a disconnect plus broken carts re-places the structure, a copy).
 - O20 refill-pages.js: add "none on any page, many pages" and locked or named stack cases.
@@ -78,12 +81,17 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
   objective or an OR in `when`), with a scenario for cooking on / elite off and a real kill.
 - O35 Match Kitchen dishes and Champion's Hearts by lore, not name only.
 - O36 Remove leftover fallback champions on entityLoad; second trim for saves past 30,000 characters.
-- O37 Interact outline scan as a runJob (after msftMyt's PR #84 lands); steady escort facing (saga-escort flake).
+- O37 Rebuild closed PR #84's player-local `variable.life`, `variable.style` and `variable.color` outline
+  bindings on latest master with regression coverage, then the interact outline scan as a runJob; steady escort
+  facing (saga-escort flake). No dependency on merging the old PR remains.
 
 ## T7. Checks and the story bible
 
 - O38 check-stories: partial color families, reused cast names and wanderer ids, ungated pack-only items, unknown
-  champion traits, rewards above the bible's scale.
+  champion traits, rewards above the bible's scale. Carry forward O74's finite-source check: any objective
+  referencing a prefab in the same chapter may establish the overlap; ordinary trees/logs, crafting, geodes,
+  inventory or party sources are alternates. Separately flag mined-out interact targets such as
+  `act4_seals/tide_echo`'s sea lanterns. The urgent release inventories these risks; it does not implement W7.
 - O39 check-ids: per-kind id sets, particle and sound ids from bedrock-samples, and bare ids in data lists and regex
   alternations (the `dead_bush` and `note_block` cases).
 - O40 docs/STORY_BIBLE.md "As shipped": Gristle and NO_KITCHEN, Prewitt, Brynn, Rosalind, Saltwife; add the writing
@@ -134,7 +142,14 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
 - O59 `spawnFresh` exists as separate copies in elite, saga, atlas, domt, expedition, calendar and moon: one shared
   module with a sync tool (C14); the moon copy already broke once (5018ece).
 - O60 Harness: `--flat` world templates get a random spawn point (meteor-edge and expedition-nether-carts depend on
-  0,0), and a template race with `--jobs > 1` on a fresh cache (tools/test-bds/lib/server.mjs).
+  0,0), and a template race with `--jobs > 1` on a fresh cache (tools/test-bds/lib/server.mjs). Fresh Windows W0
+  also reproduced 13 failing hook recipes with mangled backslashes/paths; resolve those in W12a, not by skipping
+  them. The soak's `made > 0` guard accepted only 97 of 100 requested players: require the declared population
+  and window in its performance acceptance. A separately preserved unchanged-default retry reached all 100.
+  Triage `guilds-placed-restart` separately: it failed with 1, then 22 pumpkins left; do not assume a fixture cause.
+  Validate ticking-area inputs and surface command rejection: an invalid circle radius 6 in the first O74
+  fixture was swallowed and became a 400-tick chunk timeout. The urgent fixture now uses legal radius 4;
+  fail-fast harness validation remains W12a.
 - O61 Harness on the bundle as one script context (catches C13 canceled-event bugs); a BDS smoke test in CI;
   `tools/release.mjs` for the whole publish order.
 - O62 Expedition: an option to announce clears only from a chosen level; forget leaves saved structures behind.
@@ -151,8 +166,24 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
 - O74 (blocker) Signs in the Sky "Fallen Light" can't be finished: the crater's amethyst was mined out by players who
   finished it first, so a party mate catching up has nothing to gather. Reset or regrow per accept, or accept any
   shards; audit every step that depends on blocks built once.
+  **Done in `68c15bc2417958881c69e0dba6389a6193ff881e`:** the intro and real hint explain another geode, shards
+  already carried, or a party mate. Collection already accepted those sources; no engine, terrain, item grant,
+  objective index or reward change was needed. The paired native scenario completes three phases and two real
+  BDS restarts: before has 61 passing engine/persistence/reward checks and only 2 guidance failures; fixed has
+  63/63 passes, with zero script errors in both. It covers a real built/depleted crater, a late solo player,
+  3 plus 5 party-provided shards, retained player edits, partial native saves and exactly-once rewards.
+  Simulated IDs and simple inventory/level/Crowns are explicitly adapted, not ordinary rejoin or opaque-item
+  persistence proof. The 183-step finite-gather inventory and adjacent interact risks remain assigned to W7/O38.
 - O75 (blocker) Softlock in Signs in the Sky at the Old Graveyard: tapping an empty spot while searching for clues
   froze movement, interaction and then the camera; after being killed there was no respawn screen until Escape.
+  **Server-side fix done in `6e7352ba3744447d88df8d40f404909933821bc1` and
+  `ce164b9ec609a4b1a1cdbc82b0cddc60742845ff`:** clue discovery is chat-only, pending conversations have owned
+  lifecycle cancellation and a safety timeout, and stale answers cannot accept or pay after death or travel
+  between dimensions. The native regression records 13 genuine failures before and 35/35 passes after, including
+  natural zombie melee/death, actual stale-report rewards, respawn, leave/rejoin IDs, dimensions and timeout
+  recovery before the shim fallback. The versioned candidate also passes this case in the affected Saga suite.
+  Camera/respawn-screen pixels and simultaneous unrelated add-on forms remain later private W2 human acceptance;
+  headless results do not certify them.
 
 ## Owner decisions (no task; for nishant)
 
@@ -163,8 +194,13 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
   adds them back); the Parties migration can't be rolled back; existing operators see the setup reminder once;
   nickname protection for an offline gamertag starts at that player's next join.
 - O66 Upload both new bundles to the Realm together (diag.js and the shared copies changed in both).
-- O67 msftMyt's PRs #84 and #86 now conflict with master in versions, catalogs, NEWS and PACKS.md only (their code
-  merges cleanly); after a merge they need a version bump above master's and `node tools/sync-diag.mjs`.
+- O67 **Disposition done in `5413ec948b1dfc3d9f3450027021cfef82344aa6`:** the owner directed closing
+  [#84](https://github.com/nishant/mc-packs/pull/84) and
+  [#86](https://github.com/nishant/mc-packs/pull/86) **unmerged**, not updating or merging them.
+  Closed October 19, 2026 (UTC), with heads `7801855e50d47decd7d1099b7ea6fb6cf6ae3bce` and
+  `0e54ff14ea36bdba1e7bbb549d5dddd66e405788` archived with complete patches/tests. Branches retained.
+  O37 and O17 still own implementation and verification of their preserved intentions; O73 shares the transfer
+  design. Their feature work is not complete merely because the old PRs are closed.
 
 ## Backlog (ideas from the audit, not commitments)
 
