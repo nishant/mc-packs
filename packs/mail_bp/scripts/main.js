@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { planSystemLetter } from "./policy.js";
 
 // One world property per letter: "mail:l:<id>" -> JSON Letter. A letter is one small property (a
 // subject and up to bodyLength characters), so no property gets near the 32 KB limit however many
@@ -560,7 +561,12 @@ onScriptEvent(
       const subject = clean(m.subject, Math.min(BOX, CONFIG.subjectLength), false).text || "(no subject)";
       const body = clean(m.body, CONFIG.bodyLength, true).text;
       if (!body) return;
-      if (letters().size >= MAX_LETTERS) return console.warn("[mail] mail_send: the realm's mail is full");
+      const plan = planSystemLetter(letters().values(), to.i, Date.now(), { systemInboxLimit: CONFIG.systemInboxLimit, systemLetterDays: CONFIG.systemLetterDays, systemReserve: CONFIG.systemReserve, maxLetters: MAX_LETTERS });
+      for (const id of plan.drop) {
+        const old = letters().get(id);
+        if (old) save({ ...old, di: 1, ds: 1 });
+      }
+      if (!plan.ok) return console.warn(`[mail] mail_send: ${plan.reason} (kept free for players)`);
       const inbox = inboxOf(to.i);
       const limit = get("inboxLimit");
       const read = inbox.filter((l) => l.r).reverse();
