@@ -72,7 +72,6 @@ const seenTonight = new Set();
 
 /** @param {unknown} s @returns {s is State} */
 const isState = (s) => typeof s === "string" && STATES.includes(/** @type {State} */ (s));
-const overworld = () => world.getDimension(OVERWORLD);
 
 // ---------------------------------------------------------------------------
 // Saved state
@@ -552,14 +551,18 @@ function playerMadeBlocks() {
 }
 
 /**
- * Player-made blocks near a spot, asked once per 8-block cell for the whole night: dimension|cx|cy|cz -> was anything
- * built within BUILT_PAD blocks of the cell. The cell's box covers every spot's own 9 x 9 x 9 box, so a spot is never
- * allowed where the per-spot check refused it (a few spots next to a build are refused that the old check allowed).
+ * Which 8-block cells have nothing player-made within BUILT_PAD blocks, asked once per cell for the night:
+ * dimension|cx|cy|cz -> true if something player-made is in the cell's padded box. A cell that reads clear
+ * certifies every spot in it (the padded box covers each spot's own 9 x 9 x 9 box); a cell that reads built
+ * says nothing about a single spot, which then gets the exact 9 x 9 x 9 check, so protection reaches no further than
+ * it always did. A player-made block placed during the night forgets the clear cells it could reach.
  * @type {Map<string, boolean>}
  */
 const builtCells = new Map();
 let builtNight = ""; // the night the cells belong to; another night starts the cache over
 let nightSerial = 0; // bumped at every dusk and dawn, so a night that repeats its day number and moon is still another night
+/** @type {Set<string> | undefined} */
+let playerMadeSet;
 
 function dropBuiltCells() {
   nightSerial++;
@@ -567,38 +570,69 @@ function dropBuiltCells() {
   builtNight = "";
 }
 
+/** Cell origins (multiples of 8) whose padded box holds coordinate `b`. @param {number} b */
+function cellOrigins(b) {
+  const out = [];
+  for (let o = Math.ceil((b - BUILT_CELL + 1 - BUILT_PAD) / BUILT_CELL) * BUILT_CELL; o <= b + BUILT_PAD; o += BUILT_CELL) out.push(o);
+  return out;
+}
+
+world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
+  try {
+    if (!builtCells.size) return;
+    playerMadeSet ??= new Set(playerMadeBlocks());
+    if (!playerMadeSet.has(block.typeId)) return;
+    const { x, y, z } = block.location;
+    const dimId = block.dimension.id;
+    for (const cx of cellOrigins(x)) for (const cy of cellOrigins(y)) for (const cz of cellOrigins(z)) {
+      const key = `${dimId}|${cx}|${cy}|${cz}`;
+      if (builtCells.get(key) === false) builtCells.delete(key);
+    }
+  } catch {
+    // the block or its chunk is gone: the next night starts over anyway
+    builtCells.clear();
+  }
+});
+
 /**
- * Anything player-made within BUILT_PAD blocks of the spot (its 8-block cell, padded)? Unknown (unloaded chunks, no
- * block list) counts as built and is never cached. @param {Dimension} dim @param {{ x: number, y: number, z: number }} at
+ * Anything player-made in the 9 x 9 x 9 box around the spot? A clear cell answers without a read. Unknown (an unloaded
+ * chunk reached by a read, no block list) counts as built and is never cached. allowUnloadedChunks is false in both
+ * reads (it was true: an unloaded chunk used to read as empty), so near the edge of the loaded world fewer spots pass.
+ * @param {Dimension} dim @param {{ x: number, y: number, z: number }} at
  */
 function built(dim, at) {
   const types = playerMadeBlocks();
   if (!types.length) return true; // can't tell: don't spawn
-  const cx = Math.floor(at.x / BUILT_CELL) * BUILT_CELL, cy = Math.floor(at.y / BUILT_CELL) * BUILT_CELL, cz = Math.floor(at.z / BUILT_CELL) * BUILT_CELL;
+  const exact = () => {
+    try {
+      return dim.containsBlock(new BlockVolume({ x: at.x - 4, y: at.y - 4, z: at.z - 4 }, { x: at.x + 4, y: at.y + 4, z: at.z + 4 }), { includeTypes: types }, false);
+    } catch {
+      return true;
+    }
+  };
   const id = night?.a ? `${night.d}:${night.s}:${nightSerial}` : "";
+  if (!id) return exact();
   if (id !== builtNight) {
     builtCells.clear();
     builtNight = id;
   }
+  const cx = Math.floor(at.x / BUILT_CELL) * BUILT_CELL, cy = Math.floor(at.y / BUILT_CELL) * BUILT_CELL, cz = Math.floor(at.z / BUILT_CELL) * BUILT_CELL;
   const key = `${dim.id}|${cx}|${cy}|${cz}`;
-  const known = id ? builtCells.get(key) : undefined;
-  if (known !== undefined) return known;
-  let found;
-  try {
-    // allowUnloadedChunks stays off: a box that reaches an unloaded chunk throws instead of reading as empty.
-    found = dim.containsBlock(
-      new BlockVolume({ x: cx - BUILT_PAD, y: cy - BUILT_PAD, z: cz - BUILT_PAD }, { x: cx + BUILT_CELL - 1 + BUILT_PAD, y: cy + BUILT_CELL - 1 + BUILT_PAD, z: cz + BUILT_CELL - 1 + BUILT_PAD }),
-      { includeTypes: types },
-      false,
-    );
-  } catch {
-    return true;
-  }
-  if (id) {
+  let cell = builtCells.get(key);
+  if (cell === undefined) {
+    try {
+      cell = dim.containsBlock(
+        new BlockVolume({ x: cx - BUILT_PAD, y: cy - BUILT_PAD, z: cz - BUILT_PAD }, { x: cx + BUILT_CELL - 1 + BUILT_PAD, y: cy + BUILT_CELL - 1 + BUILT_PAD, z: cz + BUILT_CELL - 1 + BUILT_PAD }),
+        { includeTypes: types },
+        false,
+      );
+    } catch {
+      return true;
+    }
     if (builtCells.size >= BUILT_CELLS_MAX) builtCells.clear();
-    builtCells.set(key, found);
+    builtCells.set(key, cell);
   }
-  return found;
+  return cell ? exact() : false;
 }
 
 /** Ground monsters can't stand on, or shouldn't. */
@@ -714,18 +748,20 @@ function spawnWave(p, budget = {}) {
   }
 }
 
-/** Removes every Blood Moon monster in loaded chunks; ones in unloaded chunks go when they load. */
+/** Removes every Blood Moon monster in loaded chunks (every dimension: the world cap counts them all); ones in unloaded chunks go when they load. */
 function removeMobs() {
-  try {
-    for (const e of overworld().getEntities({ tags: [MOB_TAG] })) {
-      try {
-        e.remove();
-      } catch {
-        // already gone
+  for (const id of MOB_DIMENSIONS) {
+    try {
+      for (const e of world.getDimension(id).getEntities({ tags: [MOB_TAG] })) {
+        try {
+          if (e.isValid && e.hasTag(MOB_TAG)) e.remove();
+        } catch {
+          // already gone
+        }
       }
+    } catch (e) {
+      console.warn(`[moon] ${e}`);
     }
-  } catch (e) {
-    console.warn(`[moon] ${e}`);
   }
 }
 

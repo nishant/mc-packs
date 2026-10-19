@@ -351,3 +351,57 @@ test("world cap: blood.maxExtraWorld is a registered option, 0 by default", asyn
   const source = (await import("node:fs")).readFileSync(new URL("../packs/moon_bp/scripts/settings.js", import.meta.url), "utf8");
   assert.match(source, /key: "blood\.maxExtraWorld", type: "int", scope: "world"[^\n]*min: 0, max: 1000/);
 });
+
+test("built check: a base placed in the middle of the night is protected at once (cells that read clear are forgotten)", async () => {
+  const w = await night({ players: 40, at: cluster });
+  try {
+    const kill = () => w.alive().forEach((m) => (m.valid = false));
+    w.run(300, kill);
+    const base = { x: 2005, y: 64, z: 1975 };
+    w.g.builds.push(base);
+    w.sim.game.emit("world.after.playerPlaceBlock", { block: { typeId: "minecraft:chest", location: base, dimension: w.dims[OVERWORLD] } });
+    const from = w.g.spawned.length;
+    w.run(400, kill);
+    assert.ok(w.g.spawned.length - from >= 200);
+    for (const m of w.g.spawned.slice(from)) assert.ok(!within(m, base), `${JSON.stringify(m.location)} appeared beside the new base`);
+  } finally {
+    w.done();
+  }
+});
+
+test("built check: protection reaches 4 blocks from a build, as before (not the whole 16-block cell box)", async () => {
+  const base = { x: 2000, y: 64, z: 1975 };
+  const w = await night({ players: 40, at: cluster, builds: [base] });
+  try {
+    w.run(600, () => w.alive().forEach((m) => (m.valid = false)));
+    const ring = w.g.spawned.filter((m) => within(m, base, 11) && !within(m, base, 4));
+    assert.ok(ring.length > 0, "spots 5 to 11 blocks from the build still get monsters");
+    assert.ok(w.g.spawned.every((m) => !within(m, base, 4)));
+  } finally {
+    w.done();
+  }
+});
+
+test("dawn: Blood Moon monsters in the Nether and the End are removed too, so the world cap can't leak", async () => {
+  const w = await night({ cfg: { "blood.maxExtraWorld": 1 }, players: 1, at: () => ({ x: 3000, z: 3000 }) });
+  try {
+    const nether = w.add(NETHER);
+    const end = w.add(END);
+    const gone = w.add(END, { valid: false });
+    w.run(40);
+    assert.equal(w.g.spawned.length, 0, "the cap is full of the ported monster");
+    w.g.time = 1000;
+    w.run(2);
+    assert.equal(nether.valid, false);
+    assert.equal(end.valid, false);
+    assert.equal(gone.valid, false);
+    w.sim.props.set("moon:pending", "blood");
+    w.g.day = 6;
+    w.g.time = 13000;
+    w.run(120);
+    assert.ok(w.g.spawned.length >= 1, "the next Blood Moon spawns again");
+    assert.deepEqual(w.warnings.filter((m) => /InvalidEntity|\[moon\]/.test(m)), []);
+  } finally {
+    w.done();
+  }
+});
