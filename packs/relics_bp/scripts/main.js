@@ -15,6 +15,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { createOwedStore } from "./owed.js";
 
 // A relic is a vanilla item that doesn't stack, with a name, lore and the item dynamic property
 // `relic:id` (plus `relic:serial`, a number unique on this realm). An anvil can rename any item, but
@@ -23,7 +24,6 @@ const ITEM_ID = "relic:id";
 const ITEM_SERIAL = "relic:serial";
 const PROP_FOUND = "relics:found"; // player: JSON array of the relic ids this player has had
 const PROP_SERIAL = "relics:serial"; // world: the last serial number handed out
-const PROP_PENDING = "relics:pending"; // world: JSON { playerId: { r: relic ids, s: shards } } for players who were offline
 const PROP_WEATHER = "relics:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 
 const SHARD_ITEM = "minecraft:amethyst_shard"; // the shared Relic Shard item (see the spec's contracts)
@@ -33,7 +33,6 @@ const FALLBACK_ITEM = "minecraft:brush"; // used if a relic's configured item st
 const OVERWORLD = "minecraft:overworld";
 const DRY_GROUND = /sand|terracotta|snow|ice/; // deserts and badlands get no rain; snowy places get snow
 const LORE_WIDTH = 40; // lore lines are kept short: the game limits their length
-const PENDING_PLAYERS = 100;
 const STORM_FRESH_TICKS = 100; // a storm cell report older than this (storm_bp sends one every 2 s) is gone
 const STORM_CELL_REACH = 160; // the Storm Staff also answers this close to a storm cell (Storm Chasing)
 const BOLT_EVIDENCE_TICKS = 1200; // a lightning bolt not made by this pack means a thunderstorm for the next minute
@@ -411,45 +410,35 @@ function giveShards(player, amount) {
   player.sendMessage(`§d+${amount} Relic Shard${amount === 1 ? "" : "s"}${dropped ? " §7(some dropped at your feet: your inventory is full)" : ""}`);
 }
 
-// Gifts for players who weren't online, handed over when they next join.
+// Gifts for players who weren't online, handed over when they next join: one world property per player,
+// "relics:pending:<playerId>" = { r: relic ids, s: shards }, plus the index "relics:pending_idx" (owed.js).
 
-/** @returns {Record<string, { r: string[], s: number }>} */
-function pending() {
-  try {
-    const raw = world.getDynamicProperty(PROP_PENDING);
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-/** @param {Record<string, { r: string[], s: number }>} all */
-function savePending(all) {
-  world.setDynamicProperty(PROP_PENDING, Object.keys(all).length ? JSON.stringify(all) : undefined);
-}
+const pendingStore = createOwedStore(world, {
+  base: "relics:pending",
+  normalize: (v) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("not a gift record");
+    return v;
+  },
+  summarize: (v) => `${Array.isArray(v?.r) ? v.r.length : 0} relics, ${Number(v?.s) || 0} shards`,
+});
 
 /** @param {string} playerId @param {string | undefined} relic @param {number} shards */
 function queue(playerId, relic, shards) {
-  const all = pending();
-  const entry = all[playerId] ?? { r: [], s: 0 };
-  if (!all[playerId] && Object.keys(all).length >= PENDING_PLAYERS) {
-    console.warn(`[relics] too many gifts waiting; dropped one for ${playerId}`);
-    return;
-  }
-  if (relic && entry.r.length < 20) entry.r.push(relic);
-  entry.s = Math.min(6400, entry.s + shards);
-  all[playerId] = entry;
-  savePending(all);
+  const ok = pendingStore.update(playerId, (cur) => {
+    const entry = cur && typeof cur === "object" ? cur : { r: [], s: 0 };
+    if (!Array.isArray(entry.r)) entry.r = [];
+    if (relic && entry.r.length < 20) entry.r.push(relic);
+    entry.s = Math.min(6400, (Number(entry.s) || 0) + shards);
+    return entry;
+  });
+  if (!ok) console.warn(`[relics] a gift for ${playerId} could not be saved (${relic ?? `${shards} shards`})`);
 }
 
 /** @param {Player} player */
 function deliver(player) {
-  const all = pending();
-  const entry = all[player.id];
-  if (!entry || !player.isValid) return;
-  delete all[player.id];
-  savePending(all);
+  if (!player.isValid) return;
+  const entry = pendingStore.take(player.id);
+  if (!entry) return;
   for (const id of entry.r ?? []) {
     const def = relics.get(id);
     if (def) giveRelic(player, def, "You received");

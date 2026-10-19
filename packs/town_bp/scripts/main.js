@@ -18,15 +18,15 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, 
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { createOwedStore } from "./owed.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
 // town's contributor lists never come near the 32 KB property limit. Rewards for contributors who
-// were offline when a project finished wait in "town:owed" until they join.
+// were offline when a project finished wait in "town:owed:<playerId>" (one property each) until they join.
 
 const TOWN_PREFIX = "town:t:";
 const PROG_PREFIX = "town:p:";
-const PROP_OWED = "town:owed";
 const MAX_LEVEL = 5;
 const NAME_LENGTH = 24;
 const PROP_LIMIT = 30000;
@@ -193,19 +193,15 @@ function guildFor(p) {
 // Rewards (paid now, or kept until the contributor joins)
 // ---------------------------------------------------------------------------
 
-/** @returns {Record<string, Owed>} */
-function owedAll() {
-  const raw = readJson(PROP_OWED);
-  /** @type {Record<string, Owed>} */
-  const out = {};
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
-  for (const [pid, o] of Object.entries(raw)) {
-    if (!o || typeof o !== "object") continue;
-    const q = Array.isArray(o.q) ? o.q.filter((/** @type {unknown} */ x) => Array.isArray(x) && x.length === 3 && x.every((y) => typeof y === "string")) : [];
-    out[pid] = { cr: Math.max(0, Math.floor(Number(o.cr) || 0)), q };
-  }
-  return out;
+/** What a contributor is owed: crowns and their latest finished projects. Unknown or damaged records are repaired as they are read. @param {any} o @returns {Owed} */
+function normalizeOwed(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o)) throw new Error("not an owed record");
+  const q = Array.isArray(o.q) ? o.q.filter((/** @type {unknown} */ x) => Array.isArray(x) && x.length === 3 && x.every((y) => typeof y === "string")) : [];
+  return { cr: Math.max(0, Math.floor(Number(o.cr) || 0)), q: q.slice(-10) };
 }
+
+// One world property per player ("town:owed:<playerId>") plus the index "town:owed_idx" (owed.js): no more shared-property cliff.
+const owedStore = createOwedStore(world, { base: "town:owed", normalize: normalizeOwed, summarize: (v) => `${v?.cr ?? 0} Crowns, ${v?.q?.length ?? 0} projects` });
 
 /** @param {Player} p @param {number} crowns @param {[string, string, string][]} quests @param {string} why */
 function payNow(p, crowns, quests, why) {
@@ -226,31 +222,20 @@ function payNow(p, crowns, quests, why) {
 
 /** @param {string} pid @param {number} crowns @param {[string, string, string]} quest */
 function owe(pid, crowns, quest) {
-  const all = owedAll();
-  const o = all[pid] ?? { cr: 0, q: [] };
-  o.cr += crowns;
-  o.q = [...o.q, quest].slice(-10);
-  all[pid] = o;
-  // Many offline contributors: keep everyone's Crowns, and only their latest finished projects.
-  let json = JSON.stringify(all);
-  for (let keep = 5; json.length > PROP_LIMIT && keep >= 0; keep--) {
-    for (const v of Object.values(all)) v.q = v.q.slice(-keep);
-    json = JSON.stringify(all);
-  }
-  try {
-    world.setDynamicProperty(PROP_OWED, json);
-  } catch (e) {
-    console.warn(`[town] owed: ${e}`);
-  }
+  const saved = owedStore.update(pid, (cur) => {
+    const o = cur ? normalizeOwed(cur) : { cr: 0, q: [] };
+    o.cr += crowns;
+    o.q = [...o.q, quest].slice(-10);
+    return o;
+  });
+  if (!saved) console.warn(`[town] owed: ${crowns} Crowns for ${pid} could not be saved`);
 }
 
 /** @param {Player} p */
 function payOwed(p) {
-  const all = owedAll();
-  const o = all[p.id];
-  if (!o) return;
-  delete all[p.id];
-  world.setDynamicProperty(PROP_OWED, Object.keys(all).length ? JSON.stringify(all) : undefined);
+  const raw = owedStore.take(p.id);
+  if (!raw) return;
+  const o = normalizeOwed(raw);
   p.sendMessage("§6Town projects you helped with were finished while you were away. Thank you!");
   payNow(p, o.cr, o.q, "Town projects");
 }
