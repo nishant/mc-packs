@@ -75,6 +75,14 @@ Several workstreams touch the same packs, so run them in waves. Within a wave, a
 own worktree. After each wave, merge into integration, run `npm run check` and the scenarios of the touched packs, and
 merge `master` in.
 
+**Owner-directed urgent acceleration:** once W0's untouched pack/harness snapshot and genuine offline RED tests are
+frozen, isolated O75 lifecycle authoring and O74 story-data authoring may overlap the unchanged W0 suite/profiles.
+Keep their file ownership separate and the total at 3 workers including W0. No additional native work, heavy local
+checks during exclusive profiles, or integration/merge/publication is permitted before W0's final evidence.
+Afterward, review and validate O75 first; merge its reviewed fix into O74 before O74's native acceptance. Durable
+workflow checkpoints adopt the isolated helper commits and evidence instead of launching duplicate implementations.
+This exception does not start later waves or relax any release gate.
+
 | Wave | Workstreams | Why this order |
 |---|---|---|
 | 0 | W0 preconditions | Baseline, msftMyt PRs, cleanup |
