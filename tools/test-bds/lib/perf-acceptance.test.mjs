@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "node:test";
-import { evaluateLegacyLog, evaluatePerf, WORKLOAD_SCHEMA } from "./perf-acceptance.mjs";
+import { evaluateLegacyLog, evaluatePerf, evaluatePerfBudgets, WORKLOAD_SCHEMA } from "./perf-acceptance.mjs";
+import { Profile } from "./profile-report.mjs";
 
 const soakFile = path.join(import.meta.dirname, "..", "examples", "perf-soak.js");
 const soak = (await import(pathToFileURL(soakFile).href)).default;
@@ -111,4 +112,71 @@ test("the original W0 100-player observation stays invalid and the unchanged-def
   assert.equal(retry.ok, true, retry.reasons.join("\n"));
   assert.match(retry.evidence, /log lines only/);
   assert.equal(evaluateLegacyLog(W0_RETRY, { players: 100, seconds: 600 }).ok, false, "a 300 s soak is not a declared 600 s window");
+});
+
+/** A profile JSON as Profile.write makes it, with steady-window figures; `bundle` and `packs` are ms per tick. */
+const report = ({ bundle = 1, packs = { rain_bp: 0.05, map_bp: 0.5 }, accepted = true } = {}) => ({
+  acceptance: accepted ? { ok: true, reasons: [] } : { ok: false, reasons: ["population: spawned 35 of the 40 declared players"] },
+  bundle: { msPerTick: 0.01, steadyWindow: bundle === null ? null : { avg: bundle } },
+  packs: Object.entries(packs).map(([pack, v]) => ({ pack, msPerTick: 0.01, steadyMsPerTick: v })),
+});
+const run = (entries, opts) => evaluatePerfBudgets(new Map(entries.map(([n, r, result = "pass"]) => [n, { result, report: r }])), opts);
+
+test("perf budgets: a valid 40-player run under budget passes", () => {
+  const v = run([[40, report({ bundle: 4.999, packs: { rain_bp: 0.15, map_bp: 1 } })]]);
+  assert.equal(v.ok, true, [...v.invalid, ...v.over].join("\n"));
+});
+
+test("perf budgets: over budget at 40 fails, and the whole bundle fails at exactly 5", () => {
+  assert.equal(run([[40, report({ bundle: 5 })]]).over.length, 1);
+  assert.match(run([[40, report({ bundle: 5.01 })]]).over[0], /whole bundle @40/);
+  const pack = run([[40, report({ packs: { rain_bp: 0.151, map_bp: 1.001 } })]]);
+  assert.equal(pack.ok, false);
+  assert.equal(pack.over.length, 2);
+  assert.match(pack.over.join("\n"), /rain_bp @40.*budget 0\.15/);
+  assert.match(pack.over.join("\n"), /map_bp @40.*budget 1\b/);
+});
+
+test("perf budgets: a valid 100-player run has no 40-player gate and no 5 ms bundle budget", () => {
+  const v = run([[10, report()], [40, report()], [100, report({ bundle: 9, packs: { rain_bp: 0.9, map_bp: 3 } })]]);
+  assert.equal(v.ok, true, [...v.invalid, ...v.over].join("\n"));
+  assert.equal(v.steady.get(100).bundle, 9);
+});
+
+test("perf budgets: missing, null or NaN figures are invalid, never zero", () => {
+  for (const bad of [null, NaN, undefined]) {
+    const v = run([[40, report({ packs: { rain_bp: bad, map_bp: 0.5 } })]]);
+    assert.equal(v.ok, false);
+    assert.match(v.invalid.join("\n"), /no steady-window figure for rain_bp/);
+    assert.equal(v.over.length, 0);
+  }
+  const noBundle = run([[40, report({ bundle: null })]]);
+  assert.equal(noBundle.ok, false);
+  assert.match(noBundle.invalid.join("\n"), /no steady-window bundle figure/);
+  const missingPack = run([[10, report()], [40, report({ packs: { rain_bp: 0.05 } })]]);
+  assert.match(missingPack.invalid.join("\n"), /40 players: no steady-window figure for map_bp/);
+  assert.match(run([[40, report({ packs: { rain_bp: 0.05 } })]], { only: ["rain_bp", "ghost_bp"] }).invalid.join("\n"), /ghost_bp/);
+  assert.equal(run([[40, undefined]]).ok, false);
+});
+
+test("perf budgets: an invalid population or a failed scenario is INVALID, never over budget", () => {
+  const popBad = run([[40, report({ accepted: false, bundle: 50 })]]);
+  assert.equal(popBad.ok, false);
+  assert.equal(popBad.over.length, 0);
+  assert.match(popBad.invalid.join("\n"), /spawned 35 of the 40/);
+  const failed = run([[40, report({ bundle: 50 }), "fail"]]);
+  assert.equal(failed.ok, false);
+  assert.equal(failed.over.length, 0);
+  assert.match(failed.invalid.join("\n"), /40 players: the scenario fail/);
+  assert.equal(run([]).ok, false, "no counts is not a pass");
+});
+
+test("the profile reports each pack's steady-window average from its collected tick arrays, null when incomplete", () => {
+  const p = new Profile({ say() {}, everyS: 0, json: "x.json", scenario: "s", args: {} });
+  p.tickParts.set("rain_bp", { startTick: 100, n: 1, parts: ["9,9,1,,1,9"] });
+  p.tickParts.set("half_bp", { startTick: 100, n: 2, parts: ["1"] });
+  assert.equal(p.packWindowAvg("rain_bp", 102, 104), 0.5, "ticks 102 (1) and 103 (none): the ramp's 9s are outside");
+  assert.equal(p.packWindowAvg("half_bp", 100, 101), null);
+  assert.equal(p.packWindowAvg("nobody_bp", 100, 101), null);
+  assert.equal(p.packWindowAvg("rain_bp", 105, 105), null);
 });
