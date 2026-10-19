@@ -15,6 +15,11 @@ hotbar/cursor/controls, recovery and idle fast paths. Reuse O73's transactional 
 separate from those still-open feature acceptance gates.
 
 Urgent scope is W0, then O75, then O74, followed by one reviewed source+hosting release before later waves.
+The owner later authorized isolated O75 lifecycle and O74 story-data authoring to overlap W0 once the untouched
+snapshot and offline RED tests are frozen. Count W0 in the 3-worker cap, keep file ownership separate, and do not
+change or duplicate the active baseline. W0 completion, exclusive profiling, native acceptance, reviews and
+integration remain gates; reviewed O75 is merged into O74 before O74 native acceptance. Workflow stages adopt
+completed helper commits, not duplicate implementations.
 The graveyard is an Inspect clue/form path, not the separate Vision fade path: prove the trigger and use owned
 generation/cancellation guards. Collection already accepts amethyst from anywhere; clarify another geode or a
 party mate rather than rebuilding the crater. Keep real client camera/respawn pixels unverified until W2.
