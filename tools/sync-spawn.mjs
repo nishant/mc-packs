@@ -20,6 +20,7 @@ const CONSUMERS = {
   domt_bp: ["helpers.js", "effects.js", "events.js"],
   calendar_bp: ["main.js"],
   moon_bp: ["main.js"],
+  expedition_bp: ["gauntlet.js"],
 };
 
 const problems = [];

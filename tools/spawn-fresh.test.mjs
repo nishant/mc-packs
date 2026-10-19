@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const FOLDERS = ["elite_bp", "saga_bp", "atlas_bp", "domt_bp", "calendar_bp", "moon_bp"];
+const FOLDERS = ["elite_bp", "saga_bp", "atlas_bp", "domt_bp", "calendar_bp", "moon_bp", "expedition_bp"];
 const url = (folder, file) => new URL(`../packs/${folder}/scripts/${file}`, import.meta.url);
 const read = (folder, file) => readFileSync(url(folder, file), "utf8");
 
@@ -113,6 +113,7 @@ const callers = [
   ["domt_bp", "events.js", [/spawnFresh\(dim, type, \{ x: state\.center\.x/]],
   ["calendar_bp", "main.js", [/\{ spawnEvent: "minecraft:entity_born", attempts: 4 \}/, /\+ 1, z: at\.z \}, \{ attempts: 4 \}/]],
   ["moon_bp", "main.js", [/spawnFresh\(p\.dimension, id, \{ x: at\.x \+ 0\.5, y: at\.y, z: at\.z \+ 0\.5 \}, \{ attempts: 4 \}\)\.addTag\(MOB_TAG\)/]],
+  ["expedition_bp", "gauntlet.js", [/spawnShared\(dim, type, at, \{ fresh: true \}\)/, /spawnFresh\(dim, "minecraft:chest_minecart", \{ x: at\.x \+ 0\.5/]],
 ];
 for (const [folder, file, wanted] of callers) {
   test(`${folder}/${file} calls the shared spawnFresh the way it always spawned`, () => {
