@@ -195,6 +195,25 @@ test("replay sets sneaking only for the case and restores the baseline after def
   assert.match(replayFn, /await t\.wait\(1\)/);
 });
 
+test("replay uses the equipped mainhand as event.itemStack, and the scenario refuses a visitor insert", async () => {
+  const { c13TapSource } = await import("./full-bundle-protocols.mjs");
+  const src = c13TapSource();
+  assert.match(src, /EquipmentSlot\.Mainhand/);
+  assert.match(src, /setEquipment\(EquipmentSlot\.Mainhand/);
+  assert.match(src, /getEquipment\(EquipmentSlot\.Mainhand\)/);
+  assert.match(src, /equipment and item stack disagree/);
+  const equipAt = src.indexOf("setEquipment(EquipmentSlot.Mainhand");
+  const eventAt = src.indexOf("else event = { player, block, itemStack");
+  assert.ok(equipAt > 0 && equipAt < eventAt, "the hand is equipped before the event is built");
+  const scenario = fs.readFileSync(path.join(harness, "examples", "full-bundle-protocols.js"), "utf8");
+  const juke = scenario.slice(scenario.indexOf("minecraft:jukebox"), scenario.indexOf("Storm rod"));
+  const visitorInsert = juke.indexOf("visitor does not insert the disc into an empty jukebox");
+  const ownerInsert = juke.indexOf("the owner's disc went into the jukebox");
+  const visitorEject = juke.indexOf("the visitor does not eject the disc");
+  assert.ok(visitorInsert > 0 && visitorInsert < ownerInsert, "visitor insertion refusal is asserted before the owner insert");
+  assert.ok(ownerInsert < visitorEject, "owner insertion stays before the ejection refusal");
+});
+
 test("a Windows and a POSIX stack both name the pack that subscribed", () => {
   const dir = scratch("c13-stack-");
   const packed = path.join(dir, "src");

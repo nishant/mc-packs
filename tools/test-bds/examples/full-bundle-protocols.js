@@ -175,25 +175,39 @@ export default async function (t) {
   t.check(/Slot Machine/.test(form.title), `callback-replay: the owner still gets the machine (${form.title})`);
   form.answer(null);
 
-  // Elytra jukebox, after claims. The disc item has to come from the bundled item definition.
+  // Elytra jukebox, after claims. consumeRunAwayDisc reads equipment, so the replay puts that same stack on the event.
   const juke = { x: base.x + 10, y: base.y, z: base.z };
   dim.getBlock({ x: juke.x, y: juke.y - 1, z: juke.z }).setType("minecraft:stone");
   dim.getBlock(juke).setType("minecraft:jukebox");
   const DISC = "custom:music_disc_run_away";
   const groundDiscs = () => dim.getEntities({ type: "minecraft:item", location: { x: juke.x + 0.5, y: juke.y + 1, z: juke.z + 0.5 }, maxDistance: 4 })
     .filter((e) => e.getComponent("minecraft:item")?.itemStack?.typeId === DISC).length;
-  op.getComponent("minecraft:inventory").container.setItem(0, new t.mc.ItemStack(DISC, 1));
+  const handIds = (p) => {
+    const equip = p.getComponent("minecraft:equippable")?.getEquipment(t.mc.EquipmentSlot.Mainhand)?.typeId;
+    const held = p.getComponent("minecraft:inventory").container.getItem(p.selectedSlotIndex)?.typeId;
+    return { equip, held };
+  };
+  visitor.selectedSlotIndex = 0;
+  standAt(visitor, juke);
+  await t.wait(5);
+  r = await replay(visitor, juke, { item: DISC, sneaking: false });
+  await t.wait(15);
+  let hand = handIds(visitor);
+  t.check(row(r, "elytra_bp")?.before === true, "elytra was entered with the claim cancel already set");
+  t.check(hand.equip === DISC && hand.held === DISC, `equipment and hotbar still agree on the disc (${hand.equip} / ${hand.held})`);
+  t.check(groundDiscs() === 0, "callback-replay: the visitor does not insert the disc into an empty jukebox");
   op.selectedSlotIndex = 0;
   standAt(op, juke);
   await t.wait(5);
   r = await replay(op, juke, { item: DISC, sneaking: false });
   await t.wait(15);
+  hand = handIds(op);
   t.check(row(r, "elytra_bp")?.before === false, "the owner's jukebox tap was not already canceled");
-  t.check(op.getComponent("minecraft:inventory").container.getItem(0)?.typeId !== DISC, "callback-replay: the owner's disc went into the jukebox");
+  t.check(hand.equip !== DISC && hand.held !== DISC && groundDiscs() === 0, "callback-replay: the owner's disc went into the jukebox");
   const beforeEject = groundDiscs();
   r = await replay(visitor, juke, { hand: "pickaxe", sneaking: false });
   await t.wait(20);
-  t.check(row(r, "elytra_bp")?.before === true, "elytra saw the claim cancel");
+  t.check(row(r, "elytra_bp")?.before === true, "elytra saw the claim cancel on ejection");
   t.check(groundDiscs() === beforeEject, `callback-replay: the visitor does not eject the disc (${groundDiscs()} on the ground)`);
   r = await replay(op, juke, { hand: "pickaxe", sneaking: false });
   await t.wait(20);
