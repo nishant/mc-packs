@@ -1,10 +1,9 @@
 // C13 on the genuine 67-member Realm Bundle: one add-on, pack data kept, production handlers not patched.
-// PowerShell must not use npm run bundle -- --all (that drops --all). Build and stage with Node:
+// PowerShell must not use npm run bundle -- --all (that drops --all).
+// Dedicated runner (required). A suite skip is not coverage. Lead owns suite registration.
 //   node tools/bundle.mjs --all
 //   node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out <stage>
-// The hook prints the run command. It is run.mjs --quiet --flat --bundle <stage>/realm_bundle
-// --scenario tools/test-bds/examples/full-bundle-protocols.js --timeout 1200.
-// suite.mjs does not stage a --bundle header, so this file has no suite run line.
+//   node tools/test-bds/run.mjs --quiet --flat --bundle <stage>/realm_bundle --scenario tools/test-bds/examples/full-bundle-protocols.js --timeout 1200
 //
 // What a pass means:
 //   callback-replay: harness:c13_tap hands one event object to the production beforeEvents listeners
@@ -298,7 +297,7 @@ export default async function (t) {
   await t.wait(10);
   const hitsAfter = await nativeCount(t, send, native, "playerInteractWithBlock");
   const gained = hitsAfter - hitsBefore;
-  t.log(`native-emission playerInteractWithBlock: ${gained} new hit(s); useItemInSlotOnBlock returned ${attempted}. A zero count is the known simulated-player gap, not proof the engine delivered the cancel.`);
+  t.log(`native-emission playerInteractWithBlock matching hits: ${gained}; useItemInSlotOnBlock returned ${attempted}. The count is only that signal. A zero count is the known simulated-player gap, not proof the engine delivered the cancel.`);
 
   // Addon-scoped store: the probe reads what nick saved; the harness add-on does not.
   send("realm:cfg_set", { id: "nk", pack: "nick_bp", key: "showGamertag", value: false });
@@ -318,7 +317,7 @@ export default async function (t) {
   t.log("C13 gameplay above is callback-replay of production handlers. It is not a physical tap and not a render check.");
 }
 
-// Lead command, after the suite's header scan (suite.mjs skips this file; it does not stage --bundle):
+// Dedicated runner (required). A suite skip is not coverage. Lead owns suite registration.
 //   node tools/bundle.mjs --all
 //   node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out <stage>
 //   node tools/test-bds/run.mjs --quiet --flat --bundle <stage>/realm_bundle --scenario tools/test-bds/examples/full-bundle-protocols.js --timeout 1200

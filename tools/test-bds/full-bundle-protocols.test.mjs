@@ -243,6 +243,25 @@ test("chairs must match the stair, and expedition and npc claims stay within wha
   assert.doesNotMatch(rest, /npc_bp \(after claims\) saw the entity cancel/);
 });
 
+test("the dedicated runner is required and a suite skip is not coverage", () => {
+  const lines = [
+    "node tools/bundle.mjs --all",
+    "node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out <stage>",
+    "node tools/test-bds/run.mjs --quiet --flat --bundle <stage>/realm_bundle --scenario tools/test-bds/examples/full-bundle-protocols.js --timeout 1200",
+  ];
+  const hook = spawnSync(process.execPath, [path.join(harness, "hooks", "full-bundle-protocols.mjs"), "--help"], { encoding: "utf8" });
+  assert.equal(hook.status, 0);
+  for (const line of lines) assert.ok(hook.stdout.includes(line), line);
+  assert.match(hook.stdout, /A suite skip is not coverage/);
+  assert.match(hook.stdout, /Lead owns suite registration/);
+  const scenario = fs.readFileSync(path.join(harness, "examples", "full-bundle-protocols.js"), "utf8");
+  for (const line of lines) assert.ok(scenario.includes(line), line);
+  assert.match(scenario, /A suite skip is not coverage/);
+  assert.match(scenario, /Lead owns suite registration/);
+  assert.doesNotMatch(scenario, /so this file has no suite run line/);
+  assert.doesNotMatch(scenario, /skips this file/);
+});
+
 test("a Windows and a POSIX stack both name the pack that subscribed", () => {
   const dir = scratch("c13-stack-");
   const packed = path.join(dir, "src");
