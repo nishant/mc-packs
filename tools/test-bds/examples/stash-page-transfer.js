@@ -45,8 +45,16 @@ export default async function (t) {
 
   // 1. Row 1 to Page #3, through the menu: Move to page, Whole row 1, Page #3.
   let since = t.tick;
-  t.answerForm(p, "Move to page", "Whole row 1", "Page #3");
+  const opening = t.waitForm(p);
   t.assert(t.cmd(p, "/realm:inv").ok, "the inventory menu opened");
+  const inventoryForm = await opening;
+  t.assert(inventoryForm.buttons.some((button) => /^Move to page/.test(button)), "the inventory offers the Move to page action");
+  const choosingStack = t.waitForm(p);
+  inventoryForm.answer("Move to page");
+  const stackForm = await choosingStack;
+  const choosingPage = t.waitForm(p);
+  stackForm.answer("Whole row 1");
+  (await choosingPage).answer("Page #3");
   const moved = await t.waitMessage(p, /Moved 3 stacks \(3 items\) to Page #3/, { kind: "actionbar", timeout: 200, since });
   t.log(moved.plain);
   const forms = t.forms(p);

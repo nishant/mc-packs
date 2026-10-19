@@ -263,7 +263,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Want your own stats on screen? Tap §lStats ticker§r in the same menu (or run §e/realm:stats_ticker§r). Above your hotbar you now see one stat at a time, such as §eMob kills 120 #2 of 7§r, changing every 5 seconds. Only you see yours.",
+        "text": "Your own stats show above your hotbar by default, one stat at a time, such as §eMob kills 120 #2 of 7§r, changing every 5 seconds. Only you see yours. Tap §lStats ticker§r in the same menu (or run §e/realm:stats_ticker§r) to turn yours off or on; §e/realm:prefs§r has the same switch.",
         "ops": false
       },
       {
@@ -275,7 +275,7 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lStats & Leaderboards§r has all of that, plus the leaderboard size, the ticker for the whole realm (§lStats ticker§r), whether new players see it from the start, and what every ticker setting starts as for players who haven't chosen.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lStats & Leaderboards§r has all of that, plus the leaderboard size, §lAllow the stats ticker§r (§etickerEnabled§r), §lStats ticker default§r (§etickerDefaultOn§r, enabled by default), and what every ticker setting starts as for players who haven't chosen. Disallowing the ticker hides it without erasing anybody's saved choice.",
         "ops": true
       }
     ],
@@ -290,7 +290,7 @@ export const PACKS = [
         "usage": "/realm:stats_ticker",
         "ops": false,
         "who": "Everyone",
-        "text": "Shows or hides your own stats above the hotbar (default hidden, §etickerDefaultOn§r). Remembered between sessions. Says so when an operator has disabled the ticker for the realm (§etickerEnabled§r)"
+        "text": "Shows or hides your own stats above the hotbar (default on, §etickerDefaultOn§r). Your choice is remembered between sessions and across later default changes. Says so when an operator has disallowed the ticker for the realm (§etickerEnabled§r)"
       },
       {
         "usage": "/realm:stats_sidebar <stat>",
@@ -505,10 +505,10 @@ export const PACKS = [
     "folder": "stash_bp",
     "topic": "stash",
     "name": "Quick Stack & Sort",
-    "summary": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory. The inventory itself has §l5 pages§r (the Expansive Inventory): three buttons together at the top right flip between them, and when a page fills up, new pickups are stored on another page by themselves.",
+    "summary": "Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; holding a tool, weapon or armor opens its menu to sort, lock or quick stack into storage that already holds each item (like Terraria). The §l5 native-persistent inventory pages§r share your hotbar, have previous/menu/next controls together at the top right, and let you move a stack or whole row to a page you choose. When a page fills up, new pickups are stored on another page by themselves.",
     "steps": [
       {
-        "text": "§lOpen the menu:§r sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand, or holding a tool, weapon or armor. It doesn't open; a §lQuick Stack & Sort§r menu does, with these buttons:\n  - §lSort this chest§r (or barrel, shulker box...): its stacks merge and sort, and the bar above the hotbar says §eSorted 31 stacks§r.\n  - §lLock this chest:§r only you can open, sort or break it. Once it's yours, the button reads §lShare or unlock§r: share it with players who are online, stop sharing, or unlock it.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
+        "text": "§lSort storage:§r sneak and tap a chest, trapped chest, copper chest, barrel or shulker box with an empty hand. It sorts at once and the bar says §eSorted 31 stacks§r. §lOpen the menu:§r sneak-tap holding a tool, weapon or armor. An ender chest gets the menu with an empty hand too. A §lQuick Stack & Sort§r menu opens instead of the container, with these buttons:\n  - §lSort this chest§r (or barrel, shulker box): the same as the empty-hand sort.\n  - §lLock this chest:§r only you can open, sort or break it. Once it's yours, the button reads §lShare or unlock§r: share it with players who are online, stop sharing, or unlock it.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
         "ops": false
       },
       {
@@ -520,7 +520,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lYour way:§r in §e/realm:prefs§r, choose what sneak-tapping a container does for you (§lWhen I sneak-tap a container§r: §eOpen the menu§r, §eSort it right away§r or §eNothing (opens as usual)§r), and whether sorting your inventory includes your hotbar.",
+        "text": "§lYour way:§r in §e/realm:prefs§r, choose what sneak-tapping a container does for you (§lWhen I sneak-tap a container§r: §eEmpty hand sorts, gear opens menu§r, §eSort it right away§r with an empty hand or gear, or §eNothing (opens as usual)§r), and whether sorting your inventory includes your hotbar.",
         "ops": false
       },
       {
@@ -528,7 +528,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lInventory pages:§r open your inventory. The last three slots of the main inventory's top row hold §e<§r (previous page), the current page number/menu, and §e>§r (next page), together from left to right. A page change replaces the other 24 slots. The hotbar, armor and offhand are the same on every page. §e/realm:inv§r opens a menu with every page and how full it is, §lScan all items across pages§r (pick an item to jump to a page that holds it), §lSort this page§r, §lQuick stack to nearby chests§r and §lInventory settings§r. Click the menu button, then close your inventory, and the same menu opens.",
+        "text": "§lInventory pages:§r open your inventory. The last three slots of the main inventory's top row hold §e<§r (previous page), the current page number/menu, and §e>§r (next page), together from left to right. A page change replaces the other 24 slots. The hotbar, armor and offhand are the same on every page. §e/realm:inv§r opens a menu with every page and how full it is, §lScan all items across pages§r (pick an item to jump to a page that holds it), §lMove to page§r, §lSort this page§r, §lQuick stack to nearby chests§r and §lInventory settings§r. Click the menu button, then close your inventory, and the same menu opens. §lMove to page§r asks for a stack or a whole row of your current page, then a destination. The top row has six usable slots; the other two rows have nine each. Matching stacks fill first, then empty slots. The whole move is refused if it cannot fit, a chosen stack changed, or you left, died, changed dimension or switched page. Your hotbar, cursor and page controls never move.",
         "ops": false
       },
       {
@@ -544,7 +544,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r sneak-tap someone else's locked container for §lRemove the lock (operator)§r. To switch chest locks off for the realm, disable §lChest locks§r in §e/realm:config§r (existing locks are kept for when they're enabled again). §e/realm:inv_pages <count>§r gives you your own number of pages (2 to 25, §e1§r for a single page with no buttons, §e0§r to follow the realm again) without changing everyone else's; §lInventory pages§r in §e/realm:config§r (§epages§r, 1 to 15) sets the realm's.",
+        "text": "§lOperators:§r sneak-tap someone else's locked container holding gear for §lRemove the lock (operator)§r. To switch chest locks off for the realm, disable §lChest locks§r in §e/realm:config§r (existing locks are kept for when they're enabled again). §e/realm:inv_pages <count>§r gives you your own number of pages (2 to 25, §e1§r for a single page with no buttons, §e0§r to follow the realm again) without changing everyone else's; §lInventory pages§r in §e/realm:config§r (§epages§r, 1 to 15) sets the realm's.",
         "ops": true
       }
     ],
@@ -571,7 +571,7 @@ export const PACKS = [
         "usage": "/realm:inv",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens the Expansive Inventory menu: your current page (§ePage #1 of 5§r), every page with how many of its 24 slots are used (click one to switch), §lScan all items across pages§r, §lSort this page§r, §lQuick stack to nearby chests§r and §lInventory settings§r. When your inventory screen is open it waits and appears as soon as you close it"
+        "text": "Opens the Expansive Inventory menu: your current page (§ePage #1 of 5§r), every page with how many of its 24 slots are used (click one to switch), §lScan all items across pages§r, §lMove to page§r (one stack or whole row, all or nothing), §lSort this page§r, §lQuick stack to nearby chests§r and §lInventory settings§r. When your inventory screen is open it waits and appears as soon as you close it"
       },
       {
         "usage": "/realm:inv_pages [pages]",
@@ -596,7 +596,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Tap a result: an outline of green sparkles around the container, and a column of particles over it, mark it for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark. A container in another dimension only gets its coordinates in chat.",
+        "text": "Tap a result: a bright downward arrow above the container marks it for 10 seconds (§ehighlightSeconds§r), and the bar above your hotbar says which way and how far, such as §eChest 12 blocks NE§r. Only you see the arrow and line; chat still gives its coordinates. Marking another container replaces the first mark. Leaving, dying, changing dimension or reaching the timeout stops it. A container in another dimension only gets its coordinates in chat.",
         "ops": false
       }
     ],
@@ -1411,7 +1411,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker is a quest box at §lRight 4§r (bottom right, below the minimap), up to about 10 rows: the quest and chapter in aqua (§eDrowned Bell: Salt and Silence§r), whether the steps go §eSteps, in any order:§r or §eSteps, one at a time, in order:§r, then every step as a checklist: §e[>]§r the one the tracker points at, §e[ ]§r the other open ones, each with where it is (§eNE 240m§r, §e(you're here)§r, §ewait for nightfall (in about 4 min)§r), §e[ ] Then:§r steps that come later, §e[x]§r steps done. In a party a line says who shares it (§eParty: all progress shared with Bob. One report counts for all.§r). Other quests going get a row each under it. §e/realm:saga§r has the full quest log. Counts go down as you go, within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r. The rotating Stats scoreboard is on the left, not beneath the quest. Clues appear in chat, not an automatic popup, so you can keep moving and fighting. A standard NPC or story-menu form without an answer closes after 45 seconds; death, respawn, leaving or changing dimension ends the current conversation without applying a late answer. Open the story again when you're ready.",
+        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker is a quest box at §lRight 4§r (bottom right, below the minimap), up to about 10 rows: the quest and chapter in aqua (§eDrowned Bell: Salt and Silence§r), whether the steps go §eSteps, in any order:§r or §eSteps, one at a time, in order:§r, then the checklist: §e[>]§r the focused step, §e[ ]§r other open steps with their place or wait, §e[ ] Then:§r later steps, and §e[x]§r steps done. Long quest lines wrap rather than ending in §e...§r. In a party a line explains sharing, or says §eParty quest: helping your party§r; helping does not mean you already finished that chapter. If everything cannot fit, whole lower-priority lines are omitted and §e+2 more steps in /realm:saga§r says how many. §e/realm:saga§r keeps the full log. Counts go down within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r. The rotating Stats scoreboard is on the left, not beneath the quest. Clues appear in chat, not an automatic popup, so you can keep moving and fighting. A standard NPC or story-menu form without an answer closes after 45 seconds; death, respawn, leaving or changing dimension ends the current conversation without applying a late answer. Open the story again when you're ready.",
         "ops": false
       },
       {

@@ -4,7 +4,7 @@
 // the real chapter "Salt and Silence" (The Drowned Bell): its step "Ask Warden Reyes what the night watch heard" shows
 // whole as an open step and whole as a done step (`[x]`, which the box used to cut to "[x] Ask Warden Reyes what the..."),
 // and a party mate who helps with it (Bob, who never accepted it) reads the short party line, "Party quest: helping your
-// party (you finished it)", which used to be cut to "Party quest: you finished it, so you're helping. Your party...".
+// party", which used to be cut to "Party quest: you finished it, so you're helping. Your party...".
 // The tracker preference lifecycle is kept: moving the box to another place rewrites it with that place's code, the
 // tracker off takes it down, and back on brings it back.
 // This checks the text the server sends; what a client draws still needs a real-client look at Right 1-3 and Middle.
@@ -96,7 +96,8 @@ export default async function (t) {
   t.assert(t.cmd(bob, "/realm:party_accept").ok, "accept ran");
   await t.waitUntil(() => boxes(bob, since).some((s) => /Party quest/.test(plain(s.m.text))), { timeout: 400, message: "Bob's quest box has the party quest line" });
   const bobText = plain(body(lastBox(bob)));
-  t.check(bobText.includes("Party quest: helping your party (you finished it)"), `the party quest line is the short one:\n${bobText}`);
+  t.check(bobText.includes("Party quest: helping your party"), `the party quest line is the short one:\n${bobText}`);
+  t.check(!bobText.includes("you finished it"), "a helper who never accepted this chapter is not told they finished it");
   t.check(!bobText.includes("you finished it, so you're helping"), "the long party line is gone");
 
   // Every write of the run: whole lines, the byte and row budget.

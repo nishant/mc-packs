@@ -419,6 +419,8 @@ export const SETUP = [
 export const SIZE_OPTIONS = [
   { pack: "map_bp", key: "budgetLevel", large: "low", why: "the heaviest pack: its budgets are for everyone together, about 2.0 ms a tick instead of 2.9" },
   { pack: "map_bp", key: "mobRadiusMax", large: 24, why: "each mob search covers less ground, so the budgeted searches come round sooner" },
+  { pack: "stats_bp", key: "tickerEnabled", large: true, why: "the ticker is each player's own; a Large server still allows it" },
+  { pack: "stats_bp", key: "tickerDefaultOn", large: true, why: "players who never chose start with it on; a saved choice still wins" },
   { pack: "elite_bp", key: "maxAlive", large: 16, why: "8 champions for 100 players spread out is too few; each costs little" },
   { pack: "expedition_bp", key: "slots", large: 3, why: "3 dungeons of 4 players instead of 1; about 0.1 ms a tick per run going" },
   { pack: "build_bp", key: "maxBlocksCap", large: 10000, why: "one 50,000-block build by any player stalls the server for everyone" },

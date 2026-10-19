@@ -56,6 +56,7 @@ const SPECIAL = {
   "saga-lighthouse": { args: ["--flat", "--only", "saga_bp", "--timeout", "300"], note: "no command in header" },
   "perf-soak": { args: ["--no-relay", "--profile", "--profile-every", "0", "--arg", "players=6", "--arg", "seconds=60", "--timeout", "400"], note: "short soak (6 players, 60 s)" },
   "stash-pages-persistence": { runner: "stash-persistence.mjs", note: "custom runner stash-persistence.mjs" },
+  "stash-page-transfer-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-page-transfer-restart.js")], note: "moved native row across two physical restarts" },
 };
 // A --packs header's test copy is built by the plain shell lines just above its command (run first).
 const RECIPE_START = /^\/\/ {3}(S=|mkdir |rm |cp |sed |cat |printf |for |grep |node -e )/;
@@ -166,7 +167,7 @@ function runOne(p, logDir, tag = "") {
       }
     }
     const argv = p.runner
-      ? [path.join(HERE, p.runner), "--port", String(19400 + Math.floor(Math.random() * 400) * 2)]
+      ? [path.join(HERE, p.runner), ...(p.runnerArgs ?? []), "--port", String(19400 + Math.floor(Math.random() * 400) * 2)]
       : [path.join(HERE, "run.mjs"), ...p.args, "--log", base + ".log"];
     const child = spawn(process.execPath, argv, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], env: process.env });
     const outStream = fs.createWriteStream(base + ".out");

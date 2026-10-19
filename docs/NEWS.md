@@ -7,6 +7,14 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Clear quests and safer inventory pages
+
+- Long quest steps wrap instead of being cut off with "...". A full tracker says how many more steps are in /realm:saga. Empty minimap panels now hide their backgrounds too.
+- Chest Finder marks your result with a personal bright arrow above the chest and a direction-and-distance line.
+- The stats ticker defaults on, and your own on/off choice stays yours even when the realm default changes. If an old off choice comes back, turn it off once more: choices matching the old default were not saved.
+- Sneak-tap storage with an empty hand to sort it. Hold a tool, weapon or armor to open its menu. Claims and locks are checked before sorting or opening an editable storage menu, whichever pack loads first.
+- Move a stack or a whole row to a chosen inventory page with Move to page in /realm:inv. A full destination refuses the whole move; your hotbar, cursor, controls and native item data stay intact.
+
 ## Clues without interruptions
 
 - Story clues, including the graveyard clues in Signs in the Sky, now go straight to chat instead of opening a popup while you fight. Conversations stop on death, respawn, leaving or changing dimension. An unanswered standard story menu closes after 45 seconds.

@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "domt_bp";
-const VERSION = "1.1.9";
+const VERSION = "1.1.10";
 const NAME = "Deck of Many Things";
 
 const API = 1;

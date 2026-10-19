@@ -10,7 +10,7 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "sneakTap", type: "enum", scope: "world", choices: ["menu", "sort", "off"], names: ["Open the menu", "Sort it right away", "Nothing (opens as usual)"], label: "Sneak-tapping a container" },
+  { key: "sneakTap", type: "enum", scope: "world", choices: ["menu", "sort", "off"], names: ["Empty hand sorts, gear opens menu", "Sort it right away", "Nothing (opens as usual)"], label: "Sneak-tapping a container" },
   { key: "sortHotbar", type: "bool", scope: "world", label: "Inventory sort includes the hotbar" },
   { key: "stashGear", type: "bool", scope: "world", label: "Quick stack moves tools, weapons and armor" },
   { key: "stashNamedItems", type: "bool", scope: "world", label: "Quick stack moves named items" },
@@ -20,7 +20,7 @@ const OPTIONS = [
   { key: "pages", type: "int", scope: "world", label: "Inventory pages (1 = vanilla inventory)", min: 1, max: 15, step: 1, help: "Pages of the main inventory, switched with the buttons in the inventory or /realm:inv. Items on a page that goes away move to the pages that are left" },
   { key: "invButtons", type: "bool", scope: "world", label: "In-inventory page buttons", help: "The three page buttons in the top row of the inventory. Players can turn them off for themselves" },
   { key: "autoStore", type: "bool", scope: "world", label: "Auto-store pickups into other pages", help: "When a page is full, new stacks move to another page. Players can turn it off for themselves" },
-  { key: "sneakTap", type: "enum", scope: "player", base: "sneakTap", choices: ["menu", "sort", "off"], names: ["Open the menu", "Sort it right away", "Nothing (opens as usual)"], label: "When I sneak-tap a container" },
+  { key: "sneakTap", type: "enum", scope: "player", base: "sneakTap", choices: ["menu", "sort", "off"], names: ["Empty hand sorts, gear opens menu", "Sort it right away", "Nothing (opens as usual)"], label: "When I sneak-tap a container" },
   { key: "sortHotbar", type: "bool", scope: "player", base: "sortHotbar", label: "My inventory sort includes my hotbar" },
   { key: "invOff", type: "bool", scope: "player", lock: [["pages", 1]], default: false, invert: true, label: "Expansive inventory (5 pages)", help: "Extra inventory pages and in-inventory buttons. Disabled: normal 27-slot inventory with no buttons (items on other pages move back to your inventory)" },
   { key: "invButtons", type: "bool", scope: "player", lock: [["pages", 1]], base: "invButtons", label: "In-inventory page buttons" },
@@ -57,6 +57,7 @@ const OPTIONS = [
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
  * @property {string} [prop] player only: its own dynamic property instead of `<PREFIX>:pref`
+ * @property {boolean} [sticky] player only: keep an explicit choice even when it matches the realm default
  * @property {[string, unknown][]} [lock] player only: world options that make this preference do nothing, each with
  *   the value that does it ([["enabled", false]]); /realm:prefs then shows it as set by the operators
  * @property {(player: Player) => string | undefined} [locked] player only: why it can't change for this player now, when
@@ -218,8 +219,8 @@ export function getFor(player, key) {
 }
 
 /**
- * Saves a player's own choice. Choosing what the realm has clears it, so the player follows later
- * changes to the realm's value.
+ * Saves a player's own choice. Unless the option is sticky, choosing what the realm has clears it
+ * so the player follows later changes to the realm's value.
  * @param {Player} player @param {string} key @param {unknown} value @returns {string | undefined} why it wasn't saved
  */
 export function setFor(player, key, value) {
@@ -227,7 +228,7 @@ export function setFor(player, key, value) {
   if (!opt) return "isn't a preference";
   const bad = problem(opt, value);
   if (bad) return bad;
-  const keep = /** @type {boolean | number | string | undefined} */ (value === playerBase(opt) ? undefined : value);
+  const keep = /** @type {boolean | number | string | undefined} */ (opt.sticky !== true && value === playerBase(opt) ? undefined : value);
   if (opt.prop) player.setDynamicProperty(opt.prop, keep);
   else {
     const prefs = prefsOf(player);

@@ -38,8 +38,8 @@ export const OPTIONS = [
   { key: "sidebarCycleSeconds", type: "int", scope: "world", label: "Seconds per stat when the sidebar rotates", min: 5, max: 300, step: 5 },
   ...STATS.map((s) => /** @type {Option} */ ({ key: `sidebarShows.${s.id}`, type: "bool", scope: "world", label: `Sidebar rotation includes ${s.label}` })),
   { key: "leaderboardSize", type: "int", scope: "world", label: "Leaderboard size (players)", min: 3, max: 25, step: 1 },
-  { key: "tickerEnabled", type: "bool", scope: "world", label: "Stats ticker", help: "Each player's own stats above the hotbar. Disabled: nobody sees it, whatever they chose" },
-  { key: "tickerDefaultOn", type: "bool", scope: "world", label: "Stats ticker for new players", help: "For players who never chose in /realm:stats or /realm:prefs" },
+  { key: "tickerEnabled", type: "bool", scope: "world", label: "Allow the stats ticker", help: "Disabled: nobody sees it. Enabled: each player follows their own choice, or the realm default" },
+  { key: "tickerDefaultOn", type: "bool", scope: "world", label: "Stats ticker default", help: "For players who never chose. This Realm starts on; a saved choice still wins" },
   { key: "tickerMode", type: "enum", scope: "world", label: "Ticker shows (players start with)", ...mode },
   { key: "tickerSeconds", type: "int", scope: "world", label: "Ticker seconds per stat (players start with)", min: 2, max: 60, step: 1 },
   { key: "tickerStyle", type: "enum", scope: "world", label: "Ticker style (players start with)", ...style },
@@ -47,7 +47,7 @@ export const OPTIONS = [
   { key: "tickerValueColor", type: "enum", scope: "world", label: "Ticker number color (players start with)", ...colors },
   ...STATS.map((s) => /** @type {Option} */ ({ key: `tickerShows.${s.id}`, type: "bool", scope: "world", label: `Ticker shows ${s.label} (players start with)` })),
 
-  { key: "ticker", type: "bool", scope: "player", lock: [["tickerEnabled", false]], base: "tickerDefaultOn", label: "Stats ticker above my hotbar", help: "Your own stats, one at a time or all on one line. The same switch as /realm:stats_ticker" },
+  { key: "ticker", type: "bool", scope: "player", lock: [["tickerEnabled", false]], base: "tickerDefaultOn", sticky: true, label: "Stats ticker above my hotbar", help: "Your own stats, one at a time or all on one line. The same switch as /realm:stats_ticker" },
   { key: "tickerMode", type: "enum", scope: "player", lock: [["tickerEnabled", false]], base: "tickerMode", label: "Ticker shows", ...mode },
   { key: "tickerSeconds", type: "int", scope: "player", lock: [["tickerEnabled", false]], base: "tickerSeconds", label: "Ticker seconds per stat", min: 2, max: 60, step: 1 },
   { key: "tickerStyle", type: "enum", scope: "player", lock: [["tickerEnabled", false]], base: "tickerStyle", label: "Ticker style", ...style },
@@ -86,6 +86,7 @@ export const OPTIONS = [
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
  * @property {string} [prop] player only: its own dynamic property instead of `<PREFIX>:pref`
+ * @property {boolean} [sticky] player only: keep an explicit choice even when it matches the realm default
  * @property {[string, unknown][]} [lock] player only: world options that make this preference do nothing, each with
  *   the value that does it ([["enabled", false]]); /realm:prefs then shows it as set by the operators
  * @property {(player: Player) => string | undefined} [locked] player only: why it can't change for this player now, when
@@ -247,8 +248,8 @@ export function getFor(player, key) {
 }
 
 /**
- * Saves a player's own choice. Choosing what the realm has clears it, so the player follows later
- * changes to the realm's value.
+ * Saves a player's own choice. Unless the option is sticky, choosing what the realm has clears it
+ * so the player follows later changes to the realm's value.
  * @param {Player} player @param {string} key @param {unknown} value @returns {string | undefined} why it wasn't saved
  */
 export function setFor(player, key, value) {
@@ -256,7 +257,7 @@ export function setFor(player, key, value) {
   if (!opt) return "isn't a preference";
   const bad = problem(opt, value);
   if (bad) return bad;
-  const keep = /** @type {boolean | number | string | undefined} */ (value === playerBase(opt) ? undefined : value);
+  const keep = /** @type {boolean | number | string | undefined} */ (opt.sticky !== true && value === playerBase(opt) ? undefined : value);
   if (opt.prop) player.setDynamicProperty(opt.prop, keep);
   else {
     const prefs = prefsOf(player);

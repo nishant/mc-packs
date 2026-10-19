@@ -125,6 +125,8 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 |---|---|---|---|---|
 | Minimap | `budgetLevel` | normal | low | The heaviest pack. Its time budgets are for everyone together: low caps it at about 2.0 ms a tick instead of 2.9, whatever the player count. Strips and radars keep their drawing budget; terrain and mob dots lag a little more |
 | Minimap | `mobRadiusMax` | 32 | 24 | Each mob search covers about half the ground, so the budgeted searches come round sooner for many players |
+| Stats & Leaderboards | `tickerEnabled` | true | true | Both profiles allow each player's own ticker; disallowing it hides everybody without erasing choices |
+| Stats & Leaderboards | `tickerDefaultOn` | true | true | Players who never chose start on. A saved personal on/off choice wins even after later default changes |
 | Champions | `maxAlive` | 8 | 16 | A world-wide cap: 8 champions shared by 100 spread-out players means most never meet one. They cost little (about 0.04 ms a tick at 40 players) |
 | Expeditions | `slots` | 1 | 3 | Three dungeons of 4 players at once instead of one; about 0.1 ms a tick per run going. Uses up to 3 of the world's 10 ticking areas while dungeons reset |
 | Easy Building | `maxBlocksCap` | 50,000 | 10,000 | One 50,000-block build by any player stalls the server for everyone; 10,000 still covers houses and walls |

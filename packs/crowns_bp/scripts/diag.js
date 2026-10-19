@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "crowns_bp";
-const VERSION = "1.1.6";
+const VERSION = "1.1.7";
 const NAME = "Crowns";
 
 const API = 1;

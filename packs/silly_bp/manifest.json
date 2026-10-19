@@ -4,7 +4,7 @@
     "name": "Silly Enchants",
     "description": "Fourteen harmless, silly enchantments for your gear: Grunt Birthday confetti, Hyper Jump, Squeak, Rainbow Trail and more. /realm:silly",
     "uuid": "8d7b7300-5c9c-4268-a04d-6ef96607f1ff",
-    "version": [1, 2, 5],
+    "version": [1, 2, 6],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

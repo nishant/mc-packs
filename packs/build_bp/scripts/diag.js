@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "build_bp";
-const VERSION = "3.0.4";
+const VERSION = "3.0.5";
 const NAME = "Easy Building";
 
 const API = 1;

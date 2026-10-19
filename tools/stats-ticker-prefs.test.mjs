@@ -262,7 +262,7 @@ test("stored true and false survive a later default flip, and an absent choice d
   settings.set("tickerDefaultOn", CONFIG.tickerDefaultOn);
 });
 
-test("explicit off is stored once the realm default is on, and matching the default still clears", () => {
+test("explicit on and off stay stored even when they match the realm default", () => {
   const player = ann();
   player.setDynamicProperty("stats:pref", undefined);
   settings.set("tickerDefaultOn", CONFIG.tickerDefaultOn);
@@ -270,8 +270,11 @@ test("explicit off is stored once the realm default is on, and matching the defa
   assert.equal(settings.setFor(player, "ticker", false), undefined);
   assert.equal(pref(player).ticker, false, "explicit off must remain when the default is on");
   assert.equal(settings.setFor(player, "ticker", true), undefined);
-  assert.equal(pref(player).ticker, undefined, "choosing the realm default still follows later realm changes");
+  assert.equal(pref(player).ticker, true, "an explicit matching on remains a personal choice");
   assert.equal(settings.getFor(player, "ticker"), true);
+  settings.set("tickerDefaultOn", false);
+  assert.equal(settings.getFor(player, "ticker"), true, "a later default cannot erase the explicit on");
+  settings.set("tickerDefaultOn", CONFIG.tickerDefaultOn);
 });
 
 test("both menus toggle the same preference and the cache drops without a tick write", () => {
@@ -294,7 +297,7 @@ test("both menus toggle the same preference and the cache drops without a tick w
     cmd({ sourceEntity: player });
     flush();
     assert.match(player.messages.at(-1) ?? "", /Enabled/);
-    assert.equal(pref(player).ticker, undefined, "turning it back on matches the realm default and clears the stored off");
+    assert.equal(pref(player).ticker, true, "the command keeps an explicit on even when it matches the default");
     player.bars.length = 0;
     assert.match(tickers().at(-1) ?? "", /Playtime/, "the stats command invalidates the cache");
     fire("realm:cfg_set", JSON.stringify({ id: "prefs-off", pack: "stats_bp", key: "ticker", value: false, player: player.id }));
@@ -302,10 +305,11 @@ test("both menus toggle the same preference and the cache drops without a tick w
     player.bars.length = 0;
     assert.equal(tickers().filter((line) => /Playtime/.test(line)).length, 0, "/realm:prefs write invalidates the cache");
     fire("realm:cfg_set", JSON.stringify({ id: "prefs-on", pack: "stats_bp", key: "ticker", value: true, player: player.id }));
+  assert.equal(pref(player).ticker, true, "/realm:prefs also keeps the explicit on");
   settings.set("tickerEnabled", false);
   cmd({ sourceEntity: player });
   flush();
   assert.match(player.messages.at(-1) ?? "", /disabled on this realm/);
-  assert.equal(pref(player).ticker, undefined, "the locked command must not invent a choice");
+  assert.equal(pref(player).ticker, true, "the locked command preserves the existing explicit choice");
   settings.set("tickerEnabled", true);
 });

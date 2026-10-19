@@ -141,6 +141,17 @@ Run it separately from another BDS run using the same ports.
 rollback journals, legacy migration, cursor/button echoes, and overflow without a client.
 These are model tests, not proof of client mouse/touch behavior.
 
+`node tools/test-bds/stash-persistence.mjs --scenario tools/test-bds/examples/stash-page-transfer-restart.js`
+uses that same exact-native-handle identity adapter to move a genuine shulker, potion and enchanted sword between
+pages before each of two physical BDS restarts. It then checks hidden contents/data and exactly-one counts across
+the committed pages. `--keep` retains the named test pack/server copies; `--log <file>` selects the official log.
+The default scenario and port pair are unchanged. `BDS_HARNESS_CACHE` also owns this adapter's staged pack directory.
+
+Player dynamic properties are add-on scoped too: reading `player.getDynamicProperty("stats:pref")` from the test
+pack cannot inspect Stats' saved choice. `hooks/stats-prefs.mjs` stages a console-only probe inside Stats for
+`stats-ticker-personal.js`. Register message waits before triggering forms, or pass `since` from before the action;
+an immediate toggle reply can arrive before the next form is answered.
+
 ## Writing a scenario
 
 A scenario is an ES module with a default async function. It runs inside the harness test pack,

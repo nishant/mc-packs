@@ -29,7 +29,7 @@ export const CONFIG = {
 
   /**
    * What sneaking and tapping a container does, with an empty hand or holding a tool, weapon or armor
-   * (it never opens it): "menu" = a menu to sort it, quick stack or sort your inventory,
+   * (it never opens it): "menu" = an empty hand sorts; gear opens the sort, lock and quick-stack menu,
    * "sort" = sort it right away, "off" = nothing, it opens as usual.
    */
   sneakTap: "menu",

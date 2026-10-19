@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "afk_bp";
-const VERSION = "1.3.6";
+const VERSION = "1.3.7";
 const NAME = "AFK + Smart Sleep";
 
 const API = 1;

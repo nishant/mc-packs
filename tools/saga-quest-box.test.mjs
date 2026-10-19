@@ -97,6 +97,12 @@ const box = loadBox();
 const wide = loadBox({ rows: 1000, bytes: 1000000 });
 const { BOX_COLS, BOX_ROWS, BOX_BYTES } = box;
 
+test("a party helper is not told they finished a chapter they never accepted", () => {
+  const fresh = loadBox();
+  fresh.state.mates = [{ id: "p2", name: "Bob" }];
+  assert.equal(fresh.partyLine(fresh.player, { pq: true, story: { kind: "main" } }), "§3Party quest: helping your party");
+});
+
 /** Rows of a line, counted a second way from the box's own: words at spaces, color codes take no room. */
 function rowsIn(/** @type {string} */ line) {
   let rows = 1;
@@ -335,11 +341,11 @@ test("the reported box: the party-help line is said in full, nothing is cut with
   const found = labels.find((l) => l.obj.label === "Bring Mara a filled map of a place you love");
   assert.ok(found, "the Last Map step of the report");
   const r = boxes(found.story, found.chapter, { pq: true, at: 0, status: () => " §eE 322m" });
-  assert.equal(r.out, "§bLast Map§7: The Last Map\n§e[>] §fBring Mara a filled map of a place you love §eE 322m\n§3Party quest: helping your party (you finished it)");
+  assert.equal(r.out, "§bLast Map§7: The Last Map\n§e[>] §fBring Mara a filled map of a place you love §eE 322m\n§3Party quest: helping your party");
   assert.ok(!r.out.includes("..."));
-  assert.equal(box.partyLine(box.player, { pq: true, story: { kind: "main" } }), "§3Party quest: helping your party (you finished it)");
+  assert.equal(box.partyLine(box.player, { pq: true, story: { kind: "main" } }), "§3Party quest: helping your party");
   assert.ok(!uiSource.includes("you finished it, so you're helping"), "the long wording is gone from the source");
-  assert.ok(rowsIn("Party quest: helping your party (you finished it)") <= 2);
+  assert.ok(rowsIn("Party quest: helping your party") <= 2);
 });
 
 test("every party line, for one mate and for a full party, is said whole", () => {

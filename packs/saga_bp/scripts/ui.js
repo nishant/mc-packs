@@ -1474,7 +1474,7 @@ function partyLine(player, e) {
   if (!together(e.story)) return "";
   const mates = partyMates(player);
   if (!mates.length) return "";
-  if (e.pq) return "§3Party quest: helping your party (you finished it)";
+  if (e.pq) return "§3Party quest: helping your party";
   if (e.story.kind === "main") {
     const view = partyViews.get(player.id);
     const on = mates.filter((p) => partyViews.get(p.id)?.chapter.id === e.chapter.id);
