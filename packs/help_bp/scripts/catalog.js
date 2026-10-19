@@ -2678,7 +2678,7 @@ export const PACKS = [
         "usage": "/realm:expedition_leave",
         "ops": false,
         "who": "Everyone",
-        "text": "Leave your expedition and go back to where you started it (also how to leave the treasure room early)"
+        "text": "Leave your expedition and go back to where you started it (also how to leave the treasure room early)  Also leaves your queued request."
       },
       {
         "usage": "/realm:expedition_site [x] [z]",
@@ -3271,7 +3271,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lBlood Moon:§r outdoors the sky turns dark red and red motes drift up around you. Every 20 seconds a zombie, skeleton, spider or creeper or two appears 16 to 32 blocks away, never inside or next to anything built. Stay online from dusk to dawn without dying, and at dawn you get 3 levels and 25 Crowns (§eYou survived the Blood Moon!§r), plus the §lBlood Moon Survivor§r title the first time (with the Titles pack). Blood Moon monsters drop extra experience orbs, and the ones still around at dawn vanish.",
+        "text": "§lBlood Moon:§r outdoors the sky turns dark red and red motes drift up around you. Every 20 seconds a zombie, skeleton, spider or creeper or two appears 16 to 32 blocks away, never inside or next to anything built. Stay online from dusk to dawn without dying, and at dawn you get 3 levels and 25 Crowns (§eYou survived the Blood Moon!§r), plus the §lBlood Moon Survivor§r title the first time (with the Titles pack). Blood Moon monsters drop extra experience orbs, and the ones still around at dawn vanish, in every dimension, not only the Overworld. A clear 8-block cell is cached for the night after a padded check; cells containing construction are rechecked with the original 9x9x9 spot box. Placing a tracked construction block invalidates nearby clear cells. Commands, other packs' API placement, pistons, axe stripping and unreported second bed/door halves can leave a clear cache stale until the next night. Unloaded probes fail closed and are not cached.",
         "ops": false
       },
       {

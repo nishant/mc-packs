@@ -12,23 +12,23 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T1. Performance budget at 40 and 100 players
 
-- O1 (high) The bundle is 8.3-9.7 ms/tick at 40 simulated players against the 5 ms budget; map_bp alone is 3.96 ms
+- O1 **CODE ACCEPTED `42de58a5` (lossless hot-path cuts); actual 1 ms Map / 5 ms bundle acceptance remains UNVERIFIED.** Original target: (high) The bundle is 8.3-9.7 ms/tick at 40 simulated players against the 5 ms budget; map_bp alone is 3.96 ms
   against 1 ms (redraw, scan and passes: main.js around :749, :1280, :1380). Make map_bp's redraw cheaper.
-- O2 (medium) Packs over 0.15 ms/tick at 40 players: silly 0.38, wander 0.36, elytra 0.34, stash 0.26, saga 0.23,
+- O2 **CODE ACCEPTED `d23c1bed`: lossless Durability/Relics/Saga/Elytra native-read cuts and bound real-HUD regressions. Silly, Stash and Calendar retain documented source-based no-change reasons; every pack's actual 40-player budget remains MEASUREMENT REQUIRED.** Original target: (medium) Packs over 0.15 ms/tick at 40 players: silly 0.38, wander 0.36, elytra 0.34, stash 0.26, saga 0.23,
   relics 0.22, durability 0.18, calendar 0.15 (phase3-report.md table b).
-- O3 (medium) elite_bp and wander_bp cost rises 5-12x over a soak as night falls (elite auraLoop main.js:876, wander
+- O3 **CODE ACCEPTED `fce94f2a`; round-robin work and 0.8/player density (ceiling 80, nearby 3); actual night/scale timing remains UNVERIFIED.** Original target: (medium) elite_bp and wander_bp cost rises 5-12x over a soak as night falls (elite auraLoop main.js:876, wander
   updateLabels main.js:1510): cap the work per entity count. Champion density should scale with online players
   (`maxAlive` per player or per area) instead of a fixed 8 or 16.
-- O4 (medium, unverified) bedrock_server memory grew about 8.7 MiB/min (+126 MiB in 15 min) at 40 players without
+- O4 **REQUIRED: unprofiled 40-player 3600-second RSS observation, NOT started or passed.** Original target: (medium, unverified) bedrock_server memory grew about 8.7 MiB/min (+126 MiB in 15 min) at 40 players without
   leveling off: run a 60-minute soak to confirm or rule out a leak.
-- O5 100-player soak of map_bp and saga (keep-alive resends may use up drawBudget at 100; the story tracker is
+- O5 **REQUIRED: actual 100-player Map and Saga quest workloads, NOT passed.** Original target: 100-player soak of map_bp and saga (keep-alive resends may use up drawBudget at 100; the story tracker is
   about 0.8 ms/tick at 40 with quests).
-- O6 Split `realm:hud_state` into parts (it lists only 100 players; stats_bp and party_bp join the parts).
-- O7 Blood Moon at scale: an 8-block cell cache for "built" checks and a world monster cap (option, docs, Large preset).
-- O8 More expedition slots (5-6 within the ticking-area budget) or a queue.
-- O9 `suite.mjs --perf 10,40,100` fails over budget; add it and `weather-crowd.js` to WORKING.md's finishing order.
+- O6 **CODE ACCEPTED `a83dc571`; full multipart producer/Stats/Party assembly and bounds; native 100-player proof still queued.** Original target: Split `realm:hud_state` into parts (it lists only 100 players; stats_bp and party_bp join the parts).
+- O7 **CODE ACCEPTED `d910426d`; night cell cache, loaded-world cap and all-dimension dawn cleanup; actual native scale timing still queued.** Original target: Blood Moon at scale: an 8-block cell cache for "built" checks and a world monster cap (option, docs, Large preset).
+- O8 **CODE ACCEPTED `369d257b`; real bounded FIFO queue, unchanged 1-3 slots and shared 10-area limit; native queue/pending scenarios still required.** Original target: More expedition slots (5-6 within the ticking-area budget) or a queue.
+- O9 **CODE ACCEPTED `aa5a36fa`; real steady-window fail-closed 40-player budget gate and 8-block per-player sound bands; actual gate/weather runs still required.** Original target: `suite.mjs --perf 10,40,100` fails over budget; add it and `weather-crowd.js` to WORKING.md's finishing order.
   Batch tornado sounds by distance band.
-- O10 D rows to re-measure: npc_bp 10-tick label loop 0.20 ms; build_bp preview floor 0.38 ms (measure without the
+- O10 **MEASUREMENT REQUIRED; deferred labels/preview/rebuild/build hitches are not presumed solved by source cuts.** Original target: D rows to re-measure: npc_bp 10-tick label loop 0.20 ms; build_bp preview floor 0.38 ms (measure without the
   profiler); map_bp rebuild wave every 200 ticks; expedition build steps of 25-31 ms.
 
 ## T2. Real-client acceptance pass (phone and PC, private world)
@@ -131,7 +131,7 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 - O41 **DONE `209bd5f9`, `5b9b1d42` (authoring).** `/realm:titles_take <player:String> <title:String>` and a give-or-take form over offline holders. README row updated. Original: Titles take-away (`/realm:titles_take`, a toggle in Give a title).
 - O42 **DONE `209bd5f9`, `5b9b1d42` (authoring).** Nickname operator list pages of 20 with search; title holders indexed by lowercase name (`titles:n:`). Original: Big-server lists: page or search the nickname list; index title holders by lowercase name.
-- O43 **DONE `209bd5f9`, `5b9b1d42` (authoring).** A new world gets a generic welcome; a world with Realm or saved text keeps it. NEW CONFIG options are listed in PACKS with their code defaults. `welcome:profile` and the startup heuristic are tested on a fake-API harness; the full-bundle native path is UNVERIFIED. Original: A generic default welcome for new servers (the owner keeps the live Realm's text).
+- O43 **Additional fix `3ab057f7`: real Finder-to-Welcome boot-order RED and 10 GREEN Realm/saved-text controls; exact startup key `find:mig` only. Full-bundle native proof remains queued, not inferred from the model.** **DONE `209bd5f9`, `5b9b1d42` (authoring).** A new world gets a generic welcome; a world with Realm or saved text keeps it. NEW CONFIG options are listed in PACKS with their code defaults. `welcome:profile` and the startup heuristic are tested on a fake-API harness; the full-bundle native path is UNVERIFIED. Original: A generic default welcome for new servers (the owner keeps the live Realm's text).
 - O44 **DONE `209bd5f9`, `5b9b1d42` (authoring).** The wizard's generation guards leave/death/respawn and busy pings. Original: Set up this world: the `resumed` flag left set by `showWaiting` (one extra tap) and an unhandled rejection
   when a player leaves mid-form.
 - O45 **DONE `5c8e727a` (canonical), `470f8df3` (authoring).** Untouched declared world prefixes have owners; unknown/ambiguous stay unowned; a late forget answer after 200 ticks, max 16 pending, 12,000-tick expiry. Native bundle behavior UNVERIFIED. Original: Pack diagnostics: a `diag_forgot` answer after 40 ticks shows "nothing was deleted" although it was; keys whose

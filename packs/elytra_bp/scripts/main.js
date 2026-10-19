@@ -734,11 +734,14 @@ system.runInterval(() => {
   const now = system.currentTick;
   for (const player of world.getAllPlayers()) {
     try {
-      const where = getFor(player, "where");
-      if (!player.isGliding || hudOff(player) || where === "hotbar") {
+      const gliding = player.isGliding;
+      // Only a gliding player's HUD is drawn: a player on the ground needs neither their `where` setting nor `hudOff` read.
+      const off = gliding && hudOff(player);
+      const where = gliding ? getFor(player, "where") : undefined;
+      if (!gliding || off || where === "hotbar") {
         // Landed (or switched to the hotbar): take the box away now instead of when it runs out.
         if (inBox.delete(player.id)) side.clear(player);
-        if (!player.isGliding || hudOff(player)) {
+        if (!gliding || off) {
           speedHistory.delete(player.id);
           continue;
         }

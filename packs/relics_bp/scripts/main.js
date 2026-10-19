@@ -719,7 +719,9 @@ function passives(player) {
   const wanted = new Map();
   const want = (/** @type {string} */ type, amp = 0) => wanted.set(type, Math.max(wanted.get(type) ?? 0, amp));
   const sets = setsOf(c);
-  if (get("enabled") === true) {
+  // Carrying nothing, no passive can be lit (`has` and `anywhere` are false for every relic): don't read the player's place.
+  const holding = c.carry.size > 0 || c.head !== undefined || c.feet !== undefined;
+  if (holding && get("enabled") === true) {
     const y = player.location.y;
     const now = system.currentTick;
     const overworld = player.dimension.id === OVERWORLD;
