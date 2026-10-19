@@ -34,8 +34,22 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   t.server("/gamerule sendcommandfeedback false");
   t.server("/gamerule showcoordinates false");
 
+  const clearedAreas = new Set();
+  // Never remove a production pack's loader while preparing the simulated population.
   const clearAreas = () => {
-    for (const d of [over, nether]) { try { d.runCommand("tickingarea remove_all"); } catch (e) { /* none */ } }
+    const raw = t.world.getDynamicProperty("harness:tickingAreas");
+    const areas = raw === undefined ? [] : JSON.parse(raw);
+    if (!Array.isArray(areas)) throw new Error("The harness ticking-area list is not an array");
+    for (const area of areas) {
+      const key = `${area.dimension}|${area.name}`;
+      if (clearedAreas.has(key)) continue;
+      if (!/^harness_\d+_\d+$/.test(area.name) || !["minecraft:overworld", "minecraft:nether", "minecraft:the_end"].includes(area.dimension))
+        throw new Error("Refusing to remove an area not owned by the harness");
+      const result = t.world.getDimension(area.dimension).runCommand(`tickingarea remove "${area.name}"`);
+      if (!(result.successCount > 0)) throw new Error(`Could not remove fixture area ${area.name}`);
+      clearedAreas.add(key);
+    }
+    try { nether.runCommand("tickingarea remove soak_nether"); } catch (e) { /* optional scenario-owned pocket */ }
   };
   const rnd = (n) => Math.floor(Math.random() * n);
   const ringSpot = (k) => {
@@ -62,6 +76,7 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
     t.server(`/fill ${x - 3} ${y - 3} ${z - 3} ${x + 3} ${y} ${z + 3} water`);
     pool = { x, y: y - 2, z };
     clearAreas();
+    await t.wait(1);
   }
   // Nether pocket.
   let pocket = null;
@@ -90,6 +105,7 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
     // A busy server sometimes misses the harness's chunk wait: try again a little further on.
     for (let attempt = 0; attempt < 3; attempt++) {
       clearAreas();
+      await t.wait(1);
       const at = attempt && kind === "land" ? { ...spot, x: spot.x + attempt * 7, z: spot.z - attempt * 5 } : spot;
       try {
         const p = await t.player(name(i), { ...at, dimension: kind === "nether" ? "nether" : "overworld", op: i === 0, settle: 2 });
@@ -102,6 +118,7 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
       }
     }
     clearAreas();
+    await t.wait(1);
   }
   t.log(`spawned ${made}/${N} players in ${((t.tick - t0) / 20).toFixed(0)} s (${players.filter((x) => x.kind === "water").length} in water, ${players.filter((x) => x.kind === "nether").length} in the Nether, ${Math.ceil(N / GROUP)} groups)`);
   const kinds = { land: players.filter((x) => x.kind === "land").length, water: players.filter((x) => x.kind === "water").length, nether: players.filter((x) => x.kind === "nether").length, groups: Math.ceil(N / GROUP) };
