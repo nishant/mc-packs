@@ -31,6 +31,11 @@ entries below as a changelog.
 - The minimap skips players who have just left the server.
 - Blood Moon: placing a block near a spot checked as clear makes the game check that spot again. Monsters left from a Blood Moon are removed at dawn in every dimension, not only the Overworld.
 - Side boxes for Stats and Parties ignore stale or malformed updates instead of showing them.
+- Champions: the most at once now scales with the players online (maxAlivePerPlayer, 0.8 each, up to maxAlive 80). Each area keeps at most 3 (maxAliveNearby). A saved non-default cap stays as the world ceiling; a world that still has the old default 8 gets the new scale.
+- Blood Moon: blood.maxExtraWorld caps the extra monsters for the whole world. Default 0 means no limit. It counts loaded monsters only.
+- Expeditions: when every dungeon is busy, up to 8 parties wait in a first-come line for 30 minutes. Leaving the line keeps your place for the others; a queued reroll is refused before it costs anything.
+- Parties and Stats side boxes: long updates arrive in parts and show only once the whole set is in.
+- Tornadoes: wind and rumble volume change in 8-block steps, so players at the same distance hear the same volume.
 
 ## Clear quests and safer inventory pages
 
