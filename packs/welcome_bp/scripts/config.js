@@ -49,7 +49,7 @@ export const GENERIC = {
   storyStart: "Tap §bOld Tobin§r or §bMara§r in town to begin §eThe Lantern and the Hollow§r.",
   /** Without Story Questlines. */
   noStory: "A world to explore, build and play in together.",
-  /** §type {Record<string, string>} */
+  /** @type {Record<string, string>} */
   lines: {
     quests_bp: "Daily quests (§b/realm:quests§r)",
     expedition_bp: "Expeditions (§b/realm:expedition§r)",
@@ -64,7 +64,7 @@ export const GENERIC = {
     stats_bp: "Your play stats (§b/realm:stats§r)",
     journal_bp: "A journal of what you have found (§b/realm:journal§r)",
   },
-  /** §type {Record<string, string>} */
+  /** @type {Record<string, string>} */
   next: {
     help_bp: "§b/realm:help§r lists everything this server adds.",
     settings_bp: "§b/realm:prefs§r holds your own settings, this popup included.",
