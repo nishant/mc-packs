@@ -593,18 +593,20 @@ export function currentChapter(saga, story) {
 }
 
 /**
- * The packs a started story waits for: its next chapter is hidden only because a `pack:<folder>` "on" its `when`
- * asks for is gone (removed after the story began). [] when a chapter is on offer, or before the first scan answered.
+ * The packs a started story can't go on without: a `pack:<folder>` "on" in the story's `requires.flags` or in the
+ * `when` of its current (or next) chapter, for a pack that is gone (removed after the story began). Also while a
+ * chapter is accepted. [] before the first scan answered.
  * @param {Story} story @param {Saga} saga
  */
 export function packsNeeded(story, saga) {
   const st = saga.s[story.id];
-  if (!installed.ready || !st || st.fin || currentChapter(saga, story)) return [];
-  const next = story.chapters.find((c) => !st.dn.includes(c.id));
-  if (!next?.when) return [];
-  return Object.entries(next.when)
-    .filter(([k, v]) => k.startsWith("pack:") && v === "on" && !installed.set.has(k.slice(5)))
-    .map(([k]) => k.slice(5));
+  if (!installed.ready || !st || st.fin || !(st.a || st.dn.length)) return [];
+  const cur = story.chapters.find((c) => c.id === st.cur && !st.dn.includes(c.id)) ?? story.chapters.find((c) => !st.dn.includes(c.id));
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (const when of [story.requires?.flags, cur?.when])
+    for (const [k, v] of Object.entries(when ?? {})) if (k.startsWith("pack:") && v === "on" && !installed.set.has(k.slice(5))) out.add(k.slice(5));
+  return [...out];
 }
 
 /** "Chapter 3 of 9": the place among the chapters this player gets. @param {Saga} saga @param {Story} story @param {number} index */

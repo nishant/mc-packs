@@ -53,15 +53,33 @@ test("with no kill and no hearts the active step still needs doing", () => {
   assert.equal(objDone(entry({}), gristle[1].i), false);
 });
 
-test("a started story waits on a removed pack: the log says which one it needs", () => {
-  const code = `${between("export function packsNeeded", "\n}\n")}\n}\n({ packsNeeded })`;
-  const run = (installed, cur) => runInNewContext(code, { installed, currentChapter: () => cur, matches: () => true }).packsNeeded;
-  const st = { dn: ["a"], a: false };
-  const saga = { s: { story: st } };
-  const waiting = { id: "story", chapters: [{ id: "a" }, { id: "b", when: { "pack:cooking_bp": "on", "pack:elite_bp": "on", "x": "1" } }] };
-  const names = (installed) => [...run(installed, undefined)(waiting, saga)];
-  assert.deepEqual(names({ ready: true, set: new Set(["saga_bp"]) }), ["cooking_bp", "elite_bp"]);
-  assert.deepEqual(names({ ready: true, set: new Set(["cooking_bp"]) }), ["elite_bp"]);
-  assert.deepEqual(names({ ready: false, set: new Set() }), [], "no claim before the first scan answered");
-  assert.deepEqual([...run({ ready: true, set: new Set() }, { chapter: {} })(waiting, saga)], [], "a chapter that is available needs nothing");
+// The real stories that need a pack (story.requires.flags): listening_deep (expedition_bp) and the_calling (skills_bp).
+const needsFn = (installed) => runInNewContext(`${between("export function packsNeeded", "\n}\n")}\n}\n({ packsNeeded })`, { installed }).packsNeeded;
+const byId = (id) => STORIES.find((s) => s.id === id);
+const gone = { ready: true, set: new Set(["saga_bp"]) };
+
+test("real stories: an accepted chapter of listening_deep and the_calling still names the missing pack", () => {
+  const deep = byId("listening_deep");
+  const calling = byId("the_calling");
+  const accepted = (story) => ({ s: { [story.id]: { dn: [], a: 1, cur: story.chapters[0].id, o: [] } } });
+  assert.deepEqual([...needsFn(gone)(deep, accepted(deep))], ["expedition_bp"]);
+  assert.deepEqual([...needsFn(gone)(calling, accepted(calling))], ["skills_bp"]);
+  const midway = { s: { the_calling: { dn: [calling.chapters[0].id], a: 0, o: [] } } };
+  assert.deepEqual([...needsFn(gone)(calling, midway)], ["skills_bp"], "between chapters too");
 });
+
+test("real stories: nothing is claimed with the pack present, before the scan, or when not started or finished", () => {
+  const deep = byId("listening_deep");
+  const saga = { s: { listening_deep: { dn: [], a: 1, cur: deep.chapters[0].id, o: [] } } };
+  assert.deepEqual([...needsFn({ ready: true, set: new Set(["expedition_bp"]) })(deep, saga)], []);
+  assert.deepEqual([...needsFn({ ready: false, set: new Set() })(deep, saga)], [], "no claim before the first scan answered");
+  assert.deepEqual([...needsFn(gone)(deep, { s: {} })], [], "never started");
+  assert.deepEqual([...needsFn(gone)(deep, { s: { listening_deep: { dn: ["x"], fin: 1, o: [] } } })], [], "finished");
+});
+
+test("Current quests asks packsNeeded for every started story, not only when no chapter is on offer", () => {
+  const ui = readFileSync(new URL("../packs/saga_bp/scripts/ui.js", import.meta.url), "utf8");
+  assert.doesNotMatch(ui, /e \|\| cur \? \[\] : packsNeeded/);
+  assert.match(ui, /const needs = packsNeeded\(story, saga\);\n\s+const step = needs\.length/);
+});
+
