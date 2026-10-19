@@ -19,8 +19,9 @@
 //           the same hook as saga-graveyard-softlock.js) calls the REAL touchedAt handler with the block type and spot
 //           read from the world at that moment, so what is accepted is still the real objective: its block list, its
 //           radius and its count. The step's "done" chat line is the acceptance assertion; no progress is written.
-// Disclosed limits: the six chapel candles are set with setType (the shipped Old Chapel prefab is not built) and then
-// mined by native breakBlock events. Poplar and bamboo saplings are not grown, only placed. Nothing but the sgs hook
+// Disclosed limits: the six chapel candles, and the one control candle just outside the radius, are set with setType
+// (the shipped Old Chapel prefab is not built); the chapel's are then mined by native breakBlock events. Poplar and
+// bamboo saplings are not grown, only placed. Nothing but the sgs hook
 // copy differs from the shipped saga_bp, and it is the only pack installed (no claim or protection pack is involved or
 // bypassed); skipCreative and every other setting keep their defaults (the creative control in case A proves a
 // creative player's placements still do not count).
@@ -167,8 +168,8 @@ export default async function (t) {
   }
 
   /** REPLAY: a tap on the block at `at`, with the type the world holds there now (the real touchedAt handler). */
-  async function tap(p, at, type = typeAt(at)) {
-    send("sgs:tap", { name: p.name, type, x: at.x, y: at.y, z: at.z });
+  async function tap(p, at) {
+    send("sgs:tap", { name: p.name, type: typeAt(at), x: at.x, y: at.y, z: at.z });
     await t.wait(3);
   }
 
@@ -317,13 +318,18 @@ export default async function (t) {
       "D: the keeper hint says to place new candles within 10 blocks of the chapel and that one placed candle is enough",
     );
 
-    // Look-alike taps do not count: the wrong block inside the radius, a candle outside it.
-    t.log("CASE D REPLAY: taps that must not count (sgs:tap -> the real touchedAt)");
+    // Look-alike taps do not count: the wrong block inside the radius, a real candle outside it.
+    t.log("CASE D REPLAY: taps that must not count (sgs:tap -> the real touchedAt, type and spot read from the world)");
     const s0 = t.tick;
     const grass = { x: base.x + 2, y: base.y, z: base.z };
+    // A private fixture candle just past the radius (14 blocks from the chapel's center, in the loaded area).
+    const far = { x: base.x + RADIUS + 4, y: base.y + 1, z: base.z };
+    t.dimension.getBlock(far).setType("minecraft:white_candle");
+    t.assert(typeAt(far) === "minecraft:white_candle", `a real candle stands outside the radius (${typeAt(far)})`);
+    t.assert(Math.hypot(far.x - base.x, far.z - base.z) > RADIUS, `the private candle is more than ${RADIUS} blocks from the chapel's center`);
     for (let i = 0; i < 4; i++) await tap(p, grass);
-    for (let i = 0; i < 4; i++) await tap(p, { x: base.x + RADIUS + 20, y: base.y + 1, z: base.z }, "minecraft:white_candle");
-    t.check(!(await waitDone(p, re, s0, 20)), "D: four taps on a grass block, and four on a candle 30 blocks away, do not light candles");
+    for (let i = 0; i < 4; i++) await tap(p, far);
+    t.check(!(await waitDone(p, re, s0, 20)), "D: four taps on a grass block, and four on a real candle 14 blocks away, do not light candles");
 
     // One replacement candle, a different color than the shipped ones, placed natively inside the radius.
     t.log("CASE D NATIVE: the player places one new candle of their own inside the chapel");
