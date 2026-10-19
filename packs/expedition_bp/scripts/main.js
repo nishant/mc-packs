@@ -17,7 +17,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, dropStrayCart, forgetStructures, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, setSaving, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, dropStrayCart, forgetStructures, giveKit, handingOver, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, setSaving, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -367,54 +367,62 @@ onScriptEvent(
   },
 );
 
-/** realm:diag_forget request ids for this pack (confirmed) still waiting for realm:diag's answer. @type {Set<string>} */
-const forgetting = new Set();
+// forget hook begin
+/** True from a confirmed forget until /reload: a parcel structure is still being swept (a hand-over was running). */
+let sweepPending = false;
 
-/** Removes the saved stash and parcel structures after a successful forget. Stashes still hold players' own items while a run is on, so they stay then. @param {string} rid */
-function cleanForgotten(rid) {
-  const busy = runs.size > 0 || pending.size > 0;
-  /** @type {Set<string>} */
-  const held = new Set();
-  for (const p of world.getAllPlayers()) {
-    const s = stashOf(p);
-    if (s?.id) held.add(s.id);
-  }
-  const r = forgetStructures((id) => id.startsWith("expedition:stash_") && (busy || held.has(id)));
-  const text = r.failed
-    ? `§c[Expeditions] Forgot the saved data, but ${r.failed < 0 ? "the saved structures couldn't be listed" : `${r.failed} saved structure${r.failed === 1 ? "" : "s"} couldn't be deleted`} (${r.error}). ${r.deleted} deleted.`
-    : `§e[Expeditions] Forgot the saved data and deleted ${r.deleted} saved structure${r.deleted === 1 ? "" : "s"}.${r.kept ? ` ${r.kept} stash structure${r.kept === 1 ? " was" : "s were"} kept because ${busy ? "an expedition is running" : "a player is still waiting for their items"}: forget again later.` : ""}`;
+/** Tells the operators online (and the log) how a deferred sweep ended. @param {string} text */
+function tellOps(text) {
   console.warn(text.replace(/§./g, ""));
   for (const p of world.getAllPlayers()) if (isOp(p)) p.sendMessage(text);
-  if (r.failed) system.sendScriptEvent("realm:diag_forgot", JSON.stringify({ id: rid, pack: "expedition_bp", ok: false, error: text.replace(/§./g, "").slice(0, 300) }));
 }
 
-// realm:diag forgot this pack's world data (it already ran its part when this listener hears the request): refuse new stashes
-// and parcels from now (their counters can't be saved until /reload), and once the data is really gone remove the structures.
-onScriptEvent(
-  ["realm:diag_forget", "realm:diag_forgot"],
-  ({ id, message }) => {
-    if (id !== "realm:diag_forget" && id !== "realm:diag_forgot") return;
+/** One sweep of this pack's parcel structures (their records went with the forgotten world data, so nothing can hand them over). Stash structures stay: see onForget. */
+const sweepParcels = () => forgetStructures("parcel", handingOver);
+
+/** Retries a sweep that had to wait for a running hand-over, and says how it ended. */
+function retrySweep() {
+  const r = sweepParcels();
+  if (r.failed) {
+    sweepPending = false;
+    tellOps(`§c[Expeditions] Forgot the saved data, but the parcel clean-up failed: ${r.failed < 0 ? "" : `${r.failed} parcel structure${r.failed === 1 ? "" : "s"} couldn't be deleted. `}${r.error}`);
+  } else if (r.kept) system.runTimeout(retrySweep, 40);
+  else {
+    sweepPending = false;
+    tellOps(`§e[Expeditions] The waiting parcel clean-up finished: ${r.deleted} more parcel structure${r.deleted === 1 ? "" : "s"} deleted.`);
+  }
+}
+
+/**
+ * realm:diag's forget cleanup for this pack, run once after the saved world data is gone and this pack's world saves are
+ * blocked until /reload. It stops new stashes and parcels (their counters can't be saved, and a stash without its record
+ * would strip an inventory with no way back), deletes the parcel structures (nothing can hand them over any more) and
+ * keeps every stash structure: players' own data still points at them, offline players included, so each one is deleted
+ * when its owner gets their items back. Returns the one answer's note or error.
+ * @returns {{ note?: string, error?: string }}
+ */
+function onForget() {
+  setSaving(false);
+  const r = sweepParcels();
+  const stashes = (() => {
     try {
-      const m = JSON.parse(message);
-      if (!m || m.pack !== "expedition_bp") return;
-      const rid = String(m.id ?? "").slice(0, 40);
-      if (id === "realm:diag_forget") {
-        if (m.confirm !== "FORGET expedition_bp") return;
-        forgetting.add(rid);
-        setSaving(false);
-        system.runTimeout(() => {
-          if (forgetting.delete(rid) && !forgetting.size) setSaving(true); // never answered: nothing was forgotten
-        }, 200);
-        return;
-      }
-      if (!forgetting.delete(rid)) return;
-      if (m.ok === true) cleanForgotten(rid);
-      else if (!forgetting.size) setSaving(true);
-    } catch (e) {
-      console.warn(`[expedition] forget: ${e}`);
+      return world.structureManager.getWorldStructureIds().filter((id) => /^expedition:stash_\d+$/.test(id)).length;
+    } catch {
+      return 0;
     }
-  },
-);
+  })();
+  const stashNote = stashes ? ` ${stashes} stash structure${stashes === 1 ? " stays" : "s stay"} because players' own data still points at ${stashes === 1 ? "it" : "them"}; each is deleted when its owner gets their items back.` : "";
+  if (r.failed) return { error: `${r.failed < 0 ? r.error : `${r.failed} parcel structure${r.failed === 1 ? "" : "s"} couldn't be deleted (${r.error}); ${r.deleted} deleted`}.${stashNote}` };
+  if (r.kept) {
+    sweepPending = true;
+    system.runTimeout(retrySweep, 40);
+    return { note: `${r.deleted} parcel structures deleted, ${r.kept} waiting for a hand-over to end (operators are told when done).${stashNote}` };
+  }
+  return { note: `${r.deleted} parcel structure${r.deleted === 1 ? "" : "s"} deleted.${stashNote}` };
+}
+(/** @type {any} */ (globalThis).__realmDiagForgetHooks ??= {}).expedition_bp = onForget;
+// forget hook end
+
 
 /**
  * Actionbar text, after asking the Coordinates HUD (and other bar writers) to step aside. The run line

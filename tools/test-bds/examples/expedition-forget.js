@@ -1,6 +1,6 @@
-// Expeditions: a confirmed realm:diag_forget for expedition_bp also deletes its own saved stash and parcel
-// structures, keeps every other structure (another pack's, a builder's), and answers ok only when they are gone. A
-// forget without the exact confirmation deletes nothing. Needs real BDS: the structure list and delete are native.
+// Expeditions: a confirmed realm:diag_forget for expedition_bp deletes its own saved parcel structures, keeps its stash
+// structures (players' own data still points at them) and every other structure (another pack's, a builder's), and
+// answers ONCE, after the clean-up. A forget without the exact confirmation deletes nothing. Needs real BDS: the structure list and delete are native.
 // node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-forget.js
 export default async function (t) {
   await t.player("Tester", { op: true });
@@ -25,9 +25,10 @@ export default async function (t) {
 
   send({ id: "x2", pack: "expedition_bp", confirm: "FORGET expedition_bp" });
   await t.waitUntil(() => got.some((g) => g.id === "x2"), { timeout: 100, message: "the forget answer" });
-  await t.wait(10);
-  t.check(!own.some((id) => ids().includes(id)), `own structures deleted (${ids().filter((x) => x.startsWith("expedition:")).join(", ")})`);
+  const left = ids().filter((x) => x.startsWith("expedition:"));
+  t.check(!left.some((id) => id.startsWith("expedition:parcel_90")), `own parcels deleted (${left.join(", ")})`);
+  t.check(ids().includes("expedition:stash_901"), "stash kept");
   t.check(foreign.every((id) => ids().includes(id)), "other structures kept");
-  t.check(!got.some((g) => g.id === "x2" && g.ok === false), "no failure reported");
-  for (const id of foreign) sm.delete(id);
+  t.check(got.filter((g) => g.id === "x2").length === 1 && got.find((g) => g.id === "x2").ok === true, "one ok answer");
+  for (const id of [...foreign, "expedition:stash_901"]) sm.delete(id);
 }

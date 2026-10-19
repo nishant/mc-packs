@@ -28,26 +28,26 @@ export function setSaving(on) {
 }
 
 /**
- * Deletes this pack's saved stash and parcel structures (never another pack's or a player's own structures), except
- * the ones `keep` names, and checks each is really gone.
- * @param {(id: string) => boolean} keep
+ * Deletes this pack's saved structures of one kind (`expedition:<kind>_<n>`; never another pack's or a player's own
+ * structures), except the ones `hold` names, which are counted as kept, and checks each is really gone.
+ * @param {"stash" | "parcel"} kind @param {() => boolean} hold
  * @returns {{ deleted: number, kept: number, failed: number, error?: string }}
  */
-export function forgetStructures(keep) {
+export function forgetStructures(kind, hold) {
   /** @type {{ deleted: number, kept: number, failed: number, error?: string }} */
   const out = { deleted: 0, kept: 0, failed: 0 };
   const sm = world.structureManager;
   /** @type {string[]} */
   let ids;
   try {
-    ids = sm.getWorldStructureIds().filter((id) => OWN_STRUCTURE.test(id));
+    ids = sm.getWorldStructureIds().filter((id) => OWN_STRUCTURE.test(id) && id.startsWith(`expedition:${kind}_`));
   } catch (e) {
     out.failed = -1;
     out.error = `couldn't list saved structures: ${String(e).slice(0, 120)}`;
     return out;
   }
   for (const id of ids) {
-    if (keep(id)) {
+    if (hold()) {
       out.kept++;
       continue;
     }
@@ -633,6 +633,9 @@ export async function openParcels(p) {
 
 /** Players whose parcels are being handed over right now. @type {Set<string>} */
 const opening = new Set();
+
+/** Is a parcel hand-over running (its carts may be standing, its structure still needed)? */
+export const handingOver = () => opening.size > 0;
 
 /** @param {Player} p @returns {Promise<{ kinds: Set<string>, spilled: boolean } | false>} */
 async function handOver(p) {
