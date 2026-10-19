@@ -358,7 +358,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "growers", amount: 25 }],
-        hint: "Hal's echo appears at the Tide Seal: swim close to the shrine and talk to the glowing figure. Then tap or hit 4 of the sea lanterns around the shrine's frame. If they are all mined out, place a sea lantern of your own within 10 blocks of the seal (5 prismarine shards and 4 prismarine crystals craft one) and tap it 4 times. This whole chapter is underwater, so bring water breathing.",
+        hint: "Hal's echo appears at the Tide Seal: swim close to the shrine and talk to the glowing figure. Then tap or hit 4 of the sea lanterns around the shrine's frame. If they are all mined out, place a sea lantern of your own within 10 blocks of the seal (4 prismarine shards and 5 prismarine crystals craft one) and tap it 4 times. This whole chapter is underwater, so bring water breathing.",
       },
 
       // 5-7. The Stone Seal (Ida and the Miners).

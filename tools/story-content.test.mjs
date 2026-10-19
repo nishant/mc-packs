@@ -75,17 +75,17 @@ const SIGNPOSTS = [
   { at: "act2_choir/double objective 3", noun: "barrel", block: "minecraft:barrel" },
   { at: "act2_choir/hollis_night objective 2", noun: "bell", block: "minecraft:bell" },
   { at: "act2_choir/ring_burns objective 5", noun: "bell", block: "minecraft:bell" },
-  { at: "act4_seals/tide_echo objective 2", noun: "sea lantern", block: "minecraft:sea_lantern" },
+  { at: "act4_seals/tide_echo objective 2", noun: "sea lantern", block: "minecraft:sea_lantern", recipe: "4 prismarine shards and 5 prismarine crystals craft one" },
   { at: "act5_lantern/smugglers objective 1", noun: "barrel", block: "minecraft:barrel" },
-  { at: "act5_lantern/choice objective 2", noun: "end rod", block: "minecraft:end_rod" },
+  { at: "act5_lantern/choice objective 2", noun: "end rod", block: "minecraft:end_rod", recipe: "a blaze rod over a popped chorus fruit crafts 4" },
   { at: "vesna_bargain/fen_mother objective 1", noun: "cauldron", block: "minecraft:cauldron" },
   { at: "vesna_bargain/break_heart objective 1", noun: "cauldron", block: "minecraft:cauldron" },
   { at: "heart_hollis/vigil objective 1", noun: "candle", block: "minecraft:candle" },
   { at: "w_pell_road/chapel objective 3", noun: "candle", block: "minecraft:candle" },
-  { at: "w_anwen_survey/rest objective 1", noun: "lodestone", block: "minecraft:lodestone" },
+  { at: "w_anwen_survey/rest objective 1", noun: "lodestone", block: "minecraft:lodestone", recipe: "8 chiseled stone bricks around an iron ingot craft one" },
 ];
 
-for (const { at, noun, block } of SIGNPOSTS) {
+for (const { at, noun, block, recipe } of SIGNPOSTS) {
   test(`${at} tells a player who finds the ${noun} gone what to place and how close`, () => {
     const { chapter, objective } = objectiveAt(at);
     assert.equal(objective.type, "interact");
@@ -95,6 +95,8 @@ for (const { at, noun, block } of SIGNPOSTS) {
     assert.match(hint, /\b(?:gone|mined out|missing|none (?:is|are) left)\b/i, "hint says when to place it");
     assert.match(hint, new RegExp(`within ${objective.radius} blocks`), `hint gives the objective's radius ${objective.radius}`);
     assert.equal(/[^\x20-\x7e\n]/.test(hint), false, "hint is plain ASCII");
+    // Crafting quantities match Mojang's recipes (bedrock-samples 46ba6ea9, behavior_pack/recipes: sealantern, lodestone, end_rod).
+    if (recipe) assert.ok(hint.includes(recipe), `hint says: ${recipe}`);
   });
 }
 

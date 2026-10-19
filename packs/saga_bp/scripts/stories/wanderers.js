@@ -236,7 +236,7 @@ const ANWEN = {
       ],
       reward: { levels: 8, crowns: 130, title: "Keeper of the Survey", relicRoll: ROLL, items: [{ item: "minecraft:compass", amount: 1, name: "§bAnwen's Compass", lore: ["§7North is still north."] }], codex: { id: "w_anwen", title: "The Last Survey", text: "Anwen was a sky surveyor, one of the people who measured the Lantern's road across the sky every forty years and marked three places on the ground where its light must fall. Three marks on a line, and the line points home. She kept measuring long after she died, and wrote on the old stones: still true." } },
       rep: [{ guild: "wayfarers", amount: 20 }],
-      hint: "The lodestone stands in the middle of the Stargazer's Ruin: tap or hit it. If it has been mined out, place a lodestone of your own within 8 blocks of the ruin's center (8 chiseled stone bricks around a netherite ingot craft one). The vision plays when you stand in the ruin.",
+      hint: "The lodestone stands in the middle of the Stargazer's Ruin: tap or hit it. If it has been mined out, place a lodestone of your own within 8 blocks of the ruin's center (8 chiseled stone bricks around an iron ingot craft one). The vision plays when you stand in the ruin.",
     },
   ],
 };
