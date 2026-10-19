@@ -155,6 +155,29 @@ test("the hook rejects a missing --from and prints the --bundle recipe", () => {
   assert.doesNotMatch(scenario, /sed -i/);
 });
 
+test("native hit report counts only the requested signal", async () => {
+  const mod = await import("./full-bundle-protocols.mjs");
+  assert.equal(typeof mod.nativeHitReport, "function", "nativeHitReport is exported");
+  const unrelated = mod.nativeHitReport([
+    { signal: "playerBreakBlock" },
+    { signal: "itemUse" },
+    { signal: "playerInteractWithEntity" },
+  ], "playerInteractWithBlock");
+  assert.equal(unrelated.hits, 0, "an unrelated signal must not count as a target hit");
+  assert.equal(unrelated.rows.length, 0);
+  const mixed = mod.nativeHitReport([
+    { signal: "playerInteractWithBlock", pack: "claims_bp" },
+    { signal: "playerBreakBlock", pack: "claims_bp" },
+    { signal: "playerInteractWithBlock", pack: "stash_bp" },
+  ], "playerInteractWithBlock");
+  assert.equal(mixed.hits, 2);
+  assert.equal(mixed.rows.length, 2);
+  assert.ok(mixed.rows.every((row) => row.signal === "playerInteractWithBlock"));
+  const src = mod.c13TapSource();
+  assert.match(src, /nativeHitReport\(nativeHits/);
+  assert.doesNotMatch(src, /hits:\s*nativeHits\.length/);
+});
+
 test("a Windows and a POSIX stack both name the pack that subscribed", () => {
   const dir = scratch("c13-stack-");
   const packed = path.join(dir, "src");

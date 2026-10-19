@@ -7,6 +7,12 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statS
 import { join } from "node:path";
 import { extractZip } from "./lib/unzip.mjs";
 
+/** Engine deliveries for one signal. Unrelated signals must not inflate the count. */
+export function nativeHitReport(hits, signal) {
+  const matching = (Array.isArray(hits) ? hits : []).filter((row) => !signal || row.signal === signal);
+  return { hits: matching.length, rows: matching.slice(-12) };
+}
+
 export const STAGED_NAME = "realm_bundle";
 export const INSTRUMENT = ["__c13_tap", "__events_count", "probe_bp"];
 export const RUN_TIMEOUT = "1200";
@@ -31,6 +37,7 @@ export function c13TapSource() {
     "// A simulated empty-hand tap often emits no event. harness:c13_native reports engine deliveries separately.",
     "const signals = {};",
     "const nativeHits = [];",
+    nativeHitReport.toString().replace(/^function nativeHitReport/, "function nativeHitReport") + ";",
     `const SKIP = new Set(${skip});`,
     "const packOf = (stack = String(new Error().stack ?? \"\")) => {",
     "  const skip = new Set([\"__c13_tap\", \"__events_count\", \"probe_bp\"]);",
@@ -71,8 +78,8 @@ export function c13TapSource() {
     "system.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {",
     "  if (id === \"harness:c13_native\") {",
     "    const q = JSON.parse(message || \"{}\");",
-    "    const rows = nativeHits.filter((h) => !q.signal || h.signal === q.signal).slice(-12);",
-    "    system.sendScriptEvent(\"harness:c13_native_result\", JSON.stringify({ id: q.id, mode: \"native-emission\", hits: nativeHits.length, rows }));",
+    "    const report = nativeHitReport(nativeHits, q.signal);",
+    "    system.sendScriptEvent(\"harness:c13_native_result\", JSON.stringify({ id: q.id, mode: \"native-emission\", signal: q.signal, hits: report.hits, rows: report.rows }));",
     "    return;",
     "  }",
     "  if (id !== \"harness:c13_tap\") return;",
