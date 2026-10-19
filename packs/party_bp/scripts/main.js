@@ -361,6 +361,36 @@ let hudPlayers = new Set();
 let hudHeard = -Infinity;
 /** The Coordinates HUD repeats its state every 5 seconds: after 10 without one, it's gone. */
 const HUD_STALE_TICKS = 200;
+const HUD_PART_TIMEOUT = 100;
+/** The realm:hud_state list still arriving: one `seq`, its parts so far. @type {{ parts: number, seq: unknown, got: Map<number, string[]>, tick: number } | null} */
+let hudAssembly = null;
+
+/** Takes one realm:hud_state part; the player list is replaced only when every part of one publication is here. @param {any} msg */
+function takeHudState(msg) {
+  if (!Array.isArray(msg.players)) return;
+  const now = system.currentTick;
+  const parts = Math.floor(Number(msg.parts ?? 1));
+  const part = Math.floor(Number(msg.part ?? 1));
+  if (!(parts >= 1 && parts <= 1000 && part >= 1 && part <= parts)) {
+    hudAssembly = null;
+    return;
+  }
+  const ids = msg.players.map(String);
+  if (parts === 1) {
+    hudAssembly = null;
+    hudPlayers = new Set(ids);
+    hudHeard = now;
+    return;
+  }
+  let a = hudAssembly;
+  if (a && now - a.tick <= HUD_PART_TIMEOUT && typeof a.seq === "number" && typeof msg.seq === "number" && msg.seq < a.seq) return; // a late part of an older publication
+  if (!a || a.parts !== parts || a.seq !== msg.seq || now - a.tick > HUD_PART_TIMEOUT) a = hudAssembly = { parts, seq: msg.seq, got: new Map(), tick: now };
+  a.got.set(part, ids);
+  if (a.got.size < parts) return;
+  hudAssembly = null;
+  hudPlayers = new Set([...a.got.values()].flat());
+  hudHeard = now;
+}
 
 // Other packs' notes and steady lines (an expedition's run line, the Elytra HUD) hold the bar: the
 // party line waits, so the two don't take turns.
@@ -371,10 +401,7 @@ onScriptEvent(
     try {
       const m = JSON.parse(message);
       if (id === "realm:hud_state") {
-        if (m && Array.isArray(m.players)) {
-          hudPlayers = new Set(m.players.map(String));
-          hudHeard = system.currentTick;
-        }
+        if (m && typeof m === "object") takeHudState(m);
         return;
       }
       if (!m || typeof m.player !== "string" || m.from === "party_bp") return;
