@@ -34,6 +34,20 @@ export const CONFIG = {
     "minecraft:chest_boat",
   ],
 
+  /**
+   * Farm and pet animals in a claim only its players can use: leash, ride, feed, milk, shear, name, sit or tame them.
+   * The game gives packs no way to stop damage before it lands (arrows, swords, fire, explosions, pistons), so this
+   * covers use, not hurting. Off: anyone can use them.
+   */
+  protectAnimals: true,
+
+  /** Which animals protectAnimals covers. */
+  protectedAnimals: [
+    "minecraft:cow", "minecraft:mooshroom", "minecraft:sheep", "minecraft:pig", "minecraft:chicken", "minecraft:goat",
+    "minecraft:horse", "minecraft:donkey", "minecraft:mule", "minecraft:llama", "minecraft:camel",
+    "minecraft:wolf", "minecraft:cat", "minecraft:parrot",
+  ],
+
   /** How long "Show claim borders" draws them, in seconds. */
   borderSeconds: 10,
 };

@@ -278,8 +278,8 @@ function recordAt(dimension, p, sigOf) {
 /** Reads a container the player opened and notes that they opened it. @param {Dimension} dimension @param {import("@minecraft/server").Vector3} p @param {string} playerId */
 function seen(dimension, p, playerId) {
   const key = recordAt(dimension, p);
-  const entry = key ? getIndex().get(key) : undefined;
-  if (!entry) return;
+  const entry = key === undefined ? undefined : getIndex().get(key);
+  if (key === undefined || !entry) return;
   const w = [...(entry.w ?? []).filter((x) => x !== playerId), playerId].slice(-MAX_VIEWERS);
   getIndex().set(key, { ...entry, w });
   dirty = true;

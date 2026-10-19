@@ -22,7 +22,7 @@ const MAX_CLAIMS = 500; // in the whole world
 const NEARBY = 64; // blocks: claims whose borders "Show claim borders" draws
 
 /** @typedef {{ i: string, n: string }} Who */
-/** @typedef {{ id: number, o: string, n: string, dim: string, x: number, z: number, r: number, s: Who[], pt?: boolean, pc?: string }} Claim owner id and name, shared with; pt: shared with the owner's party, pc: the owner's party code when last seen online ("" = none) */
+/** @typedef {{ id: number, o: string, n: string, dim: string, x: number, z: number, r: number, s: Who[], pt?: boolean, pc?: string, dr?: boolean, lv?: number }} Claim owner id and name, shared with; pt: shared with the owner's party, pc: the owner's party code when last seen online ("" = none) */
 
 const PARTY_TAG = "realm_party:"; // the Parties pack's tag on every member, `realm_party:<code>`
 /** The player's party code from the Parties pack's tag, or "". @param {Player} player */
@@ -59,6 +59,8 @@ function partyAllowed(player, c) {
 }
 
 const protectedEntities = new Set(CONFIG.protectedEntities);
+const protectedAnimals = new Set(CONFIG.protectedAnimals);
+const DOOR = /_(door|trapdoor|fence_gate)$/;
 const enabled = () => get("enabled") === true;
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
@@ -204,7 +206,10 @@ world.beforeEvents.playerBreakBlock.subscribe((event) => {
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, blockFace, isFirstEvent, itemStack } = event;
   const dim = block.dimension.id;
-  const c = closedTo(player, dim, block.location) ?? (itemStack ? closedTo(player, dim, across(block, blockFace)) : undefined);
+  const here = closedTo(player, dim, block.location);
+  // The owner's "visitors may open doors" switch: doors, trapdoors and gates only, never containers.
+  if (here?.dr === true && DOOR.test(block.typeId)) return;
+  const c = here ?? (itemStack ? closedTo(player, dim, across(block, blockFace)) : undefined);
   if (!c) return;
   event.cancel = true;
   if (isFirstEvent) sayClaimed(player, c);
@@ -212,7 +217,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
 
 world.beforeEvents.playerInteractWithEntity.subscribe((event) => {
   const { player, target } = event;
-  if (!protectedEntities.has(target.typeId)) return;
+  if (!protectedEntities.has(target.typeId) && !(protectedAnimals.has(target.typeId) && get("protectAnimals") === true)) return;
   const c = closedTo(player, target.dimension.id, target.location);
   if (!c) return;
   event.cancel = true;
@@ -278,12 +283,30 @@ system.runInterval(() => {
   }
 }, 20);
 
+/** Owners' last visit, saved on join and on leave (a claim's `lv`, ms). @param {string} id */
+function touchOwner(id) {
+  const now = Date.now();
+  for (const c of claimsOf(id)) {
+    const next = { ...c, lv: now };
+    claims().set(c.id, next);
+    world.setDynamicProperty(CLAIM_PREFIX + c.id, JSON.stringify(next)); // the shape didn't change: no need to republish the zones
+  }
+}
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  try {
+    touchOwner(playerId);
+  } catch (e) {
+    console.warn(`[claims] ${e}`);
+  }
+});
+
 // A player who changed their gamertag: their claims and shares keep their id, so update the saved name
 // ("This land is claimed by ...", the zones, the share lists) when they join.
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   try {
     const { id, name } = player;
+    touchOwner(id);
     for (const c of [...claims().values()]) {
       const owner = c.o === id && c.n !== name;
       const shared = c.s.some((s) => s.i === id && s.n !== name);
@@ -462,6 +485,10 @@ async function manage(player, c) {
     actions.push({ text: `Stop sharing with ${s.n}`, run: () => change(player, c.id, (x) => ({ ...x, s: x.s.filter((y) => y.i !== s.i) })) });
   }
   actions.push({
+    text: c.dr === true ? "Visitors may open doors: Enabled\n§8Tap to close doors to visitors again" : "Visitors may open doors: Disabled\n§8Tap to let visitors open doors, trapdoors and gates",
+    run: () => change(player, c.id, (x) => ({ ...x, dr: x.dr !== true })),
+  });
+  actions.push({
     text: `Remove this claim\n§8Anyone can build here again`,
     // Asks first: removing can't be undone, and the shares go with it.
     run: () =>
@@ -496,15 +523,36 @@ function change(player, id, fn) {
   bar(player, "§aClaim updated");
 }
 
-/** Operators: every claim, to remove any. @param {Player} player */
-async function allClaims(player) {
-  const list = [...claims().values()].sort((a, b) => a.n.localeCompare(b.n) || a.id - b.id);
+/** "40 days ago", "today", or "unknown" for a claim saved before last visits were tracked. @param {Claim} c */
+function lastVisit(c) {
+  if (world.getAllPlayers().some((p) => p.id === c.o)) return "online now";
+  const lv = /** @type {any} */ (c).lv;
+  if (typeof lv !== "number") return "unknown";
+  const days = Math.floor((Date.now() - lv) / 86_400_000);
+  return days < 1 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+/** @type {Record<string, string>} */
+const SORT_NAMES = { name: "owner", size: "size, biggest first", visit: "owner's last visit, longest ago first" };
+
+/** Operators: every claim, to audit and remove any. @param {Player} player @param {"name" | "size" | "visit"} [sort] */
+async function allClaims(player, sort = "name") {
+  /** @param {Claim} c */
+  const seenAt = (c) => (world.getAllPlayers().some((p) => p.id === c.o) ? Infinity : typeof (/** @type {any} */ (c).lv) === "number" ? /** @type {any} */ (c).lv : -Infinity);
+  const list = [...claims().values()].sort((a, b) =>
+    sort === "size" ? b.r - a.r || a.n.localeCompare(b.n) || a.id - b.id : sort === "visit" ? (seenAt(a) === seenAt(b) ? 0 : seenAt(a) < seenAt(b) ? -1 : 1) || a.n.localeCompare(b.n) || a.id - b.id : a.n.localeCompare(b.n) || a.id - b.id
+  );
+  /** @type {{ text: string, run: () => void | Promise<void> }[]} */
+  const sorts = [];
+  for (const [key, label] of /** @type {["size" | "visit" | "name", string][]} */ ([["size", "Sort by size"], ["visit", "Sort by owner's last visit"], ["name", "Sort by owner"]])) {
+    if (key !== sort) sorts.push({ text: label, run: () => allClaims(player, key) });
+  }
   await menu(
     player,
     "§lAll claims",
-    list.length ? `${list.length} claim${list.length === 1 ? "" : "s"}. Pick one to remove it.` : "No claims yet.",
-    list.map((c) => ({
-      text: `${c.n}: ${span(c)}\n§8${shortDim(c.dim)}, shared with ${c.s.length}`,
+    list.length ? `${list.length} claim${list.length === 1 ? "" : "s"}, by ${SORT_NAMES[sort]}. Pick one to remove it.` : "No claims yet.",
+    [...sorts, ...list.map((c) => ({
+      text: `${c.n}: ${2 * c.r + 1} x ${2 * c.r + 1}, ${span(c)}\n§8${shortDim(c.dim)}, last visit ${lastVisit(c)}, shared with ${c.s.length}`,
       run: () =>
         menu(player, "§lRemove this claim?", `${c.n}'s claim, ${span(c)} (${shortDim(c.dim)}).`, [
           {
@@ -519,7 +567,7 @@ async function allClaims(player) {
           },
           { text: "Keep it", run: () => {} },
         ]),
-    }))
+    }))]
   );
 }
 
