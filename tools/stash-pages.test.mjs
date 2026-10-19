@@ -2299,17 +2299,42 @@ const pickup = (/** @type {any} */ p, /** @type {number} */ slot, /** @type {any
   advance(30);
 };
 
-test("PR86: a genuine pickup on page 3 goes to the earliest page with room even when page 3 has room; the hotbar stays", () => {
+/** Leaves the open page with `keep` free storage slots, the rest held by slot-locked stones that never move. */
+const nearlyFull = (/** @type {any} */ p, /** @type {number[]} */ keep) => {
+  for (const s of STORAGE_SLOTS) if (!keep.includes(s) && !p.container.getItem(s)) p.container.setItem(s, Object.assign(stack("minecraft:cobblestone", 1), { lockMode: "slot" }));
+  advance(30);
+};
+
+test("auto-store: a pickup with room on the open page stays there (master's rule: route only when it is full or down to one free slot)", () => {
+  const p = joined();
+  mc.players = [p];
+  pages.initPages({ bar: (player, text) => player.bar.push(text), sort() {}, stash() {} });
+  try {
+    arrange(p, { 1: full([9]), 2: { 9: stack("minecraft:emerald", 3) } });
+    switchPage(p, 3);
+    advance(30);
+    const bars = p.bar.length;
+    pickup(p, 20, stack("minecraft:iron_ingot", 5));
+    assert.equal(p.container.getItem(20)?.amount, 5, "plenty of room: no commit, no move");
+    assert.equal(savedPage(p, 1).get(9), undefined);
+    assert.equal(p.bar.length, bars, "no action bar message");
+  } finally {
+    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
+  }
+});
+
+test("PR86: a genuine pickup on a nearly full page 3 goes to the earliest page with room; the hotbar stays", () => {
   const p = joined();
   mc.players = [p];
   arrange(p, { 1: full([9]), 2: { 9: stack("minecraft:emerald", 3) } });
   switchPage(p, 3);
-  advance(30);
+  nearlyFull(p, [20, 21]);
   pickup(p, 20, stack("minecraft:iron_ingot", 5));
   assert.equal(p.container.getItem(20), undefined, "left the active page");
   assert.equal(savedPage(p, 1).get(9)?.typeId, "minecraft:iron_ingot", "page 1 had the only free slot");
-  pickup(p, 21, stack("minecraft:gold_ingot", 2));
-  assert.equal(p.container.getItem(21), undefined);
+  p.container.setItem(21, undefined);
+  pickup(p, 20, stack("minecraft:gold_ingot", 2));
+  assert.equal(p.container.getItem(20), undefined);
   assert.equal(savedPage(p, 2).size, 2, "page 1 is full now, so page 2 takes it");
   p.container.setItem(2, stack("minecraft:diamond", 4));
   advance(30);
@@ -2493,7 +2518,7 @@ test("F4 index: a pickup never restores a saved page the index proves can't take
   const fixed = (/** @type {number[]} */ free) => Object.fromEntries(STORAGE_SLOTS.filter((s) => !free.includes(s)).map((s) => [s, Object.assign(stack("minecraft:stone", 64), { lockMode: "slot" })]));
   arrange(p, { 1: fixed([]), 2: fixed([]), 3: { 9: stack("minecraft:emerald", 3) } });
   switchPage(p, 4);
-  advance(30);
+  nearlyFull(p, [20]);
   const known = new Map(pageRefIds(p));
   const watch = recordPlaces();
   try {
@@ -2523,7 +2548,7 @@ test("F5 auto-store: a failed save leaves the pickup where it is and is not retr
   const fixed = (/** @type {number[]} */ free) => Object.fromEntries(STORAGE_SLOTS.filter((s) => !free.includes(s)).map((s) => [s, Object.assign(stack("minecraft:stone", 64), { lockMode: "slot" })]));
   arrange(p, { 1: fixed([9]), 2: fixed([]) });
   switchPage(p, 3);
-  advance(30);
+  nearlyFull(p, [20, 21]);
   const warns = p.bar.length;
   mc.failSave = true;
   try {
@@ -2539,14 +2564,9 @@ test("F5 auto-store: a failed save leaves the pickup where it is and is not retr
   pickup(p, 21, stack("minecraft:gold_ingot", 2));
   assert.equal(p.container.getItem(21), undefined, "an earlier page with a free slot always takes a pickup");
   assert.equal(savedPage(p, 1).get(9)?.typeId, "minecraft:gold_ingot");
-  pickup(p, 22, stack("minecraft:emerald", 1));
-  assert.equal(p.container.getItem(22)?.amount, 1, "pages 1 and 2 are full and the active page has room, so a later page is not used");
-  const open = STORAGE_SLOTS.filter((s) => !p.container.getItem(s));
-  for (const s of open.slice(1)) pickup(p, s, Object.assign(stack("minecraft:cobblestone", 1), { lockMode: "slot" }));
-  advance(130);
-  pickup(p, open[0], stack("minecraft:diamond", 1));
-  advance(100);
-  assert.equal(savedPage(p, 4).get(9)?.typeId, "minecraft:diamond");
+  pickup(p, 21, stack("minecraft:emerald", 1));
+  assert.equal(p.container.getItem(21), undefined, "pages 1 and 2 are full and the open page is down to one free slot, so a later page takes it");
+  assert.equal(savedPage(p, 4).get(9)?.typeId, "minecraft:emerald");
   } finally {
     pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
   }

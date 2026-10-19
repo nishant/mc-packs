@@ -1221,8 +1221,8 @@ function mayHold(player, page, id) {
 
 /**
  * A stack that really arrived on the active page (a pickup, not a click, hotbar swap, cursor drop or armor change)
- * goes to the earliest earlier page with room, so page 1 fills first and the active page stays free. When the active
- * page is full or down to one free slot, later pages take overflow too. The pickup is told apart from a move by
+ * goes to the earliest other page with room, so page 1 fills first, but only while the active page is full or down to
+ * one free slot (as before pages were routed), and only until two slots are free again. The pickup is told apart from a move by
  * the total of everything carried (page, hotbar, cursor, worn gear): a kind only counts when that total grew, and
  * only up to that growth. Every page touched is read once and everything is one transaction, so a failure changes
  * nothing, and the look is always refreshed first so a failed attempt is never retried against old numbers.
@@ -1237,7 +1237,7 @@ function autoStore(player) {
   const live = liveTotals(player, inv, now.amounts);
   const before = snapshots.get(player.id);
   snapshots.set(player.id, { page: cur, amounts: now.amounts, live });
-  if (!before || before.page !== cur) return;
+  if (!before || before.page !== cur || now.empty > 1) return;
 
   /** @type {Map<string, number>} */
   const gains = new Map();
@@ -1248,7 +1248,7 @@ function autoStore(player) {
   if (!gains.size) return;
   /** @type {number[]} */
   const targets = [];
-  for (let p = 1; p <= total; p++) if (p !== cur && (p < cur || now.empty <= 1)) targets.push(p);
+  for (let p = 1; p <= total; p++) if (p !== cur) targets.push(p);
   if (!targets.length) return;
 
   /** @type {Map<number, Rec[]>} */
@@ -1259,7 +1259,8 @@ function autoStore(player) {
   const perPage = new Map();
   let movedCount = 0;
   let name = "";
-  for (let i = STORAGE_SLOTS.length - 1; i >= 0 && gains.size; i--) {
+  let empty = now.empty;
+  for (let i = STORAGE_SLOTS.length - 1; i >= 0 && gains.size && empty < 2; i--) {
     const s = STORAGE_SLOTS[i];
     const item = inv.getItem(s);
     if (!item || isButton(item) || item.lockMode === ItemLockMode.slot) continue;
@@ -1282,7 +1283,10 @@ function autoStore(player) {
       const keep = item.clone();
       keep.amount = left;
       changed.set(s, keep);
-    } else changed.set(s, undefined);
+    } else {
+      changed.set(s, undefined);
+      empty++;
+    }
     movedCount += n;
     name = item.nameTag ?? pretty(item.typeId);
     void rem;

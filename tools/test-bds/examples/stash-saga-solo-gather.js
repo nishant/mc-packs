@@ -34,14 +34,22 @@ export default async function (t) {
   fillers.forEach((id, slot) => inv.setItem(slot, new mc.ItemStack(`minecraft:${id}`, 1)));
   await t.wait(10);
 
+  // Auto-store routes only from a full or nearly full page (down to one free slot): leave slot 20 as the only free one.
+  for (const s of [9, 10, 11, 12, 13, 14, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]) {
+    const stone = new mc.ItemStack("minecraft:cobblestone", 1);
+    stone.lockMode = mc.ItemLockMode.slot;
+    inv.setItem(s, stone);
+  }
+  await t.wait(10);
+
   // Move an EXISTING stack: creating one with setItem would increase total ownership, not simulate rearrangement.
   const moved = inv.getItem(0);
   inv.setItem(0, undefined);
-  inv.setItem(30, moved);
+  inv.setItem(20, moved);
   await t.wait(120); // cover the existing quiet-player sampling cycle, not a production delay
-  t.assert(inv.getItem(30)?.typeId === "minecraft:stick", "moving an existing hotbar stack does not route it as a pickup");
-  inv.setItem(0, inv.getItem(30));
-  inv.setItem(30, undefined);
+  t.assert(inv.getItem(20)?.typeId === "minecraft:stick", "moving an existing hotbar stack does not route it as a pickup");
+  inv.setItem(0, inv.getItem(20));
+  inv.setItem(20, undefined);
   await t.wait(10);
   t.assert(pageNow() === 2, "still on page 2");
 
