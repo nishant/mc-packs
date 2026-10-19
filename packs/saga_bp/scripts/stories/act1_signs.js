@@ -125,7 +125,7 @@ export const STORIES = [
         intro: [
           `${S}I have been reading Fenn's old letters. He used to tease me that stars were only rocks with good manners. But he wrote one thing he never teased about: where a star fell, the ground remembers.`,
           `${S}Far out past the farms there is a crater. Black glass and purple crystal, and in the middle a light that never goes out. The farmers call it the Starfall Crater and won't graze sheep near it. The sheep agree with them.`,
-          `${S}Go there for me. Bring back amethyst from the crater's teeth: eight shards. And touch the glowing heart of it, just once. If a star remembers anything, it will remember there.`,
+          `${S}Go there and touch the glowing heart, just once. Bring me eight amethyst shards. Another geode, shards you already carry, or a party mate's hand all count: the crater's teeth may already be mined out.`,
           `${S}Take food and a good pickaxe. And if the light shows you something, don't be afraid. Or be afraid, but keep looking. That's all astronomy is.`,
         ],
         objectives: [
@@ -175,7 +175,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "miners", amount: 10 }],
-        hint: "The Starfall Crater is far from town ({band:starfall} blocks); the tracker points the way, and a horse or boat helps. Amethyst grows on the crater's crystal blocks: mine the clusters for shards. Then stand at the glowing middle to touch it.",
+        hint: "The Starfall Crater is far from town ({band:starfall} blocks); the tracker points the way, and a horse or boat helps. Still go there and stand at the glowing middle to touch it. Eight amethyst shards count from any source: another geode, shards you already have, or a party mate. The crater's clusters can be mined out, so don't wait on them.",
       },
 
       // 2b -----------------------------------------------------------------------------------------
