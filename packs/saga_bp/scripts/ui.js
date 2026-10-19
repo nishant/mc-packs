@@ -63,6 +63,23 @@ import { PACK, across, alive, busy, clock, compass, coords, dialog, dimName, exc
 /** @typedef {import("./places.js").Loc} Loc */
 
 const HINT_MS = 600000; // operator notes about unset places: at most every 10 minutes per place
+const NEWS_GAP = 1000; // town gossip: at most one line per 1000 game ticks
+let newsAt = -NEWS_GAP;
+const newsSeen = new Set(); // keys of the last 64 gossip lines (memory only)
+
+/**
+ * Town gossip. A line that comes too soon is dropped, not queued. Each key is told once.
+ * @param {string} key @param {Record<string, unknown>} msg
+ */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(newsSeen.values().next().value);
+  send("realm:gossip", msg);
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -923,10 +940,10 @@ function complete(player, story, chapter, e, choice, by) {
   } else {
     player.sendMessage(`§6[Story] Story complete: ${story.title}!`);
     // Townsfolk gossip about a finished act of the main story (once, for whoever told it).
-    if (!by && story.kind === "main" && (story.act ?? 0) >= 1) send("realm:gossip", { kind: "act", player: player.id, name: player.name, place: story.title, n: story.act });
+    if (!by && story.kind === "main" && (story.act ?? 0) >= 1) gossip(`act:${player.id}:${story.id ?? story.title}`, { kind: "act", player: player.id, name: player.name, place: story.title, n: story.act });
     // A Recurring Wanderer's chain is done: town gossip, and their camp goes once nobody else needs it.
     if (wanderer) {
-      send("realm:gossip", { kind: "wander_chain", player: player.id, name: player.name, place: wanderer.name });
+      gossip(`wander:${wanderer.id}:${player.id}`, { kind: "wander_chain", player: player.id, name: player.name, place: wanderer.name });
       leaveCamp(wanderer.id, player.id);
     }
     player.playSound("random.levelup", { pitch: 0.7, volume: 1 });
@@ -1120,7 +1137,7 @@ export async function wanderEnd(player, auto) {
     send("realm:quest_done", { player: player.id, pack: PACK, id: `wander:${e.chapter.id}`, label: `${wv.hk ? "Ambush" : "Stranger"}: ${e.chapter.title}`, kind: "wander", guild });
     if (wv.hk) {
       send("realm:rep_add", { player: player.id, guild: "wardens", amount: 15, reason: `Ambush: ${e.chapter.title}` });
-      send("realm:gossip", { kind: "wander_hostile", player: player.id, name: player.name, place: e.chapter.title });
+      gossip(`whostile:${player.id}:${e.chapter.id}`, { kind: "wander_hostile", player: player.id, name: player.name, place: e.chapter.title });
     } else send("realm:wander_done", { player: player.id, wid: wv.w, how: "left" });
   });
 }
