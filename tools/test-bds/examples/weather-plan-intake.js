@@ -70,7 +70,11 @@ export default async function (t) {
     else t.log("the Almanac re-applied the weather on load, so a weatherChange may have taught them first; tools/weather-plan-intake.test.mjs covers the plan path alone");
     const plans = of("realm:weather_plan");
     t.log(`asks seen by the scenario: ${of("realm:weather_ask").length}; plan broadcasts: ${plans.length}`);
-    t.check(plans.length <= 4, `the Almanac does not answer every pack's ask on its own (${plans.length} plan broadcasts in this window)`);
+    if (plans.length) {
+      t.check(plans.length <= 4, `the Almanac does not answer every pack's ask on its own (${plans.length} plan broadcasts in this window)`);
+    } else {
+      t.log("startup plan broadcasts preceded this observer; this run does not certify ask coalescing");
+    }
   } else {
     await t.wait(260);
     now = await read();

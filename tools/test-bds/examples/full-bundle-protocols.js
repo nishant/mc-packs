@@ -1,6 +1,7 @@
 // C13 on the genuine 67-member Realm Bundle: one add-on, pack data kept, production handlers not patched.
 // PowerShell must not use npm run bundle -- --all (that drops --all).
-// Dedicated runner (required). A suite skip is not coverage. Lead owns suite registration.
+// A suite skip is not coverage. The official suite builds and stages this genuine bundle automatically:
+//   node tools/test-bds/suite.mjs --jobs 1 --filter '^full-bundle-protocols$'
 //   node tools/bundle.mjs --all
 //   node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out <stage>
 //   node tools/test-bds/run.mjs --quiet --flat --bundle <stage>/realm_bundle --scenario tools/test-bds/examples/full-bundle-protocols.js --timeout 1200
@@ -317,7 +318,7 @@ export default async function (t) {
   t.log("C13 gameplay above is callback-replay of production handlers. It is not a physical tap and not a render check.");
 }
 
-// Dedicated runner (required). A suite skip is not coverage. Lead owns suite registration.
+// Dedicated equivalent of the registered suite case. A suite skip is not coverage.
 //   node tools/bundle.mjs --all
 //   node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out <stage>
 //   node tools/test-bds/run.mjs --quiet --flat --bundle <stage>/realm_bundle --scenario tools/test-bds/examples/full-bundle-protocols.js --timeout 1200

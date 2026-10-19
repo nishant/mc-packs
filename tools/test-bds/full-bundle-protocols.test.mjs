@@ -243,7 +243,7 @@ test("chairs must match the stair, and expedition and npc claims stay within wha
   assert.doesNotMatch(rest, /npc_bp \(after claims\) saw the entity cancel/);
 });
 
-test("the dedicated runner is required and a suite skip is not coverage", () => {
+test("the genuine bundle runner is registered and a suite skip is not coverage", () => {
   const lines = [
     "node tools/bundle.mjs --all",
     "node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out <stage>",
@@ -253,11 +253,11 @@ test("the dedicated runner is required and a suite skip is not coverage", () => 
   assert.equal(hook.status, 0);
   for (const line of lines) assert.ok(hook.stdout.includes(line), line);
   assert.match(hook.stdout, /A suite skip is not coverage/);
-  assert.match(hook.stdout, /Lead owns suite registration/);
+  assert.match(hook.stdout, /official suite builds and stages this genuine bundle automatically/);
   const scenario = fs.readFileSync(path.join(harness, "examples", "full-bundle-protocols.js"), "utf8");
   for (const line of lines) assert.ok(scenario.includes(line), line);
   assert.match(scenario, /A suite skip is not coverage/);
-  assert.match(scenario, /Lead owns suite registration/);
+  assert.match(scenario, /official suite builds and stages this genuine bundle automatically/);
   assert.doesNotMatch(scenario, /so this file has no suite run line/);
   assert.doesNotMatch(scenario, /skips this file/);
 });

@@ -3,7 +3,7 @@
 //   node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out <stage>
 // Do not use `npm run bundle -- --all` from PowerShell: npm does not receive --all.
 // This runs tools/test-bds/hooks/events-bundle.mjs <scratch> --inject <unpacked dir> (not the scripts-only default).
-// Then the dedicated runner below. A suite skip is not coverage. Lead owns suite registration.
+// The official suite builds and stages this genuine bundle automatically; the equivalent manual runner is below.
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -25,7 +25,10 @@ events-bundle default is refused.
 It then imports a private callback-replay tap relay before the packs. Production handlers
 are not edited. The scenario labels callback-replay separately from native engine emissions.
 
-Dedicated runner (required). A suite skip is not coverage. Lead owns suite registration.
+A suite skip is not coverage. The official suite builds and stages this genuine bundle automatically:
+  node tools/test-bds/suite.mjs --jobs 1 --filter '^full-bundle-protocols$'
+
+Equivalent manual runner:
   node tools/bundle.mjs --all
   node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out <stage>
   node tools/test-bds/run.mjs --quiet --flat --bundle <stage>/realm_bundle --scenario tools/test-bds/examples/full-bundle-protocols.js --timeout 1200

@@ -64,6 +64,7 @@ const SPECIAL = {
   "perf-soak": { args: ["--no-relay", "--profile", "--profile-every", "0", "--arg", "players=6", "--arg", "seconds=60", "--timeout", "400"], note: "short soak (6 players, 60 s)" },
   "stash-pages-persistence": { runner: "stash-persistence.mjs", note: "custom runner stash-persistence.mjs" },
   "bundle-smoke": { args: ["--flat", "--bundle", "dist/realm_bundle.mcpack", "--timeout", "300"], prepare: ["tools/bundle.mjs", "--all"], note: "builds the Realm Bundle first (dist/realm_bundle.mcpack), runs it as one script context" },
+  "full-bundle-protocols": { fullBundle: true, note: "builds and stages the genuine 67-member cancellation bundle" },
   "stash-page-transfer-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-page-transfer-restart.js")], note: "moved native row across two physical restarts" },
 };
 // A --packs header's test copy is built by the plain shell lines just above its command (run first).
@@ -103,6 +104,15 @@ function plan(file, hookRoot) {
   const sp = SPECIAL[name];
   if (sp) {
     if (sp.note) p.notes.push(sp.note);
+    if (sp.fullBundle) {
+      const stage = path.join(hookRoot, name);
+      p.prepareSteps = [
+        ["tools/bundle.mjs", "--all"],
+        ["tools/test-bds/hooks/full-bundle-protocols.mjs", "--from", path.join(ROOT, "dist", "realm_bundle.mcpack"), "--out", stage],
+      ];
+      p.args = ["--quiet", "--strict", "--flat", "--bundle", path.join(stage, "realm_bundle"), "--timeout", "1200", "--scenario", file];
+      return p;
+    }
     if (sp.runner) { p.runner = sp.runner; return p; }
     if (sp.prepare) p.prepare = sp.prepare;
     p.args = ["--quiet", ...sp.args, "--scenario", file];
@@ -203,11 +213,11 @@ function runOne(p, logDir, tag = "") {
         return;
       }
     }
-    if (p.prepare) {
-      const r = prepareOnce(p.prepare);
+    for (const preparation of p.prepareSteps ?? (p.prepare ? [p.prepare] : [])) {
+      const r = prepareOnce(preparation);
       if (r.status !== 0) {
-        fs.writeFileSync(base + ".out", `preparing the scenario failed: node ${p.prepare.join(" ")}\n${r.stdout}\n${r.stderr}`);
-        resolve({ result: "fail", code: 4, seconds: (Date.now() - t0) / 1000, failure: `preparing failed (node ${p.prepare.join(" ")}): ${(r.stderr || r.stdout || "").trim().split("\n").at(-1)}` });
+        fs.writeFileSync(base + ".out", `preparing the scenario failed: node ${preparation.join(" ")}\n${r.stdout}\n${r.stderr}`);
+        resolve({ result: "fail", code: 4, seconds: (Date.now() - t0) / 1000, failure: `preparing failed (node ${preparation.join(" ")}): ${(r.stderr || r.stdout || "").trim().split("\n").at(-1)}` });
         return;
       }
     }
