@@ -1420,10 +1420,27 @@ function used(player, item) {
   advance(player, "use", (obj) => (obj.item === item && playerIn(player, obj) ? 1 : 0));
 }
 
+/** Is a block a bed? @param {string} id */
+const isBed = (id) => id.endsWith("_bed");
+
+/**
+ * With the daylight cycle off, vanilla refuses the bed by day, so `isSleeping` never turns true: a tap on a
+ * bed counts as the night's sleep, and the step's vision waits for the next tick (queued like a real dream).
+ * @param {Player} player @param {import("@minecraft/server").Block} block
+ */
+function bedWhileStopped(player, block) {
+  if (timeMoves() || !isBed(block.typeId) || !counting(player)) return;
+  for (const { e, i, obj } of open(player, "sleep")) {
+    bump(player, e, i, 1);
+    if (obj.vision?.length) dreams.set(player.id, obj.vision);
+  }
+}
+
 world.afterEvents.playerInteractWithBlock.subscribe(({ player, block, isFirstEvent, beforeItemStack }) => {
   if (!isFirstEvent) return;
   try {
     touched(player, block);
+    bedWhileStopped(player, block);
     if (beforeItemStack) used(player, beforeItemStack.typeId);
   } catch (e) {
     console.warn(`[saga] ${e}`);
@@ -3333,7 +3350,7 @@ export function waitDays(x, k, obj, absNow, msNow, dirty, player) {
   const w = `w${k}`;
   if (x[k] === undefined) {
     x[k] = absNow;
-    x[w] = msNow;
+    if (!timeMoves()) x[w] = msNow; // the real-time fallback only runs while the clock is stopped
     dirty(player);
     return false;
   }
