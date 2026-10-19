@@ -8,6 +8,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { after } from "node:test";
 
+// The funnel's heading and wobble are random; a fixed sequence keeps its distance to the listeners reproducible.
+let seed = 12345;
+Math.random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+
 const roots = [];
 after(() => { for (const r of roots) rmSync(r, { recursive: true, force: true }); });
 

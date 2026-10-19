@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "node:test";
@@ -179,4 +181,54 @@ test("the profile reports each pack's steady-window average from its collected t
   assert.equal(p.packWindowAvg("half_bp", 100, 101), null);
   assert.equal(p.packWindowAvg("nobody_bp", 100, 101), null);
   assert.equal(p.packWindowAvg("rain_bp", 105, 105), null);
+});
+
+/** Runs the real soak against the fake harness, then the real Profile.report()/JSON write, and returns the written profile JSON. */
+async function writtenProfile({ players = 12, packs, ramp = 9 }) {
+  const h = fakeHarness({ players, seconds: 10 });
+  await soak(h.t);
+  const w = h.reports.at(-1).data;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "o9-"));
+  const json = path.join(dir, "perf.json");
+  const p = new Profile({ say() {}, everyS: 0, json, scenario: "perf-soak.js", args: h.t.args });
+  p.setWorkload(w);
+  const total = h.now();
+  for (const [pack, v] of Object.entries(packs)) {
+    const per = Array.from({ length: total }, (_, i) => (i < w.soak.startTick ? ramp : v));
+    p.final.set(pack, { pack, final: true, startTick: 0, endTick: total, ticks: total, msPerTick: ramp, totalMs: ramp * total, callsPerTick: 1, calls: total, dynWrites: 0, dynBytes: 0, actionBar: 0, titles: 0, commands: 0, p95TickMs: 0, maxTickMs: 0, top: [] });
+    p.tickParts.set(pack, { startTick: 0, n: 1, parts: [per.join(",")] });
+  }
+  p.report();
+  const out = JSON.parse(fs.readFileSync(json, "utf8"));
+  fs.rmSync(dir, { recursive: true, force: true });
+  return { out, players };
+}
+const verdictFor = ({ out, players }, result = "pass") => evaluatePerfBudgets(new Map([[players, { result, report: out }]]));
+
+test("end to end: the real report writer's steady figures feed the budget gate (the spawn ramp is ignored)", async () => {
+  const w = await writtenProfile({ players: 12, packs: { rain_bp: 0.1, map_bp: 0.5 } });
+  assert.equal(w.out.acceptance.ok, true, w.out.acceptance.reasons.join("; "));
+  assert.ok(Math.abs(w.out.packs.find((r) => r.pack === "rain_bp").steadyMsPerTick - 0.1) < 1e-9);
+  assert.ok(w.out.bundle.steadyWindow.avg < 1, "the ramp's 9 ms ticks stay out of the steady window");
+  assert.equal(verdictFor(w).ok, true, "12 players: no verdict at all, whatever the figures");
+});
+
+test("end to end: judged at the 40-player budget, the same written profile fails over budget and passes under it", async () => {
+  const over = await writtenProfile({ players: 40, packs: { rain_bp: 0.2, map_bp: 0.5 } });
+  const vOver = verdictFor(over);
+  assert.equal(vOver.ok, false);
+  assert.match(vOver.over.join("\n"), /rain_bp/);
+  const ok = await writtenProfile({ players: 40, packs: { rain_bp: 0.15, map_bp: 1 } });
+  assert.equal(verdictFor(ok).ok, true, [...verdictFor(ok).over, ...verdictFor(ok).invalid].join("\n"));
+});
+
+test("end to end: a pack whose per-tick data is incomplete gets no steady figure, so the gate is INVALID, never zero", async () => {
+  const w = await writtenProfile({ players: 40, packs: { rain_bp: 0.1, map_bp: 0.5 } });
+  const row = w.out.packs.find((r) => r.pack === "map_bp");
+  row.steadyMsPerTick = null;
+  const v = verdictFor(w);
+  assert.equal(v.ok, false);
+  assert.equal(v.over.length, 0);
+  assert.match(v.invalid.join("\n"), /no steady-window figure for map_bp/);
+  assert.equal(verdictFor(w, "fail").ok, false);
 });
