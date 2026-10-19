@@ -45,6 +45,13 @@ export const CONFIG = {
    */
   exitSeconds: 90,
 
+  /**
+   * The lowest difficulty whose clears are announced to everyone in chat, as a level number: "0" every clear
+   * (Easy), "1" Normal, "2" Hard, "3" Nightmare 1, "4" Nightmare 2, and so on up to "22" (Nightmare 20). The party's
+   * own message, rewards, progress and leaderboards don't change. Text, because it's a choice in the menu.
+   */
+  announceFromLevel: "0",
+
   /** Items a player drops when dying in the dungeon are given back after they respawn (they would be lost when the dungeon resets). */
   returnItemsOnDeath: true,
 

@@ -17,7 +17,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, dropStrayCart, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, dropStrayCart, forgetStructures, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, setSaving, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -363,6 +363,55 @@ onScriptEvent(
       if (until > (barHeld.get(m.player) ?? 0)) barHeld.set(m.player, until);
     } catch {
       // not ours
+    }
+  },
+);
+
+/** realm:diag_forget request ids for this pack (confirmed) still waiting for realm:diag's answer. @type {Set<string>} */
+const forgetting = new Set();
+
+/** Removes the saved stash and parcel structures after a successful forget. Stashes still hold players' own items while a run is on, so they stay then. @param {string} rid */
+function cleanForgotten(rid) {
+  const busy = runs.size > 0 || pending.size > 0;
+  /** @type {Set<string>} */
+  const held = new Set();
+  for (const p of world.getAllPlayers()) {
+    const s = stashOf(p);
+    if (s?.id) held.add(s.id);
+  }
+  const r = forgetStructures((id) => id.startsWith("expedition:stash_") && (busy || held.has(id)));
+  const text = r.failed
+    ? `§c[Expeditions] Forgot the saved data, but ${r.failed < 0 ? "the saved structures couldn't be listed" : `${r.failed} saved structure${r.failed === 1 ? "" : "s"} couldn't be deleted`} (${r.error}). ${r.deleted} deleted.`
+    : `§e[Expeditions] Forgot the saved data and deleted ${r.deleted} saved structure${r.deleted === 1 ? "" : "s"}.${r.kept ? ` ${r.kept} stash structure${r.kept === 1 ? " was" : "s were"} kept because ${busy ? "an expedition is running" : "a player is still waiting for their items"}: forget again later.` : ""}`;
+  console.warn(text.replace(/§./g, ""));
+  for (const p of world.getAllPlayers()) if (isOp(p)) p.sendMessage(text);
+  if (r.failed) system.sendScriptEvent("realm:diag_forgot", JSON.stringify({ id: rid, pack: "expedition_bp", ok: false, error: text.replace(/§./g, "").slice(0, 300) }));
+}
+
+// realm:diag forgot this pack's world data (it already ran its part when this listener hears the request): refuse new stashes
+// and parcels from now (their counters can't be saved until /reload), and once the data is really gone remove the structures.
+onScriptEvent(
+  ["realm:diag_forget", "realm:diag_forgot"],
+  ({ id, message }) => {
+    if (id !== "realm:diag_forget" && id !== "realm:diag_forgot") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || m.pack !== "expedition_bp") return;
+      const rid = String(m.id ?? "").slice(0, 40);
+      if (id === "realm:diag_forget") {
+        if (m.confirm !== "FORGET expedition_bp") return;
+        forgetting.add(rid);
+        setSaving(false);
+        system.runTimeout(() => {
+          if (forgetting.delete(rid) && !forgetting.size) setSaving(true); // never answered: nothing was forgotten
+        }, 200);
+        return;
+      }
+      if (!forgetting.delete(rid)) return;
+      if (m.ok === true) cleanForgotten(rid);
+      else if (!forgetting.size) setSaving(true);
+    } catch (e) {
+      console.warn(`[expedition] forget: ${e}`);
     }
   },
 );
@@ -2344,8 +2393,14 @@ function finish(run) {
   tiers = tiers.sort((a, b) => b.l - a.l || a.at - b.at).slice(0, Math.max(1, CONFIG.tierBoardSize));
   writeJson(PROP_TIERS, tiers);
   tell(run, `§a${d.name} cleared in ${clock(run.clearMs)}!${record} §eThe treasure room is open: you have ${get("exitSeconds")} seconds before you're taken back (opening a chest near the end gives you more). Press the gold button there to leave sooner; treasure left in the chests comes back with you.`);
-  world.sendMessage(`§6${names.join(", ")} cleared the ${dungeonLabel(d, L)} in ${clock(run.clearMs)}.`);
+  announceClear(names, d, L, run.clearMs);
   saveRun(run);
+}
+
+/** The chat line for a clear, only from the level the "announceFromLevel" setting names up (0: every clear). Rewards, XP and progress never depend on it. @param {string[]} names @param {Dungeon} d @param {number} L @param {number} ms */
+function announceClear(names, d, L, ms) {
+  if (L < (Number(get("announceFromLevel")) || 0)) return;
+  world.sendMessage(`§6${names.join(", ")} cleared the ${dungeonLabel(d, L)} in ${clock(ms)}.`);
 }
 
 /** How much more treasure this run gives. @param {Run} run */

@@ -17,6 +17,51 @@ export const RUN_LORE = "§8Expedition gear: stays in the dungeon";
 const STASH_PROP = "expedition:stash"; // player: JSON { id, tag, placed? }: where their own items are while they run with the kit
 const STASH_NEXT = "expedition:stash_next"; // world: the next stash number
 const STASH_TAG = "realm:exp_stash";
+/** Saved structure ids this pack makes: expedition:stash_<n> and expedition:parcel_<n>, nothing else. */
+const OWN_STRUCTURE = /^expedition:(stash|parcel)_\d+$/;
+/** False from a confirmed "forget" until /reload: realm:diag blocks this pack's world saves then, so a new stash or parcel couldn't be tracked. */
+let saving = true;
+
+/** @param {boolean} on */
+export function setSaving(on) {
+  saving = on;
+}
+
+/**
+ * Deletes this pack's saved stash and parcel structures (never another pack's or a player's own structures), except
+ * the ones `keep` names, and checks each is really gone.
+ * @param {(id: string) => boolean} keep
+ * @returns {{ deleted: number, kept: number, failed: number, error?: string }}
+ */
+export function forgetStructures(keep) {
+  /** @type {{ deleted: number, kept: number, failed: number, error?: string }} */
+  const out = { deleted: 0, kept: 0, failed: 0 };
+  const sm = world.structureManager;
+  /** @type {string[]} */
+  let ids;
+  try {
+    ids = sm.getWorldStructureIds().filter((id) => OWN_STRUCTURE.test(id));
+  } catch (e) {
+    out.failed = -1;
+    out.error = `couldn't list saved structures: ${String(e).slice(0, 120)}`;
+    return out;
+  }
+  for (const id of ids) {
+    if (keep(id)) {
+      out.kept++;
+      continue;
+    }
+    try {
+      sm.delete(id);
+      if (sm.get(id)) throw new Error("still saved");
+      out.deleted++;
+    } catch (e) {
+      out.failed++;
+      out.error ??= `${id}: ${String(e).slice(0, 120)}`;
+    }
+  }
+  return out;
+}
 /** Slots 0 to 35 are the inventory; then the armor and the offhand. */
 const EQUIP = [EquipmentSlot.Head, EquipmentSlot.Chest, EquipmentSlot.Legs, EquipmentSlot.Feet, EquipmentSlot.Offhand];
 const SLOTS = 36 + EQUIP.length;
@@ -219,6 +264,7 @@ function carried(p) {
  * @param {Player} p @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at
  */
 export function saveStash(p, dim, at) {
+  if (!saving) return false; // forgotten: the next numbers can't be saved, so no structure and no stripped inventory
   if (stashOf(p)) return false; // a stash from before is still waiting: never overwrite it
   const { inv, eq, items } = carried(p);
   if (!inv || !eq) return false;
@@ -525,6 +571,7 @@ export const hasParcels = (owner) => parcelsOf(owner).length > 0;
 export function saveParcel(owner, kind, items, dim, at) {
   const keep = items.filter((it) => !isRunGear(it));
   if (!keep.length) return true;
+  if (!saving) return false; // forgotten: the caller keeps the items
   const nRaw = world.getDynamicProperty(PARCEL_NEXT);
   const n = typeof nRaw === "number" ? nRaw : 1;
   world.setDynamicProperty(PARCEL_NEXT, n + 1);
