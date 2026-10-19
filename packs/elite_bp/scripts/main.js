@@ -417,7 +417,7 @@ function night() {
 
 world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
   try {
-    if (cause !== EntityInitializationCause.Spawned) return;
+    if (cause !== EntityInitializationCause.Spawned || !entity.isValid) return;
     if (entity.typeId === "minecraft:item") {
       noteItem(entity);
       return;
@@ -1052,6 +1052,7 @@ function slain(info, killerEntity, hits, entityId) {
  * @param {Entity} e
  */
 function upkeep(e) {
+  if (!e.isValid) return;
   const trait = traitOf(e);
   if (!trait) return;
   const name = nameOf(e);
