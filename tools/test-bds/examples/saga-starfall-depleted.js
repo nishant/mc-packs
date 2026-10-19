@@ -33,7 +33,21 @@ export default async function (t) {
     return reply;
   }
   const debug = (player, message) => send("realm:saga_debug", { player: player.id, ...message });
+  function standing(player) {
+    const at = player.location;
+    let hp = 0;
+    try {
+      hp = player.getComponent("minecraft:health")?.currentValue ?? 0;
+    } catch (error) {
+      t.fail(`${player.name} health unreadable before dialogue: ${error}`);
+    }
+    const mode = String(player.getGameMode());
+    t.log(`${player.name} before dialogue at ${at.x.toFixed(1)} ${at.y.toFixed(1)} ${at.z.toFixed(1)} hp=${hp} mode=${mode}`);
+    t.assert(hp > 0 && at.y > 0, `${player.name} is not standing before dialogue at ${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)} hp=${hp}`);
+    t.assert(mode.toLowerCase() === "survival", `${player.name} left survival (${mode})`);
+  }
   async function choose(player, key) {
+    standing(player);
     let next = t.waitForm(player, { timeout: 300 });
     send("realm:npc_choose", { pack: "saga_bp", player: player.id, npc: "sol", key });
     const bodies = [];
@@ -118,8 +132,11 @@ export default async function (t) {
   // A circle ticking area accepts radius 1-4 only. Radius 6 is rejected, so the chunk never loads.
   t.server("/tickingarea remove o74_crater");
   const area = t.server("/tickingarea add circle 500 0 500 4 o74_crater true");
-  t.assert(area.ok, `fixture ticking area was rejected: ${area.error ?? "command failed"}`);
+  if (!area.ok) t.fail(`fixture ticking area was rejected: ${area.error ?? "command failed"}`);
   await t.loadArea(500, 500, { radius: 4 });
+  // Players stand at x 515 and 517, outside the crater fill (488..512). A pad here keeps the fall from killing them.
+  const pad = t.server("/fill 513 57 494 522 63 506 stone");
+  if (!pad.ok) t.fail(`standing pad was rejected: ${pad.error ?? "command failed"}`);
   const late = await t.player("LateSearcher", { op: true, x: 515, y: 65, z: 500 });
   if (t.phase === 1) {
     t.server("/fill 488 57 488 512 63 512 stone");
