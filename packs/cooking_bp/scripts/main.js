@@ -237,6 +237,7 @@ function dishLore(d) {
   if (d.roll) lines.push("§dRolls for a surprise");
   else lines.push(...d.effects.map(fxLore));
   lines.push(d.tier === "rare" ? "§6Rare dish" : "§8Kitchen dish");
+  lines.push(`§8Dish: ${d.name}`); // the mark a renamed dish can't fake: the Story Log's deliveries check it
   return lines;
 }
 

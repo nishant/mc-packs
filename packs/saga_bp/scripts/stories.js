@@ -33,6 +33,7 @@ export const NPC_NAMES = /** @type {Record<string, string>} */ ({
  * tracker and story log call it.
  */
 export const PLACES = /** @type {Record<string, string>} */ ({
+  town: "Town",
   lighthouse: "Lighthouse",
   sunken_bell: "Sunken Bell",
   old_chapel: "Old Chapel",
