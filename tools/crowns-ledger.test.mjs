@@ -180,3 +180,82 @@ test("O30: /realm:crowns_audit lists the newest entries for an operator and refu
   await w.sim.settle();
   assert.equal(w.sim.pending.length, 0);
 });
+
+test("O30 review: 200 entries fit even with worst-case names: quotes, backslashes, control characters, emoji", async () => {
+  const w = await world({ cfg: { dailyPayLimit: 0 } });
+  const a = w.sim.join('"\\\u0001\u0007' + "\ud83d\ude00".repeat(20));
+  const b = w.sim.join('\\"'.repeat(20));
+  w.give(a, 1_000_000);
+  for (let i = 1; i <= 205; i++) w.sim.run("realm:crowns_pay", a, [b], 2_000_000 > i ? 2147 + i : 1);
+  const text = w.sim.props.get("crowns:ledger");
+  assert.ok(Buffer.byteLength(text, "utf8") <= 30000);
+  const l = JSON.parse(text);
+  assert.equal(l.length, 200);
+  assert.doesNotMatch(l[0][2], /[\u0000-\u001f]/);
+});
+
+test("O30 review: old oversized ledger entries are shortened, not the newest 200 dropped", async () => {
+  const fat = Array.from({ length: 200 }, (_, i) => [i + 1, "p", "\u20ac".repeat(40), "\u20ac".repeat(40), 5, "x".repeat(60)]);
+  const w = await world({ ledger: JSON.stringify(fat), cfg: { dailyPayLimit: 0 } });
+  const a = w.sim.join("Ann");
+  const b = w.sim.join("Bob");
+  w.give(a, 100);
+  w.sim.run("realm:crowns_pay", a, [b], 5);
+  const text = w.sim.props.get("crowns:ledger");
+  assert.ok(Buffer.byteLength(text, "utf8") <= 30000);
+  assert.equal(JSON.parse(text).length, 200);
+});
+
+test("O30 review: a failed daily-total write moves no Crowns and counts nothing; a failed credit restores the total", async () => {
+  const w = await world({ cfg: { dailyPayLimit: 1000 } });
+  const a = w.sim.join("Ann");
+  const b = w.sim.join("Bob");
+  w.give(a, 500);
+  const real = a.setDynamicProperty.bind(a);
+  a.setDynamicProperty = (k, v) => {
+    if (k === "crowns:paid") throw new Error("quota");
+    return real(k, v);
+  };
+  w.sim.run("realm:crowns_pay", a, [b], 100);
+  assert.equal(w.bal(a), 500);
+  assert.equal(w.bal(b), 0);
+  assert.equal(w.ledger().length, 0);
+  assert.match(a.messages.at(-1), /kept your Crowns/);
+  a.setDynamicProperty = real;
+  w.sim.run("realm:crowns_pay", a, [b], 100);
+  assert.equal(JSON.parse(a.getDynamicProperty("crowns:paid"))[1], 100);
+});
+
+test("O30 review: the limit boundary is the UTC midnight: 23:59:59.999 counts for the old day, 00:00:00.000 starts a new one", async () => {
+  const w = await world({ cfg: { dailyPayLimit: 100 } });
+  const a = w.sim.join("Ann");
+  const b = w.sim.join("Bob");
+  w.give(a, 1000);
+  const midnight = Math.floor(T0 / DAY) * DAY + DAY;
+  Date.now = () => midnight - 1;
+  w.sim.run("realm:crowns_pay", a, [b], 100);
+  w.sim.run("realm:crowns_pay", a, [b], 1);
+  assert.equal(w.bal(b), 100);
+  Date.now = () => midnight;
+  w.sim.run("realm:crowns_pay", a, [b], 100);
+  assert.equal(w.bal(b), 200);
+});
+
+test("O30 review: give rechecks the operator a tick later, and counts each target once and only those it changed", async () => {
+  const w = await world();
+  const op = w.sim.join("Op", { op: true });
+  const a = w.sim.join("Ann");
+  const b = w.sim.join("Bob");
+  w.sim.run("realm:crowns_give", op, [a, a, b], 10);
+  assert.equal(w.bal(a), 10, "a duplicate target is paid once");
+  assert.equal(w.ledger().at(-1)[3], "2 players");
+  w.sim.run("realm:crowns_give", op, [a, b], -10);
+  w.give(b, 5);
+  w.sim.run("realm:crowns_give", op, [a, b], -5); // Ann has none left to take
+  assert.equal(w.ledger().at(-1)[3], "Bob");
+  const n = w.ledger().length;
+  op.commandPermissionLevel = 0;
+  w.sim.run("realm:crowns_give", op, [a], 999);
+  assert.equal(w.bal(a), 0);
+  assert.equal(w.ledger().length, n);
+});

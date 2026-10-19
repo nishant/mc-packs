@@ -6,7 +6,8 @@
 export const LEDGER_MAX = 200;
 /** The most UTF-8 bytes the saved ledger may use: well under the 32,767 a dynamic property holds. */
 export const LEDGER_BYTES = 30000;
-const NAME_MAX = 40;
+/** A name takes at most this many UTF-8 bytes once JSON-encoded (quotes included): 200 entries of at most about 135 bytes fit LEDGER_BYTES. */
+const NAME_BYTES = 50;
 export const DAY_MS = 86400000;
 
 /** @param {string} s exact UTF-8 length */
@@ -39,7 +40,11 @@ export function parseLedger(raw) {
 }
 
 /** @param {unknown} name */
-const clean = (name) => String(name ?? "").replace(/[\u0000-\u001f]/g, "").slice(0, NAME_MAX);
+export function clean(name) {
+  const chars = Array.from(String(name ?? "").replace(/[\u0000-\u001f\u007f-\u009f]/g, ""));
+  while (chars.length && utf8Length(JSON.stringify(chars.join(""))) > NAME_BYTES) chars.pop();
+  return chars.join("");
+}
 
 /**
  * The ledger text after adding one entry: the newest LEDGER_MAX entries, and the oldest dropped until it fits LEDGER_BYTES.
@@ -51,6 +56,17 @@ export function appendEntry(raw, e) {
   list.push([Math.floor(e.at), e.kind, clean(e.from), clean(e.to), Math.floor(e.amount)]);
   let out = list.slice(-LEDGER_MAX);
   let text = JSON.stringify(out);
+  if (utf8Length(text) > LEDGER_BYTES) {
+    // Shorten older, wider entries first (names, then extra fields) before any of the newest 200 is lost.
+    out = out.map((e) => [e[0], e[1], clean(e[2]), clean(e[3]), ...e.slice(4)]);
+    text = JSON.stringify(out);
+    for (let i = 0; i < out.length && utf8Length(text) > LEDGER_BYTES; i++) {
+      if (out[i].length > 5) {
+        out[i] = out[i].slice(0, 5);
+        text = JSON.stringify(out);
+      }
+    }
+  }
   while (out.length > 1 && utf8Length(text) > LEDGER_BYTES) {
     out = out.slice(1);
     text = JSON.stringify(out);

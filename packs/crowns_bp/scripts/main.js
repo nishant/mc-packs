@@ -372,6 +372,7 @@ function record(kind, from, to, amount) {
 
 /** @param {Player} sender @param {Player[]} targets @param {number} amount */
 function pay(sender, targets, amount) {
+  if (!sender.isValid) return;
   const valid = (targets ?? []).filter((p) => p.isValid);
   if (valid.length !== 1) return sender.sendMessage("§cPick exactly one player who is online.");
   const [target] = valid;
@@ -387,18 +388,32 @@ function pay(sender, targets, amount) {
     const left = Math.max(0, limit - paidOn(sender.getDynamicProperty(PROP_PAID), day));
     if (amount > left) return sender.sendMessage(`§cYou can send ${crowns(left)} more today (the limit is ${crowns(limit)} a day; it resets at midnight UTC).`);
   }
-  if (!takeCrowns(sender, amount)) return sender.sendMessage(`§cYou have only ${crowns(have)}.`);
+  // The day total is written first: if it can't be saved, nothing moves, so no payment is ever left uncounted.
+  const paidBefore = sender.getDynamicProperty(PROP_PAID);
+  try {
+    sender.setDynamicProperty(PROP_PAID, addPaid(paidBefore, day, amount));
+  } catch (e) {
+    console.warn(`[crowns] pay limit: ${e}`);
+    if (limit > 0) return sender.sendMessage("§cThe payment failed and you kept your Crowns.");
+  }
+  const undoPaid = () => {
+    try {
+      sender.setDynamicProperty(PROP_PAID, paidBefore);
+    } catch (e) {
+      console.warn(`[crowns] pay limit rollback: ${e}`);
+    }
+  };
+  if (!takeCrowns(sender, amount)) {
+    undoPaid();
+    return sender.sendMessage(`§cYou have only ${crowns(have)}.`);
+  }
   try {
     addCrowns(target, amount);
   } catch (e) {
     addCrowns(sender, amount); // nothing moved: give it back
+    undoPaid();
     console.warn(`[crowns] pay: ${e}`);
     return sender.sendMessage("§cThe payment failed and you kept your Crowns.");
-  }
-  try {
-    sender.setDynamicProperty(PROP_PAID, addPaid(sender.getDynamicProperty(PROP_PAID), day, amount));
-  } catch (e) {
-    console.warn(`[crowns] pay limit: ${e}`);
   }
   record("p", sender.name, target.name, amount);
   rememberName(target);
@@ -408,13 +423,17 @@ function pay(sender, targets, amount) {
 
 /** @param {Player | undefined} op @param {Player[]} targets @param {number} amount */
 function give(op, targets, amount) {
-  const valid = (targets ?? []).filter((p) => p.isValid);
+  if (op && (!op.isValid || !isOp(op))) return; // the command runs a tick later: still an operator?
+  const seenIds = new Set();
+  const valid = (targets ?? []).filter((p) => p.isValid && !seenIds.has(p.id) && seenIds.add(p.id));
   /** @param {string} m */
   const tell = (m) => (op ? op.sendMessage(m) : console.warn(`[crowns] ${m}`));
   if (!valid.length) return tell("§cNo player online matches.");
   if (!Number.isInteger(amount) || amount === 0) return tell("§cThe amount must be a whole number other than 0.");
   /** @type {string[]} */
   const done = [];
+  /** @type {string[]} */
+  const changed = [];
   let applied = 0;
   for (const p of valid) {
     if (amount > 0) {
@@ -423,6 +442,7 @@ function give(op, targets, amount) {
       if (add > 0) {
         addCrowns(p, add);
         applied += add;
+        changed.push(p.name);
         p.sendMessage(`§6+${crowns(add)} §7(from an operator. Balance: ${fmt(crownsOf(p))})`);
       }
       done.push(`${p.name} +${fmt(add)}${add < amount ? " (the most a balance can hold)" : ""}`);
@@ -431,13 +451,14 @@ function give(op, targets, amount) {
       if (take > 0) {
         objective().addScore(p, -take);
         applied -= take;
+        changed.push(p.name);
         p.sendMessage(`§c-${crowns(take)} §7(taken by an operator. Balance: ${fmt(crownsOf(p))})`);
       }
       done.push(`${p.name} -${fmt(take)}`);
     }
     rememberName(p);
   }
-  if (applied !== 0) record("g", op?.name ?? "console", valid.length === 1 ? valid[0].name : `${valid.length} players`, applied);
+  if (applied !== 0) record("g", op?.name ?? "console", changed.length === 1 ? changed[0] : `${changed.length} players`, applied);
   tell(`§aCrowns: ${done.join(", ")}`);
 }
 
