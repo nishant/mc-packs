@@ -105,4 +105,30 @@ export default async function (t) {
   await t.wait(40);
   await toPage(1);
   t.check(inv.getItem(22)?.typeId === ROCKET && inv.getItem(22)?.amount === 64, `the rockets stay on page 1 (${inv.getItem(22)?.amount})`);
+
+  // 6. (O20) Nothing matches: a request nothing on any page can answer fills nothing and moves nothing.
+  await toPage(2);
+  for (let s = 0; s < 9; s++) inv.setItem(s, undefined);
+  t.system.sendScriptEvent("realm:refill_need", JSON.stringify({ player: p.id, slot: 0, id: "minecraft:pufferfish" }));
+  await t.wait(20);
+  t.check(!inv.getItem(0), `a miss fills nothing (${inv.getItem(0)?.typeId})`);
+  await toPage(1);
+  t.check(inv.getItem(22)?.amount === 64, "a miss moved nothing");
+
+  // 7. (O20) A named stack and a slot-locked stack on page 1 are never pulled for a plain rocket request.
+  inv.setItem(22, undefined);
+  const named = new mc.ItemStack(ROCKET, 64);
+  named.nameTag = "Show";
+  const locked = new mc.ItemStack(ROCKET, 64);
+  locked.lockMode = mc.ItemLockMode.slot;
+  inv.setItem(23, named);
+  inv.setItem(24, locked);
+  await t.wait(5);
+  await toPage(2);
+  for (let s = 0; s < 9; s++) inv.setItem(s, undefined);
+  t.check(await useLast(), "a plain rocket was used");
+  await t.wait(20);
+  t.check(!inv.getItem(0), `neither the named nor the locked stack came over (${inv.getItem(0)?.typeId})`);
+  await toPage(1);
+  t.check(inv.getItem(23)?.nameTag === "Show" && inv.getItem(24)?.lockMode === mc.ItemLockMode.slot, "both stay on page 1");
 }

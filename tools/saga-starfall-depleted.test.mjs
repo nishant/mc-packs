@@ -54,6 +54,7 @@ function fixture(saved) {
     objKey: (e, i) => `${e.story.id}:${e.chapter.id}:${i}`,
     share() {},
     nameKey: () => { throw new Error("this chapter does not ask for a named item"); },
+    collectCount: (pl, obj) => engine.countItem(pl, obj.item, obj.name), // no Expansive Inventory saved pages in this fixture (see saga-collect-stash.test.mjs)
   };
   const functions = [
     productionFunction(dataSource, "target"),

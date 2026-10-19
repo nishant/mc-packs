@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, onChange, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, signature, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, exportPending, indexedEntries, InventoryRecoveryError, inventoryReady, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, saveSnapshot, signature, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -254,6 +254,103 @@ function nativeEntries(entries) {
 }
 
 /**
+ * The committed revision of a player's saved pages: it changes whenever any page's snapshot does (a page ref id is
+ * never reused). It rides on every notice and every reply, so a reply computed before a change can be told from one
+ * after it. @param {Player} player @returns {string | undefined}
+ */
+export function revisionOf(player) {
+  try {
+    const state = stateOf(player);
+    return `${Object.entries(state.pages).map(([p, r]) => `${p}=${r.id}`).join(",")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Tells packs that count items (Saga's collect steps) that what the saved pages hold changed, with the new revision. @param {Player} player */
+function announceChange(player) {
+  try {
+    system.sendScriptEvent("realm:stash_changed", JSON.stringify({ player: player.id, rev: revisionOf(player) }));
+  } catch {
+    // a notice that can't be sent only delays a recount
+  }
+}
+
+/** @typedef {{ id: string, name?: string, lore?: string[], n: number, x?: boolean }} CountRow x: its lore was too long to send */
+
+/** @type {Map<string, { sig: string, rows: Map<string, CountRow[]> }>} per player: what each ask has on saved pages, valid while the page refs are the same */
+const storedCache = new Map();
+
+/** Could a saved page hold a named stack? False only when the committed index says it holds none. @param {Player} player @param {number} page */
+function mayHoldNamed(player, page) {
+  try {
+    const kinds = indexedEntries(stateOf(player), page);
+    return !kinds || kinds.some((k) => k.name !== undefined && k.name !== "");
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * What the player's saved pages (not the active one) hold of an item and/or custom name, as one row per kind, name and
+ * lore, for realm:stash_count. A step with an item reads only pages the committed index says may hold it; a step with
+ * only a name reads the pages that may hold any named stack, and every named stack goes out (the asker matches the name,
+ * the way it does for live items). The answer is kept until a page changes. Undefined when a page can't be read, so a
+ * caller waits rather than counting it as empty.
+ * @param {Player} player @param {string | undefined} id @param {string} [name]
+ * @returns {CountRow[] | undefined}
+ */
+export function storedCount(player, id, name) {
+  let state;
+  try {
+    state = stateOf(player);
+  } catch {
+    return undefined;
+  }
+  if (state.pending) return undefined;
+  const cur = curPage(player);
+  const pagesNow = new Set(Object.keys(state.pages).map(Number));
+  /** @type {string[]} */
+  const legacy = [];
+  for (let p = 1; p <= totalPages(player); p++) {
+    const raw = player.getDynamicProperty(PAGE_PROP + p);
+    if (raw === undefined) continue;
+    pagesNow.add(p);
+    if (!state.pages[p]) legacy.push(`${p}:L${typeof raw === "string" ? raw.length : "?"}`);
+  }
+  const sig = `${cur}|${Object.entries(state.pages).map(([p, r]) => `${p}:${r.id}`).join(",")}|${legacy.join(",")}`;
+  let cache = storedCache.get(player.id);
+  if (!cache || cache.sig !== sig) {
+    cache = { sig, rows: new Map() };
+    storedCache.set(player.id, cache);
+  }
+  const ask = id === undefined ? `\u0000${name ?? ""}` : id;
+  const known = cache.rows.get(ask);
+  if (known) return known;
+  /** @type {Map<string, CountRow>} */
+  const out = new Map();
+  for (const p of [...pagesNow].sort((a, b) => a - b)) {
+    if (p === cur || !(id === undefined ? mayHoldNamed(player, p) : mayHold(player, p, id))) continue;
+    const entries = readPage(player, p);
+    if (!entries) return undefined;
+    for (const e of entries) {
+      if (id !== undefined ? e.id !== id : !e.name) continue;
+      const item = deserializeStack(e);
+      if (!item) return undefined;
+      const lore = item.getLore();
+      const long = lore.join("\n").length > 200;
+      const key = `${e.id}|${e.name ?? ""}|${JSON.stringify(long ? [] : lore)}|${long}`;
+      const row = out.get(key) ?? { id: e.id, name: e.name, lore: lore.length && !long ? lore : undefined, n: 0, x: long ? true : undefined };
+      row.n += e.n;
+      out.set(key, row);
+    }
+  }
+  const rows = [...out.values()];
+  cache.rows.set(ask, rows);
+  return rows;
+}
+
+/**
  * Builds immutable page images, then commits them together with the inventory.
  * Empty snapshots intentionally shadow legacy JSON so it can never be restored twice.
  * `decorate` runs once on the index about to be written, so whatever else the index records (a content index)
@@ -273,9 +370,12 @@ function commitPages(player, edits, after, cur = curPage(player), decorate) {
       ref.layout = 2;
       created.push(ref);
       next.pages[page] = ref;
+      recordIndex(next, page, ref, kindsOfRecs(entries));
     }
+    pruneIndex(next);
     decorate?.(next, edits);
     commitInventory(player, old, next, after);
+    if (edits.size) announceChange(player);
   } catch (e) {
     const live = stateOf(player);
     if (!(e instanceof InventoryRecoveryError) && !live.pending) for (const ref of created) if (!Object.values(live.pages).some((r) => r.id === ref.id)) discardSnapshot(ref);
@@ -313,12 +413,30 @@ function addToEntries(entries, rec, mode) {
 }
 
 /**
+ * Could a saved page take this item (a matching stack or a free slot)? False only when the committed index and the
+ * page's saved stack count prove it can't; an unknown page is read, never skipped.
+ * @param {Player} player @param {number} page @param {string} id
+ */
+function mayTake(player, page, id) {
+  try {
+    const state = stateOf(player);
+    if (state.pending || !state.pages[page]) return true;
+    if (!indexedEntries(state, page)) return true;
+    const held = savedStacks(player, page);
+    return held === undefined || held < PAGE_SIZE || mayHold(player, page, id);
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Puts a stack onto saved pages: matching stacks first, then empty slots. Returns what didn't fit.
  * @param {Player} player @param {ItemStack} item @param {number[]} pages
  * @param {Map<number, Rec[]>} [edits]
+ * @param {boolean} [perPage] fill each page (matching stacks, then free slots) before the next, so earlier pages fill first
  * @returns {{ rem: ItemStack | undefined, moved: Map<number, number>, edits: Map<number, Rec[]> }}
  */
-function storeOnPages(player, item, pages, edits = new Map()) {
+function storeOnPages(player, item, pages, edits = new Map(), perPage = false) {
   /** @type {Map<number, number>} */
   const moved = new Map();
   const rec = toRecord(item);
@@ -326,18 +444,23 @@ function storeOnPages(player, item, pages, edits = new Map()) {
   /** @type {Map<number, Rec[] | undefined>} */
   const loaded = new Map();
   let left = item.amount;
-  for (const mode of /** @type {const} */ (["merge", "fill"])) {
-    for (const p of pages) {
-      if (!left) break;
-      if (!loaded.has(p)) loaded.set(p, edits.get(p) ?? readPage(player, p));
-      const entries = loaded.get(p);
-      if (!entries) throw new Error(`page ${p} can't be read; nothing moved`);
-      const n = addToEntries(entries, { ...rec, n: left }, mode);
-      if (!n) continue;
-      left -= n;
-      edits.set(p, entries);
-      moved.set(p, (moved.get(p) ?? 0) + n);
-    }
+  /** @param {number} p @param {"merge" | "fill"} mode */
+  const put = (p, mode) => {
+    if (!left) return;
+    if (!loaded.has(p) && !edits.has(p) && !mayTake(player, p, rec.id)) return;
+    if (!loaded.has(p)) loaded.set(p, edits.get(p) ?? readPage(player, p));
+    const entries = loaded.get(p);
+    if (!entries) throw new Error(`page ${p} can't be read; nothing moved`);
+    const n = addToEntries(entries, { ...rec, n: left }, mode);
+    if (!n) return;
+    left -= n;
+    edits.set(p, entries);
+    moved.set(p, (moved.get(p) ?? 0) + n);
+  };
+  if (perPage) {
+    for (const p of pages) for (const mode of /** @type {const} */ (["merge", "fill"])) put(p, mode);
+  } else {
+    for (const mode of /** @type {const} */ (["merge", "fill"])) for (const p of pages) put(p, mode);
   }
   if (!left) return { rem: undefined, moved, edits };
   const rem = item.clone();
@@ -424,7 +547,7 @@ function usedOnPage(inv) {
 const switching = new Set();
 /** @type {Set<string>} */
 const recoveryWarned = new Set();
-/** @type {Map<string, { page: number, keys: Map<string, number> }>} what each player's page held at the last auto-store look */
+/** @type {Map<string, { page: number, amounts: Map<string, number>, live: Map<string, number> }>} what each player's page, and everything they carry, held at the last auto-store look */
 const snapshots = new Map();
 /**
  * Saves the active page and shows another. The page being left is saved and read back before anything
@@ -1024,85 +1147,264 @@ const lastEnforce = new Map();
 /** What a stack counts as when looking for new pickups: its item and name, not its amount. @param {ItemStack} item */
 const keyOf = (item) => `${item.typeId}|${item.nameTag ?? ""}|${item.getLore().join("/")}`;
 
-/** How many empty slots this page has, and how many stacks of each kind. @param {import("@minecraft/server").Container} inv */
+/** How many empty slots this page has, and how many items of each kind. @param {import("@minecraft/server").Container} inv */
 function lookAtPage(inv) {
   /** @type {Map<string, number>} */
-  const keys = new Map();
+  const amounts = new Map();
   let empty = 0;
   for (const s of STORAGE_SLOTS) {
     const item = inv.getItem(s);
     if (!item) empty++;
-    else if (!isButton(item)) keys.set(keyOf(item), (keys.get(keyOf(item)) ?? 0) + 1);
+    else if (!isButton(item)) amounts.set(keyOf(item), (amounts.get(keyOf(item)) ?? 0) + item.amount);
   }
-  return { empty, keys };
+  return { empty, amounts };
 }
 
+/** @type {string[]} the armor and offhand slots (EquipmentSlot values) */
+const WORN = ["Head", "Chest", "Legs", "Feet", "Offhand"];
+
+/**
+ * Everything the player carries right now: the page, the hotbar, the cursor and worn equipment, by kind. A stack that
+ * merely moves between those (a click, a shift-click, a hotbar swap) leaves this total alone, so only a stack that
+ * really came from outside is a pickup.
+ * @param {Player} player @param {import("@minecraft/server").Container} inv @param {Map<string, number>} page
+ */
+function liveTotals(player, inv, page) {
+  const live = new Map(page);
+  /** @param {ItemStack | undefined} item */
+  const add = (item) => {
+    if (item && !isButton(item)) live.set(keyOf(item), (live.get(keyOf(item)) ?? 0) + item.amount);
+  };
+  for (const s of HOTBAR) add(inv.getItem(s));
+  try { add(player.getComponent("minecraft:cursor_inventory")?.item); } catch { /* an unreadable cursor counts as empty */ }
+  try {
+    const worn = player.getComponent("minecraft:equippable");
+    if (worn) for (const slot of WORN) add(worn.getEquipment(/** @type {any} */ (slot)));
+  } catch { /* no equipment to count */ }
+  return live;
+}
 /** Free slots across every page the player has. @param {Player} player @param {import("@minecraft/server").Container} inv */
 function freeEverywhere(player, inv) {
   const total = totalPages(player);
   const cur = curPage(player);
   let free = PAGE_SIZE - usedOnPage(inv);
-  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, readPage(player, p)?.length ?? PAGE_SIZE);
+  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, savedStacks(player, p) ?? PAGE_SIZE);
   return free;
 }
 
 /**
- * When the page is full or down to one free slot, the newest stack moves to another page, so the player never
- * stops picking things up. A stack is "new" when the page holds more stacks of its kind than at the last look.
+ * How many stacks a saved page holds, from its ref (the slots are checked against the snapshot whenever it loads),
+ * so no snapshot is restored for a count. Undefined when the page can't be read.
+ * @param {Player} player @param {number} page
+ */
+function savedStacks(player, page) {
+  try {
+    const state = stateOf(player);
+    const ref = state.pages[page];
+    if (ref && !state.pending && Array.isArray(ref.slots)) return ref.slots.length;
+  } catch {
+    // fall back to reading the page, which reports the problem
+  }
+  return readPage(player, page)?.length;
+}
+
+/** Could a saved page hold this item? False only when the committed index says it holds none; an unknown page may. @param {Player} player @param {number} page @param {string} id */
+function mayHold(player, page, id) {
+  try {
+    const kinds = indexedEntries(stateOf(player), page);
+    if (!kinds) return true;
+    return kinds.some((k) => k.id === id);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * A stack that really arrived on the active page (a pickup, not a click, hotbar swap, cursor drop or armor change)
+ * goes to the earliest earlier page with room, so page 1 fills first and the active page stays free. When the active
+ * page is full or down to one free slot, later pages take overflow too. The pickup is told apart from a move by
+ * the total of everything carried (page, hotbar, cursor, worn gear): a kind only counts when that total grew, and
+ * only up to that growth. Every page touched is read once and everything is one transaction, so a failure changes
+ * nothing, and the look is always refreshed first so a failed attempt is never retried against old numbers.
  * @param {Player} player
  */
 function autoStore(player) {
   const inv = invOf(player);
-  if (!inv || switching.has(player.id)) return;
+  if (!inv || switching.has(player.id) || queuedButtons.has(player.id) || reconciling.has(player.id)) return;
   const total = totalPages(player);
   const cur = curPage(player);
   const now = lookAtPage(inv);
+  const live = liveTotals(player, inv, now.amounts);
   const before = snapshots.get(player.id);
-  snapshots.set(player.id, { page: cur, keys: now.keys });
-  if (!before || before.page !== cur || now.empty > 1) return;
+  snapshots.set(player.id, { page: cur, amounts: now.amounts, live });
+  if (!before || before.page !== cur) return;
 
-  /** @type {number[]} */
-  const others = [];
-  for (let p = 1; p <= total; p++) if (p !== cur) others.push(p);
   /** @type {Map<string, number>} */
-  const extra = new Map();
-  for (const [k, n] of now.keys) if (n > (before.keys.get(k) ?? 0)) extra.set(k, n - (before.keys.get(k) ?? 0));
-  if (!extra.size) return;
+  const gains = new Map();
+  for (const [k, n] of now.amounts) {
+    const gain = Math.min(n - (before.amounts.get(k) ?? 0), (live.get(k) ?? 0) - (before.live.get(k) ?? 0));
+    if (gain > 0) gains.set(k, gain);
+  }
+  if (!gains.size) return;
+  /** @type {number[]} */
+  const targets = [];
+  for (let p = 1; p <= total; p++) if (p !== cur && (p < cur || now.empty <= 1)) targets.push(p);
+  if (!targets.length) return;
 
-  let movedCount = 0;
-  let name = "";
+  /** @type {Map<number, Rec[]>} */
+  const edits = new Map();
+  /** @type {Map<number, ItemStack | undefined>} */
+  const changed = new Map();
   /** @type {Map<number, number>} */
   const perPage = new Map();
-  let empty = now.empty;
-  for (let i = STORAGE_SLOTS.length - 1; i >= 0 && extra.size && empty < 2; i--) {
+  let movedCount = 0;
+  let name = "";
+  for (let i = STORAGE_SLOTS.length - 1; i >= 0 && gains.size; i--) {
     const s = STORAGE_SLOTS[i];
     const item = inv.getItem(s);
-    if (!item || isButton(item)) continue;
+    if (!item || isButton(item) || item.lockMode === ItemLockMode.slot) continue;
     const key = keyOf(item);
-    const want = extra.get(key);
+    const want = gains.get(key);
     if (!want) continue;
-    extra.set(key, want - 1);
-    if (want - 1 <= 0) extra.delete(key);
-    const { rem, moved, edits } = storeOnPages(player, item, others);
+    const piece = item.clone();
+    piece.amount = Math.min(item.amount, want);
+    if (want - piece.amount > 0) gains.set(key, want - piece.amount);
+    else gains.delete(key);
+    const { rem, moved } = storeOnPages(player, piece, targets, edits, true);
     let n = 0;
     for (const [p, c] of moved) {
       n += c;
       perPage.set(p, (perPage.get(p) ?? 0) + c);
     }
     if (!n) continue;
-    const after = carried(inv).filter((e) => e.s !== s);
-    if (rem) after.push({ s, item: rem });
-    commitPages(player, edits, after);
-    if (!rem) empty++;
+    const left = item.amount - n;
+    if (left > 0) {
+      const keep = item.clone();
+      keep.amount = left;
+      changed.set(s, keep);
+    } else changed.set(s, undefined);
     movedCount += n;
     name = item.nameTag ?? pretty(item.typeId);
+    void rem;
   }
   if (!movedCount) return;
-  snapshots.set(player.id, { page: cur, keys: lookAtPage(inv).keys });
-  const dest = [...perPage.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  const after = carried(inv).filter((e) => !changed.has(e.s));
+  for (const [s, item] of changed) if (item) after.push({ s, item });
+  try {
+    commitPages(player, edits, after);
+  } catch (e) {
+    console.warn(`[stash] auto-store: ${e}`);
+    snapshots.delete(player.id); // the next look is a fresh baseline, so this pickup is never retried as new
+    hooks.bar(player, "§cAuto-store could not move your pickup. Nothing changed");
+    return;
+  }
+  const look = lookAtPage(inv);
+  snapshots.set(player.id, { page: cur, amounts: look.amounts, live: liveTotals(player, inv, look.amounts) });
+  const dest = [...perPage.entries()].sort((a, b) => a[0] - b[0]).sort((a, b) => b[1] - a[1])[0][0];
   hooks.bar(player, `§8[§bPage #${dest}§8] §7Auto-stored §f${movedCount}x ${name} §7(${freeEverywhere(player, inv)} slots left)`);
 }
 
+/**
+ * Manual "Fill earlier pages": every page after page 1, hidden or active, pours into the pages before it. Source pages go
+ * in order (2, 3, ...), each source stack in slot order and unsorted, into the earliest earlier page that can take it
+ * (matching stacks first, then a free slot, destination by destination). The hotbar, cursor, buttons and slot-locked
+ * stacks stay; what doesn't fit stays. Everything, the active page included, is one transaction like every page edit,
+ * so a failure changes nothing. Works with auto-store disabled.
+ * @param {Player} player
+ * @returns {{ ok: true, stacks: number, items: number, left: number } | { ok: false, message: string }}
+ */
+export function fillEarlierPages(player) {
+  const id = player.id;
+  const inv = invOf(player);
+  if (!inv || !alive(player)) return { ok: false, message: "You can't move items right now" };
+  if (switching.has(id)) return { ok: false, message: "Another inventory change is still running. Try again in a moment" };
+  try {
+    if (stateOf(player).pending) return { ok: false, message: "Inventory recovery is safely saved and needs an operator" };
+    ensureLayout(player);
+  } catch (e) {
+    return { ok: false, message: `Items not moved: ${e}` };
+  }
+  switching.add(id);
+  try {
+    const cur = curPage(player);
+    const total = totalPages(player);
+    if (total <= 1 || cur > total) return { ok: false, message: "There is no earlier page to fill" };
+    /** @type {Map<number, Rec[]>} */
+    const edits = new Map();
+    /** @type {(Rec & { fixed?: boolean })[]} the live page as records, so it can be a destination too; slot-locked stacks can't be merged into */
+    const live = [];
+    /** @type {Map<number, number>} */
+    const liveWas = new Map();
+    for (const s of STORAGE_SLOTS) {
+      const item = inv.getItem(s);
+      if (!item || isButton(item)) continue;
+      liveWas.set(s, item.amount);
+      const fixed = item.lockMode === ItemLockMode.slot;
+      live.push({ s, ...toRecord(item), n: fixed ? Number.MAX_SAFE_INTEGER : item.amount, fixed });
+    }
+    if (cur < total) edits.set(cur, live);
+    let stacks = 0;
+    let items = 0;
+    let left = 0;
+    for (let p = 2; p <= total; p++) {
+      /** @type {Rec[] | undefined} */
+      let source;
+      if (p === cur) source = live;
+      else {
+        if (!stateOf(player).pages[p] && player.getDynamicProperty(PAGE_PROP + p) === undefined) continue;
+        source = edits.get(p) ?? readPage(player, p);
+        if (!source) return { ok: false, message: `Page ${p} can't be read. Nothing was moved` };
+      }
+      const earlier = Array.from({ length: p - 1 }, (_, i) => i + 1);
+      const kept = [];
+      let touched = false;
+      for (const rec of [...source].sort((a, b) => a.s - b.s)) {
+        const stackItem = /** @type {Rec & { fixed?: boolean }} */ (rec).fixed ? undefined : deserializeStack(rec);
+        if (!stackItem || stackItem.lockMode === ItemLockMode.slot) {
+          kept.push(rec);
+          continue;
+        }
+        const { rem } = storeOnPages(player, stackItem, earlier, edits, true);
+        const n = rec.n - (rem?.amount ?? 0);
+        left += rem?.amount ?? 0;
+        if (n) {
+          stacks++;
+          items += n;
+          touched = true;
+          rec.n -= n;
+        }
+        if (rec.n > 0) kept.push(rec);
+      }
+      if (touched && p !== cur) edits.set(p, kept);
+    }
+    if (!items) return { ok: false, message: "Nothing fit on the earlier pages. Nothing was moved" };
+    edits.delete(cur);
+    /** @type {Map<number, ItemStack | undefined>} */
+    const changed = new Map();
+    const liveNow = new Set();
+    for (const rec of live) {
+      liveNow.add(rec.s);
+      if (rec.n === liveWas.get(rec.s)) continue;
+      changed.set(rec.s, rec.n > 0 ? deserializeStack(rec) : undefined);
+    }
+    for (const s of liveWas.keys()) if (!liveNow.has(s)) changed.set(s, undefined);
+    const after = carried(inv).filter((e) => !changed.has(e.s));
+    for (const [s, item] of changed) if (item) after.push({ s, item });
+    try {
+      commitPages(player, edits, after, cur);
+    } catch (e) {
+      console.warn(`[stash] filling earlier pages: ${e}`);
+      return { ok: false, message: `Items not moved: ${e}` };
+    }
+    snapshots.delete(id); // our own move, not a pickup
+    return { ok: true, stacks, items, left };
+  } catch (e) {
+    console.warn(`[stash] filling earlier pages: ${e}`);
+    return { ok: false, message: `Items not moved: ${e}` };
+  } finally {
+    switching.delete(id);
+  }
+}
 /**
  * Hotbar Refill ran out of a stack and found none like it on this page (realm:refill_need): the fullest stack like it on
  * another page goes into the empty hotbar slot. "Like it": the same item, name and lore, as Hotbar Refill matches them.
@@ -1119,7 +1421,7 @@ export function refillFromPages(player, slot, want) {
   /** @type {{ page: number, entries: Rec[], k: number, n: number } | undefined} */
   let best;
   for (let p = 1; p <= total; p++) {
-    if (p === cur) continue;
+    if (p === cur || !mayHold(player, p, want.id)) continue;
     const entries = readPage(player, p);
     if (!entries) continue;
     entries.forEach((e, k) => {
@@ -1172,7 +1474,10 @@ function tickPlayer(player, withAutoStore) {
     pollButtons(player);
     if (withAutoStore) sweepStrays(player, inv);
   }
-  if (total > 1 && withAutoStore && getFor(player, "autoStore") !== false) autoStore(player);
+  if (total > 1 && withAutoStore) {
+    if (getFor(player, "autoStore") !== false) autoStore(player);
+    else snapshots.delete(player.id); // what arrived while it was off is not new when it is turned back on
+  }
 }
 
 /** @type {Map<string, { until: number, text: string, logged: number }>} a player whose last tick failed waits before the next try */
@@ -1289,7 +1594,7 @@ function pageUsage(player, inv) {
   const total = totalPages(player);
   const cur = curPage(player);
   const usage = [];
-  for (let p = 1; p <= total; p++) usage.push(p === cur ? usedOnPage(inv) : Math.min(PAGE_SIZE, readPage(player, p)?.length ?? 0));
+  for (let p = 1; p <= total; p++) usage.push(p === cur ? usedOnPage(inv) : Math.min(PAGE_SIZE, savedStacks(player, p) ?? 0));
   return usage;
 }
 
@@ -1310,7 +1615,13 @@ function scanItems(player, inv) {
     const item = inv.getItem(s);
     if (item && !isButton(item)) add(`${item.typeId}|${item.nameTag ?? ""}`, item.nameTag ?? pretty(item.typeId), item.amount, cur);
   }
+  const state = stateOf(player);
   for (let p = 1; p <= total; p++) {
+    const kinds = indexedEntries(state, p);
+    if (kinds) {
+      for (const { id, name, n } of kinds) add(`${id}|${name ?? ""}`, name ?? pretty(id), n, p);
+      continue;
+    }
     for (const e of readPage(player, p) ?? []) add(`${e.id}|${e.name ?? ""}`, e.name ?? pretty(e.id), e.n, p);
   }
   return [...found.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -1361,6 +1672,13 @@ function inventoryMenu(player) {
       }
       form.button("Scan all items across pages\n§8Find which page holds an item");
       actions.push(() => scanMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
+      {
+        form.button("Fill earlier pages\n§8Pull every later page's stacks into free space on earlier pages");
+        actions.push(() => {
+          const r = fillEarlierPages(player);
+          player.sendMessage(r.ok ? `§aMoved ${r.items} items (${r.stacks} stacks) to earlier pages${r.left ? `; ${r.left} did not fit and stayed here` : ""}.` : `§c${r.message}`);
+        });
+      }
       form.button("Move to page\n§8Send a stack or a whole row to another page");
       actions.push(() => openMoveMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
     }
@@ -1508,7 +1826,7 @@ async function moveMenu(player) {
     const where = new ActionFormData().title("§lMove to which page?").body(`Moving ${plural(slots.length, "stack")} from Page #${cur}. A page that can't take all of it refuses the move, and nothing changes.`);
     for (let p = 1; p <= total; p++) {
       if (p === cur) continue;
-      const held = readPage(player, p)?.length;
+      const held = savedStacks(player, p);
       where.button(`Page #${p}\n§8${held === undefined ? "can't be read" : `${PAGE_SIZE - held} of ${PAGE_SIZE} slots free`}`);
       targets.push(p);
     }
@@ -1557,4 +1875,33 @@ async function settingsMenu(player) {
     player.sendMessage(out.message);
   }
   hooks.bar(player, "§aInventory settings saved");
+}
+
+/**
+ * Operator recovery for a stuck inventory journal: the operator confirms what will happen, the summary is read
+ * again on submit (the journal may have changed or been cleared meanwhile), and only then is the export run.
+ * @param {Player} operator @param {Player} target
+ * @returns {Promise<string>}
+ */
+export async function recoverInventory(operator, target) {
+  const own = (/** @type {{ s: number, item: ItemStack | undefined }} */ e) => BUTTON_SLOTS.includes(e.s) && isButton(e.item);
+  if (!alive(operator) || !isOp(operator)) return "Only an operator who is here and healthy can recover an inventory.";
+  const first = pendingSummary(target, own);
+  if (!first) return `${target.name} has nothing waiting for recovery.`;
+  const form = new ActionFormData()
+    .title("§lRecover inventory")
+    .body(
+      `${target.name}'s inventory move did not finish. Their saved before-image holds ${first.items} stacks.\n` +
+        `Confirming puts those stacks into ${first.chests} chest(s) on empty floor next to you, then clears the journal. ` +
+        `Their current inventory is not touched, so inspect it and back up what matters first: items they still carry will exist twice.` +
+        (first.started ? "\nAn export was already started: it must be finished in the dimension where it began." : "")
+    )
+    .button("§cExport to chests")
+    .button("Cancel");
+  const res = /** @type {any} */ (await form.show(operator));
+  if (res.canceled || res.selection !== 0) return "Canceled, nothing changed.";
+  if (!alive(operator) || !isOp(operator) || !target.isValid) return "The operator or the player is no longer available; nothing was exported. Run it again.";
+  const again = pendingSummary(target, own);
+  if (!again || again.id !== first.id || again.items !== first.items) return "The journal changed while you were deciding; nothing was exported. Run it again.";
+  return exportPending(operator, target, own).message;
 }
