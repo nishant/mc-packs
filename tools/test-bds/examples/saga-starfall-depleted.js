@@ -1,7 +1,11 @@
 // A real built Starfall Crater stays depleted while late players finish Fallen Light with other sources.
 // Guidance is expected RED on the original source. It is checked only in phase 3: a failed t.check
 // cancels t.restart, which would hide the persistence guards. Inventory credit and exactly-once rewards
-// are before-PASS guards, not proof of the guidance fix. This definition was syntax-reviewed, not executed.
+// are before-PASS guards, not proof of the guidance fix.
+//
+// The first report waits for the public end:act1_signs offer. Fallen Light's optional meteor step is
+// pack-gated, so chapterDone is false and endChapter returns with no form until the startup scan
+// (worldLoad + 60 ticks, then a 40-tick window) sets installed.ready. That wait is not a guidance result.
 //
 // Official suite skip is a fixture prerequisite, not a content result. --packs needs a bash recipe, and
 // this stager is not one suite.mjs recognizes. Do not add mkdir/cp: the Windows suite mangles those
@@ -20,11 +24,20 @@ export default async function (t) {
   const send = (id, message) => sys.sendScriptEvent(id, JSON.stringify(message));
   const replies = new Map();
   let nextRequest = 0;
+  const offers = [];
   sys.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
     if (id !== "harness:starfall_reply") return;
     const reply = JSON.parse(message);
     replies.set(reply.req, reply);
   }, { namespaces: ["harness"] });
+  sys.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
+    if (id !== "realm:npc_offer") return;
+    try {
+      offers.push(JSON.parse(message));
+    } catch {
+      // A non-JSON offer is not this protocol.
+    }
+  }, { namespaces: ["realm"] });
   async function request(player, action, extra = {}) {
     const req = `sf${t.phase}-${++nextRequest}`;
     send("harness:starfall_request", { req, player: player.id, action, ...extra });
@@ -46,8 +59,37 @@ export default async function (t) {
     t.assert(hp > 0 && at.y > 0, `${player.name} is not standing before dialogue at ${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)} hp=${hp}`);
     t.assert(mode.toLowerCase() === "survival", `${player.name} left survival (${mode})`);
   }
+  // Poll the public offer. A blind sleep would hide a chapter that never becomes reportable.
+  async function waitEndOffer(player) {
+    const pending = new Set();
+    const seen = [];
+    for (let i = 0; i < 40; i++) {
+      const req = `endready-${t.phase}-${++nextRequest}`;
+      pending.add(req);
+      send("realm:npc_talk", { player: player.id, npc: "sol", req });
+      await t.wait(5);
+      const mine = offers.filter((offer) => pending.has(offer.req) && offer.pack === "saga_bp");
+      for (const offer of mine) if (!seen.includes(offer.key)) seen.push(offer.key);
+      if (mine.some((offer) => offer.key === "end:act1_signs")) {
+        t.log(`end:act1_signs offered after ${i * 5} ticks (${seen.join(",")})`);
+        return true;
+      }
+    }
+    let packsReady = "unread";
+    let progress = "unread";
+    try {
+      const state = await request(player, "state");
+      packsReady = String(state.packsReady);
+      progress = JSON.stringify(state.progress && state.progress.o);
+    } catch (error) {
+      progress = `state unread: ${error}`;
+    }
+    t.fail(`end:act1_signs was not offered in 200 ticks; progress=${progress} packsReady=${packsReady} recentOffers=${seen.join(",") || "none"}`);
+    return false;
+  }
   async function choose(player, key) {
     standing(player);
+    if (key.startsWith("end:") && !(await waitEndOffer(player))) return;
     let next = t.waitForm(player, { timeout: 300 });
     send("realm:npc_choose", { pack: "saga_bp", player: player.id, npc: "sol", key });
     const bodies = [];
