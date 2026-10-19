@@ -17,6 +17,7 @@ entries below as a changelog.
 - A treasure map's Warmer / Colder line now waits for notes and gives way to Elytra, Relics and expedition lines instead of hiding them.
 - Rain, storm, tornado, aurora and moon effects can learn about a storm already under way when they are added to a world.
 - Story hints explain how to replace required bells, candles and other blocks if someone mined them out. Building steps accept poplar wood and the missing sapling types too.
+- Townsfolk no longer open conversations or start NPC-editor work after another protection handler has already canceled the tap.
 
 ## Clues without interruptions
 

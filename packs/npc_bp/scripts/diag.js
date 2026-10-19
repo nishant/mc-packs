@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "npc_bp";
-const VERSION = "1.7.12";
+const VERSION = "1.7.13";
 const NAME = "Townsfolk";
 
 const API = 1;

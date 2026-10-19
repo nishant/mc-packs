@@ -740,6 +740,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return;
   const { player, target } = ev;
   try {
     if (target.typeId !== NPC_TYPE || !target.hasTag(OWNER_TAG)) return;
