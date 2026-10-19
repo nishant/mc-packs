@@ -169,25 +169,38 @@ export default async function (t) {
     }
     t.fail(`native collect progress did not reach ${count}`);
   }
-  t.server("/gamerule doMobSpawning false");
-  t.server("/gamerule keepInventory true");
+  // Gamerules still apply after restart: v5 set the same values again and both returned ok.
+  const mobs = t.server("/gamerule doMobSpawning false");
+  const keep = t.server("/gamerule keepInventory true");
+  if (!mobs.ok || !keep.ok) t.fail(`fixture gamerules were rejected: mobs=${mobs.error ?? mobs.successCount ?? 0} keep=${keep.error ?? keep.successCount ?? 0}`);
   // A circle ticking area accepts radius 1-4 only. Radius 6 is rejected, so the chunk never loads.
-  // Create the owned area once. It persists with the world: v4 remove succeeded after restart, then
-  // the same-tick add returned successCount 0 with no exception because the name was not free yet.
-  // Later phases reuse that area. loadArea still waits until the crater chunks can be read.
+  // Physical construction is phase 1 only. An unchanged /fill returns successCount 0 and does not throw,
+  // so later phases must not rebuild the pad, crater base, or prefab. They read those postconditions.
+  // loadArea still waits until the crater chunks can be read. Give, party, and report commands stay later:
+  // those change player state and are not persisted terrain.
+  await t.loadArea(500, 500, { radius: 4 });
   if (t.phase === 1) {
     const area = t.server("/tickingarea add circle 500 0 500 4 o74_crater true");
     if (!area.ok) t.fail(`fixture ticking area was rejected: ${area.error ?? `successCount ${area.successCount ?? 0}`}`);
+    // Players stand at x 515 and 517, outside the crater fill (488..512). The pad keeps that fall from killing them.
+    const pad = t.server("/fill 513 57 494 522 63 506 stone");
+    if (!pad.ok) t.fail(`standing pad was rejected: ${pad.error ?? `successCount ${pad.successCount ?? 0}`}`);
+    const base = t.server("/fill 488 57 488 512 63 512 stone");
+    if (!base.ok) t.fail(`crater base was rejected: ${base.error ?? `successCount ${base.successCount ?? 0}`}`);
   } else {
-    t.log(`reusing persisted ticking area o74_crater in phase ${t.phase}`);
+    t.log(`reusing persisted crater fixture in phase ${t.phase}`);
   }
-  await t.loadArea(500, 500, { radius: 4 });
-  // Players stand at x 515 and 517, outside the crater fill (488..512). A pad here keeps the fall from killing them.
-  const pad = t.server("/fill 513 57 494 522 63 506 stone");
-  if (!pad.ok) t.fail(`standing pad was rejected: ${pad.error ?? "command failed"}`);
+  for (const [x, z] of [[515, 500], [517, 500]]) {
+    let block;
+    try {
+      block = t.dimension.getBlock({ x, y: 63, z });
+    } catch (error) {
+      t.fail(`standing pad at ${x} 63 ${z} is not loaded: ${error}`);
+    }
+    t.assert(block?.typeId === "minecraft:stone", `standing pad persisted as stone at ${x} 63 ${z} (${block?.typeId ?? "unloaded"})`);
+  }
   const late = await t.player("LateSearcher", { op: true, x: 515, y: 65, z: 500 });
   if (t.phase === 1) {
-    t.server("/fill 488 57 488 512 63 512 stone");
     const first = await t.player("FirstSearcher", { op: true, x: 515, y: 65, z: 500 });
     const built = await request(first, "build", { origin: { x: 500, y: 64, z: 500 } });
     t.assert(built.place?.built === 1, "the shipped Starfall prefab was actually built");
