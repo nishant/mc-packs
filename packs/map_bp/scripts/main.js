@@ -1770,6 +1770,8 @@ function onEvent(id, m, source) {
         pose: t ? { ...t.at, dim: t.dim, heading: t.heading, radius: t.radius, north: t.north } : undefined,
         target: t?.target,
         wp: player ? waypointOf(player) ?? null : null,
+        marks: player ? marksOf(player) : [],
+        resetGen: currentGen(),
         terrain: player ? {
           store: storeFor(player.id, player.dimension.id).id,
           surface: surface ? { columns: surface.cols.size, fine: surface.fine.size } : undefined,
