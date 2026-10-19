@@ -290,3 +290,53 @@ for (const [folder, bases] of Object.entries(CONSUMERS)) {
     assert.doesNotMatch(src, /(saveJson|saveWorld)\(\s*(world,\s*)?PROP_(OWED|PENDING)\b/);
   });
 }
+
+test("applyParts: a failure before, in the middle of, or after the grants saves exactly the ungiven parts", () => {
+  const { applyParts } = mod;
+  const run = (failAt) => {
+    const given = [];
+    const saved = [];
+    const r = applyParts(["a", "b", "c"], (p) => {
+      if (p === failAt) throw new Error("nope");
+      given.push(p);
+    }, (failed) => saved.push(...failed));
+    return { given, saved, r };
+  };
+  assert.deepEqual(run("a"), { given: ["b", "c"], saved: ["a"], r: { applied: 2, failed: ["a"] } }, "before");
+  assert.deepEqual(run("b").saved, ["b"], "mid");
+  assert.deepEqual(run("b").given, ["a", "c"]);
+  assert.deepEqual(run("none"), { given: ["a", "b", "c"], saved: [], r: { applied: 3, failed: [] } }, "after: all given, nothing saved again");
+});
+
+test("applyParts: a given part is never saved again, so a restart cannot pay it twice", () => {
+  const { applyParts } = mod;
+  const w = fakeWorld();
+  const store = createOwedStore(w, { base: "t:owed", normalize: (v) => v });
+  store.set("p", [5, 7]);
+  const paid = [];
+  const parts = store.take("p");
+  applyParts(parts, (n) => {
+    if (n === 7) throw new Error("grant failed");
+    paid.push(n);
+  }, (failed) => store.set("p", failed));
+  assert.deepEqual(paid, [5]);
+  assert.deepEqual(store.get("p"), [7], "only the ungiven part is owed again");
+});
+
+test("applyParts: when saving the failed parts also fails it is reported, not thrown", () => {
+  const { applyParts } = mod;
+  const warned = [];
+  assert.doesNotThrow(() => applyParts([1], () => { throw new Error("x"); }, () => { throw new Error("full"); }, (m) => warned.push(m)));
+  assert.equal(warned.length, 2);
+});
+test("every owed consumer hands over through applyParts and never swallows a failed grant", () => {
+  for (const pack of ["cooking", "relics", "bounty", "guilds", "town", "fishing"]) {
+    const src = readFileSync(join(root, "packs", `${pack}_bp`, "scripts", "main.js"), "utf8");
+    assert.match(src, /applyParts\(/, `${pack} hands over through applyParts`);
+  }
+});
+
+test("town normalizeOwed keeps fields it does not know", () => {
+  const src = readFileSync(join(root, "packs", "town_bp", "scripts", "main.js"), "utf8");
+  assert.match(src, /return \{ \.\.\.o, cr:/);
+});

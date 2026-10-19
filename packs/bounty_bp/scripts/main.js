@@ -11,7 +11,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecra
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { createOwedStore } from "./owed.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -140,8 +140,15 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   try {
     const n = owedStore.take(player.id);
     if (typeof n !== "number") return;
-    crownsObjective().addScore(player, Math.floor(n));
-    player.sendMessage(`§6+${fmt(n)} Crowns §7(Bounty rewards while you were away)`);
+    const { applied } = applyParts(
+      [Math.floor(n)],
+      (crowns) => crownsObjective().addScore(player, crowns),
+      (failed) => {
+        if (!owedStore.update(player.id, (cur) => (typeof cur === "number" ? cur : 0) + failed.reduce((a, b) => a + b, 0))) throw new Error("could not be saved");
+      },
+      (m) => console.warn(`[bounty] ${m}`),
+    );
+    if (applied) player.sendMessage(`§6+${fmt(n)} Crowns §7(Bounty rewards while you were away)`);
   } catch (e) {
     console.warn(`[bounty] ${e}`);
   }

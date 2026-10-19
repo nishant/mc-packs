@@ -4,7 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { createOwedStore } from "./owed.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 const PACK = "fishing_bp";
 const PROP_WEATHER = "fishing:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -819,10 +819,18 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
       if (!player.isValid) return;
       const due = owedStore.take(player.id);
       if (!Array.isArray(due)) return;
-      if (!addCrowns(player, due[0])) {
-        // The crowns could not be added: keep them owed for the next join.
-        owedStore.update(player.id, (cur) => [(Array.isArray(cur) ? Number(cur[0]) || 0 : 0) + (Number(due[0]) || 0), due[1], due[2]]);
-      } else {
+      const { applied } = applyParts(
+        [due],
+        (d) => {
+          if (!addCrowns(player, d[0])) throw new Error("the crowns could not be added");
+        },
+        (failed) => {
+          // Keep them owed for the next join.
+          if (!owedStore.update(player.id, (cur) => [(Array.isArray(cur) ? Number(cur[0]) || 0 : 0) + failed.reduce((a, d) => a + (Number(d[0]) || 0), 0), due[1], due[2]])) throw new Error("could not be saved");
+        },
+        (m) => console.warn(`[fishing] ${m}`),
+      );
+      if (applied) {
         player.sendMessage(`§6+${due[0]} Crowns §7(${due[1]})`);
         send("realm:quest_done", { player: player.id, pack: PACK, id: String(due[2] ?? "tournament"), label: String(due[1]), kind: "tournament" });
       }

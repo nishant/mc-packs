@@ -18,7 +18,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, 
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { createOwedStore } from "./owed.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
@@ -197,20 +197,32 @@ function guildFor(p) {
 function normalizeOwed(o) {
   if (!o || typeof o !== "object" || Array.isArray(o)) throw new Error("not an owed record");
   const q = Array.isArray(o.q) ? o.q.filter((/** @type {unknown} */ x) => Array.isArray(x) && x.length === 3 && x.every((y) => typeof y === "string")) : [];
-  return { cr: Math.max(0, Math.floor(Number(o.cr) || 0)), q: q.slice(-10) };
+  return { ...o, cr: Math.max(0, Math.floor(Number(o.cr) || 0)), q: q.slice(-10) };
 }
 
 // One world property per player ("town:owed:<playerId>") plus the index "town:owed_idx" (owed.js): no more shared-property cliff.
 const owedStore = createOwedStore(world, { base: "town:owed", normalize: normalizeOwed, summarize: (v) => `${v?.cr ?? 0} Crowns, ${v?.q?.length ?? 0} projects` });
 
-/** @param {Player} p @param {number} crowns @param {[string, string, string][]} quests @param {string} why */
-function payNow(p, crowns, quests, why) {
+/** @param {Player} p @param {number} crowns @param {[string, string, string][]} quests @param {string} why @param {(crowns: number) => void} [keep] called with Crowns that could not be added */
+function payNow(p, crowns, quests, why, keep) {
   if (crowns > 0) {
-    try {
-      crownsObjective()?.addScore(p, Math.floor(crowns));
-      p.sendMessage(`§6+${Math.floor(crowns)} Crowns §7(${why})`);
-    } catch (e) {
-      console.warn(`[town] crowns: ${e}`);
+    const whole = Math.floor(crowns);
+    const { applied } = applyParts(
+      [whole],
+      (n) => {
+        const obj = crownsObjective();
+        if (!obj) throw new Error("no crowns scoreboard");
+        obj.addScore(p, n);
+      },
+      (failed) => keep?.(failed[0]),
+      (m) => console.warn(`[town] ${m}`),
+    );
+    if (applied) {
+      try {
+        p.sendMessage(`§6+${whole} Crowns §7(${why})`);
+      } catch (e) {
+        console.warn(`[town] crowns message: ${e}`);
+      }
     }
   }
   const rep = get("repPerProject");
@@ -237,7 +249,9 @@ function payOwed(p) {
   if (!raw) return;
   const o = normalizeOwed(raw);
   p.sendMessage("§6Town projects you helped with were finished while you were away. Thank you!");
-  payNow(p, o.cr, o.q, "Town projects");
+  payNow(p, o.cr, o.q, "Town projects", (crowns) => {
+    if (!owedStore.update(p.id, (cur) => ({ ...o, ...(cur ? normalizeOwed(cur) : {}), cr: crowns + (cur ? normalizeOwed(cur).cr : 0), q: [] }))) console.warn(`[town] owed: ${crowns} Crowns for ${p.id} could not be saved`);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +395,14 @@ function finishProject(t, p, pr) {
   ranked.forEach(([id, name, n], i) => {
     const crowns = CONFIG.topCrowns[i] ?? 0;
     const pl = online(id);
-    if (pl) payNow(pl, crowns, [quest], `${p.name}, ${t.n}`);
+    if (pl)
+      payNow(pl, crowns, [quest], `${p.name}, ${t.n}`, (kept) => {
+        // The quest lines went out already: only the Crowns that could not be added are owed.
+        owedStore.update(id, (cur) => {
+          const o = cur ? normalizeOwed(cur) : { cr: 0, q: [] };
+          return { ...o, cr: o.cr + kept };
+        });
+      });
     else {
       owe(id, crowns, quest);
       if (letters++ >= LETTERS_MAX) return;

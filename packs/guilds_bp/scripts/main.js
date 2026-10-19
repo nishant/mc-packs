@@ -4,7 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { createOwedStore } from "./owed.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 /** @typedef {"miners" | "growers" | "wardens" | "wayfarers"} Guild */
 /** @typedef {import("@minecraft/server").ScoreboardObjective} ScoreboardObjective */
@@ -227,7 +227,14 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   try {
     const mine = pendingStore.take(player.id);
     if (!mine) return;
-    for (const g of GUILDS) if (mine[g]) addRep(player, g, /** @type {number} */ (mine[g]), "while you were away");
+    applyParts(
+      GUILDS.filter((g) => mine[g]),
+      (g) => addRep(player, g, /** @type {number} */ (mine[g]), "while you were away"),
+      (failed) => {
+        for (const g of failed) addPending(player.id, g, /** @type {number} */ (mine[g]));
+      },
+      (m) => console.warn(`[guilds] ${m}`),
+    );
   } catch (e) {
     console.warn(`[guilds] ${e}`);
   }

@@ -5,7 +5,7 @@ import { CONFIG } from "./config.js";
 import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./recipes.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { createOwedStore } from "./owed.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
@@ -440,10 +440,17 @@ function readCards(player) {
 function applyPending(player) {
   const list = pendingStore.take(player.id);
   if (!Array.isArray(list)) return;
-  for (const id of list) {
-    const d = dishById.get(id);
-    if (d) learn(player, d, "from a story");
-  }
+  applyParts(
+    list.filter((id) => dishById.has(id)),
+    (id) => learn(player, /** @type {Dish} */ (dishById.get(id)), "from a story"),
+    (failed) => {
+      for (const id of failed) {
+        const d = dishById.get(id);
+        if (d) addPending(player.id, d);
+      }
+    },
+    (m) => console.warn(`[cooking] ${m}`),
+  );
 }
 
 /** @param {string} pid @param {Dish} d */
@@ -593,11 +600,17 @@ function settle(pid, d, n) {
 function applyOwed(player) {
   const mine = owedStore.take(player.id);
   if (!mine || typeof mine !== "object" || Array.isArray(mine)) return;
-  for (const [id, n] of Object.entries(mine)) {
-    const d = dishById.get(id);
-    const batches = Math.floor(Number(n));
-    if (d && batches > 0) deliver(player, d, batches);
-  }
+  const parts = Object.entries(mine)
+    .map(([id, n]) => /** @type {[string, number]} */ ([id, Math.floor(Number(n))]))
+    .filter(([id, n]) => dishById.has(id) && n > 0);
+  applyParts(
+    parts,
+    ([id, n]) => deliver(player, /** @type {Dish} */ (dishById.get(id)), n),
+    (failed) => {
+      for (const [id, n] of failed) owe(player.id, /** @type {Dish} */ (dishById.get(id)), n);
+    },
+    (m) => console.warn(`[cooking] ${m}`),
+  );
 }
 
 /** Is this cauldron a cooking pot (a lit campfire under it)? @param {import("@minecraft/server").Block} block */

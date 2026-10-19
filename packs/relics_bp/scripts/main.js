@@ -15,7 +15,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { createOwedStore } from "./owed.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 // A relic is a vanilla item that doesn't stack, with a name, lore and the item dynamic property
 // `relic:id` (plus `relic:serial`, a number unique on this realm). An anvil can rename any item, but
@@ -439,11 +439,22 @@ function deliver(player) {
   if (!player.isValid) return;
   const entry = pendingStore.take(player.id);
   if (!entry) return;
-  for (const id of entry.r ?? []) {
-    const def = relics.get(id);
-    if (def) giveRelic(player, def, "You received");
-  }
-  if (entry.s > 0) giveShards(player, entry.s);
+  /** @type {({ relic: string } | { shards: number })[]} */
+  const parts = [];
+  for (const id of Array.isArray(entry.r) ? entry.r : []) if (relics.has(id)) parts.push({ relic: id });
+  if (Number(entry.s) > 0) parts.push({ shards: Number(entry.s) });
+  applyParts(
+    parts,
+    (part) => {
+      if ("relic" in part) giveRelic(player, /** @type {any} */ (relics.get(part.relic)), "You received");
+      else giveShards(player, part.shards);
+    },
+    (failed) => {
+      for (const part of failed) if ("relic" in part) queue(player.id, part.relic, 0);
+      else queue(player.id, undefined, part.shards);
+    },
+    (m) => console.warn(`[relics] ${m}`),
+  );
 }
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {

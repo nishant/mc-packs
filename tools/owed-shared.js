@@ -353,3 +353,31 @@ export function createOwedStore(world, options) {
   };
   return store;
 }
+/**
+ * Hands over what `take` returned, one part at a time (a recipe, a dish, a relic, an amount of Crowns). A part whose
+ * `apply` returned counts as given and is never saved again; a part whose `apply` threw was not given and is passed,
+ * with the other failed ones, to `requeue` so the next join retries exactly those. Keep what happens after the grant
+ * (chat lines, sounds) out of `apply` or in its own try/catch: a throw there must not undo a grant.
+ * @template T @param {T[]} parts @param {(part: T) => void} apply @param {(failed: T[]) => void} requeue @param {(message: string) => void} [warn]
+ * @returns {{ applied: number, failed: T[] }}
+ */
+export function applyParts(parts, apply, requeue, warn = () => {}) {
+  /** @type {T[]} */
+  const failed = [];
+  for (const part of parts) {
+    try {
+      apply(part);
+    } catch (e) {
+      failed.push(part);
+      warn(`could not hand over ${JSON.stringify(part)}, kept for the next join: ${e}`);
+    }
+  }
+  if (failed.length) {
+    try {
+      requeue(failed);
+    } catch (e) {
+      warn(`lost ${JSON.stringify(failed)}: ${e}`);
+    }
+  }
+  return { applied: parts.length - failed.length, failed };
+}
