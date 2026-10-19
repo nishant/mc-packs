@@ -1,6 +1,6 @@
 // Story characters and story mobs the pack spawns for one player's scene: who they belong to, keeping
 // them where they should be, and cleaning them up. Imports only util.js.
-import { system, world } from "@minecraft/server";
+import { GameMode, system, world } from "@minecraft/server";
 import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
 import { spawnFresh } from "./spawn.js";
 import { DIMENSIONS, dist3, hash } from "./util.js";
@@ -27,6 +27,7 @@ const nameLabels = createNameLabels({
   ownerTag: ACTOR,
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
+  spectatorsExcluded: true,
 });
 
 /**
@@ -169,7 +170,7 @@ export function updateActorLabels() {
       return [];
     }
   });
-  nameLabels.sync(targets, world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /** Removes every actor matching. @param {{ owner?: string, key?: string, role?: Actor["role"] }} f @param {boolean} [effect] */
