@@ -7,6 +7,7 @@ import { FAR, FAR_KINDS, MARKERS, WOOLS, coarse, markerLooks, nearRiddle, treeOf
 import { isProtected, protectedBox } from "./zones.js";
 import { isSlot, sideBoxes } from "./side.js";
 import { ANY_WOOL, kindOf, record, release, startSweep } from "./cleanup.js";
+import { drawWarmth, noteRequest } from "./bar.js";
 import { onScriptEvent } from "./script-events.js";
 
 const PACK = "maps_bp";
@@ -258,10 +259,14 @@ const cache = new Map();
 const retryAt = new Map();
 /** Last distance shown per player and hunt, for Warmer / Colder. @type {Map<string, number>} */
 const lastDistance = new Map();
+/** Tick until which another pack's note or a higher steady line holds a player's action bar (the Warmer / Colder line waits). @type {Map<string, number>} */
+const barHeld = new Map();
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   cache.delete(playerId);
   lastNpc.delete(playerId);
+  barHeld.delete(playerId);
+  mapHolders.delete(playerId);
   for (const key of [...jobs.keys()]) if (key.startsWith(`${playerId}/`)) jobs.delete(key);
   for (const key of [...lastDistance.keys()]) if (key.startsWith(`${playerId}/`)) lastDistance.delete(key);
   for (const key of [...retryAt.keys()]) if (key.startsWith(`${playerId}/`)) retryAt.delete(key);
@@ -531,13 +536,30 @@ function step(player, hunt) {
   }
 }
 
+/** Players who held a treasure map at the last warmth pass: only their bars matter to the Warmer / Colder line. @type {Set<string>} */
+const mapHolders = new Set();
+
+// Other packs' notes and steady lines hold the bar (the action bar protocol): the Warmer / Colder line waits for them.
+onScriptEvent("realm:actionbar", ({ message }) => {
+  if (!mapHolders.size) return;
+  try {
+    noteRequest(barHeld, JSON.parse(message), system.currentTick);
+  } catch {
+    // not ours
+  }
+});
+
 system.runInterval(() => {
   if (get("warmth") !== true) return;
   for (const player of world.getAllPlayers()) {
     try {
       const inv = inventoryOf(player);
       const id = mapIdOf(inv?.getItem(player.selectedSlotIndex));
-      if (!id) continue;
+      if (!id) {
+        mapHolders.delete(player.id);
+        continue;
+      }
+      mapHolders.add(player.id);
       // A map from a finished or abandoned hunt (a copy kept in a chest) says so, also when no hunt is left.
       const hunt = huntsOf(player).find((h) => h.id === id);
       let text;
@@ -567,11 +589,7 @@ system.runInterval(() => {
       }
       const where = getFor(player, "where");
       if (isSlot(where)) side.show(player, where, text, 45);
-      else {
-        // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
-        send("realm:actionbar", { player: player.id, ticks: 45, from: "maps_bp" });
-        player.onScreenDisplay.setActionBar(text);
-      }
+      else drawWarmth(player, text, barHeld, system.currentTick, send); // a steady line of the action bar protocol (scripts/bar.js)
     } catch (e) {
       console.warn(`[maps] ${e}`);
     }
