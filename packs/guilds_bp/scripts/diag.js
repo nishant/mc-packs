@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "guilds_bp";
-const VERSION = "1.1.8";
+const VERSION = "1.1.9";
 const NAME = "Guilds & Reputation";
 
 const API = 1;

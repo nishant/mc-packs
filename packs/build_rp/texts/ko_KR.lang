@@ -154,6 +154,8 @@ eb.settings.admin_destroy_creative=§c관리§r - 파괴 모드: 창의 전용\n
 eb.settings.admin_allow_inf_reach=§c관리§r - 무한 범위 허용\n§7끄기: 무한 범위 전역 비활성화
 eb.settings.admin_max_reach_cap=§c관리§r - 최대 무한 범위 거리\n§7현재: §e%1  §70 = 제한 없음
 eb.settings.admin_max_blocks_cap=§c관리자§r - 최대 블록 상한 (플레이어당)\n§7현재: §e%1  §7최대: §e%2
+eb.settings.admin_default_max_blocks=§c관리자§r - 건축당 기본 블록 수\n§7저장된 한도가 없는 플레이어. 현재: §e%1  §7최대: §e%2
+eb.set.admin_default_blocks=기본 블록 수
 eb.settings.admin_auto_give_book=§c관리§r - 건축의 서 자동 지급\n§7켜기: 플레이어 참여 시 자동 지급
 eb.settings.admin_config_tag=config 명령어를 필수 태그로 제한\n§7켜져 있을 경우 필요한 태그를 가진 플레이어만 /config 를 사용할 수 있습니다.
 
@@ -397,7 +399,6 @@ eb.join.welcome=§a[Effortless Building] §r§6건축의 서§r와 §6튜토리�
 eb.help.title=도움말
 eb.help.body=§f§6튜토리얼§f 책이 그림으로 모든 것을 설명합니다. 손에 들면 눈앞에서 펼쳐집니다.
 eb.help.btn.book=§l튜토리얼 책§r\n§8받거나 여는 법 보기
-eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
 eb.help.btn.setup=§l빠른 설정§r\n§8애드온을 기기에 맞추기
 eb.help.book_hold=§a[EB] §r§6튜토리얼§r 책을 이미 가지고 있습니다. 손에 들면 눈앞에서 펼쳐집니다.
 eb.help.book_given=§a[EB] §r§6튜토리얼§r 책을 드립니다. 손에 들면 눈앞에서 펼쳐집니다.
@@ -449,7 +450,6 @@ eb.set.admin_auto_give_book=접속 시 책 지급
 eb.set.admin_lock_quality=미리보기 품질 고정
 eb.set.admin_vanilla_menus=모두에게 기본 메뉴
 eb.set.book_language=책 언어
-eb.set.book_language.tip=책 언어\n§7튜토리얼 책과 플로팅 메뉴의\n§7힌트 및 레슨에 쓰이는 언어.
 eb.help.btn.language=§l책 언어§r\n§8English, Español, Deutsch, 日本語 ...
 entity.eb:language_picker.name=언어
 eb.palette.dist.dissolve_x=디졸브 X

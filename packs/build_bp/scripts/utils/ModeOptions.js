@@ -1,5 +1,7 @@
 // @ts-nocheck
 const DEFAULTS = {
+    line:          { curve: "straight" },
+    diagonal_line: { curve: "straight" },
     wall:          { fill: "filled" },
     floor:         { fill: "filled" },
     diagonal_wall: { fill: "filled" },

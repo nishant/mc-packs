@@ -7,6 +7,15 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Earlier pages and bounded offline rewards
+
+- New pickups fill earlier inventory pages first. Fill earlier pages in /realm:inv tidies every later page without sorting; your hotbar stays put. Story collect steps count your saved pages too, without giving free hand-in credit.
+- Operators can export a retained failed inventory save with /realm:inv_recover. Back up and inspect the player's live inventory and recovery chests: it is a backup export, not automatic duplicate removal.
+- Pack letters have separate retention and inbox limits, leaving room for player mail. Old offline rewards use bounded per-player saves instead of one growing property.
+- Inactive gamertag protection and earned title records expire after a year by default; solo parties after 180 days. Operators can set each retention to 0 to keep them indefinitely. Untimestamped old records start counting now.
+- /realm:map_reset confirm clears destinations and marks for online players now and offline players once on return. New marks survive stale menus.
+- Building beds keeps paired halves and one-item accounting. The normal default stays 50000 blocks; the operator Large server profile uses 2000, operator-only tools and no Infinite Reach.
+
 ## Clear quests and safer inventory pages
 
 - Long quest steps wrap instead of being cut off with "...". A full tracker says how many more steps are in /realm:saga. Empty minimap panels now hide their backgrounds too.
