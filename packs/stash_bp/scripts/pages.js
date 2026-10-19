@@ -1436,6 +1436,9 @@ export async function openMoveMenu(player) {
   moveOpen.add(player.id);
   try {
     await moveMenu(player);
+  } catch (e) {
+    console.warn(`[stash] move to page: ${e}`);
+    if (alive(player)) hooks.bar(player, `§cMove to page isn't available: ${e}`);
   } finally {
     moveOpen.delete(player.id);
   }

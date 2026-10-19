@@ -1804,6 +1804,26 @@ test("the Move to page menu does nothing for a canceled form, Back, or an empty 
   }
 });
 
+test("an item the menu can't read is reported to the player instead of a silent failure", async () => {
+  const p = joined();
+  const pick = stack("minecraft:diamond_pickaxe");
+  arrange(p, { 1: { 10: pick } });
+  const view = liveView(p);
+  const formsBefore = mc.forms.length;
+  const all = mc.players;
+  mc.players = [p];
+  mc.metadataThrow.add(pick.typeId);
+  try {
+    await pages.openMoveMenu(p);
+  } finally {
+    mc.metadataThrow.clear();
+    mc.players = all;
+  }
+  assert.match(barNow(p), /Move to page isn't available/);
+  assert.deepEqual(liveView(p), view);
+  assert.equal(mc.forms.length, formsBefore, "no form was built from a half-read page");
+});
+
 for (const [label, meanwhile] of /** @type {Array<[string, (p: any) => void]>} */ ([
   ["dies", (p) => { fire("entityDie", { deadEntity: p }); }],
   ["leaves", (p) => { p.isValid = false; fire("playerLeave", { playerId: p.id }); }],
