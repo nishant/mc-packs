@@ -4,6 +4,7 @@
 import * as mc from "@minecraft/server";
 import * as gt from "@minecraft/server-gametest";
 import scenario from "./scenario.js";
+import { afterTickingAreaAdd, radiusProblem, tickingAreaCommandProblem } from "./tickingarea.js";
 
 const { world, system, GameMode, CommandPermissionLevel } = mc;
 
@@ -237,6 +238,8 @@ const MODES = { survival: GameMode.Survival, creative: GameMode.Creative, advent
 
 function runCmd(target, cmd) {
   const c = String(cmd).replace(/^\s*\//, "");
+  const bad = tickingAreaCommandProblem(c);
+  if (bad) throw new Stop(false, `/${c}: ${bad}`);
   try {
     const r = target.runCommand(c);
     return { ok: (r?.successCount ?? 0) > 0, successCount: r?.successCount ?? 0 };
@@ -274,12 +277,16 @@ function makeT(cfg) {
     /** run.mjs --arg key=value pairs (strings). */
     args: cfg.args || {},
     packs: cfg.packs || [],
+    /** With run.mjs --bundle: [{folder, name, members}] of the bundle running as one script context; otherwise null. */
+    bundle: cfg.bundle || null,
     get tick() { return system.currentTick; },
     get dimension() { return world.getDimension("overworld"); },
     get messagesAll() { return messages; },
     failures,
 
     log: (...a) => out({ type: "log", msg: a.map(fmt).join(" ") }),
+    /** Hands run.mjs a named structured result (the perf soak's workload report); it lands in the profile JSON. */
+    report: (name, data) => out({ type: "report", name: String(name), data }),
     wait: (ticks = 1) => system.waitTicks(Math.max(1, Math.floor(ticks))),
     seconds: (s) => system.waitTicks(Math.max(1, Math.round(s * 20))),
 
@@ -315,17 +322,27 @@ function makeT(cfg) {
     get formTimeout() { return formTimeout; },
     set echoActionBar(v) { echoActionBar = !!v; },
 
-    /** Waits until the chunk column at x,z can be read, loading it with a ticking area. */
+    /** Waits until the chunk column at x,z can be read, loading it with a ticking area (circle radius 1 to 4). */
     async loadArea(x, z, { dimension = world.getDimension("overworld"), radius = 2, timeout = 400 } = {}) {
+      const badRadius = radiusProblem(radius);
+      if (badRadius) throw new Stop(false, `loadArea(${x}, ${z}): ${badRadius}`);
       const name = `harness_${++spawnArea}`;
-      runCmd(dimension, `tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} ${radius} ${name} true`);
+      const add = runCmd(dimension, `tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} ${radius} ${name} true`);
       // getTopmostBlock can answer before the chunk ticks (with y 319): also require that the
       // block can be read and that a standing spot below it can be found.
-      const ground = await t.waitUntil(() => {
+      const readGround = () => {
         const top = dimension.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
         if (!top || !dimension.getBlock(top.location)) return false;
         return findGround(dimension, top);
-      }, { timeout, message: `chunk at ${x},${z} did not load in ${timeout} ticks` });
+      };
+      if (!add.ok) {
+        let readable = false;
+        try { readable = !!readGround(); } catch (e) { readable = false; }
+        const after = afterTickingAreaAdd({ x, z, radius, add, readable });
+        if (after.action === "fail") throw new Stop(false, after.message);
+        out({ type: "log", msg: `loadArea: ${after.message}` });
+      }
+      const ground = await t.waitUntil(readGround, { timeout, message: `chunk at ${x},${z} did not load in ${timeout} ticks` });
       return { top: ground, name };
     },
 

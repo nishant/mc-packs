@@ -1,6 +1,9 @@
 # Runs every repo check and builds every pack on each pull request and push to master, so nothing reaches the
-# Realm (or a public server) without `npm run check` and `npm run build` passing. The BDS scenarios stay local
-# (tools/test-bds/suite.mjs): they need a 200 MB server download and several minutes of a real server.
+# Realm (or a public server) without `npm run check` and `npm run build` passing. Then a bounded smoke test starts the
+# genuine Realm Bundle (every behavior pack merged into one script context, as on the Realm) on a Bedrock Dedicated Server
+# with one simulated player: the bundle must load without script errors and every pack must answer /realm:help and
+# /realm:diag. The full BDS scenario suite stays local (tools/test-bds/suite.mjs): several minutes of a real server each.
+# Running BDS needs Ubuntu 18 or later (the only Linux Mojang supports); the server archive comes from minecraft.net.
 name: check
 on:
   pull_request:
@@ -21,3 +24,40 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+  bds-smoke:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      BDS_DIR: ${{ runner.temp }}/bds
+      BDS_HARNESS_CACHE: ${{ runner.temp }}/bds-harness-cache
+      BDS_HARNESS_TMP: ${{ runner.temp }}/bds-harness-tmp
+      BDS_HARNESS_LOGS: ${{ runner.temp }}/bds-harness-logs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/bds
+          key: bds-${{ runner.os }}-${{ hashFiles('tools/test-bds/lib/server.mjs') }}
+      - run: node tools/test-bds/setup.mjs
+        timeout-minutes: 8
+      - name: BDS shared libraries are present
+        run: "! ldd \"$BDS_DIR/bedrock_server\" | grep 'not found'"
+      - run: mkdir -p "$BDS_HARNESS_CACHE" "$BDS_HARNESS_TMP" "$BDS_HARNESS_LOGS"
+      - run: node tools/bundle.mjs --all
+      - name: Realm Bundle smoke test (one script context)
+        run: node tools/test-bds/run.mjs --quiet --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/bundle-smoke.js --timeout 300
+        timeout-minutes: 10
+      - name: Keep the BDS logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bds-smoke-logs
+          path: ${{ runner.temp }}/bds-harness-logs
+          if-no-files-found: ignore
+          retention-days: 7

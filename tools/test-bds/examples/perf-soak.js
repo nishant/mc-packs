@@ -1,6 +1,10 @@
 // Performance soak: many simulated players spread around the world for a few minutes, walking, looking
 // around, sneaking, jumping and running a few common commands, so the packs do their usual per-player
-// work. Meant for run.mjs --profile (it checks nothing but that the players stay in the world).
+// work. Meant for run.mjs --profile. A soak only counts as an N-player measurement when all N players
+// spawned, all of them stayed in the world at every second of the soak, the declared water and Nether
+// players were placed, and the full steady window ran: the scenario fails otherwise and reports
+// {declared, spawned, retention, soak window} as `perf-workload`, which run.mjs puts into the profile JSON
+// next to its acceptance verdict (lib/perf-acceptance.mjs).
 //   node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 900
 // Arguments (--arg key=value): players (default 10), seconds (default 300), group (players per
 // group, default 5), spread (blocks between far groups, default 240), commands (seconds between one
@@ -97,7 +101,13 @@ export default async function (t) {
     clearAreas();
   }
   t.log(`spawned ${made}/${N} players in ${((t.tick - t0) / 20).toFixed(0)} s (${players.filter((x) => x.kind === "water").length} in water, ${players.filter((x) => x.kind === "nether").length} in the Nether, ${Math.ceil(N / GROUP)} groups)`);
-  t.assert(made > 0, "at least one simulated player spawned");
+  const kinds = { land: players.filter((x) => x.kind === "land").length, water: players.filter((x) => x.kind === "water").length, nether: players.filter((x) => x.kind === "nether").length, groups: Math.ceil(N / GROUP) };
+  const declared = { players: N, seconds: SECONDS, group: GROUP, spread: SPREAD, commands: CMD_EVERY, water: WATER, nether: NETHER };
+  const spawnGameSeconds = (t.tick - t0) / 20;
+  // The profile only counts as an N-player measurement when all N spawned (the old guard was `made > 0`): report what
+  // happened first, so a short run is documented in the profile JSON, then fail.
+  t.report("perf-workload", { schema: 1, declared, spawned: made, spawnGameSeconds, kinds });
+  t.assert(made === N, `all ${N} declared players spawned (${made} did)`);
 
   const COMMANDS = [
     ["help_bp", "/realm:help"], ["stats_bp", "/realm:stats"], ["hud_bp", "/realm:hud"], ["quests_bp", "/realm:quests"],
@@ -107,14 +117,16 @@ export default async function (t) {
 
   // The soak itself: one decision per player per second; commands staggered across players.
   const start = t.tick;
-  let commands = 0, moves = 0, lastLog = start;
+  let commands = 0, moves = 0, lastLog = start, samples = 0, minValid = Infinity;
   const valid = (p) => { try { return p.isValid; } catch (e) { return false; } };
   while (t.tick - start < SECONDS * 20) {
     await t.wait(20);
     const sec = Math.floor((t.tick - start) / 20);
+    let validNow = 0;
     for (let i = 0; i < players.length; i++) {
       const s = players[i];
       if (!valid(s.p)) continue;
+      validNow++;
       const r = Math.random();
       try {
         if (s.kind === "land" && r < 0.35) {
@@ -136,12 +148,22 @@ export default async function (t) {
         commands++;
       }
     }
+    samples++;
+    minValid = Math.min(minValid, validNow);
     if (t.tick - lastLog >= 1200) {
       lastLog = t.tick;
       t.log(`soak ${sec} s: ${players.filter((x) => valid(x.p)).length} players in the world, ${moves} walks, ${commands} commands`);
     }
   }
   const alive = players.filter((x) => valid(x.p)).length;
-  t.log(`soak done: ${SECONDS} s, ${alive}/${players.length} players still in the world, ${moves} walks, ${commands} commands`);
-  t.check(alive > 0, "players stayed in the world");
+  t.log(`soak done: ${SECONDS} s, ${alive}/${N} players still in the world, ${moves} walks, ${commands} commands`);
+  const soakTicks = t.tick - start;
+  t.report("perf-workload", {
+    schema: 1, declared, spawned: made, spawnGameSeconds, kinds,
+    soak: { startTick: start, endTick: t.tick, ticks: soakTicks, seconds: soakTicks / 20 },
+    retention: { samples, minValid: samples ? minValid : 0, endValid: alive },
+    walks: moves, commands,
+  });
+  t.check(samples > 0 && minValid === N && alive === N, `all ${N} players stayed in the world for the whole ${SECONDS} s soak (fewest at any second: ${samples ? minValid : 0}, at the end: ${alive})`);
+  t.check(soakTicks >= SECONDS * 20, `the steady window ran its full ${SECONDS} s of game time (${(soakTicks / 20).toFixed(1)} s)`);
 }

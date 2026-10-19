@@ -38,7 +38,9 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--ticks <n>` | 200 | How long the idle scenario waits. |
 | `--timeout <s>` | 180 | Total time limit, setup and boot included. |
 | `--seed <n>` | 1 | World seed. Each seed's world is generated once and cached in `.cache/`. |
-| `--flat` | off | Superflat world (grass at y -61). |
+| `--flat` | off | Superflat world (grass at y -61). The world spawn is pinned to 0,0 (flat templates used to draw a random one, e.g. 261,5). |
+| `--bundle <file\|dir>` | | Run a built Realm Bundle (`dist/realm_bundle.mcpack` from `node tools/bundle.mjs --all`, or an unpacked folder) as **one** behavior pack: one script context and one dynamic property store, like the Realm. Replaces `--packs`/`--only`; `t.packs` lists the bundle's members, `t.bundle` its folder, name and members. |
+| `--bundle-resources <file\|dir>` | | Also install a built resource bundle (`dist/realm_resources.mcpack`). |
 | `--prop key=value` | | Extra `server.properties` line, repeatable (e.g. `--prop difficulty=hard`). |
 | `--allow-error <regex>` | | Do not fail on script errors matching this, repeatable. |
 | `--strict` | off | Also fail on content log errors and on caught errors that packs log as warnings. |
@@ -54,8 +56,17 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `-h`, `--help` | | Print the usage and exit. |
 
 Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or `/home/user/bds` on Linux; downloaded by `setup.mjs` if
-missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
-`logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir).
+missing; the harness only links or copies it, never writes into it), `BDS_HARNESS_CACHE` (world templates and port
+reservations, default `.cache/`), `BDS_HARNESS_LOGS` (default `logs/`), `BDS_HARNESS_TMP` (temp servers, default the
+OS temp dir), `BDS_HARNESS_BASH` (the bash that runs suite header recipes; on Windows Git for Windows' `bash.exe`, never the
+WSL launcher in `System32`). Give every parallel job its own `BDS_HARNESS_TMP` and `BDS_HARNESS_LOGS` (or leave them: the temp
+server folder and the default log name are unique per run), and share one `BDS_HARNESS_CACHE`: templates and ports are
+locked across processes.
+
+Safe to run in parallel and after a crash: each run's ports (`server-port` and the IPv6 port above it) are picked free
+from the OS **and** reserved with a lock file in the cache, so two runs (or a template generation and a run) never share
+one; a reservation of a dead process is reused. A run's server folder holds `server.owner.json` (harness pid, `bedrock_server`
+pid, port); the harness only ever stops the exact pid it started, never a process by name.
 
 ## Profiling (`--profile`)
 
@@ -100,16 +111,23 @@ from its own header (the first `node tools/test-bds/run.mjs ...` line; the scena
 file itself) and prints `scenario | result | seconds | first failure line`, then the totals. Results:
 `pass`, `fail`, `flaky` (failed, then passed when rerun alone with `--retry`), `timeout`, `skipped`.
 Headers that build a test copy with a plain shell recipe (the lines just above the command: `mkdir`,
-`cp`, `sed`, `grep`, `cat`...) get the recipe run first, with `/tmp/` moved to a folder of the suite run.
+`cp`, `sed`, `grep`, `cat`, `node ...` hooks...) get the recipe run first in **bash** (on Windows Git for Windows'
+`bash.exe`, found from `git` on `PATH` or `BDS_HARNESS_BASH`), with every `/tmp/` replaced by a quoted folder of the suite
+run in the quoting context it sits in (unquoted, inside `'...'`, inside `"..."`, in a here-document), and `$S` quoted, so
+a folder with spaces, apostrophes or Windows backslashes works. A folder path with `"`, `$`, a backtick or a line break
+is refused with a clear message. `node tools/test-bds/suite.mjs --prepare-only [--filter <regex>] [--json out]` stages every
+recipe and checks the folder each run command points at, **without starting BDS** (about 3 s for all 17).
 Test hooks that a scenario needs inside a pack (packs can't read each other's dynamic properties) live in
 `hooks/` and are appended to the test copy by the recipe (`hooks/maps-rvtest.js` for maps-cleanup and
 maps-leave, `hooks/rainbow-rvtest.js` for rainbow-race, the `hooks/limit_bp` probe pack for
-harness-event-limit); a `--packs` header without a recipe is skipped ("needs hook copy"). A header whose
+harness-event-limit, Node stagers such as `hooks/saga-starfall-stage.mjs` and `hooks/stage-saga-softlock.mjs`); a `--packs`
+header without a recipe is skipped ("needs hook copy"). A header whose
 command runs another scenario file fails (and `npm run check` catches it too). A few have no plain command and are listed in
 `SPECIAL` in `suite.mjs` (smoke and restart with every pack, forms, domt-champion, the
-npc-name-capability probe, saga-lighthouse, and stash-pages-persistence through `stash-persistence.mjs`).
+npc-name-capability probe, saga-lighthouse, bundle-smoke (builds `dist/realm_bundle.mcpack` first and runs it as one
+script context), and stash-pages-persistence through `stash-persistence.mjs`).
 Options: `--jobs N` (default 2; each run is CPU bound), `--filter <regex>` (scenario names),
-`--retry`, `--json <out>`, `--list` (print each plan and exit). Logs go to
+`--retry`, `--json <out>`, `--list` (print each plan and exit), `--prepare-only` (above). Logs go to
 `logs/suite-<time>/<scenario>.out` (run.mjs output) and `.log` (full BDS log). The exit code is 1 when
 anything failed or timed out. The whole suite takes a few hours at `--jobs 2`.
 
@@ -117,11 +135,64 @@ anything failed or timed out. The whole suite takes a few hours at `--jobs 2`.
 only `perf-soak.js`, once per player count (one at a time, with `--profile`), and prints ms/tick per pack side by
 side with the budget: the whole bundle under 5 ms/tick at 40 players, a typical pack at most 0.15, the Minimap
 (`map_bp`) and HUD (`hud_bp`) at most 1. The JSON reports land in the suite's log folder.
+**A count only counts when its soak was valid:** the soak must spawn every declared player (an old guard of
+`made > 0` let a run that spawned 97 of 100 be written up as a 100-player measurement), keep all of them in the world at every
+second of the soak, place the declared water and Nether players, and run its full `seconds` of game time with the profile
+covering that window. The scenario reports this as `perf-workload` (`t.report`), `run.mjs` puts it and the verdict
+(`acceptance`: `ok` and `reasons`) into the profile JSON next to `bundle.steadyWindow` (the soak window alone, without the spawn
+ramp), prints `perf acceptance: VALID/INVALID`, and fails the run (exit 1) when invalid; `suite.mjs --perf` marks the count
+INVALID, lists it, and exits 1. The profile still spans the spawn ramp plus the soak, as before; keep both observations when
+a run is retried (an invalid first run and its valid retry), and never change the group, spread, water or Nether settings to
+make a comparison pass. What the profiler measures: time inside the callbacks each pack handed to the game; time after an
+`await` inside an async callback is not attributed (see `lib/profile.js`), and a run of separate packs sums separate script
+contexts, whereas `--bundle --profile` measures the real merged context as one row.
 
 The shim also checks the script event rule: a pack that sends a `realm:` script event of 2048 characters or
 more logs a `[harness-shim] ... sent script event ... with N characters` script error, so the run fails (BDS
 1.26 delivers any length, so only a Realm would notice). Scenarios can listen for `harness:limit`
 `{pack, id, length}` too (`examples/harness-event-limit.js`).
+
+## The Realm Bundle as one script context (`--bundle`)
+
+The Realm runs every behavior pack as ONE add-on (`tools/bundle.mjs --all`): one script context, one `scriptEventReceive`
+bus, one dynamic property store. Separate-pack runs hide what only shows there (a canceled `beforeEvents` event that
+later subscribers in the same pack still see, C13; a key two packs share; one pack's prototype patch seen by another).
+`node tools/bundle.mjs --all` then
+`node tools/test-bds/run.mjs --quiet --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/bundle-smoke.js --timeout 300`
+installs the built bundle (the real file, not a re-merge) under the shim and profiler as a single pack (`lib/unzip.mjs`
+unpacks it; it must have exactly one script module that imports at least two packs). `examples/bundle-smoke.js` checks that
+it loads without a script error and that every member answers `realm:help_ping` and `realm:diag_ping` with its own
+folder, then runs `/realm:help`. Scenarios use `t.packs` (the members) and `t.bundle`; message and form attribution is
+the bundle's name (`realm_bundle`), not the member's. `hooks/diag-bundle.mjs` stays the small, fast fixture for the diag
+protocol. CI runs the smoke test after check and build (`.github/workflows/check.yml`, job `bds-smoke`, Ubuntu 24.04, BDS
+from minecraft.net cached by version, 25 minutes at most).
+
+## Releasing (`tools/release.mjs`)
+
+`node tools/release.mjs plan` prints the whole ship order from CLAUDE.md and changes nothing; `prepare`, `source`, `publish`
+and `live` run one phase with `--execute --state <file>` and refuse to start until the earlier phases are on record for the
+exact commit. It never uploads to the Realm, passes `--allow-dirty` or a force flag, merges with admin rights, or invents a
+native-test or review result (those are receipts: `{schema: "release-evidence-v1", kind, sourceSha, result: "pass", artifacts}`).
+
+## Parallel runs, templates and crashes
+
+The first run for a seed (or `--flat`) generates the world template once. Several runs that need it at the same time take an
+exclusive lock folder (`<template>.lock/owner.json` names the owner pid), one generates, the others wait and use its result.
+The finished template is built in a staging folder, marked ready (`template.ready.json`) and published with one rename, so
+a half-built template is never used; a lock whose owner died is cleaned up with its staging and temp server folder (a
+`bedrock_server` it left running is reported by pid, never stopped by name). Templates from before the marker are adopted
+when they are finished (`level.dat` parses, seeded ones have their `db/CURRENT`), others are rebuilt.
+`node tools/test-bds/template-race.mjs [--workers 3] [--flat]` runs the race offline with a stand-in generator (separate
+processes, a cold cache): exactly one generation, one ready folder, no lock or staging left; `--real --cache <empty dir>` does
+it with real BDS (starts one `bedrock_server`).
+
+## Harness input checks
+
+A ticking-area circle radius must be a whole number from 1 to 4. `t.loadArea` and every `t.cmd`/`t.server` of a
+`tickingarea add circle` command reject another radius immediately with the rule (the first O74 fixture's radius 6 used
+to be swallowed and showed up 400 ticks later as "chunk did not load"), and a `tickingarea add` the game rejects
+(for example the 10-area limit) fails at once with the game's own message unless the column is already readable.
+`examples/harness-tickingarea-inputs.js` shows both against the real game.
 
 ## Inventory persistence regression
 
@@ -270,13 +341,14 @@ Examples: `examples/smoke.js` (help menu, commands from several packs), `example
    stops it and patches `level.dat` (little-endian NBT, `lib/nbt.mjs`): `experiments.gametest = 1`
    (the "Beta APIs" toggle that `@minecraft/server-gametest` needs; BDS logs
    `Experiment(s) active: gtst`), `cheatsEnabled`, `commandsEnabled`. For flat it sets
-   `Generator = 2` and drops the chunks. The result is cached in `.cache/worlds/` (about 100 KB).
+   `Generator = 2`, pins the world spawn to 0,0 (`SpawnX/Y/Z`, `lib/server.mjs` `FLAT_SPAWN`; every run's copy is pinned again) and drops the chunks. The result is cached in `.cache/worlds/` (about 100 KB) with a
+   `template.ready.json` marker; see "Parallel runs, templates and crashes".
 2. **Server copy.** The platform binary (`bedrock_server.exe` or `bedrock_server`),
    `behavior_packs`, `resource_packs`, `definitions`, `data` are linked (no disk, about 0.3 s).
    Windows uses directory junctions and file hardlinks, including DLLs; Linux uses `cp -al`.
    Linking falls back to copying when unavailable (for example, across drives). Config files are copied. `server.properties`:
    `transport=nethernet` (TCP on `server-port`; raknet needs IPv6, which this container lacks), a
-   random free port, `allow-cheats=true`, `online-mode=false`, no allow list, LAN visibility off,
+   free, reserved port pair, `allow-cheats=true`, `online-mode=false`, no allow list, LAN visibility off,
    content log to the console.
 3. **Packs.** Each pack is copied into `development_behavior_packs/` or
    `development_resource_packs/` and listed in the world's `world_behavior_packs.json` /
@@ -347,9 +419,14 @@ Examples: `examples/smoke.js` (help menu, commands from several packs), `example
 
 ## Files
 
-- `run.mjs`: the runner. `setup.mjs`: downloads BDS 1.26.52 into `BDS_DIR` if missing.
-- `lib/server.mjs`: server copies, properties, ports, world templates. `lib/packs.mjs`: pack
-  discovery and installation. `lib/shim.js`: the shim. `lib/nbt.mjs`: NBT reader/writer.
-  `lib/idle-scenario.js`: the default scenario.
+- `run.mjs`: the runner. `setup.mjs`: downloads BDS 1.26.52 into `BDS_DIR` if missing (unpacked into a staging
+  folder, moved into place when complete). `suite.mjs`: every scenario, `--perf`, `--prepare-only`.
+  `template-race.mjs`: the cold-cache template race check.
+- `lib/server.mjs`: server copies, properties, port reservations, world templates (locks, ready marker, pinned flat spawn).
+  `lib/packs.mjs`: pack discovery, bundle loading and installation. `lib/shim.js`: the shim. `lib/nbt.mjs`: NBT
+  reader/writer. `lib/unzip.mjs`: the `.mcpack` reader. `lib/recipe.mjs`: header recipe staging and bash lookup.
+  `lib/tickingarea.js`: ticking-area input checks (also copied into the test pack). `lib/perf-acceptance.mjs`: the
+  perf-soak verdict. `lib/profile.js`, `lib/profile-report.mjs`: the profiler. `lib/idle-scenario.js`: the default scenario.
+  `lib/*.test.mjs` run in `npm run test`.
 - `testpack/scripts/harness.js`: the scenario API.
 - `examples/`: scenarios.

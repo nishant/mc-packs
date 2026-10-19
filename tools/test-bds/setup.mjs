@@ -15,34 +15,57 @@ function run(cmd, args) {
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed (${r.status ?? r.error})`);
 }
 
-export function setup({ force = false } = {}) {
+function downloadArchive(zip) {
+  // curl honors HTTPS_PROXY; minecraft.net requires a browser-like user agent.
+  run(IS_WIN ? "curl.exe" : "curl", ["-fsSL", "--retry", "3", "-A", "Mozilla/5.0", "-o", zip, BDS_URL]);
+}
+
+function extractArchive(zip, dir) {
+  if (IS_WIN) {
+    const tar = spawnSync("tar.exe", ["-xf", zip, "-C", dir], { stdio: "inherit" });
+    if (tar.status !== 0) {
+      const quote = (s) => `'${s.replace(/'/g, "''")}'`;
+      run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath ${quote(zip)} -DestinationPath ${quote(dir)} -Force`]);
+    }
+  } else {
+    const unzip = spawnSync("unzip", ["-oq", zip, "-d", dir], { stdio: "inherit" });
+    if (unzip.status !== 0) run("python3", ["-I", "-c", "import sys,zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])", zip, dir]);
+  }
+}
+
+/**
+ * Installs BDS into BDS_DIR. The archive is unpacked into a staging folder beside it and moved into place only when
+ * complete, so an interrupted download or unpack never leaves a half-installed server that looks installed (the
+ * binary's presence is the check), and two processes installing at once cannot interleave.
+ */
+export function setup({ force = false, download = downloadArchive, extract = extractArchive } = {}) {
   const dir = bdsDir();
   const binary = path.join(dir, BDS_BIN);
   if (!force && fs.existsSync(binary)) {
     console.log(`[setup] BDS already at ${dir}`);
     return dir;
   }
-  fs.mkdirSync(dir, { recursive: true });
-  const zip = path.join(dir, "bds.zip");
+  const staging = `${dir}.installing-${process.pid}`;
+  fs.rmSync(staging, { recursive: true, force: true });
+  fs.mkdirSync(staging, { recursive: true });
   try {
+    const zip = path.join(staging, "bds.zip");
     console.log(`[setup] downloading ${BDS_URL} -> ${zip}`);
-    // curl honors HTTPS_PROXY; minecraft.net requires a browser-like user agent.
-    run(IS_WIN ? "curl.exe" : "curl", ["-fsSL", "--retry", "3", "-A", "Mozilla/5.0", "-o", zip, BDS_URL]);
-    console.log(`[setup] unpacking into ${dir}`);
-    if (IS_WIN) {
-      const tar = spawnSync("tar.exe", ["-xf", zip, "-C", dir], { stdio: "inherit" });
-      if (tar.status !== 0) {
-        const quote = (s) => `'${s.replace(/'/g, "''")}'`;
-        run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath ${quote(zip)} -DestinationPath ${quote(dir)} -Force`]);
-      }
-    } else {
-      const unzip = spawnSync("unzip", ["-oq", zip, "-d", dir], { stdio: "inherit" });
-      if (unzip.status !== 0) run("python3", ["-I", "-c", "import sys,zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])", zip, dir]);
-    }
-    if (!fs.existsSync(binary)) throw new Error(`Archive did not contain ${BDS_BIN}: ${BDS_URL}`);
-    if (!IS_WIN) fs.chmodSync(binary, 0o755);
-  } finally {
+    download(zip);
+    console.log(`[setup] unpacking into ${staging}`);
+    extract(zip, staging);
     fs.rmSync(zip, { force: true });
+    if (!fs.existsSync(path.join(staging, BDS_BIN))) throw new Error(`Archive did not contain ${BDS_BIN}: ${BDS_URL}`);
+    if (!IS_WIN) fs.chmodSync(path.join(staging, BDS_BIN), 0o755);
+    if (!force && fs.existsSync(binary)) {
+      console.log(`[setup] another process installed BDS at ${dir} first`);
+      return dir;
+    }
+    fs.rmSync(dir, { recursive: true, force: true }); // an unfinished install (no binary), or the one --force replaces
+    fs.mkdirSync(path.dirname(dir), { recursive: true });
+    fs.renameSync(staging, dir);
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
   }
   console.log(`[setup] BDS ${BDS_VERSION} ready at ${dir} (keep it pristine: the harness only copies it)`);
   return dir;
