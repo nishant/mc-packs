@@ -297,7 +297,8 @@ function loadedAt(dim, at) {
  * put down before the carts appear (never placed twice while they exist); one put down where the carts never
  * appeared is placed again, since the structure is only deleted once everything is handed over. Once its carts have been
  * found, `seen` is saved: a seen record whose carts are gone (broken, emptied) is never placed again, which would hand
- * the same items out twice, and resolves `null`.
+ * the same items out twice, and resolves `null`. Any owned cart found, in any dimension, is used: fewer than `want`
+ * is returned as is (the caller says so) and the structure is never placed over survivors.
  * Resolves the carts, `null` when the structure is missing, or `undefined` to try again later.
  * @template {{ id: string, tag: string, placed?: boolean, seen?: boolean, at?: { x: number, y: number, z: number, d: string } }} R
  * @param {Player} p @param {R} rec @param {(r: R) => void} save @param {number} want how many carts it has
@@ -356,7 +357,7 @@ async function cartsOf(p, rec, save, want) {
     for (const d of DIMS) {
       if (d === rec.at.d) continue;
       const there = find(d);
-      if (there.length >= want) {
+      if (there.length) {
         dropStrays(d);
         if (!rec.seen) save({ ...rec, seen: true });
         return there;
@@ -483,6 +484,7 @@ export async function restoreStash(p) {
     // already gone
   }
   p.sendMessage(`§aYour own items are back with you.${spilled ? " Some are at your feet: those slots were taken." : ""}`);
+  if (carts.length < 2) p.sendMessage(`§cOnly ${carts.length} of 2 storage carts could be found, so some of your stored items are missing. Tell an operator.`);
   return true;
 }
 
@@ -629,6 +631,7 @@ async function handOver(p) {
       // already gone
     }
     kinds.add(rec.k);
+    if (carts.length < (rec.c ?? 1)) p.sendMessage(`§cOnly ${carts.length} of ${rec.c} carts holding your items could be found, so some items are missing. Tell an operator.`);
   }
   return { kinds, spilled };
 }

@@ -14,7 +14,7 @@ function fn(name, isAsync = false) {
   return m[0].replace(/^export /, "");
 }
 
-function run({ rec, carts }) {
+function run({ rec, carts, other = [] }) {
   const placed = [];
   const saved = [];
   const dim = {
@@ -23,15 +23,16 @@ function run({ rec, carts }) {
     getEntities: () => carts.slice(),
     runCommand: (c) => placed.push(c),
   };
+  const nether = { id: "minecraft:nether", getBlock: () => ({}), getEntities: () => other.slice(), runCommand: (c) => placed.push(c) };
   const player = { isValid: true, location: { x: 1, y: 64, z: 1 }, dimension: dim };
   const context = {
     console,
-    world: { getDimension: () => dim, structureManager: { get: () => ({}) } },
+    world: { getDimension: (d) => (d === "minecraft:nether" ? nether : dim), structureManager: { get: () => ({}) } },
     wait: async () => {},
     removeCart: () => {},
   };
   vm.createContext(context);
-  vm.runInContext(`const DIMS = ["minecraft:overworld"];\n${fn("loadedAt")}\n${fn("placeCarts")}\n${fn("cartsOf", true)}\nglobalThis.cartsOf = cartsOf;`, context);
+  vm.runInContext(`const DIMS = ["minecraft:overworld", "minecraft:nether"];\n${fn("loadedAt")}\n${fn("placeCarts")}\n${fn("cartsOf", true)}\nglobalThis.cartsOf = cartsOf;`, context);
   return { placed, saved, call: () => context.cartsOf(player, rec, (r) => saved.push(r), 2) };
 }
 
@@ -55,4 +56,23 @@ test("a record whose carts never appeared is still placed again, then saved as s
   const r = run({ rec: base, carts: [] });
   await r.call();
   assert.equal(r.placed.length, 1);
+});
+
+test("one of two carts found where they were put down is used and nothing is placed over it", async () => {
+  const r = run({ rec: base, carts: [cart] });
+  assert.equal((await r.call()).length, 1);
+  assert.deepEqual(r.placed, []);
+  assert.equal(r.saved.at(-1).seen, true);
+});
+
+test("one survivor of two in another dimension is used, never placed over (that would duplicate items)", async () => {
+  const r = run({ rec: base, carts: [], other: [cart] });
+  assert.equal((await r.call()).length, 1);
+  assert.deepEqual(r.placed, []);
+  assert.equal(r.saved.at(-1).seen, true);
+});
+
+test("a seen record with only a survivor in another dimension still returns it, and with none returns null", async () => {
+  assert.equal((await run({ rec: { ...base, seen: true }, carts: [], other: [cart] }).call()).length, 1);
+  assert.equal(await run({ rec: { ...base, seen: true }, carts: [], other: [] }).call(), null);
 });
