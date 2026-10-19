@@ -5,7 +5,7 @@ import { StructureSaveMode, world } from "@minecraft/server";
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {{ s: number, item: ItemStack }} Entry */
 /** @typedef {{ id: string, slots: number[], layout?: 2 }} Ref */
-/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, pending?: { before: Ref, after: Ref } }} State */
+/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, idx?: Record<string, { r: string, k: Record<string, number> }>, pending?: { before: Ref, after: Ref } }} State */
 const STATE = "stash:native";
 const NEXT = "stash:snapshot_next";
 const ENTITY = "realm:stash_page_store";
@@ -42,9 +42,114 @@ export function stateOf(player) {
   return state;
 }
 
+/**
+ * The page-content index rides in the same property as the page refs, so one write commits both. `idx[page]` is
+ * `{ r, k }`: `r` is the id of the snapshot the counts were taken from, `k` maps a kind ("redstone" for
+ * minecraft:redstone, a custom id as is, "id|Name" for a named stack) to how many are on that page. An entry whose
+ * `r` is not the page's current snapshot, or a page without an entry (saved before the index existed, or dropped to
+ * stay under the property limit), is unknown: readers must open that page, never treat it as empty.
+ * @typedef {{ r: string, k: Record<string, number> }} PageIndex
+ */
+/** Longest a stored name is kept in a kind key. */
+const KEY_NAME = 40;
+/** Bytes the whole index property may use: the dynamic property limit is 32767, and a recovery journal adds two refs. */
+const STATE_LIMIT = 30000;
+
+/** @param {string} id @param {string | undefined} name @returns {string} */
+export function kindKey(id, name) {
+  const short = id.startsWith("minecraft:") ? id.slice(10) : id;
+  return name ? `${short}|${name.slice(0, KEY_NAME)}` : short;
+}
+
+/** @param {string} key @returns {{ id: string, name: string | undefined }} */
+export function parseKind(key) {
+  const bar = key.indexOf("|");
+  const id = bar < 0 ? key : key.slice(0, bar);
+  return { id: id.includes(":") ? id : `minecraft:${id}`, name: bar < 0 ? undefined : key.slice(bar + 1) };
+}
+
+/** @param {{ id: string, name?: string, n: number }[]} recs @returns {Record<string, number>} */
+export function kindsOfRecs(recs) {
+  /** @type {Record<string, number>} */
+  const k = {};
+  for (const r of recs) {
+    const key = kindKey(r.id, r.name);
+    k[key] = (k[key] ?? 0) + r.n;
+  }
+  return k;
+}
+
+/**
+ * What the committed index says a saved page holds, as full item id (and "|name") -> count, or undefined when the
+ * page's contents are unknown (no entry, an entry for another snapshot, or an unreadable one).
+ * @param {State} state @param {number} page @returns {Map<string, number> | undefined}
+ */
+export function indexedKinds(state, page) {
+  const ref = state.pages?.[page];
+  const entry = state.idx?.[page];
+  if (!ref || !entry || entry.r !== ref.id || !entry.k || typeof entry.k !== "object") return undefined;
+  const out = new Map();
+  for (const [key, n] of Object.entries(entry.k)) {
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 1) return undefined;
+    const { id, name } = parseKind(key);
+    out.set(name === undefined ? id : `${id}|${name}`, n);
+  }
+  return out;
+}
+
+/** Records one page's kinds against the snapshot it came from; forgets every entry for a page that changed or went away. @param {State} state @param {number} page @param {Ref} ref @param {Record<string, number>} kinds */
+export function recordIndex(state, page, ref, kinds) {
+  state.idx = { ...state.idx, [page]: { r: ref.id, k: kinds } };
+}
+
+/** @param {State} state */
+export function pruneIndex(state) {
+  if (!state.idx) return;
+  /** @type {Record<string, PageIndex>} */
+  const keep = {};
+  for (const [n, entry] of Object.entries(state.idx)) if (state.pages[n] && entry?.r === state.pages[n].id) keep[n] = entry;
+  if (Object.keys(keep).length) state.idx = keep;
+  else delete state.idx;
+}
+
+/** @param {string} text */
+function byteLength(text) {
+  let n = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff) {
+      n += 4;
+      i++;
+    } else n += 3;
+  }
+  return n;
+}
+
+/**
+ * Keeps the property under the dynamic property limit by dropping the largest index entries (those pages become
+ * unknown and are read when needed). Refs, the journal and unknown fields are never dropped.
+ * @param {State} state @returns {State}
+ */
+function fitIndex(state) {
+  let text = JSON.stringify(state);
+  if (byteLength(text) <= STATE_LIMIT || !state.idx) return state;
+  const idx = { ...state.idx };
+  const bySize = Object.keys(idx).sort((a, b) => JSON.stringify(idx[b]).length - JSON.stringify(idx[a]).length);
+  const fit = { ...state, idx };
+  for (const n of bySize) {
+    delete idx[n];
+    text = JSON.stringify(fit);
+    if (byteLength(text) <= STATE_LIMIT) break;
+  }
+  if (!Object.keys(idx).length) delete fit.idx;
+  return fit;
+}
+
 /** A single property is the commit point for every page changed in an operation. @param {Player} player @param {State} state */
 function writeState(player, state) {
-  const text = JSON.stringify(state);
+  const text = JSON.stringify(fitIndex(state));
   player.setDynamicProperty(STATE, text);
   if (player.getDynamicProperty(STATE) !== text) throw new Error("page index readback failed");
 }

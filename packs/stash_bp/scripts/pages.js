@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, onChange, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, signature, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, indexedKinds, InventoryRecoveryError, inventoryReady, kindsOfRecs, loadSnapshot, parseKind, pruneIndex, recordIndex, saveSnapshot, signature, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -273,7 +273,9 @@ function commitPages(player, edits, after, cur = curPage(player), decorate) {
       ref.layout = 2;
       created.push(ref);
       next.pages[page] = ref;
+      recordIndex(next, page, ref, kindsOfRecs(entries));
     }
+    pruneIndex(next);
     decorate?.(next, edits);
     commitInventory(player, old, next, after);
   } catch (e) {
@@ -1042,8 +1044,36 @@ function freeEverywhere(player, inv) {
   const total = totalPages(player);
   const cur = curPage(player);
   let free = PAGE_SIZE - usedOnPage(inv);
-  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, readPage(player, p)?.length ?? PAGE_SIZE);
+  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, savedStacks(player, p) ?? PAGE_SIZE);
   return free;
+}
+
+/**
+ * How many stacks a saved page holds, from its ref (the slots are checked against the snapshot whenever it loads),
+ * so no snapshot is restored for a count. Undefined when the page can't be read.
+ * @param {Player} player @param {number} page
+ */
+function savedStacks(player, page) {
+  try {
+    const state = stateOf(player);
+    const ref = state.pages[page];
+    if (ref && !state.pending && Array.isArray(ref.slots)) return ref.slots.length;
+  } catch {
+    // fall back to reading the page, which reports the problem
+  }
+  return readPage(player, page)?.length;
+}
+
+/** Could a saved page hold this item? False only when the committed index says it holds none; an unknown page may. @param {Player} player @param {number} page @param {string} id */
+function mayHold(player, page, id) {
+  try {
+    const kinds = indexedKinds(stateOf(player), page);
+    if (!kinds) return true;
+    for (const key of kinds.keys()) if (parseKind(key).id === id) return true;
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -1119,7 +1149,7 @@ export function refillFromPages(player, slot, want) {
   /** @type {{ page: number, entries: Rec[], k: number, n: number } | undefined} */
   let best;
   for (let p = 1; p <= total; p++) {
-    if (p === cur) continue;
+    if (p === cur || !mayHold(player, p, want.id)) continue;
     const entries = readPage(player, p);
     if (!entries) continue;
     entries.forEach((e, k) => {
@@ -1289,7 +1319,7 @@ function pageUsage(player, inv) {
   const total = totalPages(player);
   const cur = curPage(player);
   const usage = [];
-  for (let p = 1; p <= total; p++) usage.push(p === cur ? usedOnPage(inv) : Math.min(PAGE_SIZE, readPage(player, p)?.length ?? 0));
+  for (let p = 1; p <= total; p++) usage.push(p === cur ? usedOnPage(inv) : Math.min(PAGE_SIZE, savedStacks(player, p) ?? 0));
   return usage;
 }
 
@@ -1310,7 +1340,16 @@ function scanItems(player, inv) {
     const item = inv.getItem(s);
     if (item && !isButton(item)) add(`${item.typeId}|${item.nameTag ?? ""}`, item.nameTag ?? pretty(item.typeId), item.amount, cur);
   }
+  const state = stateOf(player);
   for (let p = 1; p <= total; p++) {
+    const kinds = indexedKinds(state, p);
+    if (kinds) {
+      for (const [key, n] of kinds) {
+        const { id, name } = parseKind(key);
+        add(`${id}|${name ?? ""}`, name ?? pretty(id), n, p);
+      }
+      continue;
+    }
     for (const e of readPage(player, p) ?? []) add(`${e.id}|${e.name ?? ""}`, e.name ?? pretty(e.id), e.n, p);
   }
   return [...found.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -1508,7 +1547,7 @@ async function moveMenu(player) {
     const where = new ActionFormData().title("§lMove to which page?").body(`Moving ${plural(slots.length, "stack")} from Page #${cur}. A page that can't take all of it refuses the move, and nothing changes.`);
     for (let p = 1; p <= total; p++) {
       if (p === cur) continue;
-      const held = readPage(player, p)?.length;
+      const held = savedStacks(player, p);
       where.button(`Page #${p}\n§8${held === undefined ? "can't be read" : `${PAGE_SIZE - held} of ${PAGE_SIZE} slots free`}`);
       targets.push(p);
     }

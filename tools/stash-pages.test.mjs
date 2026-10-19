@@ -1922,6 +1922,204 @@ test("the inventory menu offers Move to page next to the scan, and keeps its oth
 });
 
 // ---------------------------------------------------------------------------
+// O17: the committed page-content index (item kinds and counts per saved page, tied to the page's snapshot id)
+// ---------------------------------------------------------------------------
+
+/** Records every structure id the model restores, so a test can tell which saved pages a call read. */
+function recordPlaces() {
+  const real = mc.server.world.structureManager.place;
+  /** @type {string[]} */
+  const ids = [];
+  mc.server.world.structureManager.place = (id, ...rest) => {
+    ids.push(id);
+    return real(id, ...rest);
+  };
+  return { ids, stop: () => void (mc.server.world.structureManager.place = real) };
+}
+/** The ref ids of the pages a player has saved right now. */
+const pageRefIds = (/** @type {any} */ p) => new Map(Object.entries(nativeIndex(p).pages).map(([n, r]) => [Number(n), r.id]));
+/** What a page really holds, kind -> count, read from its snapshot. */
+function truth(/** @type {any} */ p, /** @type {number} */ n) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const item of savedPage(p, n).values()) {
+    const key = item.nameTag ? `${item.typeId}|${item.nameTag}` : item.typeId;
+    out[key] = (out[key] ?? 0) + item.amount;
+  }
+  return out;
+}
+/** Every saved page's recorded index agrees with its snapshot, and none is recorded for a page that has no snapshot. */
+function assertIndexExact(/** @type {any} */ p, /** @type {string} */ label = "") {
+  const state = nativeIndex(p);
+  for (const [n, ref] of Object.entries(state.pages)) {
+    const got = storage.indexedKinds(state, Number(n));
+    assert.ok(got, `${label} page ${n} is indexed`);
+    assert.deepEqual(Object.fromEntries(got), truth(p, Number(n)), `${label} page ${n} index equals its snapshot`);
+    assert.equal(state.idx[n].r, ref.id, `${label} page ${n} index is tied to its snapshot id`);
+  }
+  for (const n of Object.keys(state.idx ?? {})) assert.ok(state.pages[n], `${label} no index for page ${n} without a snapshot`);
+}
+const WANT_REDSTONE = { id: "minecraft:redstone", name: undefined, sameLore: (/** @type {string[]} */ lore) => lore.length === 0 };
+
+test("O17: refill reads only the pages whose index lists the item (25 pages, one holder)", () => {
+  mc.pages = 25;
+  const p = joined();
+  try {
+    arrange(p, Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 2, { 9: stack(PAGE_ITEMS[1 + (i % 4)], 5) }])));
+    arrange(p, { 17: { 9: stack("minecraft:redstone", 33) } });
+    const known = new Map(pageRefIds(p));
+    const watch = recordPlaces();
+    try {
+      const got = pages.refillFromPages(p, 0, WANT_REDSTONE);
+      assert.deepEqual(got, { n: 33, page: 17 });
+      const reads = watch.ids.filter((id) => [...known.values()].includes(id));
+      assert.deepEqual(reads, [known.get(17)], "only the one candidate page was restored");
+    } finally {
+      watch.stop();
+    }
+    assertIndexExact(p, "after refill");
+    assert.equal(p.container.getItem(0).amount, 33);
+  } finally {
+    mc.pages = 5;
+  }
+});
+
+test("O17: a refill that finds nothing on 25 pages restores no page at all", () => {
+  mc.pages = 25;
+  const p = joined();
+  try {
+    arrange(p, Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 2, { 9: stack(PAGE_ITEMS[1 + (i % 4)], 5) }])));
+    const watch = recordPlaces();
+    const loads = mc.loads;
+    const saves = mc.saves;
+    try {
+      assert.equal(pages.refillFromPages(p, 0, WANT_REDSTONE), undefined);
+      assert.equal(watch.ids.length, 0, "no snapshot read");
+      assert.equal(mc.loads, loads);
+      assert.equal(mc.saves, saves, "and nothing written");
+    } finally {
+      watch.stop();
+    }
+    assert.equal(p.container.getItem(0), undefined);
+  } finally {
+    mc.pages = 5;
+  }
+});
+
+test("O17: pages saved before the index existed still load, and the next write of a page indexes it", () => {
+  const p = joined();
+  arrange(p, { 2: { 9: stack("minecraft:redstone", 12), 10: stack("minecraft:emerald", 3) }, 3: { 9: stack("minecraft:iron_ingot", 7) } });
+  const state = nativeIndex(p);
+  delete state.idx;
+  state.future = { keep: ["unknown fields survive"] };
+  p.setDynamicProperty("stash:native", JSON.stringify(state));
+  assert.equal(storage.indexedKinds(nativeIndex(p), 2), undefined, "an unindexed page is unknown, not empty");
+  const watch = recordPlaces();
+  try {
+    assert.deepEqual(pages.refillFromPages(p, 0, WANT_REDSTONE), { n: 12, page: 2 });
+    assert.equal(watch.ids.filter((id) => id === state.pages[2].id).length, 1, "an unindexed page is read, never skipped");
+  } finally {
+    watch.stop();
+  }
+  const after = nativeIndex(p);
+  assert.deepEqual(after.future, { keep: ["unknown fields survive"] });
+  assert.ok(storage.indexedKinds(after, 2), "the rewritten page is indexed now");
+  assert.equal(storage.indexedKinds(after, 3), undefined, "an untouched legacy page stays unindexed");
+  assert.equal(savedPage(p, 3).get(9).typeId, "minecraft:iron_ingot");
+});
+
+test("O17: an index tied to a different snapshot is ignored (stale), never trusted as empty", () => {
+  const p = joined();
+  arrange(p, { 2: { 9: stack("minecraft:redstone", 12) } });
+  const state = nativeIndex(p);
+  state.idx[2] = { r: "stash:page_99999", k: { emerald: 1 } };
+  p.setDynamicProperty("stash:native", JSON.stringify(state));
+  assert.equal(storage.indexedKinds(nativeIndex(p), 2), undefined);
+  assert.deepEqual(pages.refillFromPages(p, 0, WANT_REDSTONE), { n: 12, page: 2 });
+});
+
+test("O17: every writer keeps the index equal to the snapshots (switch, auto-store, shrink, move, rescue, refill)", () => {
+  const p = joined();
+  arrange(p, { 1: { 10: stack("minecraft:stone", 64), 11: shulker("kept", "Box") }, 2: { 9: stack("minecraft:redstone", 20) }, 3: { 9: stack("minecraft:emerald", 5), 10: stack("minecraft:emerald", 7) } });
+  assertIndexExact(p, "switches");
+  assert.equal(pages.transferStacks(p, { slots: [10], to: 3 }).ok, true);
+  assertIndexExact(p, "transfer");
+  assert.equal(switchPage(p, 3), true);
+  assertIndexExact(p, "switch");
+  assert.equal(pages.refillFromPages(p, 0, { id: "minecraft:redstone", sameLore: (/** @type {string[]} */ l) => l.length === 0 }) !== undefined, true);
+  assertIndexExact(p, "refill");
+  mc.pages = 2;
+  try {
+    advance(60);
+  } finally {
+    mc.pages = 5;
+  }
+  assertIndexExact(p, "shrink");
+  assert.ok(Object.keys(nativeIndex(p).pages).length >= 1);
+});
+
+test("O17: the index stays below the property limit with 25 pages of long custom ids, and falls back to reading", () => {
+  mc.pages = 25;
+  const p = joined();
+  try {
+    const longId = (/** @type {number} */ page, /** @type {number} */ i) => `some_long_addon_namespace_name:${"very_long_item_identifier_".repeat(2)}${page}_${i}`;
+    for (let page = 25; page >= 2; page--) {
+      assert.equal(switchPage(p, page), true);
+      for (let i = 0; i < 24; i++) p.container.setItem(STORAGE_SLOTS[i], stack(longId(page, i), 3));
+    }
+    assert.equal(switchPage(p, 1), true);
+    const raw = p.getDynamicProperty("stash:native");
+    assert.ok(Buffer.byteLength(raw) < 32767, `index property is ${Buffer.byteLength(raw)} bytes`);
+    const state = nativeIndex(p);
+    assert.equal(Object.keys(state.pages).length, 25);
+    for (const n of Object.keys(state.idx ?? {})) assert.equal(state.idx[n].r, state.pages[n].id);
+    // A page whose index was dropped is still found by reading it.
+    const wanted = longId(14, 5);
+    assert.deepEqual(pages.refillFromPages(p, 0, { id: wanted, sameLore: () => true }), { n: 3, page: 14 });
+  } finally {
+    mc.pages = 5;
+  }
+});
+
+test("O17: the Expansive Inventory menu and the scan list restore no indexed page", async () => {
+  mc.pages = 25;
+  const p = joined();
+  const all = mc.players;
+  mc.players = [p];
+  try {
+    arrange(p, Object.fromEntries(Array.from({ length: 24 }, (_, i) => [i + 2, { 9: stack(PAGE_ITEMS[i % 5], 5), 10: shulker(`b${i}`, `Box ${i}`) }])));
+    const loads = mc.loads;
+    mc.formResponses.set(p.id, [pick("Scan all items"), { canceled: true }]);
+    await pages.openInvMenu(p);
+    await settle();
+    assert.equal(mc.loads, loads, "usage figures and the scan came from the index");
+    const scan = mc.forms.filter((e) => e.player === p).at(-1).form;
+    assert.match(scan.heading, /Scan all items/);
+    assert.ok(scan.buttons.some((b) => /^Box 3 x1 - Page #5$/.test(b)), JSON.stringify(scan.buttons.slice(0, 6)));
+  } finally {
+    mc.pages = 5;
+    mc.players = all;
+  }
+});
+
+test("O17: locked, named and variant stacks are never pulled by refill; many pages without a match stay untouched", () => {
+  const p = joined();
+  const named = stack("minecraft:redstone", 40);
+  named.nameTag = "Spare";
+  const locked = stack("minecraft:redstone", 30);
+  locked.lockMode = "inventory";
+  const lored = stack("minecraft:redstone", 20);
+  lored.setLore(["owner"]);
+  arrange(p, { 2: { 9: named, 10: locked, 11: lored }, 3: { 9: stack("minecraft:redstone", 8) } });
+  const before = census(p);
+  assert.deepEqual(pages.refillFromPages(p, 0, WANT_REDSTONE), { n: 8, page: 3 }, "only the plain stack");
+  p.container.setItem(1, undefined);
+  assert.equal(pages.refillFromPages(p, 1, WANT_REDSTONE), undefined, "named, locked and lore stacks stay");
+  assert.deepEqual(census(p), before);
+  assertIndexExact(p, "after");
+});
+
+// ---------------------------------------------------------------------------
 // O72: sneak-tapping a container (main.js's playerInteractWithBlock handler, driven with real event objects)
 // ---------------------------------------------------------------------------
 
