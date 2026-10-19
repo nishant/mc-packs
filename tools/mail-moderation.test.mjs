@@ -192,3 +192,93 @@ test("O29: the purge says so when the name matches no letters", async () => {
   assert.match(op.messages.join("\n"), /No letters from "Nobody"/);
   assert.equal(w.stored().length, 1);
 });
+
+const mailer = async (opts) => {
+  const w = await world(opts);
+  const party = (code, ...names) => w.sim.game.deliver("realm:party_members", JSON.stringify({ code, l: `id-${names[0]}`, m: names.map((n) => [`id-${n}`, n]) }));
+  return { ...w, party };
+};
+
+test("O29 review: a party letter skips a mate who blocked the sender or is at the unread cap, and still reaches the rest", async () => {
+  const w = await mailer({ cfg: { sendCooldownSeconds: 0, senderUnreadCap: 1 }, letters: [letter(1, "id-Ann", "Ann", "id-Cy", "Cy")] });
+  w.sim.props.set("mail:b:id-Bob", JSON.stringify([{ i: "id-Ann", n: "Ann", keep: 1 }]));
+  w.party("P1", "Ann", "Bob", "Cy", "Di");
+  w.people.Ann.tags = ["realm_party:P1"];
+  w.sim.step(2);
+  w.sim.run("realm:mail", w.people.Ann);
+  await w.sim.nextForm();
+  const main = w.sim.pending[0].form.buttons;
+  w.sim.answer({ selection: 1 });
+  const f = await w.sim.nextForm();
+  const dd = f.form.parts.find((p) => p.kind === "dropdown");
+  const party = dd.items.findIndex((x) => /party/i.test(x));
+  assert.ok(party >= 0, dd.items.join("|") + main.join("|"));
+  w.sim.answer({ formValues: [party, "s", "hello", "", "", "", "", ""] });
+  await w.sim.settle();
+  drain(w.sim);
+  const got = (id) => w.stored().filter((l) => l.t === id && l.b === "hello").length;
+  assert.equal(got("id-Di"), 1);
+  assert.equal(got("id-Bob"), 0, "blocked");
+  assert.equal(got("id-Cy"), 0, "at the cap");
+  assert.match(w.people.Ann.messages.join("\n"), /Di/);
+});
+
+test("O29 review: deleting an unread letter frees the sender's cap", async () => {
+  const w = await world({ cfg: { sendCooldownSeconds: 0, senderUnreadCap: 1 }, letters: [letter(1, "id-Ann", "Ann", "id-Bob", "Bob")] });
+  assert.match((await sendTo(w, w.people.Ann, "Bob")).problem, /unread/);
+  w.sim.run("realm:mail", w.people.Bob);
+  await w.sim.nextForm();
+  w.sim.answer({ selection: 0 });
+  await w.sim.nextForm();
+  w.sim.answer({ selection: 0 });
+  const lf = await w.sim.nextForm();
+  const del = lf.form.buttons.findIndex((b) => /delete/i.test(b));
+  assert.ok(del >= 0, lf.form.buttons.join("|"));
+  w.sim.answer({ selection: del });
+  await w.sim.settle();
+  drain(w.sim);
+  assert.equal((await sendTo(w, w.people.Ann, "Bob")).problem, "");
+});
+
+async function purge(w, op, typed) {
+  w.sim.run("realm:mail", op);
+  await w.sim.nextForm();
+  w.sim.answer({ selection: w.sim.pending[0].form.buttons.findIndex((b) => /delete letters/i.test(b)) });
+  await w.sim.nextForm();
+  w.sim.answer({ formValues: [typed] });
+  await w.sim.settle();
+  if (w.sim.pending.length) w.sim.answer({ selection: 0 });
+  await w.sim.settle();
+  drain(w.sim);
+}
+
+test("O29 review: the purge finds a renamed or off-roster writer by letter name or id, ignoring codes and spaces", async () => {
+  const w = await world({
+    letters: [letter(1, "id-Old", "Zed", "id-Bob", "Bob"), letter(2, "id-Ann", "Ann", "id-Bob", "Bob")],
+    names: ["Ann", "Bob", "Cy", "Di", "Zed"], // a different player now holds the name Zed
+  });
+  const op = w.sim.join("Boss", { op: true, id: "id-Boss" });
+  await purge(w, op, " §cZed ");
+  assert.deepEqual(w.stored().map((l) => l.id), [2]);
+  const w2 = await world({ letters: [letter(1, "id-Old", "Zed", "id-Bob", "Bob")] });
+  const op2 = w2.sim.join("Boss", { op: true, id: "id-Boss" });
+  await purge(w2, op2, "id-Old");
+  assert.equal(w2.stored().length, 0);
+});
+
+test("O29 review: blocking keeps unknown fields on the saved block list", async () => {
+  const w = await world({ letters: [letter(1, "id-Ann", "Ann", "id-Bob", "Bob")] });
+  w.sim.props.set("mail:b:id-Bob", JSON.stringify([{ i: "x1", n: "X1", note: "kept" }]));
+  w.sim.run("realm:mail", w.people.Bob);
+  await w.sim.nextForm();
+  w.sim.answer({ selection: 0 });
+  await w.sim.nextForm();
+  w.sim.answer({ selection: 0 });
+  const f = await w.sim.nextForm();
+  w.sim.answer({ selection: f.form.buttons.findIndex((b) => /block/i.test(b)) });
+  await w.sim.settle();
+  drain(w.sim);
+  const saved = JSON.parse(w.sim.props.get("mail:b:id-Bob"));
+  assert.equal(saved.length, 2);
+  assert.equal(saved.find((b) => b.i === "x1").note, "kept");
+});

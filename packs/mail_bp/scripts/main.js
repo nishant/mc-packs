@@ -117,7 +117,7 @@ function blockedBy(id) {
   try {
     const raw = world.getDynamicProperty(BLOCK_PREFIX + id);
     const v = typeof raw === "string" ? JSON.parse(raw) : [];
-    return Array.isArray(v) ? v.filter((b) => b && typeof b.i === "string").map((b) => ({ i: b.i, n: String(b.n ?? "?") })) : [];
+    return Array.isArray(v) ? v.filter((b) => b && typeof b.i === "string").map((b) => ({ ...b, i: b.i, n: String(b.n ?? "?") })) : [];
   } catch {
     return [];
   }
@@ -571,14 +571,16 @@ async function purgeMenu(player) {
   if (!isOp(player)) return;
   const res = await show(player, new ModalFormData().title("§lDelete letters").textField("Gamertag of the writer", "Steve").submitButton("Find"));
   if (!res || res.canceled || !player.isValid) return;
-  const typed = String(res.formValues?.find((v) => typeof v === "string") ?? "").trim();
+  const typed = noCodes(String(res.formValues?.find((v) => typeof v === "string") ?? "")).trim();
   if (!typed) return;
   const want = typed.toLowerCase();
   const all = [...letters().values()].filter((l) => l.f);
-  const m = members().find((x) => x.n.toLowerCase() === want);
-  const ids = new Set(m ? [m.i] : all.filter((l) => l.fn.toLowerCase() === want).map((l) => l.f));
+  const ids = new Set([
+    ...members().filter((x) => x.n.toLowerCase() === want || x.i.toLowerCase() === want).map((x) => x.i),
+    ...all.filter((l) => l.fn.toLowerCase() === want || l.f.toLowerCase() === want).map((l) => l.f),
+  ]);
   const mine = all.filter((l) => ids.has(l.f));
-  if (!mine.length) return player.sendMessage(`§7No letters from "${typed.replace(/§/g, "")}".`);
+  if (!mine.length) return player.sendMessage(`§7No letters from "${typed}".`);
   const sure = await show(player, new ActionFormData().title("§lDelete letters").body(`Delete ${mine.length} letter${mine.length === 1 ? "" : "s"} from ${mine[0].fn}, from every inbox and their Sent list? This can't be undone.`).button("§cDelete").button("Cancel"));
   if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid) return;
   if (!isOp(player)) return player.sendMessage("§cOnly operators can delete other players' letters."); // de-opped while the form was open
