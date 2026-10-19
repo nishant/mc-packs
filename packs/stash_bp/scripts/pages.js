@@ -318,9 +318,10 @@ function addToEntries(entries, rec, mode) {
  * Puts a stack onto saved pages: matching stacks first, then empty slots. Returns what didn't fit.
  * @param {Player} player @param {ItemStack} item @param {number[]} pages
  * @param {Map<number, Rec[]>} [edits]
+ * @param {boolean} [perPage] fill each page (matching stacks, then free slots) before the next, so earlier pages fill first
  * @returns {{ rem: ItemStack | undefined, moved: Map<number, number>, edits: Map<number, Rec[]> }}
  */
-function storeOnPages(player, item, pages, edits = new Map()) {
+function storeOnPages(player, item, pages, edits = new Map(), perPage = false) {
   /** @type {Map<number, number>} */
   const moved = new Map();
   const rec = toRecord(item);
@@ -328,18 +329,22 @@ function storeOnPages(player, item, pages, edits = new Map()) {
   /** @type {Map<number, Rec[] | undefined>} */
   const loaded = new Map();
   let left = item.amount;
-  for (const mode of /** @type {const} */ (["merge", "fill"])) {
-    for (const p of pages) {
-      if (!left) break;
-      if (!loaded.has(p)) loaded.set(p, edits.get(p) ?? readPage(player, p));
-      const entries = loaded.get(p);
-      if (!entries) throw new Error(`page ${p} can't be read; nothing moved`);
-      const n = addToEntries(entries, { ...rec, n: left }, mode);
-      if (!n) continue;
-      left -= n;
-      edits.set(p, entries);
-      moved.set(p, (moved.get(p) ?? 0) + n);
-    }
+  /** @param {number} p @param {"merge" | "fill"} mode */
+  const put = (p, mode) => {
+    if (!left) return;
+    if (!loaded.has(p)) loaded.set(p, edits.get(p) ?? readPage(player, p));
+    const entries = loaded.get(p);
+    if (!entries) throw new Error(`page ${p} can't be read; nothing moved`);
+    const n = addToEntries(entries, { ...rec, n: left }, mode);
+    if (!n) return;
+    left -= n;
+    edits.set(p, entries);
+    moved.set(p, (moved.get(p) ?? 0) + n);
+  };
+  if (perPage) {
+    for (const p of pages) for (const mode of /** @type {const} */ (["merge", "fill"])) put(p, mode);
+  } else {
+    for (const mode of /** @type {const} */ (["merge", "fill"])) for (const p of pages) put(p, mode);
   }
   if (!left) return { rem: undefined, moved, edits };
   const rem = item.clone();
@@ -426,7 +431,7 @@ function usedOnPage(inv) {
 const switching = new Set();
 /** @type {Set<string>} */
 const recoveryWarned = new Set();
-/** @type {Map<string, { page: number, keys: Map<string, number> }>} what each player's page held at the last auto-store look */
+/** @type {Map<string, { page: number, amounts: Map<string, number>, live: Map<string, number> }>} what each player's page, and everything they carry, held at the last auto-store look */
 const snapshots = new Map();
 /**
  * Saves the active page and shows another. The page being left is saved and read back before anything
@@ -1026,19 +1031,42 @@ const lastEnforce = new Map();
 /** What a stack counts as when looking for new pickups: its item and name, not its amount. @param {ItemStack} item */
 const keyOf = (item) => `${item.typeId}|${item.nameTag ?? ""}|${item.getLore().join("/")}`;
 
-/** How many empty slots this page has, and how many stacks of each kind. @param {import("@minecraft/server").Container} inv */
+/** How many empty slots this page has, and how many items of each kind. @param {import("@minecraft/server").Container} inv */
 function lookAtPage(inv) {
   /** @type {Map<string, number>} */
-  const keys = new Map();
+  const amounts = new Map();
   let empty = 0;
   for (const s of STORAGE_SLOTS) {
     const item = inv.getItem(s);
     if (!item) empty++;
-    else if (!isButton(item)) keys.set(keyOf(item), (keys.get(keyOf(item)) ?? 0) + 1);
+    else if (!isButton(item)) amounts.set(keyOf(item), (amounts.get(keyOf(item)) ?? 0) + item.amount);
   }
-  return { empty, keys };
+  return { empty, amounts };
 }
 
+/** @type {string[]} the armor and offhand slots (EquipmentSlot values) */
+const WORN = ["Head", "Chest", "Legs", "Feet", "Offhand"];
+
+/**
+ * Everything the player carries right now: the page, the hotbar, the cursor and worn equipment, by kind. A stack that
+ * merely moves between those (a click, a shift-click, a hotbar swap) leaves this total alone, so only a stack that
+ * really came from outside is a pickup.
+ * @param {Player} player @param {import("@minecraft/server").Container} inv @param {Map<string, number>} page
+ */
+function liveTotals(player, inv, page) {
+  const live = new Map(page);
+  /** @param {ItemStack | undefined} item */
+  const add = (item) => {
+    if (item && !isButton(item)) live.set(keyOf(item), (live.get(keyOf(item)) ?? 0) + item.amount);
+  };
+  for (const s of HOTBAR) add(inv.getItem(s));
+  try { add(player.getComponent("minecraft:cursor_inventory")?.item); } catch { /* an unreadable cursor counts as empty */ }
+  try {
+    const worn = player.getComponent("minecraft:equippable");
+    if (worn) for (const slot of WORN) add(worn.getEquipment(/** @type {any} */ (slot)));
+  } catch { /* no equipment to count */ }
+  return live;
+}
 /** Free slots across every page the player has. @param {Player} player @param {import("@minecraft/server").Container} inv */
 function freeEverywhere(player, inv) {
   const total = totalPages(player);
@@ -1077,8 +1105,12 @@ function mayHold(player, page, id) {
 }
 
 /**
- * When the page is full or down to one free slot, the newest stack moves to another page, so the player never
- * stops picking things up. A stack is "new" when the page holds more stacks of its kind than at the last look.
+ * A stack that really arrived on the active page (a pickup, not a click, hotbar swap, cursor drop or armor change)
+ * goes to the earliest earlier page with room, so page 1 fills first and the active page stays free. When the active
+ * page is full or down to one free slot, later pages take overflow too. The pickup is told apart from a move by
+ * the total of everything carried (page, hotbar, cursor, worn gear): a kind only counts when that total grew, and
+ * only up to that growth. Every page touched is read once and everything is one transaction, so a failure changes
+ * nothing, and the look is always refreshed first so a failed attempt is never retried against old numbers.
  * @param {Player} player
  */
 function autoStore(player) {
@@ -1087,52 +1119,131 @@ function autoStore(player) {
   const total = totalPages(player);
   const cur = curPage(player);
   const now = lookAtPage(inv);
+  const live = liveTotals(player, inv, now.amounts);
   const before = snapshots.get(player.id);
-  snapshots.set(player.id, { page: cur, keys: now.keys });
-  if (!before || before.page !== cur || now.empty > 1) return;
+  snapshots.set(player.id, { page: cur, amounts: now.amounts, live });
+  if (!before || before.page !== cur) return;
 
-  /** @type {number[]} */
-  const others = [];
-  for (let p = 1; p <= total; p++) if (p !== cur) others.push(p);
   /** @type {Map<string, number>} */
-  const extra = new Map();
-  for (const [k, n] of now.keys) if (n > (before.keys.get(k) ?? 0)) extra.set(k, n - (before.keys.get(k) ?? 0));
-  if (!extra.size) return;
+  const gains = new Map();
+  for (const [k, n] of now.amounts) {
+    const gain = Math.min(n - (before.amounts.get(k) ?? 0), (live.get(k) ?? 0) - (before.live.get(k) ?? 0));
+    if (gain > 0) gains.set(k, gain);
+  }
+  if (!gains.size) return;
+  /** @type {number[]} */
+  const targets = [];
+  for (let p = 1; p <= total; p++) if (p !== cur && (p < cur || now.empty <= 1)) targets.push(p);
+  if (!targets.length) return;
 
-  let movedCount = 0;
-  let name = "";
+  /** @type {Map<number, Rec[]>} */
+  const edits = new Map();
+  /** @type {Map<number, ItemStack | undefined>} */
+  const changed = new Map();
   /** @type {Map<number, number>} */
   const perPage = new Map();
-  let empty = now.empty;
-  for (let i = STORAGE_SLOTS.length - 1; i >= 0 && extra.size && empty < 2; i--) {
+  let movedCount = 0;
+  let name = "";
+  for (let i = STORAGE_SLOTS.length - 1; i >= 0 && gains.size; i--) {
     const s = STORAGE_SLOTS[i];
     const item = inv.getItem(s);
-    if (!item || isButton(item)) continue;
+    if (!item || isButton(item) || item.lockMode === ItemLockMode.slot) continue;
     const key = keyOf(item);
-    const want = extra.get(key);
+    const want = gains.get(key);
     if (!want) continue;
-    extra.set(key, want - 1);
-    if (want - 1 <= 0) extra.delete(key);
-    const { rem, moved, edits } = storeOnPages(player, item, others);
+    const piece = item.clone();
+    piece.amount = Math.min(item.amount, want);
+    if (want - piece.amount > 0) gains.set(key, want - piece.amount);
+    else gains.delete(key);
+    const { rem, moved } = storeOnPages(player, piece, targets, edits, true);
     let n = 0;
     for (const [p, c] of moved) {
       n += c;
       perPage.set(p, (perPage.get(p) ?? 0) + c);
     }
     if (!n) continue;
-    const after = carried(inv).filter((e) => e.s !== s);
-    if (rem) after.push({ s, item: rem });
-    commitPages(player, edits, after);
-    if (!rem) empty++;
+    const left = item.amount - n;
+    if (left > 0) {
+      const keep = item.clone();
+      keep.amount = left;
+      changed.set(s, keep);
+    } else changed.set(s, undefined);
     movedCount += n;
     name = item.nameTag ?? pretty(item.typeId);
+    void rem;
   }
   if (!movedCount) return;
-  snapshots.set(player.id, { page: cur, keys: lookAtPage(inv).keys });
-  const dest = [...perPage.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  const after = carried(inv).filter((e) => !changed.has(e.s));
+  for (const [s, item] of changed) if (item) after.push({ s, item });
+  commitPages(player, edits, after);
+  const look = lookAtPage(inv);
+  snapshots.set(player.id, { page: cur, amounts: look.amounts, live: liveTotals(player, inv, look.amounts) });
+  const dest = [...perPage.entries()].sort((a, b) => a[0] - b[0]).sort((a, b) => b[1] - a[1])[0][0];
   hooks.bar(player, `§8[§bPage #${dest}§8] §7Auto-stored §f${movedCount}x ${name} §7(${freeEverywhere(player, inv)} slots left)`);
 }
 
+/**
+ * Manual "Fill earlier pages": this page's stacks, in slot order and unsorted, go into the earliest earlier page with
+ * room (matching stacks first, then free slots, page by page). The hotbar, cursor, buttons and slot-locked stacks
+ * stay; what doesn't fit stays. One transaction like every page edit, so a failure changes nothing. Works with
+ * auto-store disabled.
+ * @param {Player} player
+ * @returns {{ ok: true, stacks: number, items: number, left: number } | { ok: false, message: string }}
+ */
+export function fillEarlierPages(player) {
+  const id = player.id;
+  const inv = invOf(player);
+  if (!inv || !alive(player)) return { ok: false, message: "You can't move items right now" };
+  if (switching.has(id)) return { ok: false, message: "Another inventory change is still running. Try again in a moment" };
+  try {
+    if (stateOf(player).pending) return { ok: false, message: "Inventory recovery is safely saved and needs an operator" };
+    ensureLayout(player);
+  } catch (e) {
+    return { ok: false, message: `Items not moved: ${e}` };
+  }
+  switching.add(id);
+  try {
+    const cur = curPage(player);
+    if (cur <= 1 || cur > totalPages(player)) return { ok: false, message: "There is no earlier page to fill" };
+    /** @type {number[]} */
+    const earlier = [];
+    for (let p = 1; p < cur; p++) earlier.push(p);
+    /** @type {Map<number, Rec[]>} */
+    const edits = new Map();
+    /** @type {Map<number, ItemStack | undefined>} */
+    const changed = new Map();
+    let stacks = 0;
+    let items = 0;
+    let left = 0;
+    for (const s of STORAGE_SLOTS) {
+      const item = inv.getItem(s);
+      if (!item || isButton(item) || item.lockMode === ItemLockMode.slot) continue;
+      const { rem } = storeOnPages(player, item, earlier, edits, true);
+      const n = item.amount - (rem?.amount ?? 0);
+      left += rem?.amount ?? 0;
+      if (!n) continue;
+      stacks++;
+      items += n;
+      changed.set(s, rem);
+    }
+    if (!items) return { ok: false, message: "Nothing fit on the earlier pages. Nothing was moved" };
+    const after = carried(inv).filter((e) => !changed.has(e.s));
+    for (const [s, item] of changed) if (item) after.push({ s, item });
+    try {
+      commitPages(player, edits, after, cur);
+    } catch (e) {
+      console.warn(`[stash] filling earlier pages: ${e}`);
+      return { ok: false, message: `Items not moved: ${e}` };
+    }
+    snapshots.delete(id); // our own move, not a pickup
+    return { ok: true, stacks, items, left };
+  } catch (e) {
+    console.warn(`[stash] filling earlier pages: ${e}`);
+    return { ok: false, message: `Items not moved: ${e}` };
+  } finally {
+    switching.delete(id);
+  }
+}
 /**
  * Hotbar Refill ran out of a stack and found none like it on this page (realm:refill_need): the fullest stack like it on
  * another page goes into the empty hotbar slot. "Like it": the same item, name and lore, as Hotbar Refill matches them.
@@ -1202,7 +1313,10 @@ function tickPlayer(player, withAutoStore) {
     pollButtons(player);
     if (withAutoStore) sweepStrays(player, inv);
   }
-  if (total > 1 && withAutoStore && getFor(player, "autoStore") !== false) autoStore(player);
+  if (total > 1 && withAutoStore) {
+    if (getFor(player, "autoStore") !== false) autoStore(player);
+    else snapshots.delete(player.id); // what arrived while it was off is not new when it is turned back on
+  }
 }
 
 /** @type {Map<string, { until: number, text: string, logged: number }>} a player whose last tick failed waits before the next try */
@@ -1400,6 +1514,13 @@ function inventoryMenu(player) {
       }
       form.button("Scan all items across pages\n§8Find which page holds an item");
       actions.push(() => scanMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
+      if (cur > 1) {
+        form.button("Fill earlier pages\n§8Move this page's stacks into free space on earlier pages");
+        actions.push(() => {
+          const r = fillEarlierPages(player);
+          player.sendMessage(r.ok ? `§aMoved ${r.items} items (${r.stacks} stacks) to earlier pages${r.left ? `; ${r.left} did not fit and stayed here` : ""}.` : `§c${r.message}`);
+        });
+      }
       form.button("Move to page\n§8Send a stack or a whole row to another page");
       actions.push(() => openMoveMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
     }

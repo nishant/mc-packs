@@ -216,6 +216,7 @@ function makePlayer() {
     getComponent(name) {
       if (name === "minecraft:inventory") return { container };
       if (name === "minecraft:cursor_inventory") return cursor;
+      if (name === "minecraft:equippable") return { getEquipment: (slot) => player.worn?.[slot] };
       return undefined;
     },
   };
@@ -2117,6 +2118,111 @@ test("O17: locked, named and variant stacks are never pulled by refill; many pag
   assert.equal(pages.refillFromPages(p, 1, WANT_REDSTONE), undefined, "named, locked and lore stacks stay");
   assert.deepEqual(census(p), before);
   assertIndexExact(p, "after");
+});
+
+// ---------------------------------------------------------------------------
+// PR86: genuine pickups go to the earliest earlier page; "Fill earlier pages" moves a page's stacks in order
+// ---------------------------------------------------------------------------
+
+/** A pickup as the game delivers it: new stuff in the page, then the periodic look. */
+const pickup = (/** @type {any} */ p, /** @type {number} */ slot, /** @type {any} */ item) => {
+  p.container.setItem(slot, item);
+  advance(30);
+};
+
+test("PR86: a genuine pickup on page 3 goes to the earliest page with room even when page 3 has room; the hotbar stays", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: full([9]), 2: { 9: stack("minecraft:emerald", 3) } });
+  switchPage(p, 3);
+  advance(30);
+  pickup(p, 20, stack("minecraft:iron_ingot", 5));
+  assert.equal(p.container.getItem(20), undefined, "left the active page");
+  assert.equal(savedPage(p, 1).get(9)?.typeId, "minecraft:iron_ingot", "page 1 had the only free slot");
+  pickup(p, 21, stack("minecraft:gold_ingot", 2));
+  assert.equal(p.container.getItem(21), undefined);
+  assert.equal(savedPage(p, 2).size, 2, "page 1 is full now, so page 2 takes it");
+  p.container.setItem(2, stack("minecraft:diamond", 4));
+  advance(30);
+  assert.equal(p.container.getItem(2)?.typeId, "minecraft:diamond", "a hotbar pickup stays in the hotbar");
+  assertIndexExact(p, "after routing");
+});
+
+test("PR86: moving stacks between page, hotbar, cursor and worn gear is not a pickup", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  advance(30);
+  p.container.setItem(3, stack("minecraft:emerald", 7));
+  advance(30);
+  const moved = p.container.getItem(3);
+  p.container.setItem(3, undefined);
+  p.container.setItem(20, moved);
+  advance(30);
+  assert.equal(p.container.getItem(20)?.amount, 7, "a hotbar to page move stays on the page");
+  p.cursor.item = p.container.getItem(20);
+  p.container.setItem(20, undefined);
+  advance(30);
+  p.container.setItem(21, p.cursor.item);
+  p.cursor.item = undefined;
+  advance(30);
+  assert.equal(p.container.getItem(21)?.amount, 7, "a cursor to page move stays on the page");
+  p.worn = { Head: stack("minecraft:iron_ingot", 1) };
+  advance(130); // a quiet player is looked at every 5 s
+  p.container.setItem(22, p.worn.Head);
+  p.worn = {};
+  advance(30);
+  assert.equal(p.container.getItem(22)?.typeId, "minecraft:iron_ingot", "taking off worn gear is not a pickup");
+  p.worn = undefined;
+});
+
+test("PR86: re-enabling auto-store does not route what arrived while it was off", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  advance(30);
+  mc.prefs.set(`${p.id}:autoStore`, false);
+  advance(30);
+  p.container.setItem(20, stack("minecraft:emerald", 9));
+  advance(30);
+  mc.prefs.set(`${p.id}:autoStore`, true);
+  advance(30);
+  assert.equal(p.container.getItem(20)?.amount, 9);
+  mc.prefs.delete(`${p.id}:autoStore`);
+});
+
+test("fillEarlierPages: slot order, no sorting, hotbar and cursor untouched, leftovers stay, nothing lost", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: full([9, 10]), 2: { 9: stack("minecraft:emerald", 60), 10: stack("minecraft:stone", 64) } });
+  switchPage(p, 3);
+  p.container.setItem(30, stack("minecraft:iron_ingot", 5));
+  p.container.setItem(18, stack("minecraft:emerald", 10));
+  p.container.setItem(19, stack("minecraft:glowstone", 1));
+  p.container.setItem(1, stack("minecraft:redstone", 3));
+  p.cursor.item = stack("minecraft:redstone", 9);
+  const before = census(p);
+  const r = pages.fillEarlierPages(p);
+  assert.equal(r.ok, true);
+  assert.deepEqual(census(p), before, "nothing lost or duplicated");
+  assert.equal(savedPage(p, 1).get(9)?.typeId, "minecraft:emerald", "the slot 18 stack took page 1's first free slot");
+  assert.equal(savedPage(p, 1).get(10)?.typeId, "minecraft:glowstone", "then slot 19, unsorted");
+  assert.equal(p.container.getItem(1)?.typeId, "minecraft:redstone");
+  assert.equal(p.cursor.item?.amount, 9);
+  assertIndexExact(p, "after fill");
+});
+
+test("fillEarlierPages: refuses cleanly on page 1 and when nothing fits", () => {
+  const p = joined();
+  mc.players = [p];
+  assert.equal(pages.fillEarlierPages(p).ok, false);
+  arrange(p, { 1: full(), 2: full() });
+  switchPage(p, 2);
+  const before = census(p);
+  assert.equal(pages.fillEarlierPages(p).ok, false);
+  assert.deepEqual(census(p), before);
 });
 
 // ---------------------------------------------------------------------------
