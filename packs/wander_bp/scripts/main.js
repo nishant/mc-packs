@@ -690,6 +690,7 @@ function updateLabels() {
         return [];
       }
     });
+  /** @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string }[]} */
   const targets = [];
   for (const rec of Object.values(live)) {
     const ent = entityById(rec.e);

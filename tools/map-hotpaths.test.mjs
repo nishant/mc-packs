@@ -66,6 +66,16 @@ test("nobody due gives nothing, and fewer due than fit keep their list order eve
 
 // The tests below run the real callbacks and helpers cut out of main.js (not copies), with stubbed game objects.
 const mainSource = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+
+test("a cached player who left is not resolved as an online waypoint target", () => {
+  const declaration = mainSource.match(/^const onlineById = .+;$/m)?.[0];
+  assert.ok(declaration, "the real online target resolver exists");
+  const resolve = vm.runInNewContext(`${declaration}\nonlineById`);
+  const gone = { id: "gone", isValid: false, get location() { throw new Error("offline"); } };
+  const here = { id: "here", isValid: true };
+  assert.equal(resolve("gone", [gone, here]), undefined);
+  assert.equal(resolve("here", [gone, here]), here);
+});
 /** The n-th top-level system.runInterval callback of main.js, as a function expression's source. */
 function callbackSource(n) {
   let at = -1;

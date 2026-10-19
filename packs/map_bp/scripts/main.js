@@ -393,7 +393,7 @@ let costPasses = 0;
 let costPlayers = 0;
 
 /** A live player's position, if they're online. @param {string} id @param {Player[]} all */
-const onlineById = (id, all) => all.find((p) => p.id === id);
+const onlineById = (id, all) => all.find((p) => p.isValid && p.id === id);
 
 /** The siege spot for a player: the nearest circle still singing, else the town (the warning). @param {Player} player */
 function siegeSpot(player) {

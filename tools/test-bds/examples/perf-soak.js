@@ -34,9 +34,22 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   t.server("/gamerule sendcommandfeedback false");
   t.server("/gamerule showcoordinates false");
 
-  // Callers yield a tick after removing areas so an in-flight removal cannot erase the next loader.
+  const clearedAreas = new Set();
+  // Never remove a production pack's loader while preparing the simulated population.
   const clearAreas = () => {
-    for (const d of [over, nether]) { try { d.runCommand("tickingarea remove_all"); } catch (e) { /* none */ } }
+    const raw = t.world.getDynamicProperty("harness:tickingAreas");
+    const areas = raw === undefined ? [] : JSON.parse(raw);
+    if (!Array.isArray(areas)) throw new Error("The harness ticking-area list is not an array");
+    for (const area of areas) {
+      const key = `${area.dimension}|${area.name}`;
+      if (clearedAreas.has(key)) continue;
+      if (!/^harness_\d+_\d+$/.test(area.name) || !["minecraft:overworld", "minecraft:nether", "minecraft:the_end"].includes(area.dimension))
+        throw new Error("Refusing to remove an area not owned by the harness");
+      const result = t.world.getDimension(area.dimension).runCommand(`tickingarea remove "${area.name}"`);
+      if (!(result.successCount > 0)) throw new Error(`Could not remove fixture area ${area.name}`);
+      clearedAreas.add(key);
+    }
+    try { nether.runCommand("tickingarea remove soak_nether"); } catch (e) { /* optional scenario-owned pocket */ }
   };
   const rnd = (n) => Math.floor(Math.random() * n);
   const ringSpot = (k) => {

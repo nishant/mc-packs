@@ -20,7 +20,7 @@ function fakeHarness({ players, seconds, failSpawn = () => false, dropAt = () =>
     args: { players: String(players), seconds: String(seconds), group: String(group), water: "2", nether: "2", commands: "0" },
     packs: [],
     get tick() { return tick; },
-    world: { getDimension: () => dim, getDefaultSpawnLocation: () => ({ x: 163, y: 70, z: 170 }) },
+    world: { getDimension: () => dim, getDefaultSpawnLocation: () => ({ x: 163, y: 70, z: 170 }), getDynamicProperty: () => undefined },
     server: () => ({ ok: true }),
     cmd: () => ({ ok: true }),
     log: (...a) => logs.push(a.join(" ")),

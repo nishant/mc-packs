@@ -941,7 +941,9 @@ function approachStep(e, step, units = 1) {
 /** @param {Vector3} a @param {Vector3} b */
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
-/** How far a champion steps after `elapsed` ticks since its last step: the pace times that time (at least one step's, at most `APPROACH_CATCHUP`), but under 0.9 block (collision safety), so a pace above 0.9 block a step-time or a crowd bigger than a run slows the walk. */
+/** How far a champion steps after `elapsed` ticks since its last step: the pace times that time (at least one step's, at most `APPROACH_CATCHUP`), but under 0.9 block (collision safety), so a pace above 0.9 block a step-time or a crowd bigger than a run slows the walk.
+ * @param {number} speed @param {number} elapsed
+ */
 function stepFor(speed, elapsed) {
   const ticks = Math.min(Math.max(Number(elapsed) || 0, STEP_TICKS), STEP_TICKS * APPROACH_CATCHUP);
   return Math.min(0.9, (Math.max(0, Number(speed) || 0) * ticks) / 20);

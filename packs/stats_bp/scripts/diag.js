@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "stats_bp";
-const VERSION = "1.4.11";
+const VERSION = "1.4.12";
 const NAME = "Stats & Leaderboards";
 /** @type {string[]} */
 const PREFIXES = ["stats"];

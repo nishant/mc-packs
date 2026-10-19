@@ -147,8 +147,8 @@ make a comparison pass. What the profiler measures: time inside the callbacks ea
 `await` inside an async callback is not attributed (see `lib/profile.js`), and a run of separate packs sums separate script
 contexts, whereas `--bundle --profile` measures the real merged context as one row.
 
-Population setup yields one tick after removing temporary ticking areas before adding the next loader. This settles
-area removal without changing the declared population, group/spread, water/Nether placement or steady window.
+Population setup removes only its own temporary ticking areas, never another pack's loader, then yields one tick
+before adding the next loader. Population, group/spread, water/Nether placement and the steady window are unchanged.
 Use the same setup version for the frozen before packs and candidate packs; retain invalid population attempts.
 
 The shim also checks the script event rule: a pack that sends a `realm:` script event of 2048 characters or

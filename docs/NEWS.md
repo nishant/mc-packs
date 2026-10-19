@@ -35,7 +35,7 @@ entries below as a changelog.
 - Blood Moon: blood.maxExtraWorld caps the extra monsters for the whole world. Default 0 means no limit. It counts loaded monsters only.
 - Expeditions: when every dungeon is busy, up to 8 parties wait in a first-come line for 30 minutes. Leaving the line keeps your place for the others; a queued reroll is refused before it costs anything.
 - Parties and Stats side boxes: long updates arrive in parts and show only once the whole set is in.
-- Tornadoes: wind and rumble volume change in 8-block steps, so players at the same distance hear the same volume.
+- Tornadoes: wind, rumble and horn volume change in 8-block steps, so players at the same distance hear the same volume.
 
 ## Clear quests and safer inventory pages
 
