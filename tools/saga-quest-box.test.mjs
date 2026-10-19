@@ -118,7 +118,7 @@ function rowsIn(/** @type {string} */ line) {
 }
 const rowsOfBox = (/** @type {string} */ text) => text.split("\n").reduce((n, line) => n + rowsIn(line), 0);
 const plainOf = (/** @type {string} */ text) => text.replace(/§./g, "");
-const SUMMARY = /^§7\+(\d+) more( quests| steps)? in \/realm:saga$/;
+const SUMMARY = /^§7\+(\d+) more( quests?| steps?)? in \/realm:saga$/;
 
 // ---------------------------------------------------------------------------------------------------------------
 // What the stories and the tracker can put in the box
