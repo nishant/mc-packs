@@ -43,11 +43,11 @@ test("only the word confirm runs a reset", () => {
 });
 
 test("generations count up from missing or damaged values", () => {
-  assert.equal(R.nextGeneration(undefined), 1);
-  assert.equal(R.nextGeneration(3), 4);
-  assert.equal(R.nextGeneration("x"), 1);
-  assert.equal(R.nextGeneration(-4), 1);
-  assert.equal(R.nextGeneration(NaN), 1);
+  assert.equal(R.nextGeneration(undefined, 0), 1);
+  assert.equal(R.nextGeneration(3, 0), 4);
+  assert.equal(R.nextGeneration("x", 0), 1);
+  assert.equal(R.nextGeneration(-4, 0), 1);
+  assert.equal(R.nextGeneration(NaN, 0), 1);
 });
 
 test("a player is reset once per generation, offline players on their next join", () => {
@@ -109,4 +109,16 @@ test("every map menu checks the reset generation after its form returns", () => 
   const shows = src.map((l, i) => (/await show\(player, form\)/.test(l) ? i : -1)).filter((i) => i >= 0);
   assert.ok(shows.length >= 4);
   for (const i of shows) assert.match(src.slice(i, i + 3).join("\n"), /resetSince\(/, `line ${i + 1}`);
+});
+test("a reset after the world's generation was forgotten still reaches players saved at an earlier one", () => {
+  const { nextGeneration, needsReset, resetPlayer } = R;
+  const now = Date.UTC(2026, 9, 19);
+  const g1 = nextGeneration(undefined, now);
+  const player = { p: new Map([["map:wp", "x"]]), getDynamicProperty(k) { return this.p.get(k); }, setDynamicProperty(k, v) { if (v === undefined) this.p.delete(k); else this.p.set(k, v); } };
+  resetPlayer(player, g1);
+  const g2 = nextGeneration(undefined, now + 5000); // world property forgotten, then reset again
+  assert.ok(g2 > g1);
+  assert.equal(needsReset(g2, player.getDynamicProperty("map:gen")), true);
+  assert.equal(nextGeneration(g2, now), g2 + 1, "same second: still strictly increasing");
+  assert.equal(nextGeneration(7, now), Math.floor(now / 1000), "old small generations are passed");
 });
