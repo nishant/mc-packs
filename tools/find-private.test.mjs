@@ -46,6 +46,20 @@ async function world({ shards, items = {}, props = {}, load = true } = {}) {
     return p;
   };
   const open = (p, x) => sim.game.emit("world.after.playerInteractWithBlock", { player: p, block: blocks.get(x) });
+  /** Answers Chest Finder's access question the way Land Claims or Stash would: `answer(spots, playerId) -> { closed, ours }`. */
+  let answer;
+  const push = sim.game.sent.push.bind(sim.game.sent);
+  sim.game.sent.push = (s) => {
+    const n = push(s);
+    if (answer && s.id === "realm:access_check") {
+      const ask = JSON.parse(s.message);
+      if (ask.id !== "hello") {
+        const { closed = [], ours = [] } = answer(ask.spots, ask.player);
+        sim.game.deliver("realm:access_check_result", JSON.stringify({ id: ask.id, from: "claims_bp", closed, ours }));
+      }
+    }
+    return n;
+  };
   const find = async (p, q) => {
     p.messages.length = 0;
     sim.run("realm:find", p, q);
@@ -54,7 +68,10 @@ async function world({ shards, items = {}, props = {}, load = true } = {}) {
     await sim.settle(3);
     return sim.pending.length ? sim.pending.shift() : undefined;
   };
-  return { sim, mk, open, find, blocks, dim };
+  const place = (p, x) => sim.game.emit("world.after.playerPlaceBlock", { player: p, block: blocks.get(x) });
+  const breakAt = (p, x) => sim.game.emit("world.after.playerBreakBlock", { player: p, block: blocks.get(x), brokenBlockPermutation: { type: { id: blocks.get(x).typeId } } });
+  const replace = (x, id, list) => blocks.set(x, { ...chest(dim, x, list.map((n) => ({ typeId: `minecraft:${n}`, amount: 3 }))), typeId: `minecraft:${id}` });
+  return { sim, mk, open, find, blocks, dim, place, breakAt, replace, setAnswer: (f) => (answer = f) };
 }
 
 test("new world: a player finds only the container they opened", async () => {
@@ -136,4 +153,61 @@ test("migration: an operator's explicit choice is never overwritten, and it runs
   w.sim.props.set("find:cfg", JSON.stringify({ privateIndex: true, maxResults: 5 }));
   w.sim.game.emit("world.after.worldLoad", {});
   assert.equal(JSON.parse(w.sim.props.get("find:cfg")).privateIndex, true);
+});
+test("O28 review: an owner or shared player who never opened the container finds it when an access answer says it is theirs", async () => {
+  const shard = JSON.stringify({ "overworld:10,64,0": { t: [["diamond", 5]], at: 1700000000000, b: "chest" } });
+  const w = await world({ shards: [shard], props: { "find:cfg": JSON.stringify({ privateIndex: true }) }, items: { 10: ["diamond"] } });
+  const ann = w.mk("Ann");
+  const bob = w.mk("Bob");
+  w.setAnswer((spots, player) => (player === "id-Ann" ? { ours: [0] } : {}));
+  assert.equal((await w.find(ann, "diamond"))?.form.buttons.length, 1);
+  assert.equal(await w.find(bob, "diamond"), undefined);
+});
+
+test("O28 review: a container in someone else's claim is never shown, even to its viewer; and 'ours' needs a live answer", async () => {
+  const w = await world({ items: { 10: ["diamond"] } });
+  const ann = w.mk("Ann");
+  w.open(ann, 10);
+  w.setAnswer(() => ({ closed: [0] }));
+  assert.equal(await w.find(ann, "diamond"), undefined);
+  w.setAnswer(undefined);
+  assert.ok(await w.find(ann, "diamond"));
+});
+
+test("O28 review: a placed container is the placer's; many viewers never push the placer out", async () => {
+  const w = await world({ items: { 10: ["diamond"] } });
+  const ann = w.mk("Ann");
+  w.place(ann, 10);
+  for (let i = 0; i < 12; i++) w.open(w.mk(`V${i}`), 10);
+  const bob = w.mk("Bob");
+  assert.ok(await w.find(ann, "diamond"), "the placer still finds it");
+  assert.equal(await w.find(bob, "diamond"), undefined);
+  w.sim.step(700);
+  const e = JSON.parse(w.sim.props.get("find:idx:0"))["overworld:10,64,0"];
+  assert.deepEqual(e.o, ["id-Ann"]);
+  assert.ok(e.w.length <= 8);
+});
+
+test("O28 review: a delayed look for a player who opened a container later replaced at the same spot is dropped", async () => {
+  const w = await world({ items: { 10: ["diamond"] } });
+  const ann = w.mk("Ann");
+  const bob = w.mk("Bob");
+  w.open(ann, 10);
+  w.breakAt(ann, 10);
+  w.replace(10, "chest", ["diamond"]);
+  w.place(bob, 10);
+  w.sim.step(1300); // both the 200 and the 1200 tick looks run
+  assert.equal(await w.find(ann, "diamond"), undefined, "Ann does not inherit the new container");
+  assert.ok(await w.find(bob, "diamond"));
+});
+
+test("O28 review: a container replaced by another type without a break event does not keep its viewers", async () => {
+  const w = await world({ items: { 10: ["diamond"] } });
+  const ann = w.mk("Ann");
+  const bob = w.mk("Bob");
+  w.open(ann, 10);
+  w.replace(10, "barrel", ["diamond"]);
+  w.open(bob, 10);
+  assert.equal(await w.find(ann, "diamond"), undefined);
+  assert.ok(await w.find(bob, "diamond"));
 });

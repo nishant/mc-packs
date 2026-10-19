@@ -641,25 +641,29 @@ function answerCheck(message) {
 
 // Other packs ask which containers a player may not open (Quick Stack & Sort's quick stack, Chest Finder's results):
 //   realm:access_check        { id, player, spots: [[dim, x, y, z], ...] }  (at most 40 spots per message)
-//   realm:access_check_result { id, from, closed: [i, ...] }                 (indexes into that message's spots)
+//   realm:access_check_result { id, from, closed: [i, ...], ours?: [i, ...] } (indexes into that message's spots)
 // `closed` lists the spots in someone else's claim, the same rule as opening a chest there: none while claims are
-// disabled. Always answered, so the asker learns that Land Claims takes part.
+// disabled. `ours` lists the spots in a claim the player owns, is shared on, or shares through their party (not an operator bypass). Always answered, so the asker learns that Land Claims takes part.
 /** @param {string} message */
 function answerAccess(message) {
   const q = JSON.parse(message);
   if (!q || typeof q !== "object") return;
   /** @type {number[]} */
   const closed = [];
+  /** @type {number[]} */
+  const ours = [];
   if (enabled() && claims().size && Array.isArray(q.spots)) {
     const pid = String(q.player ?? "");
     const who = world.getAllPlayers().find((p) => p.id === pid);
     q.spots.slice(0, 40).forEach((/** @type {unknown} */ s, /** @type {number} */ i) => {
       if (!Array.isArray(s) || typeof s[0] !== "string" || !Number.isFinite(Number(s[1])) || !Number.isFinite(Number(s[3]))) return;
       const c = claimAt(s[0], { x: Number(s[1]), y: 0, z: Number(s[3]) });
-      if (c && !(who ? allowed(who, c) : c.o === pid || c.s.some((w) => w.i === pid))) closed.push(i);
+      if (!c) return;
+      if (!(who ? allowed(who, c) : c.o === pid || c.s.some((w) => w.i === pid))) closed.push(i);
+      else if (c.o === pid || c.s.some((w) => w.i === pid) || (who && partyAllowed(who, c))) ours.push(i);
     });
   }
-  system.sendScriptEvent("realm:access_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), from: "claims_bp", closed }));
+  system.sendScriptEvent("realm:access_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), from: "claims_bp", closed, ours }));
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.

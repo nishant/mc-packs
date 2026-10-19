@@ -111,3 +111,20 @@ test("an owner's last visit is saved on join and on leave, unknown fields kept",
   c = JSON.parse(w.sim.props.get("claims:c:1"));
   assert.ok(c.lv >= now, "set on leave: " + c.lv);
 });
+
+test("O28 access answer: the owner and a shared player get 'ours'; a stranger is closed; an operator bypass is not ownership", async () => {
+  for (const bypass of [false, true]) {
+    const w = await world({ claims: [claim(1, "id-Ann", "Ann", 0, 16, { s: [{ i: "id-Bob", n: "Bob" }] })], cfg: { operatorsBypass: bypass } });
+    const ask = (player) => {
+      const before = w.sim.game.sent.length;
+      w.sim.game.deliver("realm:access_check", JSON.stringify({ id: "t", player, spots: [[OW, 3, 64, 3], [OW, 400, 64, 0]] }));
+      const r = w.sim.game.sent.slice(before).find((s) => s.id === "realm:access_check_result");
+      return JSON.parse(r.message);
+    };
+    assert.deepEqual([ask("id-Ann").closed, ask("id-Ann").ours], [[], [0]]);
+    assert.deepEqual([ask("id-Bob").closed, ask("id-Bob").ours], [[], [0]]);
+    assert.deepEqual([ask("id-Cy").closed, ask("id-Cy").ours], [[0], []]);
+    const op = ask("id-Op");
+    assert.deepEqual([op.closed, op.ours], [bypass ? [] : [0], []]);
+  }
+});
