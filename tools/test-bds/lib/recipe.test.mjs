@@ -96,4 +96,6 @@ test("CRLF scenario headers stage the same shell program as LF headers", () => {
     "HOOK",
   ].join("\n");
   assert.equal(stageRecipe(recipe.replace(/\n/g, "\r\n"), "/tmp/stage's path"), stageRecipe(recipe, "/tmp/stage's path"));
+  const headerRecipe = recipe.split("\n").map(line => `//   ${line}\r`).map(line => line.slice(5)).join("\n");
+  assert.equal(stageRecipe(headerRecipe, "/tmp/stage's path"), stageRecipe(recipe, "/tmp/stage's path"), "the final comment line also carries a CR, without a following newline");
 });

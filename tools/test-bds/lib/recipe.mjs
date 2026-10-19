@@ -48,7 +48,7 @@ export function stagePrefix(stageDir) {
  * Here-document bodies are copied literally.
  */
 export function stageRecipe(recipe, stageDir) {
-  recipe = recipe.replace(/\r\n/g, "\n");
+  recipe = recipe.replace(/\r(?=\n|$)/g, "");
   const base = stagePrefix(stageDir);
   let out = "";
   let quote = null; // null | "'" | '"'
