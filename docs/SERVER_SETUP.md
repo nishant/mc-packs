@@ -132,7 +132,9 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 | Stats & Leaderboards | `tickerDefaultOn` | true | true | Players who never chose start on. A saved personal on/off choice wins even after later default changes |
 | Champions | `maxAlive` | 8 | 16 | A world-wide cap: 8 champions shared by 100 spread-out players means most never meet one. They cost little (about 0.04 ms a tick at 40 players) |
 | Expeditions | `slots` | 1 | 3 | Three dungeons of 4 players at once instead of one; about 0.1 ms a tick per run going. Uses up to 3 of the world's 10 ticking areas while dungeons reset |
-| Easy Building | `maxBlocksCap` | 50,000 | 10,000 | One 50,000-block build by any player stalls the server for everyone; 10,000 still covers houses and walls |
+| Easy Building | `maxBlocksCap` | 50,000 | 2,000 | Bound each public-server build; the separate `defaultMaxBlocks` stays 50,000 but is clamped to the cap |
+| Easy Building | `operatorsOnly` | Disabled | Enabled | Only operators use the building tools on the public-server profile |
+| Easy Building | `allowInfiniteReach` | Enabled | Disabled | Do not let public-server builds reach faraway areas |
 | Lag Cleanup | `threshold` | 500 | 1,500 | It counts dropped items in every dimension together; more players drop more, so cleanups stay about as rare |
 | Chest Finder | `liveScanRadius` | 16 | 8 | Each search reads 4,913 blocks instead of 35,937; farther containers still come from its index |
 | Realm Configuration | `checkSeconds` | 30 | 60 | The item check reads every inventory, about 0.2 ms per player: half as often |

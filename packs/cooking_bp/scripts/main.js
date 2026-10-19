@@ -1,17 +1,34 @@
 import "./diag.js";
-import { CommandPermissionLevel, CustomCommandStatus, ItemStack, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, ItemStack, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./recipes.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
 const PROP_STATS = "cooking:stats"; // player: JSON { c: servings cooked, e: dishes eaten }
-const PROP_PENDING = "cooking:pending"; // world: JSON { [player id]: [recipe id] } learned while offline
-const PROP_OWED = "cooking:owed"; // world: JSON { [player id]: { [dish id]: batches } } cooked after the cook left, where the pot's area was unloaded
-const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
+// Per player, one world property each plus an index (owed.js): "cooking:pending:<player id>" = [recipe id] learned while offline
+// (index "cooking:pending_idx"), and "cooking:owed:<player id>" = { [dish id]: batches } cooked after the cook left, where the pot's
+// area was unloaded (index "cooking:owed_idx").
+const pendingStore = createOwedStore(world, {
+  base: "cooking:pending",
+  normalize: (v) => {
+    if (!Array.isArray(v)) throw new Error("not a recipe list");
+    return v;
+  },
+  summarize: (v) => `recipes ${JSON.stringify(v)}`,
+});
+const owedStore = createOwedStore(world, {
+  base: "cooking:owed",
+  normalize: (v) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("not a dish list");
+    return v;
+  },
+  summarize: (v) => `dishes ${JSON.stringify(v)}`,
+});const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
 const PROP_STAR = "cooking:star"; // world: ms of the last aurora or meteor (realm:sky_event)
 const MINUTE = 60000;
 const MOON_MAX_MS = 20 * MINUTE; // a moon night lasts about 10 minutes; forget a moon that never set (saved before game ticks were)
@@ -422,24 +439,29 @@ function readCards(player) {
 
 /** Recipes learned (by a story) while the player was offline. @param {Player} player */
 function applyPending(player) {
-  const all = loadJson(world, PROP_PENDING);
-  if (!all || typeof all !== "object" || !Array.isArray(all[player.id])) return;
-  for (const id of all[player.id]) {
-    const d = dishById.get(id);
-    if (d) learn(player, d, "from a story");
-  }
-  delete all[player.id];
-  saveJson(world, PROP_PENDING, Object.keys(all).length ? all : undefined);
+  const list = pendingStore.take(player.id);
+  if (!Array.isArray(list)) return;
+  applyParts(
+    list.filter((id) => dishById.has(id)),
+    (id) => learn(player, /** @type {Dish} */ (dishById.get(id)), "from a story"),
+    (failed) => {
+      for (const id of failed) {
+        const d = dishById.get(id);
+        if (d) addPending(player.id, d);
+      }
+    },
+    (m) => console.warn(`[cooking] ${m}`),
+  );
 }
 
 /** @param {string} pid @param {Dish} d */
 function addPending(pid, d) {
-  const all = loadJson(world, PROP_PENDING);
-  const map = all && typeof all === "object" ? all : {};
-  const list = Array.isArray(map[pid]) ? map[pid] : [];
-  if (!list.includes(d.id)) list.push(d.id);
-  map[pid] = list;
-  saveJson(world, PROP_PENDING, map);
+  const ok = pendingStore.update(pid, (cur) => {
+    const list = Array.isArray(cur) ? cur : [];
+    if (!list.includes(d.id)) list.push(d.id);
+    return list;
+  });
+  if (!ok) console.warn(`[cooking] recipe ${d.id} for ${pid} could not be saved`);
 }
 
 // After a /reload, the players still online get what finished cooking meanwhile (others when they join).
@@ -553,46 +575,46 @@ function isLoaded(pot) {
 
 /** @param {string} pid @param {Dish} d @param {number} n batches @returns {boolean} whether it was saved */
 function owe(pid, d, n) {
-  const all = loadJson(world, PROP_OWED);
-  const map = all && typeof all === "object" ? all : {};
-  const mine = map[pid] && typeof map[pid] === "object" ? map[pid] : {};
-  mine[d.id] = (Number(mine[d.id]) || 0) + n;
-  map[pid] = mine;
-  try {
-    world.setDynamicProperty(PROP_OWED, JSON.stringify(map));
-    return true;
-  } catch (e) {
-    console.warn(`[cooking] save ${PROP_OWED}: ${e}`);
-    return false;
-  }
+  return owedStore.update(pid, (cur) => {
+    const mine = cur && typeof cur === "object" && !Array.isArray(cur) ? cur : {};
+    mine[d.id] = (Number(mine[d.id]) || 0) + n;
+    return mine;
+  });
 }
 
 /** Takes up to `n` batches of `d` off what `pid` is owed; returns how many were owed. @param {string} pid @param {Dish} d @param {number} n */
 function settle(pid, d, n) {
-  const all = loadJson(world, PROP_OWED);
-  const mine = all && typeof all === "object" && all[pid] && typeof all[pid] === "object" ? all[pid] : undefined;
-  const have = Math.floor(Number(mine?.[d.id]) || 0);
-  const due = Math.max(0, Math.min(n, have));
-  if (!due || !mine) return 0;
-  if (have - due > 0) mine[d.id] = have - due;
-  else delete mine[d.id];
-  if (!Object.keys(mine).length) delete all[pid];
-  saveJson(world, PROP_OWED, Object.keys(all).length ? all : undefined);
+  let due = 0;
+  owedStore.update(pid, (cur) => {
+    if (!cur || typeof cur !== "object" || Array.isArray(cur)) return cur;
+    const have = Math.floor(Number(cur[d.id]) || 0);
+    due = Math.max(0, Math.min(n, have));
+    if (!due) return cur;
+    if (have - due > 0) cur[d.id] = have - due;
+    else delete cur[d.id];
+    return Object.keys(cur).length ? cur : undefined;
+  });
   return due;
 }
 
-/** Dishes that finished cooking after the player left (or that a restart interrupted). @param {Player} player */
-function applyOwed(player) {
-  const all = loadJson(world, PROP_OWED);
-  if (!all || typeof all !== "object" || !all[player.id] || typeof all[player.id] !== "object") return;
-  const mine = all[player.id];
-  delete all[player.id];
-  saveJson(world, PROP_OWED, Object.keys(all).length ? all : undefined);
-  for (const [id, n] of Object.entries(mine)) {
-    const d = dishById.get(id);
-    const batches = Math.floor(Number(n));
-    if (d && batches > 0) deliver(player, d, batches);
-  }
+/** Dishes that finished cooking after the player left (or that a restart interrupted). `pid` and `failIds` are for the native test hook. @param {Player} player @param {string} [pid] @param {Set<string>} [failIds] */
+function applyOwed(player, pid = player.id, failIds) {
+  const mine = owedStore.take(pid);
+  if (!mine || typeof mine !== "object" || Array.isArray(mine)) return;
+  const parts = Object.entries(mine)
+    .map(([id, n]) => /** @type {[string, number]} */ ([id, Math.floor(Number(n))]))
+    .filter(([id, n]) => dishById.has(id) && n > 0);
+  applyParts(
+    parts,
+    ([id, n]) => {
+      if (failIds?.has(id)) throw new Error("test: grant failed");
+      deliver(player, /** @type {Dish} */ (dishById.get(id)), n);
+    },
+    (failed) => {
+      for (const [id, n] of failed) owe(pid, /** @type {Dish} */ (dishById.get(id)), n);
+    },
+    (m) => console.warn(`[cooking] ${m}`),
+  );
 }
 
 /** Is this cauldron a cooking pot (a lit campfire under it)? @param {import("@minecraft/server").Block} block */
@@ -1192,7 +1214,8 @@ const findIng = (v) => (typeof v === "string" ? ingByKey.get(keyOf(v)) : undefin
 /** @param {unknown} v */
 const amountOf = (v) => Math.max(1, Math.min(640, Math.floor(Number(v) || 1)));
 
-const HANDLED = new Set([
+onScriptEvent(
+  [
   "realm:npc_talk",
   "realm:npc_choose",
   "realm:champion_slain",
@@ -1204,12 +1227,9 @@ const HANDLED = new Set([
   "realm:cooking_cook",
   "realm:cooking_eat",
   "realm:cooking_owed_ping",
-]);
-
-onScriptEvent(
-  [...HANDLED],
-  ({ id, message }) => {
-    if (!HANDLED.has(id)) return;
+  "realm:cooking_owed_test",
+  ],
+  ({ id, message, sourceType }) => {
     /** @type {any} */
     let msg;
     try {
@@ -1219,10 +1239,37 @@ onScriptEvent(
     }
     if (!msg || typeof msg !== "object") return;
     try {
+      if (id === "realm:cooking_owed_test") {
+        // Tests (console only): seed an old-layout owed map, hand a stored debt to a named player, report the saved keys.
+        if (sourceType !== ScriptEventSource.Server) return;
+        if (msg.seed && typeof msg.seed === "object") world.setDynamicProperty("cooking:owed", JSON.stringify(msg.seed));
+        if (typeof msg.claim === "string" && typeof msg.as === "string") {
+          const who = world.getPlayers({ name: msg.as })[0];
+          if (who) applyOwed(who, msg.claim, Array.isArray(msg.fail) ? new Set(msg.fail.map(String)) : undefined);
+        }
+        const ids = owedStore.ids().slice(0, 10);
+        /** @type {Record<string, unknown>} */
+        const values = {};
+        for (const pid of ids) values[pid] = owedStore.get(pid);
+        const legacy = world.getDynamicProperty("cooking:owed");
+        const full = {
+          keys: world.getDynamicPropertyIds().filter((k) => k.startsWith("cooking:owed")).slice(0, 20),
+          index: ids,
+          values,
+          legacy: typeof legacy === "string" ? JSON.parse(legacy) : null,
+        };
+        // A script event message is limited to 2048 characters: a report that does not fit says so instead of being cut.
+        const text = JSON.stringify(full);
+        if (text.length < 2000) send("realm:cooking_owed_test_report", full);
+        else {
+          console.warn(`[cooking] owed test report is ${text.length} characters, too long to send`);
+          send("realm:cooking_owed_test_report", { error: "too long", length: text.length });
+        }
+        return;
+      }
       if (id === "realm:cooking_owed_ping") {
         // Tests: how many players are owed dishes and how many batches in all.
-        const all = loadJson(world, PROP_OWED);
-        const lists = all && typeof all === "object" ? Object.values(all) : [];
+        const lists = owedStore.ids().map((pid) => owedStore.get(pid)).filter((m) => m && typeof m === "object");
         const batches = lists.reduce((sum, m) => sum + Object.values(m ?? {}).reduce((a, b) => a + (Math.floor(Number(b)) || 0), 0), 0);
         send("realm:cooking_owed", { players: lists.length, batches });
         return;

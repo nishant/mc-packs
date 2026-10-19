@@ -38,6 +38,7 @@ import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
 import { aheadPicks, colKey, COL, glyphAt, KEY_BIAS, KEY_SPAN, MISS_RETRY, readColumn, sampleCoord, spendBudget, TerrainWorld } from "./terrain.js";
 import { onScriptEvent } from "./script-events.js";
+import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetPlayer, staleForm, WORLD_GEN } from "./reset.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -224,6 +225,7 @@ const arrived = new Map();
 
 /** @param {Player} player @returns {Waypoint | undefined} */
 function waypointOf(player) {
+  checkReset(player);
   if (wpCache.has(player.id)) return wpCache.get(player.id) ?? undefined;
   /** @type {Waypoint | null} */
   let wp = null;
@@ -251,6 +253,7 @@ function setWaypoint(player, wp) {
 }
 /** @param {Player} player @returns {Spot[]} */
 function marksOf(player) {
+  checkReset(player);
   const hit = marksCache.get(player.id);
   if (hit) return hit;
   /** @type {Spot[]} */
@@ -275,6 +278,49 @@ function saveMarks(player, list) {
   } catch (e) {
     console.warn(`[map] save: ${e}`);
   }
+}
+
+// /realm:map_reset: see reset.js. The world's generation is read once and kept; each player is checked once per visit.
+/** @type {number | undefined} */
+let worldGen;
+/** @type {Set<string>} */
+const resetChecked = new Set();
+function currentGen() {
+  if (worldGen === undefined) {
+    try {
+      worldGen = generationOf(world.getDynamicProperty(WORLD_GEN));
+    } catch {
+      return 0; // the world isn't loaded yet: read again next time
+    }
+  }
+  return worldGen;
+}
+/** Clears this player's marks and destination once if a reset ran since they were last here. @param {Player} player */
+function applyReset(player) {
+  resetChecked.add(player.id);
+  try {
+    const gen = currentGen();
+    if (!needsReset(gen, player.getDynamicProperty(PLAYER_GEN))) return;
+    resetPlayer(player, gen);
+    wpCache.set(player.id, null);
+    marksCache.set(player.id, []);
+    lastSent.delete(player.id);
+    views.delete(player.id);
+    passAt.delete(player.id);
+    player.sendMessage("§7[Map] An operator reset everyone's destination and marked spots.");
+  } catch (e) {
+    console.warn(`[map] reset: ${e}`);
+  }
+}
+/** @param {Player} player */
+function checkReset(player) {
+  if (!resetChecked.has(player.id)) applyReset(player);
+}
+/** True (and says so) when an operator reset the map after `gen` was read, so a menu opened before it must not save what it shows. @param {number} gen @param {Player} player */
+function resetSince(gen, player) {
+  if (!staleForm(gen, currentGen())) return false;
+  if (player.isValid) player.sendMessage("§e[Map] An operator reset the map while this menu was open. Open it again.");
+  return true;
 }
 
 /**
@@ -1451,6 +1497,7 @@ function toggleCompass(player) {
 
 /** @param {Player} player */
 async function menu(player) {
+  const gen = currentGen();
   const all = world.getAllPlayers();
   const dest = destination(player, all, new Map());
   const wp = waypointOf(player);
@@ -1480,14 +1527,16 @@ async function menu(player) {
   form.button("Close");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length || !player.isValid) return;
+  if (resetSince(gen, player)) return;
   await actions[res.selection][1]();
 }
 
 /** @param {Player} player */
 async function markMenu(player) {
+  const gen = currentGen();
   const form = new ModalFormData().title("Mark this spot").textField("Name", "e.g. Iron cave", { defaultValue: `Spot ${marksOf(player).length + 1}` });
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid || resetSince(gen, player)) return;
   const vals = /** @type {unknown[]} */ (res.formValues ?? []).filter((v) => v !== undefined);
   player.sendMessage(markHere(player, String(vals[0] ?? "")));
 }
@@ -1524,24 +1573,25 @@ function choices(player) {
 /** @param {Player} player */
 async function pickMenu(player) {
   while (player.isValid) {
+    const gen = currentGen();
     const groups = choices(player);
     const form = new ActionFormData().title("Pick a destination").body("§7The gold star on your compass strip and radar points there. A destination clears when you arrive.");
     for (const [name, list] of groups) form.button(`${name}\n§8${list.length ? `${list.length} to pick from` : "None yet"}`);
     form.button("Back");
     const res = await show(player, form);
-    if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+    if (!res || res.canceled || res.selection === undefined || !player.isValid || resetSince(gen, player)) return;
     if (res.selection >= groups.length) return menu(player);
     const [name, list] = groups[res.selection];
     if (!list.length) {
       player.sendMessage(`§7[Map] ${name}: none yet.`);
       continue;
     }
-    if (await listMenu(player, name, list)) return;
+    if (await listMenu(player, name, list, gen)) return;
   }
 }
 
-/** @param {Player} player @param {string} title @param {Waypoint[]} list @returns {Promise<boolean>} whether one was picked (or the menu closed) */
-async function listMenu(player, title, list) {
+/** @param {Player} player @param {string} title @param {Waypoint[]} list @param {number} gen the reset generation `list` was read at @returns {Promise<boolean>} whether one was picked (or the menu closed) */
+async function listMenu(player, title, list, gen) {
   const sorted = [...list].sort((a, b) => distTo(player, a) - distTo(player, b)).slice(0, MENU_MAX);
   const marks = sorted[0]?.k === "mark";
   const form = new ActionFormData().title(title);
@@ -1550,6 +1600,7 @@ async function listMenu(player, title, list) {
   form.button("Back");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return true;
+  if (resetSince(gen, player)) return true;
   if (marks && res.selection === sorted.length) {
     await forgetMenu(player);
     return false;
@@ -1563,12 +1614,13 @@ async function listMenu(player, title, list) {
 
 /** @param {Player} player */
 async function forgetMenu(player) {
+  const gen = currentGen();
   const list = marksOf(player);
   const form = new ActionFormData().title("Forget a spot");
   for (const m of list) form.button(`${m.n}\n§8${where(player, m)}`);
   form.button("Back");
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined || res.selection >= list.length || !player.isValid) return;
+  if (!res || res.canceled || res.selection === undefined || res.selection >= list.length || !player.isValid || resetSince(gen, player)) return;
   const gone = list[res.selection];
   saveMarks(
     player,
@@ -1718,6 +1770,8 @@ function onEvent(id, m, source) {
         pose: t ? { ...t.at, dim: t.dim, heading: t.heading, radius: t.radius, north: t.north } : undefined,
         target: t?.target,
         wp: player ? waypointOf(player) ?? null : null,
+        marks: player ? marksOf(player) : [],
+        resetGen: currentGen(),
         terrain: player ? {
           store: storeFor(player.id, player.dimension.id).id,
           surface: surface ? { columns: surface.cols.size, fine: surface.fine.size } : undefined,
@@ -1793,6 +1847,8 @@ world.afterEvents.worldLoad.subscribe(() => {
 });
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
+  resetChecked.delete(player.id);
+  applyReset(player);
   const id = player.id;
   system.runTimeout(() => ping(id), 40);
 });
@@ -1830,6 +1886,35 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       system.run(() => {
         if (player.isValid) player.sendMessage(markHere(player, typeof name === "string" ? name : ""));
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:map_reset",
+      description: "Operators: clear every player's map destination and marked spots (offline players on their next join). Run it with confirm",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      optionalParameters: [{ name: "confirm", type: CustomCommandParamType.String }],
+    },
+    (origin, confirm) => {
+      const who = origin.initiator ?? origin.sourceEntity;
+      if (who instanceof Player && !isOp(who)) return { status: CustomCommandStatus.Failure, message: "Only operators can reset the map." };
+      if (!confirmed(confirm)) {
+        return { status: CustomCommandStatus.Success, message: "This clears every player's map destination and marked spots, and offline players' on their next join. Run /realm:map_reset confirm to do it." };
+      }
+      system.run(() => {
+        try {
+          const gen = nextGeneration(world.getDynamicProperty(WORLD_GEN));
+          world.setDynamicProperty(WORLD_GEN, gen);
+          worldGen = gen;
+          for (const p of world.getAllPlayers()) applyReset(p);
+          console.warn(`[map] reset ${gen}: destinations and marked spots cleared for ${world.getAllPlayers().length} online players; offline players on their next join`);
+          if (who instanceof Player && who.isValid) who.sendMessage("§a[Map] Reset done: online players now, everyone else when they next join.");
+        } catch (e) {
+          console.warn(`[map] reset: ${e}`);
+        }
       });
       return { status: CustomCommandStatus.Success };
     }

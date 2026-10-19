@@ -33,6 +33,11 @@ function cap(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function chosenOption(player, modeId, opt) {
+    const cur = getModeOption(player, modeId, opt.key);
+    return opt.choices.includes(cur) ? cur : opt.choices[0];
+}
+
 function plain(label) {
     return label.replace(/§./g, "");
 }
@@ -82,7 +87,7 @@ async function showVanillaOptionsMenu(player, modeId, modeLabel) {
 
     while (true) {
         const summary = opts
-            .map(o => `${o.label}: §e${cap(getModeOption(player, modeId, o.key))}§r`)
+            .map(o => `${o.label}: §e${cap(chosenOption(player, modeId, o))}§r`)
             .join("  §8|§r  ");
 
         const form = new ActionFormData()
@@ -91,7 +96,7 @@ async function showVanillaOptionsMenu(player, modeId, modeLabel) {
 
         const btns = [];
         for (const opt of opts) {
-            const cur = getModeOption(player, modeId, opt.key);
+            const cur = chosenOption(player, modeId, opt);
             for (const choice of opt.choices) {
                 const active = cur === choice;
                 form.button(`${active ? "§l§a> §r" : ""}${opt.label}: ${cap(choice)}`);

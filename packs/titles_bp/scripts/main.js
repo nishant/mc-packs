@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { savedForm, stale, sweepRecords, unknownFields } from "./prune.js";
 
 // Each player's titles, trails and built-in stats are one world property, `titles:p:<player id>`, so
 // other packs can unlock titles for players who are offline and operators can give titles to them.
@@ -11,7 +12,7 @@ import { onScriptEvent } from "./script-events.js";
 // pack shows it under the name. Trails are particles from the Realm Skies resource pack: without it
 // installed they just don't show.
 
-/** @typedef {{ n: string, t: string[], r: string[], tr: string, s: { d: number, n: number, w: number } }} Data gamertag, titles, trails, chosen trail ("" = none), stats: distance, night seconds, storm seconds */
+/** @typedef {{ n: string, t: string[], r: string[], tr: string, s: { d: number, n: number, w: number }, ls: number }} Data gamertag, titles, trails, chosen trail ("" = none), stats: distance, night seconds, storm seconds, last seen (ms; 0 = not yet known) */
 
 const KEY_PREFIX = "titles:p:";
 const PROP_WEATHER = "titles:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -73,11 +74,13 @@ function parse(v) {
   const strings = (/** @type {any} */ a) => (Array.isArray(a) ? a.filter((x) => typeof x === "string") : []);
   const num = (/** @type {any} */ x) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : 0);
   return {
+    ...unknownFields(v, ["n", "t", "r", "tr", "s", "ls"]),
     n: typeof v?.n === "string" ? v.n : "",
     t: strings(v?.t),
     r: strings(v?.r).filter((r) => TRAILS[r]),
     tr: typeof v?.tr === "string" && TRAILS[v.tr] ? v.tr : "",
     s: { d: num(v?.s?.d), n: num(v?.s?.n), w: num(v?.s?.w) },
+    ls: num(v?.ls),
   };
 }
 
@@ -101,7 +104,7 @@ function save(id) {
   if (!d) return;
   dirty.delete(id);
   try {
-    world.setDynamicProperty(KEY_PREFIX + id, JSON.stringify({ ...d, s: { d: Math.floor(d.s.d), n: Math.floor(d.s.n), w: Math.floor(d.s.w) } }));
+    world.setDynamicProperty(KEY_PREFIX + id, JSON.stringify(savedForm({ ...d, s: { d: Math.floor(d.s.d), n: Math.floor(d.s.n), w: Math.floor(d.s.w) } })));
   } catch (e) {
     console.warn(`[titles] save: ${e}`);
   }
@@ -241,11 +244,38 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   lastSpot.delete(player.id); // respawning or joining isn't traveling
   if (!initialSpawn) return;
   const d = dataOf(player.id);
-  if (d.n !== player.name) {
+  const now = Date.now();
+  if (d.n !== player.name || stale(d.ls, now)) {
     d.n = player.name;
+    d.ls = now;
     save(player.id);
   }
 });
+
+/** Deletes the saved titles, trails and stats of players not seen for `forgetAfterDays`. A record with no time starts counting now. */
+function* forgetOld() {
+  if (!(Number(get("forgetAfterDays")) > 0)) return;
+  let keys;
+  try {
+    keys = world.getDynamicPropertyIds().filter((k) => k.startsWith(KEY_PREFIX));
+  } catch {
+    return;
+  }
+  yield* sweepRecords({
+    keys: () => keys,
+    raw: (key) => world.getDynamicProperty(key),
+    online: (key) => cache.has(key.slice(KEY_PREFIX.length)) || world.getAllPlayers().some((p) => p.id === key.slice(KEY_PREFIX.length)),
+    days: () => Number(get("forgetAfterDays")),
+    now: () => Date.now(),
+    start: (key, v, now) => world.setDynamicProperty(key, JSON.stringify({ ...v, ls: now })),
+    drop: (key, v, days) => {
+      world.setDynamicProperty(key, undefined);
+      console.warn(`[titles] forgot ${v.n || key.slice(KEY_PREFIX.length)}: not seen for over ${days} days (${Array.isArray(v.t) ? v.t.length : 0} titles)`);
+    },
+    warn: (e) => console.warn(`[titles] ${e}`),
+  });
+}system.runTimeout(() => system.runJob(forgetOld()), 1400);
+system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   if (dirty.has(playerId)) save(playerId);

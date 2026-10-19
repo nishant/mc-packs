@@ -63,6 +63,8 @@ const SPECIAL = {
   "saga-lighthouse": { args: ["--flat", "--only", "saga_bp", "--timeout", "300"], note: "no command in header" },
   "perf-soak": { args: ["--no-relay", "--profile", "--profile-every", "0", "--arg", "players=6", "--arg", "seconds=60", "--timeout", "400"], note: "short soak (6 players, 60 s)" },
   "stash-pages-persistence": { runner: "stash-persistence.mjs", note: "custom runner stash-persistence.mjs" },
+  "stash-recover-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-recover-restart.js")], note: "owning-addon pending journal recovery across a restart" },
+  "build-beds": { runner: "build-beds.mjs", note: "native main-pipeline proof, not simulated second-input or physical acceptance" },
   "bundle-smoke": { args: ["--flat", "--bundle", "dist/realm_bundle.mcpack", "--timeout", "300"], prepare: ["tools/bundle.mjs", "--all"], note: "builds the Realm Bundle first (dist/realm_bundle.mcpack), runs it as one script context" },
   "full-bundle-protocols": { fullBundle: true, note: "builds and stages the genuine 67-member cancellation bundle" },
   "stash-page-transfer-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-page-transfer-restart.js")], note: "moved native row across two physical restarts" },

@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 const PACK = "fishing_bp";
 const PROP_WEATHER = "fishing:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -13,7 +14,7 @@ const PROP_RECORDS = "fishing:records"; // world: JSON { [speciesId]: [cm, name,
 const PROP_BASKET = "fishing:basket"; // player: JSON Record<string, [string, number][]> item typeId -> [[speciesId, sizeCm], ...]
 const PROP_TOURNEY = "fishing:tourney"; // world: JSON of the running tournament (see Tourney)
 const PROP_TMETA = "fishing:tmeta"; // world: JSON { last, warned }: the scheduled starts already handled
-const PROP_OWED = "fishing:owed"; // world: JSON { [player id]: [crowns, note] }: prizes for players who were offline
+// Prizes for players who were offline: one world property per player, "fishing:owed:<player id>" = [crowns, note, quest id], plus the index "fishing:owed_idx" (owed.js).
 const OVERWORLD = "minecraft:overworld";
 const FISH_ITEMS = new Set(["minecraft:cod", "minecraft:salmon", "minecraft:tropical_fish", "minecraft:pufferfish"]);
 const MINUTE = 60000;
@@ -787,6 +788,15 @@ function finishTournament() {
   world.sendMessage(lines.join("\n"));
 }
 
+const owedStore = createOwedStore(world, {
+  base: "fishing:owed",
+  normalize: (v) => {
+    if (!Array.isArray(v)) throw new Error("not a prize record");
+    return v;
+  },
+  summarize: (v) => `${Number(v?.[0]) || 0} Crowns (${v?.[1] ?? ""})`,
+});
+
 /**
  * Pays a prize now, or when the player next joins.
  * @param {string} id @param {number} crowns @param {string} note @param {string} questId
@@ -798,22 +808,29 @@ function pay(id, crowns, note, questId) {
     send("realm:quest_done", { player: id, pack: PACK, id: questId, label: note, kind: "tournament" });
     return;
   }
-  const owed = loadWorld(PROP_OWED) ?? {};
-  const prev = Array.isArray(owed[id]) ? owed[id] : [0, ""];
-  owed[id] = [(Number(prev[0]) || 0) + crowns, note, questId];
-  saveWorld(PROP_OWED, owed);
+  const saved = owedStore.update(id, (cur) => [(Array.isArray(cur) ? Number(cur[0]) || 0 : 0) + crowns, note, questId]);
+  if (!saved) console.warn(`[fishing] ${crowns} Crowns for ${id} (${note}) could not be saved`);
 }
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   system.runTimeout(() => {
     try {
-      const owed = loadWorld(PROP_OWED);
-      const due = owed?.[player.id];
-      if (!player.isValid || !Array.isArray(due)) return;
-      delete owed[player.id];
-      saveWorld(PROP_OWED, Object.keys(owed).length ? owed : undefined);
-      if (addCrowns(player, due[0])) {
+      if (!player.isValid) return;
+      const due = owedStore.take(player.id);
+      if (!Array.isArray(due)) return;
+      const { applied } = applyParts(
+        [due],
+        (d) => {
+          if (!addCrowns(player, d[0])) throw new Error("the crowns could not be added");
+        },
+        (failed) => {
+          // Keep them owed for the next join.
+          if (!owedStore.update(player.id, (cur) => [(Array.isArray(cur) ? Number(cur[0]) || 0 : 0) + failed.reduce((a, d) => a + (Number(d[0]) || 0), 0), due[1], due[2]])) throw new Error("could not be saved");
+        },
+        (m) => console.warn(`[fishing] ${m}`),
+      );
+      if (applied) {
         player.sendMessage(`§6+${due[0]} Crowns §7(${due[1]})`);
         send("realm:quest_done", { player: player.id, pack: PACK, id: String(due[2] ?? "tournament"), label: String(due[1]), kind: "tournament" });
       }

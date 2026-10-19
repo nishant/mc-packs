@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { stale, sweepGamertags } from "./prune.js";
 
 // A nickname shows above the player's head (Player.nameTag). The stable Script API has no chat
 // events, so chat, the player list and death messages keep the gamertag.
@@ -19,6 +20,7 @@ import { onScriptEvent } from "./script-events.js";
 
 const KEY_PREFIX = "nick:p:"; // world property per player: nick:p:<player id> -> Nick
 const SEEN_PREFIX = "nick:g:"; // world property per gamertag ever seen here: nick:g:<lowercase gamertag> -> player id
+const TIME_PREFIX = "nick:t:"; // world property per player: nick:t:<player id> -> when last seen (ms)
 const NAME_RULE = /^[A-Za-z0-9_ ]{3,16}$/;
 const DISABLED = "Nicknames are disabled on this realm. An operator can enable them in /realm:config (Nicknames).";
 
@@ -136,10 +138,39 @@ function noteGamertag(player) {
   const key = SEEN_PREFIX + player.name.toLowerCase();
   try {
     if (world.getDynamicProperty(key) !== player.id) world.setDynamicProperty(key, player.id);
+    const now = Date.now();
+    if (stale(world.getDynamicProperty(TIME_PREFIX + player.id), now)) world.setDynamicProperty(TIME_PREFIX + player.id, now);
   } catch (e) {
     console.warn(`[nick] ${e}`);
   }
 }
+
+/** Forgets the gamertags of players not seen for `forgetGamertagsAfterDays` (their nicknames stay). A player with no saved time starts counting now. */
+function* forgetOld() {
+  if (!(Number(get("forgetGamertagsAfterDays")) > 0)) return;
+  let ids;
+  try {
+    ids = world.getDynamicPropertyIds().filter((k) => k.startsWith(SEEN_PREFIX));
+  } catch {
+    return;
+  }
+  yield* sweepGamertags({
+    keys: () => ids,
+    owner: (key) => world.getDynamicProperty(key),
+    online: (id) => world.getAllPlayers().some((p) => p.id === id),
+    seen: (id) => world.getDynamicProperty(TIME_PREFIX + id),
+    days: () => Number(get("forgetGamertagsAfterDays")),
+    now: () => Date.now(),
+    start: (id, now) => world.setDynamicProperty(TIME_PREFIX + id, now),
+    drop: (key, id, days) => {
+      world.setDynamicProperty(key, undefined);
+      world.setDynamicProperty(TIME_PREFIX + id, undefined);
+      console.warn(`[nick] forgot the gamertag ${key.slice(SEEN_PREFIX.length)}: not seen for over ${days} days`);
+    },
+    warn: (e) => console.warn(`[nick] ${e}`),
+  });
+}system.runTimeout(() => system.runJob(forgetOld()), 1200);
+system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (initialSpawn) noteGamertag(player);

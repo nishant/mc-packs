@@ -10,4 +10,7 @@ export const CONFIG = {
 
   /** Shown before a nickname while the player has afkTag (AFK `nameTagPrefix`). Keep the same as the AFK pack's. */
   afkPrefix: "§7[AFK]§r ",
+
+  /** A gamertag nobody has used for this many days stops being reserved, and its saved visit time is deleted. Nicknames are kept. 0 = never forget. */
+  forgetGamertagsAfterDays: 365,
 };

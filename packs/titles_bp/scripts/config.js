@@ -5,6 +5,9 @@ export const CONFIG = {
   /** Trails follow the players who chose one. */
   trails: true,
 
+  /** A player's saved titles, trails and stats are deleted when they haven't joined for this many days. 0 = never delete. */
+  forgetAfterDays: 365,
+
   /** A trail puff every this many ticks (20 ticks = 1 second) while a player moves. */
   trailTicks: 4,
 

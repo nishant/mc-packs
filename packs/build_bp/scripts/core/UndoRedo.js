@@ -25,6 +25,13 @@ export function clearPlayerTempStacks(playerId) {
 }
 function pack(typeId) { return typeId.startsWith("minecraft:") ? typeId.slice(10) : typeId; }
 function unpack(t)    { return t.includes(":") ? t : "minecraft:" + t; }
+function itemUnits(block) {
+    if (!block || block.u === 0) return 0;
+    const id = unpack(block.t);
+    if (id === "minecraft:air") return 0;
+    if (block.s?.head_piece_bit === true && (id === "minecraft:bed" || id === "minecraft:straw_bed")) return 0;
+    return 1;
+}
 function getSize(player, type) {
     return (player.getDynamicProperty(`eb:${type}_n`) ?? 0);
 }
@@ -123,7 +130,8 @@ export function captureSnapshot(dim, toPlace, typeId, blockStates, perPosTypeIds
     const aft = toPlace.map((pos, i) => ({
         x: pos.x, y: pos.y, z: pos.z,
         t: pack(perPosTypeIds ? perPosTypeIds[i] : typeId),
-        s: perPosTypeIds ? {} : (blockStates ?? {}),
+        s: pos._resolvedStates ?? (perPosTypeIds ? {} : (blockStates ?? {})),
+        u: pos._bedHead || pos._resolvedStates?.head_piece_bit === true ? 0 : 1,
     }));
     return { dim: dim.id, bef, aft };
 }
@@ -172,8 +180,8 @@ export function performUndo(player) {
     if (entry.destroy && entry.survival && !isCreative(player) && entry.bef?.length) {
         const needed = new Map();
         for (const b of entry.bef) {
+            if (!itemUnits(b)) continue;
             const befId = unpack(b.t);
-            if (befId === "minecraft:air") continue;
             needed.set(befId, (needed.get(befId) ?? 0) + 1);
         }
         for (const [tid, count] of needed) {
@@ -199,7 +207,7 @@ export function performUndo(player) {
             } catch {}
             if (!unchangedSinceBuild) continue;
             filteredBef.push(b);
-            if (checkRefund && aftId !== "minecraft:air" && unpack(b.t) !== aftId) {
+            if (checkRefund && itemUnits(a) && unpack(b.t) !== aftId) {
                 refund.set(aftId, (refund.get(aftId) ?? 0) + 1);
             }
         }
@@ -224,8 +232,8 @@ export function performRedo(player) {
     if (entry.destroy && entry.survival && !isCreative(player) && entry.bef?.length) {
         const refund = new Map();
         for (const b of entry.bef) {
+            if (!itemUnits(b)) continue;
             const befId = unpack(b.t);
-            if (befId === "minecraft:air") continue;
             refund.set(befId, (refund.get(befId) ?? 0) + 1);
         }
         for (const [tid, count] of refund) giveBlocks(player, tid, count);
@@ -234,8 +242,8 @@ export function performRedo(player) {
         for (let i = 0; i < entry.aft.length; i++) {
             const a = entry.aft[i];
             const b = entry.bef?.[i];
+            if (!itemUnits(a)) continue;
             const aftId = unpack(a.t);
-            if (aftId === "minecraft:air") continue;
             if (b && unpack(b.t) === aftId) continue;
             needed.set(aftId, (needed.get(aftId) ?? 0) + 1);
         }

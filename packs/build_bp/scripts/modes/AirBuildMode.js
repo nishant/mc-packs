@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { BlockPermutation } from "@minecraft/server";
+import { bedStates, directionFromYaw, isBedType } from "../core/beds.js";
 const FACE_OFFSETS = {
     Up:    { x:  0, y:  1, z:  0 },
     Down:  { x:  0, y: -1, z:  0 },
@@ -40,6 +41,7 @@ function tryStates(typeId, candidates) {
     return {};
 }
 export function getPlacementStatesFromFace(typeId, blockFace, player) {
+    if (isBedType(typeId)) return bedStates(typeId, directionFromYaw(player.getRotation().y), false, {});
     const hDir = yawToHDir(player.getRotation().y);
     const hOpposites = { north:"south", south:"north", east:"west", west:"east" };
     const blockFacing = (blockFace === "Up" || blockFace === "Down")
@@ -62,6 +64,7 @@ export function getPlacementStatesFromFace(typeId, blockFace, player) {
     ]);
 }
 export function getPlacementStatesFromAir(typeId, player) {
+    if (isBedType(typeId)) return bedStates(typeId, directionFromYaw(player.getRotation().y), false, {});
     const rot   = player.getRotation();
     const hDir  = yawToHDir(rot.y);
     const pitch = rot.x;
