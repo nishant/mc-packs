@@ -316,18 +316,21 @@ owner approval. Anything the packet brief describes but HEAD source does not con
 
 - O1 Map (`42de58a5`): CODE DONE, lossless work cuts only. Hard budget of 1 ms or less NOT proved; native and
   measurement open.
-- O6 HUD (`a83dc571`): CODE DONE for stale and malformed `realm:hud_state` parts being rejected (stats_bp and
-  party_bp). Native and measurement open. Not verified at this HEAD: the full multipart contract as the brief writes
-  it (100-tick partial timeout, 200-tick completed-sequence window, 1900-byte batches); check before relying on it.
-- O7 Blood Moon (`d910426d`): CODE DONE for clear-cell invalidation on `playerPlaceBlock`, an exact 9x9x9 recheck
-  for built cells, and the dawn sweep of tagged mobs in all dimensions. NOT in HEAD: `blood.maxExtraWorld` (the
-  0 unlimited, 0..1000 step 10 option) and any always-live claim for API, piston, command, axe or door moves. The
-  Large 160 proposal is root-owned and has no native performance approval.
-- O8 Expedition (`369d257b`): test-only CRLF fix. The FIFO party queue, the 1..3 slot ticking budget and the stash
-  and sigil rules are NOT in HEAD source (`expedition_bp/scripts/main.js` has no queue code). Native open.
-- O3 Champions and Wanderers (`8f89f3f8`): test-only LF fix. The elite source (`9fabad89`, maxAlive 80, schema 160,
-  maxAlivePerPlayer, maxAliveNearby) is NOT an ancestor of HEAD; HEAD still has `maxAlive: 8`. Follow-up review:
-  not marked independently APPROVED.
+- O6 HUD (`a83dc571`): CODE DONE at packet head, NOT in this branch's HEAD yet; root merge pending. Multipart
+  `realm:hud_state` `{part, parts, seq, players}`, 1900 UTF-8 byte batches, no 100-part cap, complete-only assembly,
+  100-tick partial timeout, 200-tick completed-seq window with a bounded producer-restart gap. Native and
+  measurement open.
+- O7 Blood Moon (`d910426d`): CODE DONE at packet head, NOT in this branch's HEAD yet; root merge pending. Covers
+  per-cell clear-cache invalidation on `playerPlaceBlock`, the exact 9x9x9 recheck for built cells, the dawn sweep
+  of tagged mobs in all dimensions, and `blood.maxExtraWorld` (default 0 = unlimited, loaded-only, 0..1000 step 10).
+  No always-live claim for API, piston, command, axe or door moves. The Large 160 proposal is root-owned and has no
+  native performance approval.
+- O8 Expedition (`369d257b`): CODE DONE at packet head, NOT in this branch's HEAD yet; root merge pending. FIFO
+  queue of 8 parties, 30 min (36000 ticks) memory TTL, 1..3 slots (default 1) sharing a 10-tick budget, leave/reset/
+  operator-forget rules, queued reroll refused before debit. Native open.
+- O3 Champions and Wanderers (`fce94f2a`, test fix `8f89f3f8`): CODE DONE at packet head, NOT in this branch's HEAD
+  yet (HEAD still has `maxAlive: 8`); root merge pending. Covers maxAlive 80 (schema 160), maxAlivePerPlayer 0.8,
+  maxAliveNearby 3 within 64 blocks. Follow-up review: not marked independently APPROVED.
 - O9 Tornado (`2030b19e`): CODE DONE for the perf-acceptance gate, which also touches `docs/WORKING.md` (owned by
   O9). Wind, rumble and horn volume banding is a follow-up review; per-player calls are kept, with no true RPC batch
   and no MPT claim.
