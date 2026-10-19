@@ -47,7 +47,14 @@ function parse(p) {
   /** @type {[string, string, number?][]} */
   const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => memberOf(m));
   if (!members.length) return undefined;
-  return { ...unknownFields(any, ["l", "m"]), l: members.some((m) => m[0] === any.l) ? any.l : members[0][0], m: members };
+  const l = members.some((m) => m[0] === any.l) ? any.l : members[0][0];
+  const out = { ...unknownFields(any, ["l", "m"]), l, m: members };
+  if (Array.isArray(any.mu)) {
+    const mu = any.mu.filter((/** @type {unknown} */ x) => x !== l); // a leader is never muted
+    if (mu.length) /** @type {any} */ (out).mu = mu;
+    else delete (/** @type {any} */ (out).mu);
+  }
+  return out;
 }
 
 /** @returns {Map<string, Party>} code -> party */
@@ -225,6 +232,10 @@ function remove(id, why) {
   else if (p.l === id) {
     const next = p.m.find((m) => online(m[0])) ?? p.m[0];
     p.l = next[0];
+    if (Array.isArray(anyP.mu)) {
+      anyP.mu = anyP.mu.filter((/** @type {unknown} */ x) => x !== p.l);
+      if (!anyP.mu.length) delete anyP.mu;
+    }
     why += ` ${next[1]} leads the party now.`;
   }
   save(code);
@@ -288,7 +299,7 @@ function leave(player) {
 function mutedIn(code) {
   const p = /** @type {any} */ (parties().get(code));
   if (!p || !Array.isArray(p.mu)) return [];
-  return p.mu.filter((/** @type {unknown} */ id) => typeof id === "string" && p.m.some((/** @type {any[]} */ m) => m[0] === id));
+  return p.mu.filter((/** @type {unknown} */ id) => typeof id === "string" && id !== p.l && p.m.some((/** @type {any[]} */ m) => m[0] === id));
 }
 
 /** Tick each player last sent a party chat message: one a second at most. @type {Map<string, number>} */
@@ -304,6 +315,7 @@ function chat(player, text) {
   const now = system.currentTick;
   if (now - (lastChat.get(player.id) ?? -Infinity) < 20) return player.sendMessage("§7Slow down: one party message a second.");
   lastChat.set(player.id, now);
+  if (lastChat.size > 32) for (const [id, at] of lastChat) if (now - at >= 20) lastChat.delete(id);
   tell(code, `§d[Party] ${player.name}: §f${msg}`);
 }
 
@@ -419,7 +431,7 @@ system.runInterval(() => {
 }, HUD_TICKS);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
-  if (!initialSpawn) return;
+  if (!initialSpawn) return void bump(player.id);
   try {
     syncTag(player);
     const code = partyOf(player.id);
@@ -461,8 +473,18 @@ function* forgetOld() {
 system.runTimeout(() => system.runJob(forgetOld()), 1600);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
+/** Per-player counter, bumped when a player leaves, dies, respawns or changes dimension: forms opened before that are stale. @type {Map<string, number>} */
+const lives = new Map();
+const bump = (/** @type {string} */ id) => lives.set(id, (lives.get(id) ?? 0) + 1);
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => bump(player.id));
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+  if (deadEntity.typeId === "minecraft:player") bump(deadEntity.id);
+});
+
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  lastChat.delete(playerId);
+  bump(playerId);
+  // An active one-a-second cooldown outlives leaving and rejoining; an expired one is dropped.
+  if (system.currentTick - (lastChat.get(playerId) ?? -Infinity) >= 20) lastChat.delete(playerId);
   invites.delete(playerId);
   barHeld.delete(playerId);
 });
@@ -478,9 +500,11 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
  * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 async function show(player, form) {
+  const life = lives.get(player.id) ?? 0;
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (!player.isValid) return undefined;
+    if (!player.isValid || (lives.get(player.id) ?? 0) !== life) return undefined;
     const res = /** @type {any} */ (await form.show(player));
+    if (!player.isValid || (lives.get(player.id) ?? 0) !== life) return undefined;
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), 20));
   }

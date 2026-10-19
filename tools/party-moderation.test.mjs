@@ -78,3 +78,65 @@ test("one party message a second, even from two senders in the same tick", async
   w.sim.step(1);
   assert.equal(heard(w.ann).length, 3);
 });
+test("review: a muted member who becomes leader is no longer muted, whether promoted live or loaded from old data", async () => {
+  const w = await world({ ...base, mu: ["b"] });
+  w.sim.run("realm:party_leave", w.ann);
+  assert.equal(w.saved().l, "b");
+  assert.ok(!(w.saved().mu ?? []).includes("b"));
+  w.sim.run("realm:party_chat", w.bob, "I lead");
+  w.sim.step(1);
+  assert.ok(heard(w.cy).some((m) => /I lead/.test(m)));
+  const old = await world({ ...base, l: "b", mu: ["b", "c"] });
+  old.sim.run("realm:party_chat", old.bob, "hi");
+  old.sim.step(1);
+  assert.equal(heard(old.cy).length, 1);
+    old.sim.run("realm:party_chat", old.cy, "muted");
+  old.sim.step(1);
+  assert.equal(heard(old.ann).length, 1);
+});
+
+async function openChat(w, p) {
+  w.sim.run("realm:party", p);
+  const f = await w.sim.nextForm();
+  w.sim.answer({ selection: f.form.buttons.findIndex((b) => /Send a message/.test(b.text ?? b)) });
+  await w.sim.nextForm();
+}
+
+test("review: a party message form opened before death, respawn, dimension change or leaving does nothing when answered", async () => {
+  for (const kind of ["die", "respawn", "dimension", "leave"]) {
+    const w = await world(base);
+    await openChat(w, w.bob);
+    if (kind === "die") w.sim.game.emit("world.after.entityDie", { deadEntity: { typeId: "minecraft:player", id: "b" } });
+    if (kind === "respawn") w.sim.game.emit("world.after.playerSpawn", { player: w.bob, initialSpawn: false });
+    if (kind === "dimension") w.sim.game.emit("world.after.playerDimensionChange", { player: w.bob });
+    if (kind === "leave") w.sim.game.emit("world.after.playerLeave", { playerId: "b", playerName: "Bob" });
+    w.sim.answer({ formValues: ["stale words"] });
+    await w.sim.settle();
+    while (w.sim.pending.length) w.sim.answer({ canceled: true });
+    w.sim.step(2);
+    assert.equal(heard(w.ann).length, 0, kind);
+  }
+  const w = await world(base);
+  await openChat(w, w.bob);
+  w.sim.answer({ formValues: ["fresh"] });
+  await w.sim.settle();
+  w.sim.step(2);
+  assert.equal(heard(w.ann).length, 1, "an untouched form still sends");
+});
+
+test("review: the one-a-second cooldown survives leaving and rejoining, and expired entries are dropped", async () => {
+  const w = await world(base);
+  w.sim.run("realm:party_chat", w.bob, "one");
+  w.sim.step(1);
+  w.sim.leave(w.bob);
+  const bob2 = w.sim.join("Bob", { id: "b" });
+  w.sim.step(2);
+  w.sim.run("realm:party_chat", bob2, "too soon");
+  w.sim.step(1);
+  assert.equal(heard(w.ann).length, 1);
+  assert.ok(bob2.messages.some((m) => /Slow down/.test(m)));
+  w.sim.step(25);
+  w.sim.run("realm:party_chat", bob2, "later");
+  w.sim.step(1);
+  assert.equal(heard(w.ann).length, 2);
+});
