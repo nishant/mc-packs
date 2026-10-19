@@ -99,3 +99,20 @@ test("O31: a gamertag seen online or offline is still refused as before", async 
   assert.equal(r.saved, undefined);
   assert.match(r.said, /gamertag/);
 });
+
+test("O31 review: an online operator's gamertag is protected without any config, and only the exact own gamertag is exempt", async () => {
+  const sim = await world();
+  sim.join("BossOp", { op: true });
+  const p = sim.join("Ann");
+  for (const name of ["Boss Op", "boss_op", "BOSSOP"]) {
+    const r = await tryNick(sim, p, name);
+    assert.equal(r.saved, undefined, name);
+    assert.match(r.said, /reserved|gamertag/i);
+  }
+  const sneaky = sim.join("Ad_min");
+  const r = await tryNick(sim, sneaky, "Admin");
+  assert.equal(r.saved, undefined);
+  assert.match(r.said, /reserved/i);
+  const own = await tryNick(sim, sneaky, "Ad_min");
+  assert.equal(own.saved, "Ad_min");
+});

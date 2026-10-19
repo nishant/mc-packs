@@ -224,8 +224,9 @@ async function show(player, form) {
  */
 function isReserved(player, name, op = isOp(player)) {
   const key = squash(name);
-  if (key === squash(player.name)) return false;
+  if (name.toLowerCase() === player.name.toLowerCase()) return false;
   if (reservedSet("reservedGamertags").has(key)) return true;
+  if (world.getAllPlayers().some((p) => p.id !== player.id && isOp(p) && squash(p.name) === key)) return true;
   return !op && reservedSet("reservedNames").has(key);
 }
 
@@ -296,7 +297,8 @@ const PAGE_SIZE = 20; // nicknames per page of the operators' list: a form with 
 /** A saved nickname that the reserved lists would refuse today (it is kept; operators can clear it). @param {Nick} nick */
 const reservedNow = (nick) => {
   const key = squash(nick.n);
-  return key !== squash(nick.g) && (reservedSet("reservedNames").has(key) || reservedSet("reservedGamertags").has(key));
+  if (nick.n.toLowerCase() === String(nick.g ?? "").toLowerCase()) return false;
+  return reservedSet("reservedNames").has(key) || reservedSet("reservedGamertags").has(key) || world.getAllPlayers().some((p) => isOp(p) && p.name.toLowerCase() !== String(nick.g ?? "").toLowerCase() && squash(p.name) === key);
 };
 
 /**
