@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import vm from "node:vm";
 import { decode } from "./gen-rain/png.mjs";
 import { CONFIG as mobhp } from "../packs/mobhp_bp/scripts/config.js";
 import { CONFIG as elytra } from "../packs/elytra_bp/scripts/config.js";
@@ -269,4 +270,197 @@ test("every Side HUD cut matches the side boxes protocol and the minimap's text 
   const spacer = JSON.parse(map.match(/const SPACER = ("[^"]+");/)[1]);
   assert.ok(map.includes("const LINE2_BYTES = 159 - CELLS * 3 - SPACER.length - 1;"), "the strip's second line takes what is left of the slot");
   assert.ok(CELLS * 3 + spacer.length + 1 < SEG - 1, "the strip and its spacer leave room for a second line");
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Empty panels: a slot with nothing in it must hide its whole panel, black background included (O69). The producer
+// is tools/side-shared.js; the consumer is hud_screen.json's `#visible` bindings, evaluated here the way the file
+// means them. This is offline producer/consumer evidence, not a picture of what a client draws.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** tools/side-shared.js run offline: the code that builds every subtitle the HUD cuts. */
+function loadSide() {
+  const source = fs.readFileSync(new URL("./side-shared.js", import.meta.url), "utf8").replace(/^import .*$/m, "").replace(/^export /gm, "");
+  const none = () => {};
+  const signal = { subscribe: none };
+  const context = {
+    system: { currentTick: 0, afterEvents: { scriptEventReceive: signal }, runInterval: none, sendScriptEvent: none },
+    world: { afterEvents: { playerLeave: signal }, getAllPlayers: () => [] },
+  };
+  return vm.runInNewContext(`${source}\n;({ MARK, SLOTS, ALL_SLOTS, SEG_BYTES, RADAR_SEG_BYTES, QUEST_SEG_BYTES, segment, compose, questCode })`, context);
+}
+
+/**
+ * One of the string expressions hud_screen.json binds to `#visible`: `'%.Ns' * text` keeps the first N UTF-8 bytes,
+ * `a - b` takes the first b out of a, `=`, `and`, `or`, `not`. `$name` is a variable of the control.
+ * @param {string} expression @param {Record<string, string>} vars @param {Record<string, string>} env
+ */
+function evaluate(expression, vars, env) {
+  /** @type {{ k: "str" | "var" | "id" | "op", v: string }[]} */
+  const tokens = [];
+  const re = /\s*(?:(\()|(\))|'([^']*)'|(#[a-z_]+)|\$([a-z_]+)|(\*)|(-)|(=)|\b(and|or|not)\b)/y;
+  for (let m; re.lastIndex < expression.length && (m = re.exec(expression)); ) {
+    if (m[3] !== undefined) tokens.push({ k: "str", v: m[3] });
+    else if (m[4]) tokens.push({ k: "id", v: m[4] });
+    else if (m[5]) tokens.push({ k: "var", v: m[5] });
+    else tokens.push({ k: "op", v: m[1] ?? m[2] ?? m[6] ?? m[7] ?? m[8] ?? m[9] });
+  }
+  assert.equal(re.lastIndex, expression.length, `every character of ${expression} is understood`);
+  let at = 0;
+  const op = (/** @type {string} */ v) => tokens[at]?.k === "op" && tokens[at].v === v && ++at > 0;
+  const cut = (/** @type {string} */ spec, /** @type {string} */ text) => {
+    const m = /^%\.(\d+)s$/.exec(spec);
+    assert.ok(m, `${spec} is a byte cut`);
+    return Buffer.from(text).subarray(0, Number(m[1])).toString();
+  };
+  /** @returns {any} */
+  const atom = () => {
+    const t = tokens[at++];
+    assert.ok(t, `unexpected end of ${expression}`);
+    if (t.k === "str") return t.v;
+    if (t.k === "var") {
+      assert.ok(t.v in vars, `$${t.v} has a value`);
+      return String(vars[t.v]);
+    }
+    if (t.k === "id") {
+      assert.ok(t.v in env, `${t.v} is known`);
+      return env[t.v];
+    }
+    assert.equal(t.v, "(");
+    const v = or();
+    assert.ok(op(")"), "closing parenthesis");
+    return v;
+  };
+  const mul = () => {
+    let v = atom();
+    while (op("*")) v = cut(v, atom());
+    return v;
+  };
+  const sum = () => {
+    let v = mul();
+    while (op("-")) {
+      const r = mul();
+      if (r && v.includes(r)) v = v.replace(r, "");
+    }
+    return v;
+  };
+  const cmp = () => {
+    const a = sum();
+    return op("=") ? a === sum() : a;
+  };
+  /** @returns {any} */
+  const not = () => (op("not") ? !not() : cmp());
+  const and = () => {
+    let v = not();
+    while (op("and")) v = not() && v;
+    return v;
+  };
+  /** @returns {any} */
+  const or = () => {
+    let v = and();
+    while (op("or")) v = and() || v;
+    return v;
+  };
+  const value = or();
+  assert.equal(at, tokens.length, `all of ${expression} was read`);
+  assert.equal(typeof value, "boolean");
+  return value;
+}
+
+/** Every control of hud_screen.json by name, to resolve `name@hud.template` the way the game does. */
+const templates = new Map(
+  Object.entries(ui)
+    .filter(([key, value]) => key !== "namespace" && value && typeof value === "object" && !Array.isArray(value))
+    .map(([key, value]) => [key.split("@")[0], { parent: key.split("@")[1]?.replace(/^hud\./, ""), value }]),
+);
+const templateProps = (/** @type {string} */ name) => {
+  const t = templates.get(name);
+  return t ? { ...(t.parent ? templateProps(t.parent) : {}), ...t.value } : {};
+};
+const instantiate = (/** @type {string} */ key, /** @type {any} */ own) => {
+  const parent = key.split("@")[1]?.replace(/^hud\./, "");
+  return { ...(parent ? templateProps(parent) : {}), ...own };
+};
+const varsOf = (/** @type {any} */ props, /** @type {Record<string, string>} */ inherited) => {
+  const out = { ...inherited };
+  for (const [k, v] of Object.entries(props)) if (k.startsWith("$") && !k.includes("|")) out[k.slice(1)] = /** @type {string} */ (v);
+  for (const [k, v] of Object.entries(props)) if (k.endsWith("|default") && !(k.slice(1, -8) in out)) out[k.slice(1, -8)] = /** @type {string} */ (v);
+  return out;
+};
+
+/** Every image the side area draws that is a black box or the radar's frame, with the `#visible` bindings above it. */
+function drawnBackgrounds() {
+  /** @type {{ name: string, owner: string, gates: { name: string, expr: string, vars: Record<string, string> }[] }[]} */
+  const found = [];
+  /** @param {string} key @param {any} own @param {Record<string, string>} inherited @param {{ name: string, expr: string, vars: Record<string, string> }[]} gates */
+  const walk = (key, own, inherited, gates) => {
+    const props = instantiate(key, own);
+    const vars = varsOf(props, inherited);
+    const name = key.split("@")[0];
+    const gate = (props.bindings ?? []).find((/** @type {any} */ b) => b.target_property_name === "#visible");
+    const next = gate ? [...gates, { name, expr: gate.source_property_name, vars }] : gates;
+    if (props.type === "image" && /^textures\/ui\/(Black|radar_frame|radar_shade)$/.test(props.texture ?? "")) found.push({ name, owner: next.at(-1)?.name ?? "", gates: next });
+    for (const child of props.controls ?? []) {
+      const [[k, o]] = Object.entries(child);
+      walk(k, o, vars, next);
+    }
+  };
+  walk("realm_side_area", ui.realm_side_area, {}, []);
+  return found;
+}
+
+/** The panels whose backgrounds draw for one title and subtitle, by the name of the panel that owns the background. */
+function visibleOwners(/** @type {string} */ title, /** @type {string} */ subtitle) {
+  const env = { "#hud_title_text_string": title, "#hud_subtitle_text_string": subtitle };
+  return [...new Set(drawnBackgrounds().filter((b) => b.gates.every((g) => evaluate(g.expr, g.vars, env))).map((b) => b.owner))].sort();
+}
+
+test("the empty radar the producer sends is the empty radar the HUD's visibility binding compares with", () => {
+  const side = loadSide();
+  const emptyRadar = side.segment("", " ", side.RADAR_SEG_BYTES).slice(1);
+  assert.equal(Buffer.byteLength(emptyRadar), side.RADAR_SEG_BYTES - 1, "the radar cut is the segment without its separator");
+  const sentinel = ui.realm_radar_panel["$radar_empty|default"];
+  assert.ok(sentinel === emptyRadar, `the radar's empty sentinel is ${Buffer.byteLength(sentinel)} bytes, the producer's empty radar is ${Buffer.byteLength(emptyRadar)}: it can never match`);
+  for (const [panel, variable, bytes] of [[ui.realm_slot, "$slot_empty|default", side.SEG_BYTES]]) {
+    const empty = side.segment("", " ", bytes).slice(1);
+    assert.ok(panel[variable] === empty, `${variable} is the producer's empty segment (${Buffer.byteLength(empty)} bytes)`);
+  }
+});
+
+test("a slot with nothing in it hides its whole panel, background included: the radar, the compass strip, the quest box", () => {
+  const side = loadSide();
+  const radarFull = Array.from({ length: 21 }, () => String.fromCodePoint(0xf330).repeat(21)).join("\n");
+  const radarMax = "x".repeat(side.RADAR_SEG_BYTES - 1);
+  assert.equal(Buffer.byteLength(radarFull), 21 * 21 * 3 + 20, "a real radar: 21 rows of 21 three-byte glyphs");
+  const text = (/** @type {string} */ slot) => (slot === "radar" ? radarFull : slot === "top" ? "N" : "§fReadout");
+  const quest = (/** @type {string} */ slot) => `${side.questCode(slot)}§bLast Map§7: Three Pins`;
+  /** @type {[string, string, Record<string, string>, string[]][]} */
+  const states = [
+    ["nothing in any slot", side.MARK, side.compose({}), []],
+    ["the screen cleared", "§s§0§r", " ", []],
+    ["a one-character radar", side.MARK, side.compose({ radar: "x" }), ["realm_radar"]],
+    ["a radar at the segment's limit", side.MARK, side.compose({ radar: radarMax }), ["realm_radar"]],
+    ["a radar with the compass strip and a box", side.MARK, side.compose({ top: "N", radar: radarFull, right2: "§fHi" }), ["realm_radar", "realm_right2", "realm_top"]],
+  ];
+  for (const slot of side.SLOTS) states.push([`${slot} alone (no radar, no compass, no quest box)`, side.MARK, side.compose({ [slot]: text(slot) }), [`realm_${slot}`]]);
+  states.push(["the compass strip alone", side.MARK, side.compose({ top: text("top") }), ["realm_top"]]);
+  states.push(["the radar alone", side.MARK, side.compose({ radar: text("radar") }), ["realm_radar"]]);
+  for (const slot of side.SLOTS) states.push([`the quest box alone, at ${slot}`, side.MARK, side.compose({ quest: quest(slot) }), [`realm_quest_${slot}`]]);
+  states.push(["the quest box beside a box", side.MARK, side.compose({ right1: "§fHi", quest: quest("right1") }), ["realm_quest_right1", "realm_right1"]]);
+  /** @type {string[]} */
+  const wrong = [];
+  for (const [name, title, subtitle, expected] of states) {
+    const got = visibleOwners(title, subtitle);
+    if (JSON.stringify(got) !== JSON.stringify(expected)) wrong.push(`${name}: draws ${JSON.stringify(got)}, wanted ${JSON.stringify(expected)}`);
+  }
+  assert.deepEqual(wrong, [], "only the panels with something in their slot draw their background");
+});
+
+test("every black box and frame the side area draws belongs to a panel that is hidden while its slot is empty", () => {
+  const found = drawnBackgrounds();
+  assert.ok(found.some((b) => b.owner === "realm_radar"), "the radar's black square is one of them");
+  for (const b of found) {
+    assert.ok(b.gates.length > 0, `${b.name} has an ancestor that hides it`);
+    assert.ok(b.gates.some((g) => g.expr.includes("#hud_subtitle_text_string")), `${b.name} is hidden by what the subtitle holds, not only by the title`);
+  }
 });
