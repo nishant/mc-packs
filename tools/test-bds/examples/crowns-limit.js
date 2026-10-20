@@ -43,7 +43,8 @@ export default async function (t) {
     }
   };
   cfg("dailyPayLimit", 5000);
-  await t.wait(5);
+  // The daily join bonus lands a little after joining: wait it out, so the balances below move only by the payments.
+  await t.wait(100);
   let since = t.tick;
   t.cmd(mod, "/realm:crowns_give Payer 10000");
   await t.waitMessage(payer, /from an operator/, { since, timeout: 60 });

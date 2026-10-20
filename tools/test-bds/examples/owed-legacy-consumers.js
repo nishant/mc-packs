@@ -7,7 +7,7 @@
 // The properties belong to each pack's add-on, so they are seeded and read by a harness-only probe added to copies of the
 // packs (tools/test-bds/hooks/owed-probe.mjs). It uses only raw properties and the pack's own playerSpawn listeners, so the
 // same recipe runs a tree from before the owed stores (7eb5f72): there, phase 2 fails at the first pack's "per-player key
-// and index exist" (the old code still keeps the one property), which is the migration this checks. About 90 s:
+// and index exist" (the old code still keeps the one property), which is the migration this checks. About 4 minutes:
 //   mkdir -p /tmp/owed-consumers
 //   node tools/test-bds/hooks/owed-probe.mjs /tmp/owed-consumers/packs relics_bp,fishing_bp,bounty_bp,guilds_bp,town_bp
 //   node tools/test-bds/run.mjs --quiet --timeout 1200 --packs /tmp/owed-consumers/packs --only relics_bp,fishing_bp,bounty_bp,guilds_bp,town_bp --scenario tools/test-bds/examples/owed-legacy-consumers.js
