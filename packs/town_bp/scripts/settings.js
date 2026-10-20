@@ -21,6 +21,7 @@ const OPTIONS = [
   { key: "levelDepth", type: "int", scope: "world", label: "Most blocks a picked spot's ground is leveled", help: "Natural ground only, cut or filled; 0 never levels", min: 0, max: 3, step: 1 },
   { key: "outlineSeconds", type: "int", scope: "world", label: "Outline shown before a build (seconds)", help: "To players within 32 blocks; 0 shows none", min: 0, max: 15, step: 1 },
   { key: "houses", type: "bool", scope: "world", label: "Towns build houses from level 2", help: "One for each family the level brings, at picked spots" },
+  { key: "townLife", type: "bool", scope: "world", label: "Paths, lanterns and a garden pen", help: "Placed once as towns grow; only grass becomes path" },
   { key: "residents", type: "bool", scope: "world", label: "Residents move into towns", help: "Villagers that never take players' beds or job sites" },
   { key: "residentCapWorld", type: "int", scope: "world", label: "Most residents in the world", help: "Each is a mob; lowering it removes nobody", min: 0, max: 40, step: 2 },
   { key: "residentsTrade", type: "bool", scope: "world", label: "Residents trade", help: "Vanilla trading bypasses the Crowns economy" },

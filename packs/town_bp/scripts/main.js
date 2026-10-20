@@ -22,7 +22,8 @@ import { applyParts, createOwedStore } from "./owed.js";
 import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, placeStates, toWorld } from "./designs.js";
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
-import { addLog, cleanText, houseCount, isWorkId, logLine, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
+import { PEN_ID, addLog, cleanText, houseCount, isWorkId, logLine, makePen, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
+import { CLEARABLE, POSTS_MAX, boardTexts, packCells, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
 import { TICKS_PER_MINUTE, addNew, allocate, homeAt, homesFor, livingOf, lookEvent, lookFor, pickName, plan, readResidents, reconcile, ridOf, ridTag, slotCount } from "./residents.js";
 import { spawnFresh } from "./spawn.js";
@@ -47,8 +48,9 @@ const NEAR_SPOT = 64; // a waiting build goes up when a player is this close to 
  * the structure snapId(town, project) before building, and b the box it covers [x1, y1, z1, x2, y2, z2]; old 1 when it was
  * built before snapshots existed (so what's there is never saved as the ground). A spot picked automatically (sites.js)
  * has a: 1, its grading plan lv (sites.js encodePlan, over the footprint plus a 2-block apron), lt the block a fill gets
- * on top ("grass_block"), and bs: 1 while its build has started but isn't finished (it resumes after a restart).
- * @typedef {{ x: number, y: number, z: number, f: number, snap?: number, b?: number[], old?: number, a?: number, lv?: string, lt?: string, bs?: number }} Spot
+ * on top ("grass_block"), and bs: 1 while its build has started but isn't finished (it resumes after a restart); pt: 1
+ * once the town's path from it was laid (townLife; life.js), or found no grass to lay.
+ * @typedef {{ x: number, y: number, z: number, f: number, snap?: number, b?: number[], old?: number, a?: number, lv?: string, lt?: string, bs?: number, pt?: number }} Spot
  */
 /**
  * prot: 0 when "Protect from world events" is Disabled (missing means Enabled). v: 2 once the town has a mayor `m`
@@ -60,17 +62,18 @@ const NEAR_SPOT = 64; // a waiting build goes up when a player is this close to 
  * operator sets one), rt those whose spot failed its last check once (a second failure goes to nos), as: 1 once the
  * town's projects were queued for automatic spots (towns from before this version get it on the first check).
  * log: the town's story so far (growth.js), [Realm day or 0, what happened], at most 12, the oldest dropped first.
- * @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string, plf?: number, scan?: string[], nos?: string[], rt?: string[], as?: number, log?: import("./growth.js").LogEntry[] }} Town
+ * lp: the level the town's lantern posts were last placed for (townLife; missing: 1).
+ * @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string, plf?: number, scan?: string[], nos?: string[], rt?: string[], as?: number, log?: import("./growth.js").LogEntry[], lp?: number }} Town
  */
 /** @typedef {{ min: Vector3, max: Vector3 }} Box inclusive block corners */
-/** @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number }} Progress */
+/** an: 1 once the garden pen's animals were spawned (only ever once). @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number, an?: number }} Progress */
 /** @typedef {{ cr: number, q: [string, string, string][] }} Owed crowns, and [quest id, label, guild] per finished project */
 
 /** Projects from config.js that make sense; the rest are skipped with a warning. */
 const PROJECTS = CONFIG.projects
   .filter((p) => {
-    const okay = /^[a-z0-9_]{1,32}$/.test(p.id) && !isWorkId(p.id) && p.level >= 1 && p.level < MAX_LEVEL && Object.keys(p.needs ?? {}).length > 0 && BUILDS.includes(p.build);
-    if (!okay) console.warn(`[town] project "${p.id}" in config.js is skipped: check its id (house_1 to house_10 are the towns' houses), level (1 to 4), needs and build`);
+    const okay = /^[a-z0-9_]{1,32}$/.test(p.id) && !isWorkId(p.id) && p.id !== PEN_ID && p.level >= 1 && p.level < MAX_LEVEL && Object.keys(p.needs ?? {}).length > 0 && BUILDS.includes(p.build);
+    if (!okay) console.warn(`[town] project "${p.id}" in config.js is skipped: check its id (house_1 to house_10 and pen are the towns' own works), level (1 to 4), needs and build`);
     return okay;
   })
   .map((p) => ({ ...p, why: cleanText(p.why) || undefined })); // what the mayor says it's for: plain ASCII, 60 characters
@@ -81,10 +84,16 @@ const PROJECTS = CONFIG.projects
  * board and the contributors stay on PROJECTS.
  */
 const WORKS = /** @type {Project[]} */ (makeWorks(CONFIG.houseJobs));
-const ALL = [...PROJECTS, ...WORKS];
+/** The garden pen (townLife): a town work too, next to the garden once it is built. */
+const PEN = /** @type {Project} */ (/** @type {unknown} */ (makePen()));
+const ALL = [...PROJECTS, ...WORKS, PEN];
 const byId = new Map(ALL.map((p) => [p.id, p]));
+/** A town work (a house or the pen): no deliveries, rewards or quests. @param {Project} p */
+const isWork = (p) => isWorkId(p.id) || p.id === PEN_ID;
 /** @param {Project} p */
-const isWork = (p) => isWorkId(p.id);
+const isHouse = (p) => isWorkId(p.id);
+/** The project whose build is the garden (the pen goes next to it). */
+const GARDEN = PROJECTS.find((p) => p.build === "garden");
 
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
@@ -190,6 +199,7 @@ function progressOf(t, p) {
   if (pr) return pr;
   const raw = readJson(key);
   pr = raw && typeof raw === "object" ? { got: raw.got ?? {}, c: raw.c ?? {}, done: raw.done ? 1 : 0, built: raw.built ? 1 : 0 } : { got: {}, c: {}, done: 0, built: 0 };
+  if (raw?.an) pr.an = 1;
   progCache.set(key, pr);
   return pr;
 }
@@ -197,7 +207,7 @@ function progressOf(t, p) {
 /** @param {Town} t @param {Project} p @param {Progress} pr */
 function saveProgress(t, p, pr) {
   const key = `${PROG_PREFIX}${t.id}:${p.id}`;
-  let json = JSON.stringify(isWork(p) ? { done: pr.done, built: pr.built } : pr);
+  let json = JSON.stringify(isWork(p) ? { done: pr.done, built: pr.built, ...(pr.an ? { an: 1 } : {}) } : pr);
   // Hundreds of contributors: keep the biggest ones so the property stays under the limit.
   while (json.length > PROP_LIMIT && Object.keys(pr.c).length > 10) {
     const smallest = Object.entries(pr.c).sort((a, b) => a[1][1] - b[1][1])[0][0];
@@ -483,6 +493,7 @@ function levelUp(t) {
   censusAt.delete(t.id);
   storyAdd(t, `It became a ${levelName(t.lvl)}`);
   saveTown(t);
+  lifeNews(t, `lvl${t.lvl}`);
   const title = `${t.n} is now a ${levelName(t.lvl)} (level ${t.lvl})`;
   const next = projectsAt(t.lvl);
   const sub = next.length ? `New projects: ${next.map((p) => p.name).join(", ")}` : "Every project is done!";
@@ -557,7 +568,8 @@ function build(t, p, fresh) {
   const pr = progressOf(t, p);
   if (!pr.done || pr.built) return false;
   const s = t.spots[p.id];
-  if (isWork(p) && get("houses") !== true && !s?.bs) return false; // houses Disabled: none goes up (one half built finishes)
+  if (isHouse(p) && get("houses") !== true && !s?.bs) return false; // houses Disabled: none goes up (one half built finishes)
+  if (p.id === PEN_ID && get("townLife") !== true && !s?.bs) return false; // the same for the pen with townLife Disabled
   if (!s) {
     if (fresh) {
       if (get("autoSpots") === true && t.scan?.includes(p.id)) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} is finished: its spot is picked automatically when a player is in the town.`);
@@ -613,10 +625,15 @@ function announceBuilt(t, p, s, dim, placed, skipped) {
   censusAt.delete(t.id); // a new well or house: its families move in at the next check
   const where = `${s.x}, ${s.y}, ${s.z}`;
   if (isWork(p)) {
-    // A house: news for the town (players in it, and its story), not the whole realm; no fireworks.
-    const msg = `§a${t.n} has a new house (${p.name}) at ${where}.`;
+    // A house or the pen: news for the town (players in it, and its story), not the whole realm; no fireworks.
+    const pen = p.id === PEN_ID;
+    const msg = pen ? `§a${t.n} has a garden pen at ${where}.` : `§a${t.n} has a new house (${p.name}) at ${where}.`;
     for (const pl of world.getAllPlayers()) if (isOp(pl) || (pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= get("townRadius"))) pl.sendMessage(msg);
-    storyAdd(t, `A new house went up (${p.name})`);
+    if (pen) penAnimals(t, s, dim);
+    else {
+      storyAdd(t, `A new house went up (${p.name})`);
+      lifeNews(t, p.id);
+    }
     saveTown(t);
     if (skipped) tellOps(`§7[Town Projects] ${skipped} block${skipped === 1 ? " was" : "s were"} left out of ${t.n}'s ${p.name} because something else was in the way.`);
     return;
@@ -627,6 +644,7 @@ function announceBuilt(t, p, s, dim, placed, skipped) {
   if (skipped) tellOps(`§7[Town Projects] ${skipped} block${skipped === 1 ? " was" : "s were"} left out of the ${p.name} because something else was in the way. Builds only replace air, plants, grass and dirt (and water for a dock).`);
   if (placed && get("fireworks") === true) fireworks(dim, toWorld(s, 0, 1, 2));
   if (p.build === "notice_board") system.runTimeout(() => refreshBoard(t), 2);
+  if (p.build === "garden" && queueWorks(t)) saveTown(t); // its pen is due now (townLife)
 }
 
 // ---------------------------------------------------------------------------
@@ -998,7 +1016,7 @@ function fireworks(dim, at) {
   }
 }
 
-/** Updates the notice board's signs: name and level, projects, top contributors. @param {Town} t */
+/** Updates the notice board's signs: name and level; projects done and residents; the newest residents (life.js boardTexts). @param {Town} t */
 function refreshBoard(t) {
   const p = PROJECTS.find((x) => x.build === "notice_board" && progressOf(t, x).built && t.spots[x.id]);
   if (!p) return;
@@ -1014,11 +1032,8 @@ function refreshBoard(t) {
         totals.set(id, [name, (was?.[1] ?? 0) + n]);
       }
     const top = [...totals.values()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name]) => name);
-    const texts = [
-      `§l${t.n}§r\n${levelName(t.lvl)}\nlevel ${t.lvl}`,
-      `Projects done\n${done} of ${PROJECTS.length}\n\nSee /realm:town`,
-      top.length ? `Thank you\n${top.join("\n")}` : "Bring materials\nto the mayor!",
-    ];
+    const rs = residentsOf(t);
+    const texts = boardTexts({ name: t.n, level: levelName(t.lvl), lvl: t.lvl, done, total: PROJECTS.length, residents: rs.r.filter((r) => r.d === undefined).length, newest: rs.new, top });
     for (let x = -1; x <= 1; x++) {
       const block = dim.getBlock(toWorld(s, x, 1, 0));
       const sign = block?.typeId === "minecraft:wall_sign" ? block.getComponent("minecraft:sign") : undefined;
@@ -1497,6 +1512,7 @@ function applySpot(t, p, s, tell) {
       return false;
     }
   } else if (old?.snap) deleteStructure(snapId(t, p));
+  if (old) clearLife(t, p.id); // its path and lanterns go with it
   if (moving && pr.built) {
     pr.built = 0;
     saveProgress(t, p, pr);
@@ -1524,6 +1540,7 @@ function removeSpot(t, p, tell) {
       saveProgress(t, p, pr);
     }
   } else if (s.snap) deleteStructure(snapId(t, p));
+  clearLife(t, p.id); // its path and lanterns go with it
   delete t.spots[p.id];
   saveTown(t);
   tell(`§a${wasBuilt ? `${t.n}'s ${p.name} was taken away` : `${t.n}'s ${p.name} has no spot now`}.${pr.done ? " §7It's finished: set a new spot to build it." : ""}`);
@@ -1788,6 +1805,10 @@ function deleteTown(t) {
   if (scanJob?.town === t.id) scanJob = undefined;
   for (const p of ALL) cancelAutoBuild(`${t.id}:${p.id}`);
   for (let k = 0; k < 2; k++) world.setDynamicProperty(`${PLACED_PREFIX}${t.id}:${k}`, undefined);
+  // Its paths, lanterns and pen stay standing, like its builds.
+  lifeCache.delete(t.id);
+  world.setDynamicProperty(LIFE_PREFIX + t.id, undefined);
+  if (lifeJob?.town === t.id) lifeJob = undefined;
   // Its own mayor goes with it (Mayor Bram stays where he lives).
   if (isTownMayorId(t.m)) send("realm:npc_mayor", { op: "remove", id: t.m });
   lastSet.delete(t.id);
@@ -1937,21 +1958,24 @@ function dropFrom(t, id) {
   }
 }
 
-/** The projects (and houses, while houses is Enabled) a town's scan picks spots for now. @param {Town} t */
-const scanIds = (t) => (t.scan ?? []).filter((id) => !t.spots[id] && (!isWorkId(id) || get("houses") === true));
+/** The projects (and houses while houses is Enabled, the pen while townLife is) a town's scan picks spots for now. @param {Town} t */
+const scanIds = (t) => (t.scan ?? []).filter((id) => !t.spots[id] && (!isWorkId(id) || get("houses") === true) && (id !== PEN_ID || get("townLife") === true));
 
 /** Houses a town has at its level, while houses is Enabled. @param {Town} t @param {number} [lvl] */
 const housesAt = (t, lvl = t.lvl) => (get("houses") === true ? houseCount(lvl, CONFIG.residentsPerLevel, CONFIG.residentCapTown) : 0);
 
 /**
- * The houses due at the town's level (houses Enabled): each is marked done (a town work takes no deliveries) and
- * queued for an automatic spot. Returns true when the town changed (the caller saves it).
+ * The houses due at the town's level (houses Enabled) and the garden pen once the garden is built (townLife): each is
+ * marked done (a town work takes no deliveries) and queued for an automatic spot. Returns true when the town changed
+ * (the caller saves it).
  * @param {Town} t
  */
 function queueWorks(t) {
   /** @type {string[]} */
   const due = [];
-  for (const w of WORKS.slice(0, housesAt(t))) {
+  // The garden pen, once the garden is built (townLife).
+  const pen = get("townLife") === true && !!GARDEN && progressOf(t, GARDEN).built === 1 && !!t.spots[GARDEN.id];
+  for (const w of [...WORKS.slice(0, housesAt(t)), ...(pen ? [PEN] : [])]) {
     const pr = progressOf(t, w);
     if (pr.done) continue;
     pr.done = 1;
@@ -2065,7 +2089,9 @@ function scanInput(t, claims) {
     depth,
     projects: ids.map((id) => {
       const p = /** @type {Project} */ (byId.get(id));
-      return { id, well: p.build === "well", dock: p.build === "dock", box: (/** @type {{ x: number, y: number, z: number, f: number }} */ s) => footprint(p, s) };
+      const g = id === PEN_ID && GARDEN ? t.spots[GARDEN.id] : undefined; // the pen goes beside the garden's middle
+      const near = g ? toWorld(g, 0, 0, 3) : undefined;
+      return { id, well: p.build === "well", dock: p.build === "dock", near: near && { x: near.x, z: near.z }, box: (/** @type {{ x: number, y: number, z: number, f: number }} */ s) => footprint(p, s) };
     }),
     taken,
     pads: Object.values(t.spots).map((s) => s.y - 1),
@@ -2482,7 +2508,13 @@ function ensureJobs() {
       console.warn(`[town] build: ${e}`);
       buildJob = undefined;
     }
-    if (!scanJob && !buildJob && !buildQueue.length && jobTicker !== undefined) {
+    try {
+      stepLife();
+    } catch (e) {
+      console.warn(`[town] life: ${e}`);
+      lifeJob = undefined;
+    }
+    if (!scanJob && !buildJob && !buildQueue.length && !lifeJob && jobTicker !== undefined) {
       system.clearRun(jobTicker);
       jobTicker = undefined;
     }
@@ -2504,6 +2536,7 @@ function autoTick(players) {
     t.as = 1;
     saveTown(t);
   }
+  lifeTick(players);
   if (get("autoSpots") !== true || scanJob) return;
   const t = [...allTowns().values()].find((x) => scanIds(x).length && playerIn(players, x));
   if (t) startScan(t);
@@ -2531,6 +2564,297 @@ onScriptEvent(["realm:place_ready", "realm:claims_check_result"], ({ id, message
   if (m.state === "removed") storyPlaces.delete(m.name);
   else if (typeof m.dim === "string" && Number.isFinite(m.x) && Number.isFinite(m.z) && (storyPlaces.size < 200 || storyPlaces.has(m.name))) storyPlaces.set(m.name, { dim: m.dim, x: m.x, z: m.z });
 });
+
+// ---------------------------------------------------------------------------
+// Small life (F40, townLife; life.js): a path from each build at an automatic spot toward the center, lantern posts
+// beside the paths at each new level, the garden pen's animals, the notice board and the mayor's town news. Blocks are
+// placed once, a few reads a tick in the job (no per-tick work otherwise), and saved in "town:w:<town>" so Remove spot
+// turns them back; what wasn't loaded then waits under "~<project>" until it is.
+// ---------------------------------------------------------------------------
+
+const LIFE_PREFIX = "town:w:";
+const LIFE_READS_TICK = 32; // block reads a tick while a path or the posts are planned
+const LIFE_WAITS = 3; // tries of a path that met unloaded ground (this session); then what was found is laid
+const PATH_BLOCK = "minecraft:grass_path";
+const ANIMALS = ["minecraft:sheep", "minecraft:sheep", "minecraft:chicken", "minecraft:chicken"];
+/** Each town's paths and posts (town:w:<town>), cached; this pack is the only writer. @type {Map<string, Record<string, [string, string]>>} */
+const lifeCache = new Map();
+/** Unloaded tries of a path, by "town:project". @type {Map<string, number>} */
+const lifeWaits = new Map();
+/**
+ * The path or posts being planned (one at a time).
+ * @type {{ town: string, kind: "path" | "posts", id: string, ask?: { id: string, until: number }, claims?: { x1: number, z1: number, x2: number, z2: number }[], gen?: Generator<import("./life.js").BlockRequest, any, any>, answer?: any } | undefined}
+ */
+let lifeJob;
+
+/** @param {Town} t */
+function lifeOf(t) {
+  let w = lifeCache.get(t.id);
+  if (!w) lifeCache.set(t.id, (w = readWorks(readJson(LIFE_PREFIX + t.id))));
+  return w;
+}
+
+/** @param {Town} t @param {Record<string, [string, string]>} w */
+function saveLife(t, w) {
+  lifeCache.set(t.id, w);
+  world.setDynamicProperty(LIFE_PREFIX + t.id, Object.keys(w).length ? JSON.stringify(w) : undefined);
+}
+
+/**
+ * The town's mayor tells it (Townsfolk gossip, kind town_life, only that mayor: `from`): a new family, a new house, a
+ * new level. At most one piece of this pack's news an in-game hour (gossip). @param {Town} t @param {string} key
+ */
+function lifeNews(t, key) {
+  gossip(`${t.id}:life:${key}`, { kind: "town_life", place: t.n, ...(t.m ? { from: t.m } : {}) });
+}
+
+/** The garden pen's animals: 2 sheep and 2 chickens inside it, once (they are ordinary animals, never replaced). @param {Town} t @param {Spot} s @param {Dimension} dim */
+function penAnimals(t, s, dim) {
+  const pr = progressOf(t, PEN);
+  if (pr.an) return;
+  ANIMALS.forEach((type, i) => {
+    const at = toWorld(s, (i % 2) * 2 - 1, 0, 2 + Math.floor(i / 2) * 2);
+    try {
+      const e = spawnFresh(dim, type, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, { fresh: true });
+      e.addTag(`town:a:${t.id}`);
+    } catch (e) {
+      console.warn(`[town] ${t.n}'s pen: ${type}: ${e}`);
+    }
+  });
+  pr.an = 1;
+  saveProgress(t, PEN, pr);
+}
+
+/**
+ * Turns paths back to grass and takes lantern posts away, only where they are still what the town put there. Returns
+ * what wasn't loaded. @param {Dimension} dim @param {import("./life.js").Cell[]} paths @param {import("./life.js").Cell[]} posts
+ * @returns {[import("./life.js").Cell[], import("./life.js").Cell[]]}
+ */
+function restoreLife(dim, paths, posts) {
+  const grass = perm("minecraft:grass_block");
+  const air = perm("minecraft:air");
+  /** @type {import("./life.js").Cell[]} */
+  const pathLeft = [];
+  /** @type {import("./life.js").Cell[]} */
+  const postLeft = [];
+  for (const c of paths) {
+    try {
+      const b = dim.getBlock(c);
+      if (!b) pathLeft.push(c);
+      else if (b.typeId === PATH_BLOCK) b.setPermutation(grass);
+    } catch {
+      pathLeft.push(c);
+    }
+  }
+  for (const c of posts) {
+    try {
+      const fence = dim.getBlock(c);
+      const lamp = dim.getBlock({ x: c.x, y: c.y + 1, z: c.z });
+      if (!fence || !lamp) {
+        postLeft.push(c);
+        continue;
+      }
+      if (lamp.typeId === "minecraft:lantern") lamp.setPermutation(air);
+      if (fence.typeId === "minecraft:oak_fence") fence.setPermutation(air);
+    } catch {
+      postLeft.push(c);
+    }
+  }
+  return [pathLeft, postLeft];
+}
+
+/**
+ * Remove spot (or a move): the build's path and the posts beside it go too. `leftOnly`: only what an earlier removal
+ * couldn't reach (the spot may have a new path meanwhile). @param {Town} t @param {string} id @param {boolean} [leftOnly]
+ */
+function clearLife(t, id, leftOnly = false) {
+  const w = lifeOf(t);
+  const old = "~" + id;
+  const cur = leftOnly ? undefined : w[id];
+  if (!cur && !w[old]) return;
+  if (!leftOnly) {
+    lifeWaits.delete(`${t.id}:${id}`);
+    if (lifeJob?.town === t.id && lifeJob.id === id) lifeJob = undefined;
+  }
+  const paths = [cur?.[0], w[old]?.[0]].flatMap((x) => unpackCells(x, t.x, t.z));
+  const posts = [cur?.[1], w[old]?.[1]].flatMap((x) => unpackCells(x, t.x, t.z));
+  /** @type {[import("./life.js").Cell[], import("./life.js").Cell[]]} */
+  let left = [paths, posts];
+  try {
+    left = restoreLife(world.getDimension(t.dim), paths, posts);
+  } catch {
+    // its dimension isn't there: later
+  }
+  if (!leftOnly) delete w[id];
+  delete w[old];
+  if (left[0].length || left[1].length) w[old] = [packCells(left[0], t.x, t.z), packCells(left[1], t.x, t.z)];
+  saveLife(t, w);
+}
+
+/** Rects as inclusive columns. @param {import("./sites.js").Rect} r @param {number} x @param {number} z */
+const inRect = (r, x, z) => x >= r.x1 && x <= r.x2 && z >= r.z1 && z <= r.z2;
+
+/**
+ * Where a path or a post may not go: a build's region (`except` the path's own), a claim, a block a player placed, a
+ * story place. @param {Town} t @param {string} except @param {{ x1: number, z1: number, x2: number, z2: number }[]} claims
+ */
+function lifeStop(t, except, claims) {
+  const regions = Object.entries(t.spots).flatMap(([id, s]) => (id !== except && byId.has(id) ? [regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), s)))] : []));
+  const story = [...storyPlaces.values()].filter((q) => dimId(q.dim) === t.dim);
+  const cells = cellsOf(t);
+  return (/** @type {number} */ x, /** @type {number} */ z, /** @type {number} */ y) =>
+    regions.some((r) => inRect(r, x, z)) ||
+    claims.some((r) => inRect(r, x, z)) ||
+    story.some((q) => Math.hypot(q.x - x, q.z - z) <= PLACE_KEEP) ||
+    touches(cells, t, { x1: x, z1: z, x2: x, z2: z }, y - 1, y + 2);
+}
+
+/** @param {Town} t @param {"path" | "posts"} kind @param {string} id @param {import("./sites.js").Rect} area */
+function startLife(t, kind, id, area) {
+  const job = { town: t.id, kind, id, ask: { id: "", until: system.currentTick + CLAIMS_WAIT } };
+  job.ask.id = askClaims(t.dim, area, (claims) => {
+    if (lifeJob === job) /** @type {any} */ (job).claims = claims;
+  });
+  lifeJob = job;
+  ensureJobs();
+}
+
+/**
+ * On the build check (every 100 ticks), while a player is in a town (townLife): what a removal couldn't reach is put
+ * back; a build at an automatic spot without its path gets one; a town at a new level gets its lantern posts once no
+ * build of it is waiting to go up. One job at a time. @param {Player[]} players
+ */
+function lifeTick(players) {
+  for (const t of allTowns().values()) {
+    if (!playerIn(players, t)) continue;
+    const w = lifeOf(t);
+    const old = Object.keys(w).filter((k) => k.startsWith("~"));
+    for (const k of old) clearLife(t, k.slice(1), true);
+  }
+  if (get("townLife") !== true || lifeJob) return;
+  for (const t of allTowns().values()) {
+    if (!playerIn(players, t)) continue;
+    for (const p of ALL) {
+      const s = t.spots[p.id];
+      if (!s?.a || s.pt || s.bs || progressOf(t, p).built !== 1) continue;
+      const a = toWorld(s, 0, -1, -1);
+      return startLife(t, "path", p.id, { x1: Math.min(a.x, t.x) - 1, z1: Math.min(a.z, t.z) - 1, x2: Math.max(a.x, t.x) + 1, z2: Math.max(a.z, t.z) + 1 });
+    }
+    if (t.lvl <= (t.lp ?? 1)) continue;
+    // Wait for the level's builds at automatic spots (and spots still being picked), so their paths get posts too.
+    const waiting = ALL.some((p) => t.spots[p.id]?.a && progressOf(t, p).done === 1 && progressOf(t, p).built !== 1) || (get("autoSpots") === true && scanIds(t).length > 0);
+    if (waiting) continue;
+    const r = get("townRadius");
+    return startLife(t, "posts", "", { x1: t.x - r, z1: t.z - r, x2: t.x + r, z2: t.z + r });
+  }
+}
+
+/** A tick of the path or posts being planned: up to LIFE_READS_TICK block reads, then the blocks placed at once. */
+function stepLife() {
+  const job = lifeJob;
+  if (!job) return;
+  const t = allTowns().get(job.town);
+  if (!t || get("townLife") !== true || !playerIn(world.getAllPlayers(), t)) {
+    lifeJob = undefined; // again on a later check
+    return;
+  }
+  if (job.ask) {
+    if (job.claims === undefined && system.currentTick <= job.ask.until) return;
+    claimAsks.delete(job.ask.id);
+    job.ask = undefined;
+    job.claims ??= []; // no answer: no Land Claims
+  }
+  const dim = world.getDimension(t.dim);
+  const claims = job.claims ?? [];
+  const p = byId.get(job.id);
+  const s = p ? t.spots[p.id] : undefined;
+  if (job.kind === "path" && (!p || !s?.a || progressOf(t, p).built !== 1)) {
+    lifeJob = undefined;
+    return;
+  }
+  if (!job.gen) {
+    if (job.kind === "path" && s) {
+      const a = toWorld(s, 0, -1, -1); // the ground just in front of the build
+      job.gen = planPath({ start: a, cx: t.x, cz: t.z, stop: lifeStop(t, job.id, claims) });
+    } else {
+      const w = lifeOf(t);
+      const own = Object.entries(w).filter(([k]) => !k.startsWith("~"));
+      job.gen = planPosts({
+        paths: own.map(([id, v]) => ({ id, cells: unpackCells(v[0], t.x, t.z) })),
+        posts: Object.values(w).flatMap((v) => unpackCells(v[1], t.x, t.z)),
+        stop: lifeStop(t, "", claims),
+        max: Math.max(0, POSTS_MAX - postCount(w)),
+      });
+    }
+  }
+  for (let reads = 0; reads < LIFE_READS_TICK; reads++) {
+    const r = job.gen.next(job.answer);
+    if (r.done) {
+      lifeJob = undefined;
+      if (job.kind === "path" && p && s) layPath(t, p, s, dim, r.value);
+      else layPosts(t, dim, r.value);
+      return;
+    }
+    const [, x, y, z] = r.value;
+    job.answer = blockInfo(dim, x, y, z);
+  }
+}
+
+/** @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim @param {{ cells: import("./life.js").PathCell[], unloaded: boolean }} res */
+function layPath(t, p, s, dim, res) {
+  const key = `${t.id}:${p.id}`;
+  if (res.unloaded && (lifeWaits.get(key) ?? 0) < LIFE_WAITS) {
+    lifeWaits.set(key, (lifeWaits.get(key) ?? 0) + 1); // again on a later check, when more of it is loaded
+    return;
+  }
+  lifeWaits.delete(key);
+  const path = perm(PATH_BLOCK);
+  const air = perm("minecraft:air");
+  /** @type {import("./life.js").Cell[]} */
+  const laid = [];
+  for (const c of res.cells) {
+    try {
+      // Checked again as it's laid: still grass, with air (or the wild plant it had) above.
+      const b = dim.getBlock(c);
+      const above = dim.getBlock({ x: c.x, y: c.y + 1, z: c.z });
+      if (!b || !above || b.typeId !== "minecraft:grass_block") break;
+      if (!above.isAir && !(c.c && CLEARABLE.has(above.typeId))) break;
+      if (!above.isAir) above.setPermutation(air);
+      b.setPermutation(path);
+      laid.push({ x: c.x, y: c.y, z: c.z });
+    } catch {
+      break;
+    }
+  }
+  const w = lifeOf(t);
+  if (laid.length) w[p.id] = [packCells(laid, t.x, t.z), w[p.id]?.[1] ?? ""];
+  saveLife(t, w);
+  s.pt = 1;
+  saveTown(t);
+}
+
+/** @param {Town} t @param {Dimension} dim @param {{ id: string, x: number, y: number, z: number }[]} posts */
+function layPosts(t, dim, posts) {
+  const fence = perm("minecraft:oak_fence");
+  const lamp = perm("minecraft:lantern", { hanging: false });
+  const w = lifeOf(t);
+  for (const q of posts) {
+    try {
+      const g = dim.getBlock({ x: q.x, y: q.y - 1, z: q.z });
+      const f = dim.getBlock(q);
+      const l = dim.getBlock({ x: q.x, y: q.y + 1, z: q.z });
+      if (!g || !f || !l || !NATURAL.has(g.typeId) || !f.isAir || !l.isAir || !w[q.id]) continue;
+      f.setPermutation(fence);
+      l.setPermutation(lamp);
+      w[q.id] = [w[q.id][0], w[q.id][1] + packCells([q], t.x, t.z)];
+    } catch {
+      // unloaded meanwhile: one post fewer
+    }
+  }
+  saveLife(t, w);
+  t.lp = t.lvl;
+  saveTown(t);
+}
 
 // ---------------------------------------------------------------------------
 // Placed blocks (placed.js): natural-kind blocks players place in a town look like the ground, so the town keeps
@@ -2661,7 +2985,7 @@ onScriptEvent(
       if (m.action === "zones") return broadcastZones();
       if (!t) return tell("no town");
       if (m.action === "dump")
-        return tell(JSON.stringify({ town: t, progress: ALL.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, residents: residentsOf(t), homes: homesOf(t), regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
+        return tell(JSON.stringify({ town: t, progress: ALL.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, residents: residentsOf(t), homes: homesOf(t), life: lifeOf(t), living: lifeJob ? [lifeJob.kind, lifeJob.id] : null, regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
       if (m.action === "scan") {
         findSpotsAgain(t, tell);
         if (!scanJob && get("autoSpots") === true && t.scan?.length) startScan(t);
@@ -2716,7 +3040,7 @@ onScriptEvent(
         tell(`footprint ${JSON.stringify(footprint(p, s))}, in the way ${inTheWay(t, p, s)}`);
         applySpot(t, p, s, tell);
       } else if (m.action === "finish") {
-        if (isWork(p)) return tell("a house is built by the town itself, from level 2");
+        if (isWork(p)) return tell("a house or the pen is built by the town itself (houses from level 2, the pen once the garden is built)");
         const pr = progressOf(t, p);
         if (pr.done) return tell("already finished");
         // "donors": that many offline contributors (5 items each, as on a big server); "give": the player's own items.
@@ -3235,7 +3559,10 @@ function census(t) {
     budget--;
     changed = true;
   }
-  if (changed) saveResidents(t, rs);
+  if (changed) {
+    saveResidents(t, rs);
+    refreshBoard(t); // the resident count and the newest names
+  }
   if (!arrived.length) return;
   for (const name of arrived) {
     const msg = `§aA new family moved into ${t.n}: ${name}.`;
@@ -3243,6 +3570,7 @@ function census(t) {
   }
   storyAdd(t, arrived.length === 1 ? `A new family moved in (${arrived[0]})` : `${arrived.length} new families moved in`);
   saveTown(t);
+  lifeNews(t, `fam${rs.n}`);
 }
 
 /** On the build check (every 100 ticks): the census of one town with a player in it, when its time has come. @param {Player[]} players */

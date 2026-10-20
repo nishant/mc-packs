@@ -48,8 +48,17 @@ export function addLog(log, day, text) {
 /** "Day 12: The Well was finished", or the text alone without a day. @param {LogEntry} e */
 export const logLine = (e) => (e[0] > 0 ? `Day ${e[0]}: ${e[1]}` : e[1]);
 
-/** Is this a town work's id (house_1 .. house_10)? @param {unknown} id */
+/** Is this a town house's id (house_1 .. house_10)? @param {unknown} id */
 export const isWorkId = (id) => typeof id === "string" && /^house_([1-9]|10)$/.test(id);
+
+/** The garden pen's id: a town work too (`townLife`), next to the garden once it is built. */
+export const PEN_ID = "pen";
+
+/**
+ * The garden pen as a town work: a 5 x 5 fence ring with a gate, built at a spot the town picks next to its garden,
+ * with 2 sheep and 2 chickens spawned once. @returns {{ id: string, name: string, level: number, needs: Record<string, number>, build: "pen", work: 1 }}
+ */
+export const makePen = () => ({ id: PEN_ID, name: "Garden Pen", level: 2, needs: {}, build: /** @type {const} */ ("pen"), work: /** @type {const} */ (1) });
 
 /**
  * Houses a town has at a level: none below level 2, else the level's families (`perLevel`, the last entry for higher

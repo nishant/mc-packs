@@ -5,7 +5,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import vm from "node:vm";
+import ts from "typescript";
 import { MinecraftBlockTypes } from "@minecraft/vanilla-data";
+import * as life from "../packs/town_bp/scripts/life.js";
 import { CLEARABLE, PATH_MAX, PATH_NEAR, POSTS_MAX, POST_EVERY, boardTexts, packCells, planPath, planPosts, postCount, readWorks, unpackCells, walk } from "../packs/town_bp/scripts/life.js";
 
 const id = (b) => `minecraft:${b}`;
@@ -71,8 +74,13 @@ test("readWorks keeps whole cells, 48 path blocks a build and 12 posts a town", 
   assert.deepEqual(readWorks(null), {});
   assert.deepEqual(readWorks([1]), {});
   // The worst case stays far under the 32 KB property limit.
-  const big = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`house_${i}`, [cell.repeat(PATH_MAX), cell.repeat(POSTS_MAX)]]));
-  assert.ok(JSON.stringify(readWorks(big)).length < 7000);
+  // 18 builds (7 projects, 10 houses, the pen), each with a full path and a full leftover of 2 paths, every post.
+  const ids = ["well", "notice_board", "lamps", "garden", "stall", "dock", "bell_tower", ...Array.from({ length: 10 }, (_, i) => `house_${i + 1}`), "pen"];
+  const big = Object.fromEntries(ids.flatMap((k) => [[k, [cell.repeat(PATH_MAX), cell.repeat(POSTS_MAX)]], [`~${k}`, [cell.repeat(3 * PATH_MAX), cell.repeat(POSTS_MAX)]]]));
+  const kept = readWorks(big);
+  assert.equal(kept["~well"][0].length, 2 * PATH_MAX * 6, "a leftover keeps at most 2 paths");
+  assert.equal(postCount(kept), POSTS_MAX);
+  assert.ok(JSON.stringify(kept).length < 16500, `${JSON.stringify(kept).length} characters`);
 });
 
 test("planPath: grass toward the center, steps of at most 1, stopping near the center", () => {
@@ -153,4 +161,101 @@ test("boardTexts: projects done and residents on sign 2, the newest residents on
 test("life.js runs in node", () => {
   const src = fs.readFileSync(path.join(import.meta.dirname, "..", "packs", "town_bp", "scripts", "life.js"), "utf8");
   assert.doesNotMatch(src, /@minecraft\//);
+});
+
+// --- main.js's own laying and removing (layPath, clearLife, restoreLife) on a fake world ---
+
+
+const mainSrc = fs.readFileSync(path.join(import.meta.dirname, "..", "packs", "town_bp", "scripts", "main.js"), "utf8");
+function mainParts(names) {
+  const src = ts.createSourceFile("main.js", mainSrc, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const out = new Map();
+  ts.forEachChild(src, (n) => {
+    if (ts.isFunctionDeclaration(n) && n.name && names.includes(n.name.text)) out.set(n.name.text, n.getText(src));
+    if (ts.isVariableStatement(n)) for (const d of n.declarationList.declarations) if (ts.isIdentifier(d.name) && names.includes(d.name.text)) out.set(d.name.text, n.getText(src));
+  });
+  for (const n of names) assert.ok(out.has(n), `main.js has ${n}`);
+  return [...out.values()].join("\n");
+}
+
+function fakeMain(h, loaded = () => true) {
+  const set = new Map();
+  const read = (x, y, z) => set.get(`${x},${y},${z}`) ?? (y > h(x, z) ? id("air") : y === h(x, z) ? id("grass_block") : id("dirt"));
+  const dim = {
+    getBlock: ({ x, y, z }) => {
+      if (!loaded(x, z)) return undefined;
+      const typeId = read(x, y, z);
+      return { typeId, isAir: typeId === id("air"), setPermutation: (p) => set.set(`${x},${y},${z}`, p.id) };
+    },
+  };
+  const store = { w: {} };
+  const ctx = {
+    ...life,
+    perm: (pid) => ({ id: pid }),
+    lifeOf: () => store.w,
+    saveLife: (_t, w) => (store.w = JSON.parse(JSON.stringify(w))),
+    saveTown: () => {},
+    world: { getDimension: () => dim },
+    lifeWaits: new Map(),
+  };
+  vm.runInNewContext(`var lifeJob;\n${mainParts(["PATH_BLOCK", "LIFE_WAITS", "restoreLife", "clearLife", "layPath"])}\nthis.fns = { layPath, clearLife };`, ctx);
+  return { ...ctx.fns, dim, read, set, store, ctx };
+}
+
+test("main.js lays a path only on grass that is still there, saves it, and Remove spot turns it back", () => {
+  const w = fakeMain(() => 64);
+  const t = { id: "elm", x: 0, z: 0, dim: "overworld", spots: {} };
+  const s = { x: 20, y: 65, z: 0, f: 3, a: 1 };
+  const res = run(planPath({ start: { x: 19, y: 64, z: 0 }, cx: 0, cz: 0 }), (x, y, z) => ({ id: w.read(x, y, z) }));
+  assert.equal(res.cells.length, 16);
+  w.set.set("10,64,0", id("oak_planks")); // built meanwhile: the path ends before it
+  w.layPath(t, { id: "well" }, s, w.dim, res);
+  assert.equal(s.pt, 1);
+  const laid = unpackCells(w.store.w.well[0], 0, 0);
+  assert.equal(laid.length, 9, "laid up to the block built meanwhile");
+  assert.ok(laid.every((c) => w.read(c.x, c.y, c.z) === id("grass_path")));
+  assert.equal(w.read(10, 64, 0), id("oak_planks"), "never touched");
+  // A player's own path block and a post: only ours change back.
+  w.store.w.well[1] = packCells([{ x: 15, y: 65, z: 1 }], 0, 0);
+  w.set.set("15,65,1", id("oak_fence"));
+  w.set.set("15,66,1", id("lantern"));
+  w.clearLife(t, "well");
+  assert.ok(laid.every((c) => w.read(c.x, c.y, c.z) === id("grass_block")), "grass again");
+  assert.equal(w.read(15, 65, 1), id("air"));
+  assert.equal(w.read(15, 66, 1), id("air"));
+  assert.deepEqual(w.store.w, {}, "forgotten");
+});
+
+test("main.js: a removal that can't reach part of a path keeps it as ~<id> and finishes it later, never touching a newer path", () => {
+  let far = true;
+  const w = fakeMain(() => 64, (x) => !(far && x < 8));
+  const t = { id: "elm", x: 0, z: 0, dim: "overworld", spots: {} };
+  const path = Array.from({ length: 12 }, (_, i) => ({ x: 16 - i, y: 64, z: 0 }));
+  for (const c of path) w.set.set(`${c.x},64,0`, id("grass_path"));
+  w.store.w = { well: [packCells(path, 0, 0), ""] };
+  w.clearLife(t, "well");
+  assert.deepEqual(Object.keys(w.store.w), ["~well"]);
+  assert.equal(unpackCells(w.store.w["~well"][0], 0, 0).length, 3, "the 3 blocks not loaded wait");
+  // A new path for the well meanwhile stays.
+  w.store.w.well = [packCells([{ x: 30, y: 64, z: 0 }], 0, 0), ""];
+  w.set.set("30,64,0", id("grass_path"));
+  far = false;
+  w.clearLife(t, "well", true);
+  assert.ok(path.every((c) => w.read(c.x, 64, 0) === id("grass_block")), "all of the old one is grass now");
+  assert.deepEqual(Object.keys(w.store.w), ["well"], "the new one is kept");
+  assert.equal(w.read(30, 64, 0), id("grass_path"));
+});
+
+test("main.js: a path that met unloaded ground waits (3 tries a session), then lays what it found", () => {
+  const w = fakeMain(() => 64);
+  const t = { id: "elm", x: 0, z: 0, dim: "overworld", spots: {} };
+  const s = { x: 20, y: 65, z: 0, f: 3, a: 1 };
+  const res = { cells: [{ x: 19, y: 64, z: 0 }], unloaded: true };
+  for (let i = 0; i < 3; i++) {
+    w.layPath(t, { id: "well" }, s, w.dim, res);
+    assert.equal(s.pt, undefined, `try ${i + 1} waits`);
+  }
+  w.layPath(t, { id: "well" }, s, w.dim, res);
+  assert.equal(s.pt, 1);
+  assert.equal(w.read(19, 64, 0), id("grass_path"));
 });

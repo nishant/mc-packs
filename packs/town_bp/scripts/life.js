@@ -75,7 +75,8 @@ export function unpackCells(s, cx, cz, max = Infinity) {
 
 /**
  * The saved `town:w:<town>` record, cleaned: { <project or work id>: [path cells, post cells] } (packed), a path at
- * most PATH_MAX blocks, POSTS_MAX posts in the whole town (later ones dropped). @param {unknown} raw
+ * most PATH_MAX blocks, POSTS_MAX posts in the whole town (later ones dropped); "~<id>" holds what Remove spot couldn't
+ * reach yet (unloaded), at most 2 paths of it. @param {unknown} raw
  * @returns {Record<string, [string, string]>}
  */
 export function readWorks(raw) {
@@ -84,14 +85,15 @@ export function readWorks(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   let posts = 0;
   for (const [id, v] of Object.entries(raw)) {
-    if (!/^[a-z0-9_]{1,32}$/.test(id) || !Array.isArray(v)) continue;
+    const left = id.startsWith("~"); // what a removal couldn't reach yet ("~<id>"), up to two paths of it
+    if (!/^~?[a-z0-9_]{1,32}$/.test(id) || !Array.isArray(v)) continue;
     /** Whole cells only, at most n. @param {unknown} s @param {number} n */
     const clean = (s, n) => {
       if (typeof s !== "string" || !/^[0-9a-z]*$/.test(s)) return "";
       const k = Math.min(Math.floor(s.length / CELL), Math.max(0, n));
       return s.slice(0, k * CELL);
     };
-    const p = clean(v[0], PATH_MAX);
+    const p = clean(v[0], left ? 2 * PATH_MAX : PATH_MAX);
     const l = clean(v[1], POSTS_MAX - posts);
     posts += l.length / CELL;
     if (p || l) out[id] = [p, l];

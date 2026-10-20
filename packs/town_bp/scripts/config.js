@@ -43,6 +43,13 @@ export const CONFIG = {
    */
   houses: true,
 
+  /**
+   * Small life in the towns: a path from each build the town places toward the center (grass turned to path, nothing
+   * else touched), lantern posts beside the paths at each new level (at most 12 a town) and a garden pen with 2 sheep and
+   * 2 chickens next to the garden once it is built. Disabled: none of these are added; those already there stay.
+   */
+  townLife: true,
+
   /** Families a town has room for at each level, 1 to 5. From level 2 the town builds a house for each (at most `residentCapTown`). */
   residentsPerLevel: [2, 4, 6, 8, 10],
 

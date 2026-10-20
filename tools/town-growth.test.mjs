@@ -78,7 +78,7 @@ test("main.js writes the story and shows it on the mayor's page", () => {
 
 // --- Houses (F40): town works house_1 .. house_N from level 2 ---
 
-import { HOUSE_MAX, houseCount, isWorkId, makeWorks } from "../packs/town_bp/scripts/growth.js";
+import { HOUSE_MAX, PEN_ID, houseCount, isWorkId, makePen, makeWorks } from "../packs/town_bp/scripts/growth.js";
 import { BUILDS, designFootprint } from "../packs/town_bp/scripts/designs.js";
 
 test("houses per level: none at level 1, then the level's families, capped by residentCapTown and 10", () => {
@@ -131,7 +131,7 @@ test("main.js builds houses as town works: due from level 2, scanned and built l
     return main.slice(i, main.indexOf("\n}\n", i));
   };
   assert.match(main, /const WORKS = .*makeWorks\(CONFIG\.houseJobs\)/);
-  assert.match(main, /const ALL = \[\.\.\.PROJECTS, \.\.\.WORKS\]/);
+  assert.match(main, /const ALL = \[\.\.\.PROJECTS, \.\.\.WORKS, PEN\]/);
   assert.match(main, /const byId = new Map\(ALL\.map/);
   assert.match(main, /const projectsAt = \(lvl\) => PROJECTS\.filter/, "leveling stays on the projects");
   assert.match(body("levelUp"), /queueWorks\(t\)/);
@@ -139,8 +139,17 @@ test("main.js builds houses as town works: due from level 2, scanned and built l
   assert.match(body("queueWorks"), /pr\.done = 1/);
   assert.match(body("queueWorks"), /queueScan\(t, due\)/);
   assert.match(body("deleteTown"), /for \(const p of ALL\)/);
-  assert.match(body("build"), /isWork\(p\) && get\("houses"\) !== true/);
+  assert.match(body("build"), /isHouse\(p\) && get\("houses"\) !== true/);
   assert.match(body("announceBuilt"), /isWork\(p\)/);
   assert.doesNotMatch(body("finishProject"), /WORKS|ALL/, "rewards stay on projects");
   assert.match(main, /for \(const p of ALL\) \{\n\s+const s = t\.spots\[p\.id\];/, "the build check covers houses");
+});
+
+test("the garden pen is a town work with its own reserved id", () => {
+  const pen = makePen();
+  assert.deepEqual([pen.id, pen.build, pen.work, Object.keys(pen.needs).length], [PEN_ID, "pen", 1, 0]);
+  assert.ok(!isWorkId(PEN_ID), "not a house");
+  assert.ok(!CONFIG.projects.some((p) => p.id === PEN_ID));
+  assert.match(main, /p\.id !== PEN_ID && p\.level >= 1/, "a config project named pen is skipped");
+  assert.match(main, /const isWork = \(p\) => isWorkId\(p\.id\) \|\| p\.id === PEN_ID;/);
 });
