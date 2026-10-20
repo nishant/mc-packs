@@ -69,6 +69,7 @@ const SPECIAL = {
   "stash-recover-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-recover-restart.js")], note: "owning-addon pending journal recovery across a restart" },
   "stash-recover-worn": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-recover-worn.js")], note: "recovery counts worn armor and offhand, lists a used tool as changed" },
   "build-beds": { runner: "build-beds.mjs", note: "native main-pipeline proof, not simulated second-input or physical acceptance" },
+  "build-beds-modes": { runner: "build-beds.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "build-beds-modes.js")], note: "O47: beds through main.confirmPlacement in every shape mode (bridge confirm, not physical input)" },
   "bundle-smoke": { args: ["--flat", "--bundle", "dist/realm_bundle.mcpack", "--timeout", "300"], prepare: ["tools/bundle.mjs", "--all"], note: "builds the Realm Bundle first (dist/realm_bundle.mcpack), runs it as one script context" },
   "full-bundle-protocols": { fullBundle: true, note: "builds and stages the genuine 67-member cancellation bundle" },
   "welcome-generic-bundle": { fullBundle: true, note: "checks the default welcome in the genuine 67-member bundle" },

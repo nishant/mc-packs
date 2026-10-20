@@ -209,13 +209,13 @@ export async function filterBuildPositions(player, positions, typeId, blockState
     const filtered = await filterAllowedPositionsAsync(player, player.dimension.id, ready, true);
     return dropIncompleteBeds(filtered ?? []);
 }
-async function placeAir(player, target, typeId, blockStates) {
+export async function placeAir(player, target, typeId, blockStates) {
     if (!isBedType(typeId)) return placeBlocks(player, [target], target, typeId, blockStates, { immediate: true });
     const kept = await filterBuildPositions(player, [target], typeId, blockStates, false);
     if (!kept.length) return 0;
     return placeBlocks(player, kept, target, typeId, blockStates, { immediate: true });
 }
-function confirmPlacement(player, fallbackTarget) {
+export function confirmPlacement(player, fallbackTarget) {
     const state = getState(player);
     if (state.mode === "disable" || !state.anchor || !state.blockTypeId) return;
     const anchor = { x: state.anchor.x, y: state.anchor.y, z: state.anchor.z };
