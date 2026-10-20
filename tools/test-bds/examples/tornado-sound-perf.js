@@ -9,9 +9,11 @@ export default async function (t) {
   op.lookAtLocation({ x: tx, y: top.location.y + 1, z: tz });
   await t.wait(5);
   t.assert(t.cmd(op, "/realm:tornado_spawn").ok, "/realm:tornado_spawn ran");
-  await t.waitMessage(op, /Tornado! \d+m to the/, { timeout: 100 });
+  // Profiled with --no-relay, so no chat reaches the scenario: a second spawn being refused proves the tornado is up.
+  await t.wait(40);
+  t.assert(!t.cmd(op, "/realm:tornado_spawn").ok, "the tornado formed (a second spawn is refused)");
   // Listeners 20 to 40 blocks south of the funnel, out of its pull (and the tornado drifts slowly).
   for (let i = 0; i < 29; i++) await t.player(`L${i}`, { x: tx - 14 + i, z: tz + 25 + (i % 3) * 5, settle: 1 });
   await t.wait(1200);
-  t.check(true, "a minute of wind pulses for 30 listeners");
+  t.check(!t.cmd(op, "/realm:tornado_spawn").ok, "the tornado lasted the whole minute of wind pulses for 30 listeners");
 }
