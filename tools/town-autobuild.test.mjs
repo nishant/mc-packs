@@ -14,7 +14,7 @@ import * as placed from "../packs/town_bp/scripts/placed.js";
 import * as sites from "../packs/town_bp/scripts/sites.js";
 
 const main = fs.readFileSync(path.join(import.meta.dirname, "..", "packs", "town_bp", "scripts", "main.js"), "utf8");
-const NAMES = ["perm", "canReplace", "wallFacing", "SIDES", "keyOf", "PLANTS", "GROUND", "WATER", "isOptional", "placeDesignSteps", "blockInfo", "readCol", "fillTop", "checkRegion", "applyBuild", "restoreGround", "autoGeometry", "footprint", "itemName"];
+const NAMES = ["perm", "canReplace", "wallFacing", "SIDES", "keyOf", "PLANTS", "GROUND", "WATER", "isOptional", "designOf", "spill", "placeDesignSteps", "blockInfo", "readCol", "fillTop", "checkRegion", "applyBuild", "restoreGround", "autoGeometry", "footprint", "itemName"];
 
 /** The named top-level declarations of main.js, as source. */
 function extract() {
@@ -98,7 +98,7 @@ function load(w) {
     console,
   };
   ctx.cellsOf = () => ctx.cells;
-  vm.runInNewContext(`${extract()}\nthis.fns = { readCol, checkRegion, applyBuild, restoreGround, autoGeometry, footprint };`, ctx);
+  vm.runInNewContext(`${extract()}\nthis.fns = { readCol, checkRegion, applyBuild, restoreGround, autoGeometry, footprint, spill };`, ctx);
   ctx.fns.ctx = ctx;
   return ctx.fns;
 }
@@ -119,8 +119,8 @@ function drain(gen, max = Infinity) {
 }
 
 /** The scan over the fake world through main.js's own readCol. */
-function pick(w, fns) {
-  const gen = sites.scanTown({ cx: 0, cz: 0, radius: 96, depth: 3, projects: [{ id: "well", well: true, box: (s) => fns.footprint(well, s) }] });
+function pick(w, fns, p = well) {
+  const gen = sites.scanTown({ cx: 0, cz: 0, radius: 96, depth: 3, projects: [{ id: p.id, well: p.build === "well", box: (s) => fns.footprint(p, s) }] });
   let r = gen.next();
   while (!r.done) {
     const q = r.value;
@@ -251,4 +251,67 @@ test("the check refuses man-made blocks, placed cells and a changed ground, and 
   const c = geo.plan[0];
   for (let y = c.t + 3; y >= c.t - 4; y--) w.set.set(`${c.x},${y},${c.z}`, { id: "minecraft:air" });
   assert.ok(drain(fns.checkRegion(w.dim, town, geo)).value, "a pit under a planned column");
+});
+
+const house = { id: "house_2", name: "House 2", level: 2, needs: {}, build: "house", job: "minecraft:lectern", work: 1 };
+
+test("a house on the hillside: leveled, then built with its door, both bed halves (turned with the spot) and its own job site", () => {
+  const w = fakeWorld(hill);
+  const fns = load(w);
+  const s = pick(w, fns, house);
+  const geo = fns.autoGeometry(house, s);
+  assert.equal(drain(fns.checkRegion(w.dim, town, geo)).value, undefined, "the region passes its check");
+  const out = { placed: 0, skipped: 0 };
+  assert.equal(drain(fns.applyBuild(w.dim, house, s, geo, out)).value, true);
+  assert.equal(out.skipped, 0, "nothing in the way on leveled ground");
+  const world = (x, y, z) => designs.toWorld(s, x, y, z);
+  const get = (v) => w.read(v.x, v.y, v.z);
+  const foot = get(world(2, 0, 5));
+  const head = get(world(2, 0, 6));
+  assert.equal(foot.id, "minecraft:bed");
+  assert.equal(head.id, "minecraft:bed");
+  assert.equal(foot.states.head_piece_bit, false);
+  assert.equal(head.states.head_piece_bit, true);
+  assert.equal(foot.states.direction, s.f, "the bed points the way the house faces");
+  assert.equal(head.states.direction, s.f);
+  const low = get(world(0, 0, 1));
+  const up = get(world(0, 1, 1));
+  assert.equal(low.id, "minecraft:wooden_door");
+  assert.equal(up.id, "minecraft:wooden_door");
+  assert.deepEqual([low.states.upper_block_bit, up.states.upper_block_bit], [false, true]);
+  assert.equal(low.states["minecraft:cardinal_direction"], ["south", "west", "north", "east"][s.f]);
+  assert.equal(get(world(-2, 0, 6)).id, "minecraft:lectern", "its own job site");
+  assert.equal(get(world(0, -1, 4)).id, "minecraft:oak_planks", "a planks floor on the leveled ground");
+  assert.equal(get(world(-2, 0, 2)).id, "minecraft:lantern");
+  // Applying it again changes nothing.
+  const n = w.changes();
+  drain(fns.applyBuild(w.dim, house, s, geo, { placed: 0, skipped: 0 }));
+  assert.equal(w.changes(), n);
+});
+
+test("a bed or door goes in whole or not at all: a block in the way of one half leaves both out", () => {
+  const w = fakeWorld(() => 64);
+  const fns = load(w);
+  const s = { x: 0, y: 65, z: 0, f: 3 };
+  const head = designs.toWorld(s, 2, 0, 6);
+  w.set.set(`${head.x},${head.y},${head.z}`, { id: "minecraft:chest" });
+  const out = { placed: 0, skipped: 0 };
+  drain(fns.applyBuild(w.dim, house, s, { plan: [] }, out));
+  const foot = designs.toWorld(s, 2, 0, 5);
+  assert.equal(w.read(foot.x, foot.y, foot.z).id, "minecraft:air", "no half bed");
+  assert.equal(w.read(head.x, head.y, head.z).id, "minecraft:chest", "the chest stays");
+  assert.equal(out.skipped, 2);
+});
+
+test("taking a build away breaks a container that holds items (and a lectern) so its contents drop, never lost", () => {
+  const w = fakeWorld(() => 64);
+  const fns = load(w);
+  const commands = [];
+  const dim = { ...w.dim, runCommand: (c) => commands.push(c) };
+  const block = (typeId, inv) => ({ typeId, location: { x: 1, y: 65, z: 2 }, getComponent: (k) => (k === "minecraft:inventory" ? inv : undefined) });
+  fns.spill(dim, block("minecraft:barrel", { container: { size: 27, emptySlotsCount: 26 } }));
+  fns.spill(dim, block("minecraft:barrel", { container: { size: 27, emptySlotsCount: 27 } }));
+  fns.spill(dim, block("minecraft:lectern", undefined));
+  fns.spill(dim, block("minecraft:oak_planks", undefined));
+  assert.deepEqual(commands, ["setblock 1 65 2 air destroy", "setblock 1 65 2 air destroy"], "the full barrel and the lectern; not the empty barrel or planks");
 });

@@ -3,7 +3,10 @@
 // spots keep the box (`b`) and the structure snapshot of the ground they covered when they were built.
 
 /** The built-in designs a project's `build` can name. */
-export const BUILDS = /** @type {const} */ (["well", "lamps", "stall", "bell_tower", "dock", "garden", "notice_board"]);
+export const BUILDS = /** @type {const} */ (["well", "lamps", "stall", "bell_tower", "dock", "garden", "notice_board", "house"]);
+
+/** The job-site block a house gets when none is named. */
+export const DEFAULT_JOB = "minecraft:composter";
 
 /** @typedef {typeof BUILDS[number]} Build */
 /**
@@ -11,15 +14,21 @@ export const BUILDS = /** @type {const} */ (["well", "lamps", "stall", "bell_tow
  * ground, for a well's water or a garden's farmland); "water" also water (a dock's deck); "wet" only
  * water (a dock's posts, down to the bottom).
  * @typedef {"air" | "ground" | "water" | "wet"} Mode
- * @typedef {{ x: number, y: number, z: number, block: string, states?: Record<string, string | number | boolean>, mode: Mode }} Place
- * x: to the right, y: up from the spot (0 = feet, -1 = the ground), z: forward
+ * @typedef {{ x: number, y: number, z: number, block: string, states?: Record<string, string | number | boolean>, mode: Mode, dir?: number, axis?: "x" | "z", pair?: 1 }} Place
+ * x: to the right, y: up from the spot (0 = feet, -1 = the ground), z: forward. Only a house's places use the rest:
+ * dir, the way the block points (0 forward, 1 right, 2 back, 3 left), turned with the spot by placeStates; axis, the
+ * local axis a glass pane runs along (its connections); pair 1 on the second half of a bed or a door, which goes in
+ * with the half before it or not at all.
  */
 /** @typedef {{ x: number, y: number, z: number }} Vec */
 /** @typedef {{ x: number, y: number, z: number, f: number }} Facing f: 0 south, 1 west, 2 north, 3 east */
 /** @typedef {{ min: Vec, max: Vec }} Box inclusive block corners */
 
-/** The blocks of a build, in placing order (supports first). @param {Build} kind @returns {Place[]} */
-export function design(kind) {
+/**
+ * The blocks of a build, in placing order (supports first). `job`: a house's job-site block (DEFAULT_JOB when not given).
+ * @param {Build} kind @param {string} [job] @returns {Place[]}
+ */
+export function design(kind, job) {
   /** @type {Place[]} */
   const out = [];
   /** @param {number} x @param {number} y @param {number} z @param {string} block @param {Mode} [mode] @param {Record<string, string | number | boolean>} [states] */
@@ -87,12 +96,42 @@ export function design(kind) {
       // Signs on the front, facing the spot: filled in by refreshBoard.
       for (let x = -1; x <= 1; x++) out.push({ x, y: 1, z: 0, block: "minecraft:wall_sign", mode: "air" });
       break;
+    case "house": {
+      // A 7 x 7 cottage, x -3..3, z 1..7: log corners, planks walls 3 high with glass panes, the door in the middle of
+      // the front wall (facing the spot), a slab roof; inside a bed, the job-site block and a lantern.
+      for (let x = -2; x <= 2; x++) for (let z = 2; z <= 6; z++) at(x, -1, z, "minecraft:oak_planks", "ground"); // the floor, where it's grass or dirt
+      for (let y = 0; y <= 2; y++)
+        for (let x = -3; x <= 3; x++)
+          for (let z = 1; z <= 7; z++) {
+            const side = Math.abs(x) === 3;
+            if (!side && z !== 1 && z !== 7) continue; // inside
+            if (x === 0 && z === 1 && y <= 1) continue; // the doorway
+            const corner = side && (z === 1 || z === 7);
+            const pane = y === 1 && ((z === 1 && Math.abs(x) === 2) || (z === 7 && Math.abs(x) <= 1) || (side && z === 4));
+            if (corner) at(x, y, z, "minecraft:oak_log");
+            else if (pane) out.push({ x, y, z, block: "minecraft:glass_pane", mode: "air", axis: side ? "z" : "x" });
+            else at(x, y, z, "minecraft:oak_planks");
+          }
+      const door = { door_hinge_bit: false, open_bit: false };
+      out.push({ x: 0, y: 0, z: 1, block: "minecraft:wooden_door", mode: "air", states: { ...door, upper_block_bit: false }, dir: 0 });
+      out.push({ x: 0, y: 1, z: 1, block: "minecraft:wooden_door", mode: "air", states: { ...door, upper_block_bit: true }, dir: 0, pair: 1 });
+      for (let x = -3; x <= 3; x++) for (let z = 1; z <= 7; z++) at(x, 3, z, "minecraft:oak_slab", "air", slab);
+      // The bed: its foot, then its head toward the back wall.
+      out.push({ x: 2, y: 0, z: 5, block: "minecraft:bed", mode: "air", states: { head_piece_bit: false, occupied_bit: false }, dir: 0 });
+      out.push({ x: 2, y: 0, z: 6, block: "minecraft:bed", mode: "air", states: { head_piece_bit: true, occupied_bit: false }, dir: 0, pair: 1 });
+      at(-2, 0, 6, job ?? DEFAULT_JOB);
+      at(-2, 0, 2, "minecraft:lantern", "air", { hanging: false });
+      break;
+    }
   }
   return out;
 }
 
-/** A block of a design that's only needed where it's open (a dock's posts, the floor under a well's or a garden's water). @param {string} build @param {Place} pl */
-export const isOptionalPlace = (build, pl) => pl.mode === "wet" || ((build === "well" || build === "garden") && pl.y === -2);
+/**
+ * A block of a design that's only needed where it's open (a dock's posts, the floor under a well's or a garden's water)
+ * or nice to have (a house's floor, laid only where the ground is grass or dirt). @param {string} build @param {Place} pl
+ */
+export const isOptionalPlace = (build, pl) => pl.mode === "wet" || ((build === "well" || build === "garden") && pl.y === -2) || (build === "house" && pl.y === -1);
 
 /** Forward, by the spot's facing. */
 export const FORWARD = [
@@ -107,6 +146,36 @@ export function toWorld(s, x, y, z) {
   const f = FORWARD[s.f] ?? FORWARD[0];
   const r = { x: -f.z, z: f.x };
   return { x: s.x + r.x * x + f.x * z, y: s.y + y, z: s.z + r.z * x + f.z * z };
+}
+
+const CARDINAL = ["south", "west", "north", "east"];
+
+/**
+ * A place's block states in the world at a spot facing `f`: a bed's `direction` and a door's
+ * `minecraft:cardinal_direction` turned with the spot (both use 0 south, 1 west, 2 north, 3 east, as FORWARD), and a
+ * glass pane connected along the wall it sits in. Every other place keeps its states as they are.
+ * @param {Place} pl @param {number} f @returns {Record<string, string | number | boolean> | undefined}
+ */
+export function placeStates(pl, f) {
+  if (pl.dir === undefined && pl.axis === undefined) return pl.states;
+  const face = FORWARD[f] ? f : 0;
+  /** @type {Record<string, string | number | boolean>} */
+  const st = { ...pl.states };
+  if (pl.dir !== undefined) {
+    const w = (((face + pl.dir) % 4) + 4) % 4;
+    if (pl.block === "minecraft:bed") st.direction = w;
+    else st["minecraft:cardinal_direction"] = CARDINAL[w];
+  }
+  if (pl.axis !== undefined) {
+    const fw = FORWARD[face];
+    // Local x runs to the right (-forward.z, forward.x); local z runs forward.
+    const alongX = pl.axis === "x" ? fw.z !== 0 : fw.x !== 0;
+    st["minecraft:connection_east"] = alongX;
+    st["minecraft:connection_west"] = alongX;
+    st["minecraft:connection_north"] = !alongX;
+    st["minecraft:connection_south"] = !alongX;
+  }
+  return st;
 }
 
 /** @type {Map<string, Box>} */

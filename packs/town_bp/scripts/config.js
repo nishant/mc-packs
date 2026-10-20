@@ -37,6 +37,9 @@ export const CONFIG = {
   /** Seconds the outline of a build at an automatically picked spot is shown to players within 32 blocks before it goes up (0 to 15). */
   outlineSeconds: 5,
 
+  /** The job-site block of each house, in turn (house 1 the first, house 11 the first again), so residents get different jobs. */
+  houseJobs: ["minecraft:composter", "minecraft:lectern", "minecraft:barrel", "minecraft:smoker", "minecraft:cartography_table", "minecraft:brewing_stand", "minecraft:fletching_table", "minecraft:loom", "minecraft:stonecutter_block", "minecraft:grindstone"],
+
   /** First names for new towns' mayors ("Mayor Alda"), each used once; when all are taken, "Mayor <Town>". */
   mayorNames: ["Alda", "Corwin", "Fenna", "Garrick", "Halden", "Imogen", "Joss", "Kestrel", "Linnea", "Marten", "Nessa", "Oswin", "Perrin", "Rowena", "Sorrel", "Thea", "Ulla", "Verity", "Wendell", "Ysolde"],
 

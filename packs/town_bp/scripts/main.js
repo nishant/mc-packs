@@ -19,7 +19,7 @@ import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
-import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, toWorld } from "./designs.js";
+import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, placeStates, toWorld } from "./designs.js";
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
@@ -490,6 +490,8 @@ const WATER = new Set(["water", "flowing_water", "seagrass", "kelp", "waterlily"
 
 /** A block of a design that's only needed where it's open. @param {Project} p @param {Place} pl */
 const isOptional = (p, pl) => isOptionalPlace(p.build, pl);
+/** A project's (or town work's) built-in design: a house with its own job-site block. @param {Project} p */
+const designOf = (p) => design(p.build, /** @type {{ job?: string }} */ (p).job);
 
 /** @param {string} type @param {Mode} mode */
 function canReplace(type, mode) {
@@ -728,7 +730,7 @@ function buildKinds(p) {
         }
     return kinds;
   }
-  for (const pl of design(p.build)) kinds.add(pl.block);
+  for (const pl of designOf(p)) kinds.add(pl.block);
   if (kinds.has("minecraft:farmland")) kinds.add("minecraft:dirt"); // trampled farmland
   return kinds;
 }
@@ -755,9 +757,27 @@ function restoreGround(dim, st, box, kinds) {
           if (!b) continue;
           if (b.permutation.matches(want.type.id, want.getAllStates())) continue;
           if (!b.isAir && !b.isLiquid && !kinds.has(b.typeId)) continue; // someone's own block
+          spill(dim, b);
           b.setPermutation(want);
         }
     }
+}
+
+/**
+ * Before a build's own block is taken away (Remove spot, Relocate, Rebuild): a container with something in it (a
+ * stall's or a house's barrel, a smoker, a brewing stand) or a lectern (it may hold a book) is broken the way a player
+ * breaks it, so what it holds drops on the ground instead of being lost.
+ * @param {Dimension} dim @param {import("@minecraft/server").Block} b
+ */
+function spill(dim, b) {
+  try {
+    const c = /** @type {import("@minecraft/server").BlockInventoryComponent | undefined} */ (b.getComponent("minecraft:inventory"))?.container;
+    if (!(c && c.emptySlotsCount < c.size) && b.typeId !== "minecraft:lectern") return;
+    const { x, y, z } = b.location;
+    dim.runCommand(`setblock ${x} ${y} ${z} air destroy`);
+  } catch {
+    // no inventory (most blocks), or not loaded
+  }
 }
 
 /**
@@ -774,14 +794,16 @@ function clearBuild(dim, p, s, box) {
       for (let y = box.min.y; y <= box.max.y; y++)
         for (let z = box.min.z; z <= box.max.z; z++) {
           const b = dim.getBlock({ x, y, z });
-          if (b && kinds.has(b.typeId)) b.setPermutation(air);
+          if (!b || !kinds.has(b.typeId)) continue;
+          spill(dim, b);
+          b.setPermutation(air);
         }
     return;
   }
   const grass = perm("minecraft:grass_block");
   const water = perm("minecraft:water");
   // Top down, so nothing above is left hanging while it's cleared.
-  const places = design(p.build).sort((a, b) => b.y - a.y);
+  const places = designOf(p).sort((a, b) => b.y - a.y);
   for (const pl of places) {
     let b;
     try {
@@ -792,6 +814,7 @@ function clearBuild(dim, p, s, box) {
     if (!b) continue;
     const same = b.typeId === pl.block || (pl.block === "minecraft:farmland" && b.typeId === "minecraft:dirt");
     if (!same) continue;
+    spill(dim, b);
     b.setPermutation(pl.mode === "ground" ? grass : pl.mode === "wet" ? water : air);
   }
 }
@@ -834,7 +857,7 @@ function* placeDesignSteps(dim, s, p, auto, out) {
   const { min, max } = dim.heightRange;
   /** @type {{ pl: Place, loc: Vector3, block: import("@minecraft/server").Block }[]} */
   const items = [];
-  for (const pl of design(p.build)) {
+  for (const pl of designOf(p)) {
     const loc = toWorld(s, pl.x, pl.y, pl.z);
     if (loc.y < min || loc.y >= max) {
       out.skipped++;
@@ -858,21 +881,25 @@ function* placeDesignSteps(dim, s, p, auto, out) {
   const later = (pl) => pl.block === "minecraft:water" || pl.block === "minecraft:waterlily";
   /** @param {{ pl: Place, block: import("@minecraft/server").Block }} it */
   const put = (it) => {
-    const states = it.pl.block === "minecraft:wall_sign" ? { facing_direction: wallFacing({ x: -fwd.x, z: -fwd.z }) } : it.pl.states;
+    const states = it.pl.block === "minecraft:wall_sign" ? { facing_direction: wallFacing({ x: -fwd.x, z: -fwd.z }) } : placeStates(it.pl, s.f);
     it.block.setPermutation(perm(it.pl.block, states));
     out.placed++;
   };
-  // 1. Everything but water and lily pads, supports first. A block that's already there (a rebuild) stays.
-  for (const it of items) {
-    if (later(it.pl)) continue;
+  // 1. Everything but water and lily pads, supports first. A block that's already there (a rebuild) stays. The two
+  // halves of a bed or a door (the second has `pair`) go in together, in one step, or neither does.
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (later(it.pl) || it.pl.pair) continue;
     yield;
-    if (it.block.typeId === it.pl.block) continue;
-    if (!replaceable(it.block.typeId, it.pl.mode)) {
+    const mate = items[i + 1]?.pl.pair ? items[i + 1] : undefined;
+    const group = mate ? [it, mate] : [it];
+    if (group.every((g) => g.block.typeId === g.pl.block)) continue;
+    if (!group.every((g) => g.block.typeId === g.pl.block || replaceable(g.block.typeId, g.pl.mode))) {
       // A cobblestone floor under a well, or posts under a dock, are only needed where it's open.
-      if (!optional(it.pl)) out.skipped++;
+      if (!optional(it.pl)) out.skipped += group.length;
       continue;
     }
-    put(it);
+    for (const g of group) put(g);
   }
   // 2. Water, only where it can't spill.
   const water = items.filter((it) => it.pl.block === "minecraft:water" && it.block.typeId !== "minecraft:water");
@@ -1525,7 +1552,7 @@ function inTheWay(t, p, s) {
   let n = 0;
   try {
     const dim = world.getDimension(t.dim);
-    for (const pl of design(p.build)) {
+    for (const pl of designOf(p)) {
       if (pl.block === "minecraft:waterlily" || isOptional(p, pl)) continue;
       const loc = toWorld(s, pl.x, pl.y, pl.z);
       // Its own build, when moving it a little, is taken away first.
