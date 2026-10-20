@@ -3323,3 +3323,34 @@ test("F13: near a full page the carried totals come back, so a pickup is still r
   advance(30);
   assert.equal(p.container.getItem(20)?.amount, 4, "a hotbar to page move is not a pickup");
 });
+
+// ---------------------------------------------------------------------------
+// F49: a count request doesn't read every old JSON page property
+// ---------------------------------------------------------------------------
+
+test("F49: storedCount reads an old JSON page property once, never one a snapshot shadows, and still counts it", () => {
+  const p = joined();
+  mc.players = [p];
+  // Page 2 was migrated (its old 30 KB property stays behind, shadowed by its snapshot); page 3 is still old JSON.
+  p.setDynamicProperty("stash:page:2", JSON.stringify([{ s: 10, id: "minecraft:stone", n: 1, pad: "x".repeat(30000) }]));
+  arrange(p, { 2: { 9: stack("minecraft:amethyst_shard", 4) } });
+  p.setDynamicProperty("stash:page:3", JSON.stringify([{ s: 10, id: "minecraft:amethyst_shard", n: 6 }]));
+  const real = p.getDynamicProperty;
+  /** @type {Map<string, number>} */
+  const reads = new Map();
+  p.getDynamicProperty = (/** @type {string} */ k) => {
+    const v = real(k);
+    if (k.startsWith("stash:page:") && v !== undefined) reads.set(k, (reads.get(k) ?? 0) + 1);
+    return v;
+  };
+  try {
+    const shard = "minecraft:amethyst_shard";
+    assert.equal(pages.storedCount(p, shard).reduce((a, r) => a + r.n, 0), 10, "the native page and the old JSON page");
+    for (let i = 0; i < 5; i++) pages.storedCount(p, shard);
+    pages.storedCount(p, "minecraft:diamond");
+    assert.equal(reads.get("stash:page:2") ?? 0, 0, "the shadowed property of a migrated page is never read");
+    assert.equal(reads.get("stash:page:3"), 3, "page 3: found once, then read only to answer the two different asks");
+  } finally {
+    p.getDynamicProperty = real;
+  }
+});

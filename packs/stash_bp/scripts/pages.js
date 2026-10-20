@@ -297,6 +297,31 @@ function announceChange(player) {
 /** @type {Map<string, { sig: string, rows: Map<string, CountRow[]> }>} per player: what each ask has on saved pages, valid while the page refs are the same */
 const storedCache = new Map();
 
+/** @type {Map<string, Set<number>>} per player: the pages found holding an old JSON page property */
+const legacyCache = new Map();
+
+/**
+ * The pages without a native snapshot that hold an old JSON page property. A page with a snapshot never reads its old
+ * property (the snapshot shadows it), and nothing in this version writes or deletes one, so a property found once is
+ * never read again for this; only pages not yet known to have one are checked, which is cheap while they have none.
+ * @param {Player} player @param {import("./page-store.js").State} state @returns {number[]}
+ */
+function legacyPages(player, state) {
+  let known = legacyCache.get(player.id);
+  if (!known) legacyCache.set(player.id, (known = new Set()));
+  /** @type {number[]} */
+  const pages = [];
+  for (let p = 1; p <= totalPages(player); p++) {
+    if (state.pages[p]) continue;
+    if (!known.has(p)) {
+      if (player.getDynamicProperty(PAGE_PROP + p) === undefined) continue;
+      known.add(p);
+    }
+    pages.push(p);
+  }
+  return pages;
+}
+
 /** Could a saved page hold a named stack? False only when the committed index says it holds none. @param {Player} player @param {number} page */
 function mayHoldNamed(player, page) {
   try {
@@ -326,14 +351,10 @@ export function storedCount(player, id, name) {
   if (state.pending) return undefined;
   const cur = curPage(player);
   const pagesNow = new Set(Object.keys(state.pages).map(Number));
-  /** @type {string[]} */
-  const legacy = [];
-  for (let p = 1; p <= totalPages(player); p++) {
-    const raw = player.getDynamicProperty(PAGE_PROP + p);
-    if (raw === undefined) continue;
-    pagesNow.add(p);
-    if (!state.pages[p]) legacy.push(`${p}:L${typeof raw === "string" ? raw.length : "?"}`);
-  }
+  // A legacy page is only ever read (its first write makes it native, which changes state.pages), so what it holds is
+  // fixed: the signature needs only the native refs and which pages are still legacy.
+  const legacy = legacyPages(player, state);
+  for (const p of legacy) pagesNow.add(p);
   const sig = `${cur}|${Object.entries(state.pages).map(([p, r]) => `${p}:${r.id}`).join(",")}|${legacy.join(",")}`;
   let cache = storedCache.get(player.id);
   if (!cache || cache.sig !== sig) {
@@ -1154,7 +1175,7 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 });
 world.afterEvents.playerDimensionChange.subscribe(({ player }) => bumpLife(player.id));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff, lifeGen]) m.delete(playerId);
+  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff, lifeGen, legacyCache, storedCache]) m.delete(playerId);
   recoveryWarned.delete(playerId);
   dead.delete(playerId);
   queuedButtons.delete(playerId);
