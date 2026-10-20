@@ -96,7 +96,7 @@ function game({ delay }) {
     };
     vm.createContext(context);
     vm.runInContext(
-      `const DIMS = ["minecraft:overworld"];\nlet saving = true;\nconst wait = (ticks) => new Promise((res) => system.runTimeout(() => res(undefined), ticks));\n${marksSource}\n${fn("loadedAt")}\n${fn("placeCarts")}\n${fn("cartsOf", true)}\n${fn("dropStrayCart")}\nglobalThis.cartsOf = cartsOf;\nglobalThis.dropStrayCart = dropStrayCart;`,
+      `const DIMS = ["minecraft:overworld"];\nlet saving = true;\nconst wait = (ticks) => new Promise((res) => system.runTimeout(() => res(undefined), ticks));\n${marksSource}\n${fn("loadedAt")}\n${fn("placeCarts")}\n${fn("cartsOf", true)}\n${fn("dropStrayCart")}\nglobalThis.cartsOf = cartsOf;\nglobalThis.dropStrayCart = dropStrayCart;\nglobalThis.watchPutDown = typeof watchPutDown === "function" ? watchPutDown : () => {};\nglobalThis.markSeen = typeof markSeen === "function" ? markSeen : () => {};`,
       context,
     );
     return context;
@@ -216,4 +216,45 @@ test("a cart of a waiting hand-over that loads after a restart is remembered as 
   await g.step();
   assert.equal(await comeBack(g, ctx), null);
   assert.equal(g.puts, 1);
+});
+
+// The marks are capped. A player who leaves inside the window keeps only the world's "seen" mark; it must outlast many
+// other hand-overs (abandoned put-downs and seen marks of players who never came back), or the record says "never seen"
+// again when they return and the structure goes down a second time.
+for (const [others, seenOthers] of [
+  [1000, false],
+  [600, true],
+]) {
+  test(`a leave in the window, then ${others} other ${seenOthers ? "seen" : "abandoned"} put-downs, then the carts are broken: put down once`, async () => {
+    const g = game({ delay: 0 });
+    const ctx = g.scripts();
+    const player = { isValid: true, location: { x: 1, y: 64, z: 1 }, dimension: g.dim };
+    ctx.cartsOf(player, record(g), saver(g), 2);
+    player.isValid = false; // gone in the put-down's own tick: the record never learns `seen`
+    for (let t = 0; t < 3; t++) await g.step();
+    assert.equal(record(g).seen, undefined, "the record itself doesn't know");
+    for (let i = 0; i < others; i++) {
+      const tag = `realm:exp_parcel_${1000 + i}`;
+      ctx.watchPutDown(tag);
+      if (seenOthers) ctx.markSeen(tag);
+    }
+    for (let t = 0; t < 45; t++) await g.step();
+    g.breakAll();
+    for (let t = 0; t < 3; t++) await g.step();
+    assert.equal(await comeBack(g, ctx), null);
+    assert.equal(g.puts, 1, `put down ${g.puts} times`);
+  });
+}
+
+test("a record whose carts the world saw learns `seen` itself when it's next loaded", async () => {
+  const g = game({ delay: 0 });
+  const ctx = g.scripts();
+  const player = { isValid: true, location: { x: 1, y: 64, z: 1 }, dimension: g.dim };
+  ctx.cartsOf(player, record(g), saver(g), 2);
+  player.isValid = false;
+  for (let t = 0; t < 45; t++) await g.step();
+  g.breakAll();
+  await g.step();
+  assert.equal(await comeBack(g, ctx), null);
+  assert.equal(record(g).seen, true);
 });

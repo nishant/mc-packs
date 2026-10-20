@@ -327,7 +327,11 @@ const wait = (ticks) => new Promise((res) => system.runTimeout(() => res(undefin
 // ---------------------------------------------------------------------------
 
 const CART_MARKS = "expedition:cart_marks"; // world: JSON { <cart tag>: 0 put down, not seen yet | 1 seen }
-const MARKS_MAX = 200; // oldest dropped first; a mark lives only from a hand-over's put-down until it ends
+// A mark lives from a hand-over's put-down until it ends, so a player who never comes back leaves one behind. Over the
+// cap, "not seen yet" marks go first (oldest first: forgetting one only means carts that never appeared may be put down
+// again), and a "seen" mark only when nothing else is left: losing one could put a second copy down. 800 marks of
+// ~30 characters stay well under a dynamic property's 32767.
+const MARKS_MAX = 800;
 const WATCH_TICKS = 40;
 const CART_TYPE = "minecraft:chest_minecart";
 const OWN_CART_TAG = /^realm:exp_(stash|parcel)_\d+$/;
@@ -357,6 +361,20 @@ function saveMarks() {
     world.setDynamicProperty(CART_MARKS, m.size ? JSON.stringify(Object.fromEntries(m)) : undefined);
   } catch (e) {
     console.warn(`[expedition] cart marks: ${e}`);
+  }
+}
+
+/** Drops marks over the cap: the oldest "not seen yet" first, the oldest "seen" only when no other is left. @param {string} keep the mark just made */
+function trimMarks(keep) {
+  const m = marks();
+  if (m.size <= MARKS_MAX) return;
+  for (const [k, v] of m) {
+    if (m.size <= MARKS_MAX) return;
+    if (v === 0 && k !== keep) m.delete(k);
+  }
+  for (const k of m.keys()) {
+    if (m.size <= MARKS_MAX) return;
+    if (k !== keep) m.delete(k);
   }
 }
 
@@ -415,7 +433,7 @@ function watchPutDown(tag) {
   if (m.get(tag) !== 1) {
     m.delete(tag);
     m.set(tag, 0);
-    while (m.size > MARKS_MAX) m.delete(m.keys().next().value ?? "");
+    trimMarks(tag);
     saveMarks();
   }
   if (watching++ === 0) {
@@ -500,8 +518,13 @@ async function cartsOf(p, rec, save, want) {
   const dropStrays = (keep) => {
     for (const d of DIMS) if (d !== keep) for (const cart of find(d)) removeCart(cart);
   };
-  // Seen by the world (O19) also counts: the carts were there once, even if the player never learned it.
-  const seen = !!rec.seen || seenMark(rec.tag);
+  // Seen by the world (O19) also counts: the carts were there once, even if the player never learned it. The record
+  // learns it now, so it no longer depends on the mark lasting.
+  if (!rec.seen && seenMark(rec.tag)) {
+    rec = { ...rec, seen: true };
+    save(rec);
+  }
+  const seen = !!rec.seen;
   if (rec.placed && rec.at) {
     let dim;
     try {
