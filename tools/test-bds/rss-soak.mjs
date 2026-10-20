@@ -3,7 +3,8 @@
 //   node tools/test-bds/rss-soak.mjs --every 5 --out <file.json> -- --quiet --no-relay --flat \
 //     --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=3600 --timeout 4500
 // Everything after `--` goes to run.mjs unchanged (add `--only a_bp,b_bp` to bisect). Linux only (/proc).
-// The JSON has every sample { t (s since the first), pid, rssMiB, hwmMiB } and `summary` (see summarize()).
+// The JSON has every sample { t (s since run.mjs started), pid, rssMiB, hwmMiB } and `summary` (see summarize()):
+// only the longest-lived bedrock_server is judged, with its warm-up counted from its own first sample.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,15 +32,56 @@ const slope = (x, y) => {
 };
 
 /**
- * What the samples say. The first `warmupS` seconds (the spawn ramp, chunk loading) are left out. Medians per
+ * The pid to judge: run.mjs can start more than one bedrock_server (a template or cold-cache server before the real
+ * one, a restart in the scenario). The one sampled over the longest span is the soak; ties go to the later one.
+ * @param {{ t: number, pid?: number }[]} samples
+ */
+export function mainPid(samples) {
+  /** @type {Map<number | undefined, { first: number, last: number }>} */
+  const span = new Map();
+  for (const s of samples) {
+    const x = span.get(s.pid);
+    if (!x) span.set(s.pid, { first: s.t, last: s.t });
+    else x.last = Math.max(x.last, s.t);
+  }
+  let best;
+  let bestSpan = -1;
+  let bestFirst = -Infinity;
+  for (const [pid, x] of span) {
+    const d = x.last - x.first;
+    if (d > bestSpan || (d === bestSpan && x.first > bestFirst)) [best, bestSpan, bestFirst] = [pid, d, x.first];
+  }
+  return best;
+}
+
+/**
+ * What the samples say. Only the main bedrock_server's samples count (mainPid()), with time measured from its first
+ * sample, so staging and boot before it don't eat into the warm-up; every pid sampled is listed in `pids`. The first
+ * `warmupS` seconds (the spawn ramp, chunk loading) are left out. Medians per
  * `binS` window; the slope (MiB/min) over the first and the second half of the rest; `growing` is true when the
  * second half still rises by more than `flatMiBPerMin` and its last bin is the highest. "leveled" means the second
  * half is flat within that tolerance. With less than 30 minutes after the warm-up there is no verdict.
  * @param {{ t: number, rssMiB: number }[]} samples
  */
-export function summarize(samples, { warmupS = 300, binS = 600, flatMiBPerMin = 0.5 } = {}) {
+export function summarize(all, { warmupS = 300, binS = 600, flatMiBPerMin = 0.5 } = {}) {
+  /** @type {Map<number | undefined, { pid: number | undefined, fromS: number, toS: number, samples: number, peakMiB: number }>} */
+  const pids = new Map();
+  for (const s of all) {
+    const x = pids.get(s.pid) ?? { pid: s.pid, fromS: s.t, toS: s.t, samples: 0, peakMiB: 0 };
+    x.toS = Math.max(x.toS, s.t);
+    x.samples++;
+    x.peakMiB = Math.max(x.peakMiB, s.rssMiB ?? 0);
+    pids.set(s.pid, x);
+  }
+  const pid = mainPid(all);
+  const own = all.filter((s) => s.pid === pid);
+  const t0 = own.length ? own[0].t : 0;
+  const samples = own.map((s) => ({ ...s, t: s.t - t0 }));
   const rest = samples.filter((s) => s.t >= warmupS && Number.isFinite(s.rssMiB));
   const out = {
+    pid: pid ?? null,
+    startS: own.length ? t0 : null, // when it was first sampled, in seconds after run.mjs started
+    pids: [...pids.values()],
     samples: samples.length,
     firstMiB: samples[0]?.rssMiB ?? null,
     lastMiB: samples.at(-1)?.rssMiB ?? null,
@@ -121,18 +163,20 @@ async function main() {
     fs.writeFileSync(outFile, JSON.stringify({ date: new Date(t0).toISOString(), every, run: runArgs, summary, samples }, null, 1));
     return summary;
   };
+  let intervals = 0;
   const timer = setInterval(() => {
     for (const pid of descendants(child.pid)) {
       const m = memOf(pid);
       if (m) samples.push({ t: Math.round((Date.now() - t0) / 100) / 10, pid, ...m });
     }
-    if (samples.length && samples.length % 60 === 0) write(); // a run that dies keeps what it had
+    if (++intervals % 60 === 0 && samples.length) write(); // a run that dies keeps what it had
   }, every * 1000);
   const code = await new Promise((res) => child.on("exit", (c) => res(c ?? 1)));
   clearInterval(timer);
   const s = write();
   const mib = (v) => (v == null ? "-" : v.toFixed(0));
-  console.log(`[rss-soak] ${samples.length} samples, ${mib(s.firstMiB)} -> ${mib(s.lastMiB)} MiB (peak ${mib(s.peakMiB)}), slope ${s.slopeFirstHalf.toFixed(2)} then ${s.slopeSecondHalf.toFixed(2)} MiB/min: ${s.verdict}; 10-minute medians ${s.bins.map((b) => b.medianMiB.toFixed(0)).join(", ")}`);
+  if (s.pids.length > 1) console.log(`[rss-soak] ${s.pids.length} bedrock_server processes sampled; judging pid ${s.pid} (from ${s.startS}s): ${s.pids.map((x) => `${x.pid} ${x.fromS}-${x.toS}s peak ${x.peakMiB.toFixed(0)} MiB`).join("; ")}`);
+  console.log(`[rss-soak] ${s.samples} samples, ${mib(s.firstMiB)} -> ${mib(s.lastMiB)} MiB (peak ${mib(s.peakMiB)}), slope ${s.slopeFirstHalf.toFixed(2)} then ${s.slopeSecondHalf.toFixed(2)} MiB/min: ${s.verdict}; 10-minute medians ${s.bins.map((b) => b.medianMiB.toFixed(0)).join(", ")}`);
   console.log(`[rss-soak] ${outFile}`);
   process.exit(code);
 }
