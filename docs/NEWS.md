@@ -7,7 +7,26 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
-## Earlier pages and bounded offline rewards
+## Calmer wanderers and party quests together
+
+- Wanderers and caravan llamas no longer jump back to camp: one that strays slows down and walks back, and one stuck behind a wall gets a moment to find its way around.
+- Townsfolk and story characters no longer bounce up and down when the floor under them is dug out: they stay where they land (or beside the hole if it goes into water) and go back to their spot once the floor is put back.
+- A wanderer struck by lightning no longer leaves a named witch behind.
+- Party quests at story places: your party now shares one scene per step, with one set of guards, one character to meet or escort, one defense and one group of monsters, instead of a copy for each of you. A mate helping out can hold a fight alone without the monsters vanishing.
+- The Gray Ring: the goal is now the inside of the stone circle, and the Cantor's song plays after you sneak in, not before.
+- Night fights at story places now start when the server keeps time stopped at night, and only monsters sent for your own fight count toward it.
+- Blood Moon monsters no longer appear inside a shelter built during the night with Easy Building, /fill or a structure: every spawn spot is checked fresh.
+- Saga collect quests no longer lose progress when Expansive Inventory can't answer for a moment.
+
+In case you missed them last time:
+
+- The stats ticker above your hotbar is now on by default. Turn yours off or on with /realm:stats_ticker or in /realm:prefs. Your choice stays yours even if the realm default changes. If an old off choice came back, turn it off once more.
+- Long quest steps wrap instead of being cut off with "...", and a full tracker says how many more steps are in /realm:saga.
+- Chest Finder marks your result with a bright arrow above the chest and a direction-and-distance line.
+- Sneak-tap storage with an empty hand to sort it. Move a stack or a whole row to another inventory page with Move to page in /realm:inv.
+- Story hints explain how to replace required bells, candles and other blocks someone mined out, and building steps accept poplar wood and every sapling type.
+
+## Pickups move on from a nearly full page, and bounded offline rewards
 
 - When your inventory page is down to its last free slot, new pickups can move to other pages until two slots are free. Fill earlier pages in /realm:inv tidies every later page without sorting; slot-locked stacks and your hotbar stay put. Story collect steps count your saved pages too, without giving free hand-in credit.
 - Operators can export a retained failed inventory save with /realm:inv_recover. Back up and inspect the player's live inventory and recovery chests: it is a backup export, not automatic duplicate removal.
