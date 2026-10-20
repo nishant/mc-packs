@@ -41,13 +41,13 @@ export default async function (t) {
     await t.wait(5);
     for (const c of CENTERS) {
       const { top } = await t.loadArea(c.x, c.z, { radius: 4 });
-      op.teleport({ x: c.x + 0.5, y: top + 1, z: c.z + 0.5 });
+      op.teleport({ x: c.x + 0.5, y: top.y + 1, z: c.z + 0.5 });
       await t.wait(20);
       const since = t.tick;
       town("add", { name: c.name });
       await t.waitMessage(op, new RegExp(`Town ${c.name} added`), { since, timeout: 60 });
       // 18 builds on a grid of 6 by 3, 16 apart, all facing south, away from the center where the mayor stands.
-      const spotOf = (i) => ({ x: c.x - 40 + (i % 6) * 16, y: top + 1, z: c.z - 36 + Math.floor(i / 6) * 24, f: 0 });
+      const spotOf = (i) => ({ x: c.x - 40 + (i % 6) * 16, y: top.y + 1, z: c.z - 36 + Math.floor(i / 6) * 24, f: 0 });
       PROJECTS.forEach((id, i) => town("spot", { town: c.id, project: id, spot: spotOf(i) }));
       await t.wait(5);
       for (const id of PROJECTS) {
@@ -89,8 +89,8 @@ export default async function (t) {
     const { top } = await t.loadArea(600, 0, { radius: 4 });
     const last = players.at(-1);
     last.home = { x: 600, z: 0 };
-    last.p.teleport({ x: 600.5, y: top + 1, z: 0.5 });
-    op.teleport({ x: 600.5, y: top + 1, z: 2.5 });
+    last.p.teleport({ x: 600.5, y: top.y + 1, z: 0.5 });
+    op.teleport({ x: 600.5, y: top.y + 1, z: 2.5 });
     await t.wait(20);
     const since = t.tick;
     town("add", { name: "Cedar" });

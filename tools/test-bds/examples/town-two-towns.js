@@ -53,7 +53,7 @@ export default async function (t) {
   town("add", { name: "Riverside" });
   await t.waitMessage(p, /Town Riverside added/, { since, timeout: 60 });
   const { top } = await t.loadArea(300, 0);
-  p.teleport({ x: 300.5, y: top + 1, z: 0.5 });
+  p.teleport({ x: 300.5, y: top.y + 1, z: 0.5 });
   await t.wait(20);
   since = t.tick;
   town("add", { name: "Oakfield" });

@@ -37,7 +37,7 @@ export default async function (t) {
     town("add", { name: "Riverside" });
     await t.waitMessage(p, /Town Riverside added/, { since, timeout: 60 });
     const { top } = await t.loadArea(300, 0);
-    p.teleport({ x: 300.5, y: top + 1, z: 0.5 });
+    p.teleport({ x: 300.5, y: top.y + 1, z: 0.5 });
     await t.wait(20);
     t.assert(t.cmd(p, "/realm:npc_add bram").ok, "npc_add bram (in the younger town)");
     await t.wait(10);
@@ -49,7 +49,7 @@ export default async function (t) {
     since = t.tick;
     town("finish", { town: "riverside", project: "well", donors: 2 });
     await t.waitMessage(p, /Riverside finished its Well/, { since, timeout: 60 });
-    town("spot", { town: "oakfield", project: "notice_board", spot: { x: 306, y: top + 1, z: 6, f: 2 } });
+    town("spot", { town: "oakfield", project: "notice_board", spot: { x: 306, y: top.y + 1, z: 6, f: 2 } });
     town("protect", { town: "oakfield", on: false });
     await t.wait(10);
     since = t.tick;
