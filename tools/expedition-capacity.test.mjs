@@ -3,7 +3,7 @@
 // The production queue module (queue.js) is imported as it ships and runs against fakes of the game and of the parts
 // of main.js it calls; the wiring of the rest is checked against the production source.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import vm from "node:vm";
@@ -11,7 +11,9 @@ import vm from "node:vm";
 const scripts = new URL("../packs/expedition_bp/scripts/", import.meta.url);
 const srcDir = process.env.EXPEDITION_SRC ? `${process.env.EXPEDITION_SRC}/` : undefined;
 const mainSource = readFileSync(srcDir ? `${srcDir}main.js` : new URL("main.js", scripts), "utf8").replace(/\r\n/g, "\n");
-const moduleUrl = (f) => (srcDir ? pathToFileURL(`${srcDir}${f}`).href : new URL(f, scripts).href);
+// EXPEDITION_SRC may be a copy from before queue.js and forget.js existed: those fall back to the shipped modules, so a
+// fail-before run fails on the main.js wiring assertions instead of crashing on import.
+const moduleUrl = (f) => (srcDir && existsSync(`${srcDir}${f}`) ? pathToFileURL(`${srcDir}${f}`).href : new URL(f, scripts).href);
 const { createQueue, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY } = await import(moduleUrl("queue.js"));
 const { createForget } = await import(moduleUrl("forget.js"));
 const fnSrc = (name) => {

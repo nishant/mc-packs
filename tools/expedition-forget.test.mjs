@@ -2,9 +2,10 @@
 // player's structures), keeps every stash structure (players' own data still points at them), refuses new saves
 // afterwards, and answers ONCE, after the clean-up. The real generated diag.js, the real gauntlet.js and the forget hook
 // module (forget.js, imported as it ships) run against one fake server. EXPEDITION_SRC points at another copy of the
-// pack's scripts folder.
+// pack's scripts folder; a copy from before forget.js existed uses the shipped module, so a fail-before run fails on the
+// main.js wiring assertions instead of crashing on import.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -15,7 +16,7 @@ const scripts = new URL("../packs/expedition_bp/scripts/", import.meta.url);
 const srcDir = process.env.EXPEDITION_SRC ? `${process.env.EXPEDITION_SRC}/` : undefined;
 const read = (f) => readFileSync(srcDir ? `${srcDir}${f}` : new URL(f, scripts), "utf8");
 const mainSource = read("main.js").replace(/\r\n/g, "\n");
-const { createForget } = await import(srcDir ? pathToFileURL(`${srcDir}forget.js`).href : new URL("forget.js", scripts).href);
+const { createForget } = await import(srcDir && existsSync(`${srcDir}forget.js`) ? pathToFileURL(`${srcDir}forget.js`).href : new URL("forget.js", scripts).href);
 const gauntletSource = read("gauntlet.js");
 const diagSource = readFileSync(new URL("diag.js", scripts), "utf8");
 
