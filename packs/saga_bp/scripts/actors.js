@@ -3,7 +3,7 @@
 import { GameMode, system, world } from "@minecraft/server";
 import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
 import { spawnFresh } from "./spawn.js";
-import { createSnapGuard, settledBelow } from "./tether.js";
+import { createSnapGuard, settledBelow, standable } from "./tether.js";
 import { DIMENSIONS, dist3, hash } from "./util.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
@@ -39,6 +39,7 @@ const nameLabels = createNameLabels({
  * @property {"meet" | "escort" | "ward" | "guard" | "lead" | "add"} role
  * @property {boolean} invul
  * @property {Vector3} [anchor] kept here (teleported back when it strays)
+ * @property {Vector3} [orig] its own spot while the floor under it is gone (anchor is where it landed meanwhile)
  * @property {string} marker unique invisible format-code marker identifying this actor across transformations
  * @property {string} dim
  * @property {number} born tick
@@ -202,8 +203,8 @@ const anchorGuard = createSnapGuard({ cooldown: 40, maxCooldown: 600 });
 /**
  * Keeps anchored actors at their spot and invulnerable ones at full health; drops entries of entities that are gone.
  * An anchored actor that dropped straight down from its spot (spawned over a hole, or its floor broken) gets a new spot
- * where it landed: putting it back up would let it fall again every second. One pushed off again and again waits a
- * little longer each time before it is put back.
+ * where it landed: putting it back up would let it fall again every second; once that floor is back, it goes back up
+ * to its own spot. One pushed off again and again waits a little longer each time before it is put back.
  */
 export function tendActors() {
   const now = system.currentTick;
@@ -221,13 +222,19 @@ export function tendActors() {
         if (dressed(a.ent, look)) dressing.delete(id);
         else dress(a.ent, look);
       }
-      if (a.anchor && dist3(a.ent.location, a.anchor) > 2) {
+      if (a.orig && standable(a.ent.dimension, a.orig)) {
+        a.anchor = a.orig;
+        a.orig = undefined;
+        a.ent.teleport(a.anchor);
+      } else if (a.anchor && dist3(a.ent.location, a.anchor) > 2) {
         const l = a.ent.location;
         const below = l.y < a.anchor.y && Math.hypot(l.x - a.anchor.x, l.z - a.anchor.z) <= 1;
         if (below && !a.ent.isOnGround) {
           // still falling: wait until it lands
-        } else if (settledBelow(a.ent, a.anchor)) a.anchor = { x: l.x, y: l.y, z: l.z };
-        else if (anchorGuard.allow(id, now)) {
+        } else if (settledBelow(a.ent, a.anchor)) {
+          a.orig ??= a.anchor;
+          a.anchor = { x: l.x, y: l.y, z: l.z };
+        } else if (anchorGuard.allow(id, now)) {
           a.ent.teleport(a.anchor);
           anchorGuard.snapped(id, now);
         }

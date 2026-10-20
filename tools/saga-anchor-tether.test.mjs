@@ -34,6 +34,7 @@ function run(entity, anchor) {
     system: { currentTick: 0 },
     createSnapGuard: tether.createSnapGuard,
     settledBelow: tether.settledBelow,
+    standable: tether.standable,
   };
   vm.createContext(ctx);
   vm.runInContext(`${parts.join("\n")}\nthis.tend = tendActors;`, ctx);
@@ -97,4 +98,31 @@ test("pushed off once: straight back; pushed off every second: it waits longer e
   assert.ok(at.length < 15, `${at.length} put-backs in 60 s, not 61`);
   const gaps = at.slice(1).map((t, i) => t - at[i]);
   assert.ok(gaps.every((g, i) => i === 0 || g >= gaps[i - 1]), `waits grow: ${gaps.join(",")}`);
+});
+
+test("floor gone, then refilled: the character goes back up onto its own spot, not left inside the new blocks", () => {
+  let filled = false;
+  const dim2 = {
+    getBlock({ x, y, z }) {
+      if (filled) return y <= 63 ? { typeId: "minecraft:stone", isAir: false, isLiquid: false } : { typeId: "minecraft:air", isAir: true, isLiquid: false };
+      return dim.getBlock({ x, y, z });
+    },
+  };
+  const ent = {
+    isValid: true,
+    dimension: dim2,
+    location: { x: 0.5, y: 61, z: 0.5 },
+    isOnGround: true,
+    teleport(to) {
+      this.location = { ...to };
+    },
+  };
+  const ctx = run(ent, { x: 0.5, y: 64, z: 0.5 });
+  ctx.tend();
+  assert.equal(ctx.actors.get("a1").anchor.y, 61, "a new spot where it landed while the floor is gone");
+  filled = true;
+  ctx.system.currentTick = 20;
+  ctx.tend();
+  assert.equal(ctx.actors.get("a1").anchor.y, 64, "its own spot again");
+  assert.equal(ent.location.y, 64, "standing on the refilled floor");
 });

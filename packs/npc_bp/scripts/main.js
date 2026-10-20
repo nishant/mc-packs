@@ -19,7 +19,7 @@ import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
 import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
-import { createSnapGuard, settledBelow } from "./tether.js";
+import { createSnapGuard, settledBelow, standable } from "./tether.js";
 import { onScriptEvent } from "./script-events.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
@@ -83,7 +83,7 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
 /**
  * Where one townsfolk lives: its post, inside its house, and the way it faces there. `eid` is the id of its entity
  * (ids stay the same across loads), so any other entity with its tags is a duplicate or a leftover.
- * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string }} Placed
+ * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string, orig?: Vector3 }} Placed
  */
 /** @typedef {{ missing: number, nextIdle: number, speech: number, speechLine?: string, yaw?: number }} State */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
@@ -146,7 +146,10 @@ function upgrade(r) {
   if (!r || typeof r.id !== "string" || typeof r.dim !== "string" || !isNum(r.x) || !isNum(r.y) || !isNum(r.z)) return undefined;
   const home = spotOrNot(r.home);
   const at = home ?? { x: r.x, y: r.y, z: r.z };
+  /** @type {Placed} */
   const rec = { id: r.id, dim: r.dim, x: at.x, y: at.y, z: at.z, yaw: isNum(r.yaw) ? r.yaw : 0, eid: typeof r.eid === "string" ? r.eid : undefined };
+  const orig = spotOrNot(r.orig); // its own post while the floor under it is gone (the saved post is where it landed)
+  if (orig) rec.orig = orig;
   return { rec, old: "home" in r || "posts" in r };
 }
 
@@ -619,6 +622,17 @@ const fill = (line, name) => line.split("{player}").join(name);
 function behave(rec, t, entity, lively) {
   const st = stateOf(rec.id);
   const dim = world.getDimension(rec.dim);
+  // Its post moved down when the floor under it went: once that floor is back (refilled), it goes back up to its own
+  // post, instead of being left inside the new blocks.
+  if (rec.orig && entity.dimension.id === rec.dim && loaded(dim, rec.orig) && standable(dim, rec.orig)) {
+    console.warn(`[npc] ${rec.id}: the floor under its post at ${Math.floor(rec.orig.x)}, ${rec.orig.y}, ${Math.floor(rec.orig.z)} is back: back on its post`);
+    Object.assign(rec, { x: rec.orig.x, y: rec.orig.y, z: rec.orig.z });
+    delete rec.orig;
+    save();
+    entity.teleport(anchorOf(rec), { dimension: dim, rotation: { x: 0, y: rec.yaw } });
+    st.yaw = rec.yaw;
+    return;
+  }
   const at = anchorOf(rec);
   if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
     // The floor under its post is gone (broken, or the post was a block or more above the ground): it dropped straight
@@ -627,6 +641,7 @@ function behave(rec, t, entity, lively) {
     if (entity.dimension.id === rec.dim && settledBelow(entity, at)) {
       const y = Math.round(entity.location.y * 1000) / 1000;
       console.warn(`[npc] ${rec.id}: the floor under its post at ${Math.floor(rec.x)}, ${rec.y}, ${Math.floor(rec.z)} is gone: the post moves down to y ${y}`);
+      rec.orig ??= at; // its own post, to go back to once the floor is refilled
       rec.y = y;
       save();
       return;
@@ -1537,6 +1552,7 @@ function addNpc(player, id) {
   let rec = placedOf(id);
   if (rec) {
     Object.assign(rec, { dim: dim.id, x: at.x, y: at.y, z: at.z, yaw });
+    delete rec.orig;
   } else {
     rec = { id, dim: dim.id, x: at.x, y: at.y, z: at.z, yaw };
     list.push(rec);
@@ -1925,6 +1941,7 @@ async function moveTo(dim, plan) {
     if (!rec || !t) continue;
     let entity = entityOf(rec);
     Object.assign(rec, { dim: dim.id, x: p.post.x, y: p.post.y, z: p.post.z, yaw: p.yaw });
+    delete rec.orig;
     const st = stateOf(p.id);
     st.missing = 0;
     st.yaw = p.yaw;
@@ -2030,7 +2047,7 @@ async function undoMove(player) {
   try {
     // Each townsfolk goes back to its own dimension; the move keeps these spots as the new "before".
     const byDim = new Map();
-    for (const r of prev) byDim.set(r.dim, [...(byDim.get(r.dim) ?? []), { id: r.id, post: { x: r.x, y: r.y, z: r.z }, yaw: r.yaw }]);
+    for (const r of prev) byDim.set(r.dim, [...(byDim.get(r.dim) ?? []), { id: r.id, post: r.orig ?? { x: r.x, y: r.y, z: r.z }, yaw: r.yaw }]);
     let moved = 0;
     for (const [d, plan] of byDim) moved += await moveTo(world.getDimension(d), plan);
     if (player.isValid) player.sendMessage(`§aPut ${moved} townsfolk back.§7 Run /realm:npc_undo again to swap back.`);

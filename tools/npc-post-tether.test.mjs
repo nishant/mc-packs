@@ -44,6 +44,7 @@ function run(rec, entity) {
     console: { warn() {} },
     createSnapGuard: tether.createSnapGuard,
     settledBelow: tether.settledBelow,
+    standable: tether.standable,
   };
   vm.createContext(ctx);
   vm.runInContext(`${parts.join("\n")}\nthis.behave = behave;`, ctx);
@@ -94,4 +95,37 @@ test("pushed off once: straight back; pushed off every check: it waits longer ea
     check();
   }
   assert.ok(at.length < 15, `${at.length} put-backs in 60 s, not 121`);
+});
+
+test("dug out, then refilled: the townsfolk goes back up onto its own post, not left inside the new blocks", () => {
+  let filled = false;
+  const dim = {
+    getBlock({ x, y, z }) {
+      const hole = x === 0 && z === 0 && !filled;
+      const solid = y < 62 || (y <= 63 && !hole);
+      return solid ? { typeId: "minecraft:stone", isAir: false, isLiquid: false } : { typeId: "minecraft:air", isAir: true, isLiquid: false };
+    },
+  };
+  const rec = { id: "mara", dim: "minecraft:overworld", x: 0.5, y: 64, z: 0.5, yaw: 0 };
+  const ent = {
+    dimension: { id: "minecraft:overworld", ...dim },
+    location: { x: 0.5, y: 62, z: 0.5 },
+    isOnGround: true,
+    teleport(to) {
+      this.location = { ...to };
+    },
+  };
+  const { ctx } = run(rec, ent);
+  ctx.world.getDimension = () => ({ id: "minecraft:overworld", ...dim });
+  const check = () => ctx.behave(rec, {}, ent, false);
+  check();
+  assert.equal(rec.y, 62, "the post moved down while the floor is gone");
+  filled = true; // the builder puts the floor back: she is now inside it
+  for (let k = 1; k <= 3; k++) {
+    ctx.system.currentTick = k * 10;
+    check();
+  }
+  assert.equal(rec.y, 64, "back on its own post");
+  assert.equal(ent.location.y, 64, "standing on the refilled floor");
+  assert.equal(rec.orig, undefined, "nothing left to go back to");
 });

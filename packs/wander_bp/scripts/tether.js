@@ -10,7 +10,7 @@
 // the last resort (in water or lava, stuck down a hole, or past the hard radius), goes to a free spot near home (not
 // the exact center, where it may stand in another mob), and waits out a cooldown that doubles while snaps keep coming.
 //
-//   import { createTether, createSnapGuard, freeSpotNear, settledBelow } from "./tether.js";
+//   import { createTether, createSnapGuard, freeSpotNear, settledBelow, standable } from "./tether.js";
 //
 //   const tether = createTether({ soft: 4, hard: 12 });   // options below
 //   // every few ticks, for each mob (its dimension is the caller's to check):
@@ -45,7 +45,10 @@
 //                                            undefined; `seed` turns the search so mobs differ
 //   settledBelow(ent, anchor)                 true when the mob dropped straight down from its anchor (its floor went
 //                                            or it was put a block high) and stands on the ground: move the anchor
-//                                            there instead of lifting it back up, which would loop.
+//                                            there instead of lifting it back up, which would loop. Keep the old
+//                                            anchor and go back to it once standable() says its floor is back.
+//   standable(dim, at)                        can a mob stand at `at` (exactly, a fraction of a block too): a floor
+//                                            under its feet, its body free; false when not loaded
 //
 // Cost per check: the mob's location and isInWater, one getBlock (lava) and, only while steering or on a state
 // change, its movement component and an impulse. Nothing else is read.
@@ -151,6 +154,21 @@ export function settledBelow(ent, anchor) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Can a mob stand exactly at `at` (its feet there: a floor right under them, its body free, no liquid)? A carpet or
+ * snow layer on a floor counts as floor. False when not loaded. @param {any} dim @param {Vec} at
+ */
+export function standable(dim, at) {
+  const x = Math.floor(at.x);
+  const z = Math.floor(at.z);
+  const under = Math.floor(at.y - 0.01);
+  const b = block(dim, x, under, z);
+  if (!b || b.isAir || b.isLiquid) return false;
+  if (PASSABLE.test(b.typeId) && !floor(block(dim, x, under - 1, z))) return false;
+  for (let y = Math.max(under + 1, Math.floor(at.y + 0.01)); y <= Math.floor(at.y + 1.8); y++) if (!open(block(dim, x, y, z))) return false;
+  return true;
 }
 
 /**
