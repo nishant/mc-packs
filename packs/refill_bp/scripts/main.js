@@ -11,6 +11,7 @@ import {
   world,
 } from "@minecraft/server";
 import { get, getFor, setFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // The "on" preference (player property "refill:pref") and the world options live in settings.js.
 
@@ -197,9 +198,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "refill_bp");
   },
-  { namespaces: ["realm"] }
 );

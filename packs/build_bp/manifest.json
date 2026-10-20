@@ -4,25 +4,47 @@
     "name": "Easy Building",
     "description": "Effortless Building v5.0 for the Realm: interactive 2-click and 3-click multi-block shapes, 3D floating panels and quick wheel, live block outlines, mirror/array/radial modifiers, block palettes, Air Build, copy/cut/paste, destroy mode, live Coach and Tutorial Book. /realm:build",
     "uuid": "7cecc8a2-a1ca-4f4d-a828-871169ed7e31",
-    "version": [3, 0, 4],
-    "min_engine_version": [1, 21, 100]
+    "version": [
+      3,
+      0,
+      9
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      100
+    ]
   },
   "modules": [
     {
       "type": "data",
       "uuid": "8b7d4c12-6e1a-4b9c-8a51-9f31d67e2041",
-      "version": [1, 0, 0]
+      "version": [
+        1,
+        0,
+        0
+      ]
     },
     {
       "type": "script",
       "language": "javascript",
       "uuid": "43736eb8-a9a4-4664-95be-c4c60e1310e9",
-      "version": [3, 0, 0],
+      "version": [
+        3,
+        0,
+        0
+      ],
       "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.1.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
   ]
 }

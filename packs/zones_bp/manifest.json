@@ -4,20 +4,38 @@
     "name": "Safe Zones",
     "description": "Mark your base as a safe zone: meteors, tornadoes, storm lightning and other world events break no blocks there. /realm:zones",
     "uuid": "93c7f3a1-c0b7-4584-bf8b-03325263f0d4",
-    "version": [1, 0, 6],
-    "min_engine_version": [1, 21, 100]
+    "version": [
+      1,
+      0,
+      10
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      100
+    ]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
       "uuid": "942f483a-c254-4e6c-be19-7ad1e8d4488c",
-      "version": [1, 0, 0],
+      "version": [
+        1,
+        0,
+        0
+      ],
       "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.1.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
   ]
 }

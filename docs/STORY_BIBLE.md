@@ -390,7 +390,17 @@ they differ (October 2026):
   (*The Witch's Bargain*).
 - **Hearth and Table** teaches the Kitchen's story recipes with a chapter's `teach` (Lantern Cake in
   *A Feast for Marta*, Starwright Bread in *Elsie's Old Recipe*), and every chapter that asks for a
-  dish has an "old way" with plain food, chosen in *Rations for the Wardens*.
+  dish has an "old way" with plain food, chosen in *Rations for the Wardens*. A new-kitchen player
+  without the Kitchen pack gets the old way too (`NO_KITCHEN`: `way` = `kitchen` and
+  `pack:cooking_bp` = `off`). *A Champion's Heart* asks for the hearts only with the Kitchen and
+  Champions packs (`pack:cooking_bp` and `pack:elite_bp` both `on`); otherwise Grandmother Gristle (a
+  story champion spider at the `watchtower`, flag `heart` = `gristle`), and the cook-off's heart stew
+  is 2 rabbit stews without the Champions pack.
+- **Shipped names:** Inspector Prewitt (`who.id` `prewitt` in `smugglers_run`; he also counts the
+  votes in `mayors_burden`), not Inspector Pell. The Wardens' Oath recruits are Dace, Brynn and Orrin.
+  The Lamp in the Window wedding is Barnaby Pike and Rosalind. Bea's ship is the Saltwife (codex id
+  `marigold_supper` kept). Pell the Pilgrim, Tamsin Galeward and Marigold of the Heights stay the
+  wanderers.
 - **Act IV** has 12 chapters, as planned.
 - **Side questline requirements:** `inn_ghost` needs all of Act I, and `smugglers_run` and
   `vesna_bargain` all of Act II (not a chapter of them); `star_kittens` is given by `wren` only.
@@ -609,6 +619,11 @@ story log): use it for every revelation so players can reread the story they've 
 an act finale 10 levels, 150-300 Crowns and a title or relic. Hints cost 25% of a chapter's levels
 and Crowns (`hintPenalty`).
 
+**Approved exception (owner decision, 2026-10-19, O64):** the Act 5 Lantern Night rewards (`herald`, `choice`,
+`dawn_relight`) and the deep side chapter's `last_listen` stay as written, above this scale on purpose, because the
+owner wants them intentionally generous. They are the only approved exceptions; no other reward moves to them.
+`tools/check-stories.allow.json` lists these four findings.
+
 ### Story relics (added to the Relics pack)
 
 The abilities below are the plan; the shipped ones differ in places (the Gray Choir Mask halves Choir
@@ -661,3 +676,12 @@ each real day per NPC. Template: `{ id, npc, label, objective, reward, lines: [i
    prefix like the prologue (`§eTobin:§r`).
 7. Reveal the truth in the order of section 2; no character knows more than the act allows.
 8. Violence is Minecraft violence: monsters die, nobody is gored. Sad means sad, not cruel.
+9. A named character must not reuse a townsfolk's or a wanderer's name, and a `who.id` must not be a
+   wanderer id unless it is that wanderer's own chain (`kind: "wander"`, `giver: "w_<id>"`). A scene
+   copy of the same person may use that id plus a suffix (`hollis_ward`, `hollis_sea`).
+10. A step that names a kind of block (candles, stained glass, panes, fences, saplings, wool, planks,
+    helmets) lists every color and wood, including `poplar_*` and `bamboo_sapling`. Skip `hard_*`
+    education ids and `nether_brick_fence`. `node tools/check-stories.mjs` warns on a partial family.
+    A step that has the player tap or hit a block built once into the world (a bell, candles, barrels, a
+    cauldron, a lodestone, sea lanterns, end rods) says what to place, and how close, if a later player
+    has mined it out: players may place their own inside the objective's radius.

@@ -2,6 +2,7 @@ import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Player property "death:last": JSON { d, x, y, z, told, used } of the player's last death: the
 // dimension id, the block they died in, whether the respawn message was sent and whether
@@ -528,7 +529,8 @@ function sendPoint(player) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:death_point_ping", "realm:help_ping"],
   ({ id, message }) => {
     if (id === "realm:death_point_ping") {
       try {
@@ -541,5 +543,4 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "death_bp");
   },
-  { namespaces: ["realm"] }
 );

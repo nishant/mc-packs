@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, set } from "./settings.js";
 import { escapeZones, protectedBox, zoneProviders, zonesAt } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 // World properties:
 //   "meteor:night"   JSON { n: day number, at: time of day of tonight's warning, or -1 for none }
@@ -439,6 +440,24 @@ function checkPending() {
   }
 }
 
+// Town news: at most one piece per in-game hour from this pack, each crater once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). impact.found is the durable one-off.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 function checkFound() {
   const list = impacts().filter((i) => i.state === "made" && typeof i.y === "number");
   if (!list.length) return;
@@ -454,7 +473,7 @@ function checkFound() {
         impact.found = player.name;
         saveImpacts();
         world.sendMessage(`§6${player.name} found the meteor crater!`);
-        system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "meteor", player: player.id, name: player.name })); // Townsfolk gossip
+        gossip(`meteor:${impact.id}`, { kind: "meteor", player: player.id, name: player.name }); // Townsfolk gossip
       }
     }
   }
@@ -923,7 +942,8 @@ function skyRequest(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:sky_request"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "meteor_bp");
     else if (id === "realm:sky_request") {
@@ -934,5 +954,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

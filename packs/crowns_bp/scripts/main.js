@@ -12,6 +12,8 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { addPaid, appendEntry, paidOn, parseLedger, utcDay as dayOf } from "./ledger.js";
 
 // Balances live in the `crowns` scoreboard, so any pack can pay or charge Crowns without this one, and an
 // operator can see them with /scoreboard. This pack adds the player-facing side: balance and top list,
@@ -21,6 +23,8 @@ const OBJECTIVE = "crowns";
 const PROP_JOINED = "crowns:joined"; // player: true once the starting balance was given
 const PROP_BONUS = "crowns:bonus"; // player: UTC day number of the last daily bonus
 const PROP_NAMES = "crowns:names"; // world: JSON { scoreboard id: player name }, for the top list while they're offline
+const PROP_LEDGER = "crowns:ledger"; // world: the last 200 pays and gives (ledger.js)
+const PROP_PAID = "crowns:paid"; // player: JSON [UTC day number, Crowns sent that day] for the daily pay limit
 const MAX_NAMES = 800; // keeps the names property far below the 32,000 character limit
 const JOIN_DELAY = 200; // ticks after joining before the bonus note, so it isn't lost under the join popups
 const BUY_MAX = 16; // lots one purchase can buy
@@ -357,8 +361,18 @@ async function giveForm(player) {
 // Paying
 // ---------------------------------------------------------------------------
 
+/** Adds one line to the audit ledger; the money has already moved, so a failure here only warns. @param {"p" | "g"} kind @param {string} from @param {string} to @param {number} amount */
+function record(kind, from, to, amount) {
+  try {
+    world.setDynamicProperty(PROP_LEDGER, appendEntry(world.getDynamicProperty(PROP_LEDGER), { at: Date.now(), kind, from, to, amount }));
+  } catch (e) {
+    console.warn(`[crowns] ledger: ${e}`);
+  }
+}
+
 /** @param {Player} sender @param {Player[]} targets @param {number} amount */
 function pay(sender, targets, amount) {
+  if (!sender.isValid) return;
   const valid = (targets ?? []).filter((p) => p.isValid);
   if (valid.length !== 1) return sender.sendMessage("§cPick exactly one player who is online.");
   const [target] = valid;
@@ -368,8 +382,40 @@ function pay(sender, targets, amount) {
   const have = crownsOf(sender);
   if (have < amount) return sender.sendMessage(`§cYou have only ${crowns(have)}.`);
   if (amount > roomFor(target)) return sender.sendMessage(`§c${target.name} can't hold that many more Crowns.`);
-  if (!takeCrowns(sender, amount)) return sender.sendMessage(`§cYou have only ${crowns(have)}.`);
-  addCrowns(target, amount);
+  const day = dayOf(Date.now());
+  const limit = Math.max(0, Math.floor(Number(get("dailyPayLimit")) || 0));
+  if (limit > 0) {
+    const left = Math.max(0, limit - paidOn(sender.getDynamicProperty(PROP_PAID), day));
+    if (amount > left) return sender.sendMessage(`§cYou can send ${crowns(left)} more today (the limit is ${crowns(limit)} a day; it resets at midnight UTC).`);
+  }
+  // The day total is written first: if it can't be saved, nothing moves, so no payment is ever left uncounted.
+  const paidBefore = sender.getDynamicProperty(PROP_PAID);
+  try {
+    sender.setDynamicProperty(PROP_PAID, addPaid(paidBefore, day, amount));
+  } catch (e) {
+    console.warn(`[crowns] pay limit: ${e}`);
+    if (limit > 0) return sender.sendMessage("§cThe payment failed and you kept your Crowns.");
+  }
+  const undoPaid = () => {
+    try {
+      sender.setDynamicProperty(PROP_PAID, paidBefore);
+    } catch (e) {
+      console.warn(`[crowns] pay limit rollback: ${e}`);
+    }
+  };
+  if (!takeCrowns(sender, amount)) {
+    undoPaid();
+    return sender.sendMessage(`§cYou have only ${crowns(have)}.`);
+  }
+  try {
+    addCrowns(target, amount);
+  } catch (e) {
+    addCrowns(sender, amount); // nothing moved: give it back
+    undoPaid();
+    console.warn(`[crowns] pay: ${e}`);
+    return sender.sendMessage("§cThe payment failed and you kept your Crowns.");
+  }
+  record("p", sender.name, target.name, amount);
   rememberName(target);
   sender.sendMessage(`§aYou paid ${crowns(amount)} to ${target.name}. §7Balance: ${fmt(crownsOf(sender))}`);
   target.sendMessage(`§6+${crowns(amount)} §7(from ${sender.name}. Balance: ${fmt(crownsOf(target))})`);
@@ -377,19 +423,26 @@ function pay(sender, targets, amount) {
 
 /** @param {Player | undefined} op @param {Player[]} targets @param {number} amount */
 function give(op, targets, amount) {
-  const valid = (targets ?? []).filter((p) => p.isValid);
+  if (op && (!op.isValid || !isOp(op))) return; // the command runs a tick later: still an operator?
+  const seenIds = new Set();
+  const valid = (targets ?? []).filter((p) => p.isValid && !seenIds.has(p.id) && seenIds.add(p.id));
   /** @param {string} m */
   const tell = (m) => (op ? op.sendMessage(m) : console.warn(`[crowns] ${m}`));
   if (!valid.length) return tell("§cNo player online matches.");
   if (!Number.isInteger(amount) || amount === 0) return tell("§cThe amount must be a whole number other than 0.");
   /** @type {string[]} */
   const done = [];
+  /** @type {string[]} */
+  const changed = [];
+  let applied = 0;
   for (const p of valid) {
     if (amount > 0) {
       // A score can't go past MAX_SCORE: give what fits (the rest would throw and stop the whole list).
       const add = Math.min(amount, roomFor(p));
       if (add > 0) {
         addCrowns(p, add);
+        applied += add;
+        changed.push(p.name);
         p.sendMessage(`§6+${crowns(add)} §7(from an operator. Balance: ${fmt(crownsOf(p))})`);
       }
       done.push(`${p.name} +${fmt(add)}${add < amount ? " (the most a balance can hold)" : ""}`);
@@ -397,13 +450,29 @@ function give(op, targets, amount) {
       const take = Math.min(crownsOf(p), -amount);
       if (take > 0) {
         objective().addScore(p, -take);
+        applied -= take;
+        changed.push(p.name);
         p.sendMessage(`§c-${crowns(take)} §7(taken by an operator. Balance: ${fmt(crownsOf(p))})`);
       }
       done.push(`${p.name} -${fmt(take)}`);
     }
     rememberName(p);
   }
+  if (applied !== 0) record("g", op?.name ?? "console", changed.length === 1 ? changed[0] : `${changed.length} players`, applied);
   tell(`§aCrowns: ${done.join(", ")}`);
+}
+
+/** /realm:crowns_audit: the newest pays and gives. @param {Player} player */
+async function auditList(player) {
+  if (!isOp(player)) return;
+  const list = parseLedger(world.getDynamicProperty(PROP_LEDGER));
+  const lines = list.slice(-50).reverse().map((e) => {
+    const [at, kind, from, to, amount] = /** @type {[number, string, string, string, number]} */ (e);
+    const t = new Date(Number(at)).toISOString().slice(0, 16).replace("T", " ");
+    return kind === "p" ? `§7${t} §f${from} §7paid §6${fmt(amount)} §7to §f${to}` : `§7${t} §4${from} §7${amount < 0 ? "took" : "gave"} §6${fmt(Math.abs(amount))} §7${amount < 0 ? "from" : "to"} §f${to}`;
+  });
+  const body = [`§7Times are UTC. The newest ${lines.length} of the last ${list.length} pays and gives.`, "", ...(lines.length ? lines : ["§7Nothing yet."])].join("\n");
+  await show(player, new ActionFormData().title("§lCrowns audit").body(body).button("Close"));
 }
 
 // ---------------------------------------------------------------------------
@@ -541,7 +610,8 @@ async function sellMenu(player) {
 // on a level change and when the player joins; kept in memory only.
 /** @type {Map<string, number>} player id -> percent off */
 const quillOff = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:affinity",
   ({ id, message }) => {
     if (id !== "realm:affinity") return;
     try {
@@ -553,7 +623,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /** A market price after Quill's friendship discount (rounded down). @param {Player} player @param {number} price */
@@ -615,7 +684,8 @@ function marketCommand(player) {
 }
 
 // The Townsfolk offer round: merchants offer the market.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     try {
@@ -632,7 +702,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // malformed: ignore
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -715,6 +784,16 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 
   customCommandRegistry.registerCommand(
+    { name: "realm:crowns_audit", description: "Crowns: the last 200 pays and gives (operators)", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
+    (origin) => {
+      const player = playerOf(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      later(() => auditList(player).catch((e) => console.warn(`[crowns] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    },
+  );
+
+  customCommandRegistry.registerCommand(
     { name: "realm:crowns_market", description: "Crowns: open the market (where the realm allows it)", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
     (origin) => {
       const player = playerOf(origin);
@@ -726,9 +805,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "crowns_bp");
   },
-  { namespaces: ["realm"] },
 );

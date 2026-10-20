@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemS
 import { CONFIG } from "./config.js";
 import { COLORS, SPREAD, antisolarAngle, arcDots } from "./sky.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // World property "rainbow:pot": JSON { id, x, z, y?, low?, until, expires, placed, wet?, missed?, found? }
 // for the current rainbow and its pot of gold (until / expires: Date.now() ms when the rainbow fades / the pot
@@ -708,7 +709,8 @@ function skyRequest(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:rainbow_ping", "realm:sky_request", "realm:zones"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "rainbow_bp");
     else if (id === "realm:rainbow_ping") {
@@ -730,5 +732,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

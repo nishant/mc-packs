@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Playe
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Each player's quests for the day are one small player property: "quests:day" -> JSON
 // { d: day number, q: [{ id, p: progress, done: 0 | 1 }] }. Quests are saved by their pool id.
@@ -481,7 +482,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 // Scenario tests (BDS harness): give a player set quests for today, since they're picked at random.
 // Only from the server console. /scriptevent realm:quests_test {"player":"<name>","ids":["kill_zombies"]}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:quests_test",
   (ev) => {
     if (ev.id !== "realm:quests_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -494,12 +496,11 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[quests] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "quests_bp");
   },
-  { namespaces: ["realm"] },
 );

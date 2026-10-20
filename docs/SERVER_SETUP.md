@@ -27,12 +27,15 @@ You install them one of two ways. **Pick one and keep it**:
   [mc.nish.software/realm](https://mc.nish.software/realm/), with its size and sha256. To build them yourself from
   this repository: `npm install`, then `npm run bundle -- --all` and `npm run bundle -- --resources`
   (`dist/realm_bundle.mcpack`, `dist/realm_resources.mcpack`) or `npm run build` (one `dist/<folder>.mcpack` per pack).
+- The repository's CI starts a private BDS with the genuine Realm Bundle as one script context after its checks
+  and build. This catches shared-store and cross-pack loading problems that separate-pack tests miss; it does
+  not certify client rendering, phone controls or a live Realm upload.
 
 ## Requirements
 
 | | |
 |---|---|
-| Minecraft | Bedrock **1.21.100 or newer** (`min_engine_version`); tested on Bedrock Dedicated Server **1.26.52** |
+| Minecraft | Bedrock **1.21.100 or newer** (`min_engine_version`); tested on Bedrock Dedicated Server **1.26.52.3** |
 | Script API | `@minecraft/server` 2.1.0 and `@minecraft/server-ui` 2.0.0, the stable versions |
 | Experiments, Beta APIs | **Not needed.** Leave every experimental toggle off; nothing uses beta modules |
 | Cheats | **Not needed** for any `/realm:` command. Operators' quick actions (weather, time, give...) work without cheats too |
@@ -125,20 +128,44 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 |---|---|---|---|---|
 | Minimap | `budgetLevel` | normal | low | The heaviest pack. Its time budgets are for everyone together: low caps it at about 2.0 ms a tick instead of 2.9, whatever the player count. Strips and radars keep their drawing budget; terrain and mob dots lag a little more |
 | Minimap | `mobRadiusMax` | 32 | 24 | Each mob search covers about half the ground, so the budgeted searches come round sooner for many players |
-| Champions | `maxAlive` | 8 | 16 | A world-wide cap: 8 champions shared by 100 spread-out players means most never meet one. They cost little (about 0.04 ms a tick at 40 players) |
+| Stats & Leaderboards | `tickerEnabled` | true | true | Both profiles allow each player's own ticker; disallowing it hides everybody without erasing choices |
+| Stats & Leaderboards | `tickerDefaultOn` | true | true | Players who never chose start on. A saved personal on/off choice wins even after later default changes |
+| Champions | `maxAlive` | 80 (+ 0.8 per player) | 80 | A world-wide ceiling, scaled by players online (`maxAlivePerPlayer` 0.8): 1 player meets 1, 10 meet 8, 100 meet 80. Not measured at Large player counts yet |
+| Blood Moon | `blood.maxExtraWorld` | 0 (no limit) | 160 | Caps the Blood Moon extra monsters across every player and dimension, loaded ones only. Not measured at Large player counts yet |
 | Expeditions | `slots` | 1 | 3 | Three dungeons of 4 players at once instead of one; about 0.1 ms a tick per run going. Uses up to 3 of the world's 10 ticking areas while dungeons reset |
-| Easy Building | `maxBlocksCap` | 50,000 | 10,000 | One 50,000-block build by any player stalls the server for everyone; 10,000 still covers houses and walls |
+| Easy Building | `maxBlocksCap` | 50,000 | 2,000 | Bound each public-server build; the separate `defaultMaxBlocks` stays 50,000 but is clamped to the cap |
+| Easy Building | `operatorsOnly` | Disabled | Enabled | Only operators use the building tools on the public-server profile |
+| Easy Building | `allowInfiniteReach` | Enabled | Disabled | Do not let public-server builds reach faraway areas |
 | Lag Cleanup | `threshold` | 500 | 1,500 | It counts dropped items in every dimension together; more players drop more, so cleanups stay about as rare |
 | Chest Finder | `liveScanRadius` | 16 | 8 | Each search reads 4,913 blocks instead of 35,937; farther containers still come from its index |
 | Realm Configuration | `checkSeconds` | 30 | 60 | The item check reads every inventory, about 0.2 ms per player: half as often |
 | Realm Mail | `sendCooldownSeconds` | 10 | 30 | Less letter spam among many strangers |
 | AFK + Smart Sleep | `sleep.percent` | 100 | 50 | With 30 or more players, all of them asleep at once never happens, so the night would never skip |
 
+These are the release's actual Large-preset limits, not measured performance approval. Champions use a world ceiling of 80 with 0.8 per online player and at most 3 nearby; saved non-default ceilings (such as the old Large value 16) remain until an operator reapplies the preset or changes the setting. A world using the old unstored default 8 automatically adopts the new scaling default.
+
 Measured with 40 simulated players, Large server took the whole bundle from 9.5 to 8.3 ms a tick (the Minimap from
 3.8 to 2.9 ms). Pick Small Realm again to put every value back. Each value can still be changed on its own in
 `/realm:config`.
 
 ## Performance
+
+### Current matched audit (2026-10-19)
+
+On Windows BDS 1.26.52.3, the same harness and declared workload ran master `27f26f6e` and candidate `a1b2a32c` with every declared player retained for the full 900-second steady windows. These figures sum **67 separate behavior-pack script contexts**, not the genuine one-context Realm Bundle run. They are script callback time, not client FPS or all server CPU time.
+
+For this release the owner explicitly deferred the remaining soak/load tests to Nish's Claude on 2026-10-20. The later final-bundle 40-player run was interrupted before its full 900 seconds; candidate 100-player, Saga 100-player and the remaining idle-preview measurement are unverified, not passes. The historical `a1b2a32c` figures below are not relabeled as measurements of the later Expedition loader-release/Realm News delta.
+
+| Players | Master, ms/tick | Candidate, ms/tick | Steady window |
+|---|---:|---:|---|
+| 10 | 6.648 | 4.941 | 900 seconds / 18,000 ticks |
+| 40 | 9.429222222222222 | 7.972722222222222 | 900 seconds / 18,000 ticks |
+
+**Owner answer (2026-10-19): ACCEPTED_EXCEPTION.** The owner accepts the known 40-player whole-total target miss for this release, with documentation and pending the other gates. The result is about **15.45% lower**, but **does not meet the unchanged under 5 ms/tick target**; the budget evaluator still fails. This is not a blanket waiver of individual budgets. Minimap measured **3.738** against 1 ms/tick. Against the typical-pack limit of 0.15, Easy Building measured **0.574222**, Quick Stack & Sort **0.313889**, Silly Enchants **0.276**, Elytra HUD **0.227944**, Story Questlines **0.227**, Stats **0.212111**, Realm Configuration **0.183667**, and Realm Calendar **0.150444**. See [the complete per-pack table and measurement limits](audits/2026-10-deep-audit/perf-tables.md).
+
+This Realm keeps **Small Realm defaults**: capacity 10, usually 1-4 online. It is not being switched to Large, and those player counts are not evidence that a 40-player budget passed. A further reduction of over 37% from the current result would be needed to get under 5 in this workload. Hardware, workload, context count and synchronous native API work all matter; this does not prove the target impossible or rule out future optimization.
+
+### Historical earlier audit (not the current matched comparator)
 
 Measured on a 4-core Linux machine running BDS 1.26.52 with every behavior pack (the Realm Bundle's contents),
 simulated players walking, looking and running a command now and then (`tools/test-bds/examples/perf-soak.js`),
@@ -188,7 +215,8 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
   stored inventory pages and saved ground of town projects as structures inside it.
 - **Versions:** every pack's version is in its `manifest.json`. The bundles' versions are their build time in UTC
   (`YYYY.MMDD.HHMM`), so every build is higher than the last; a single pack counts up (`1.4.2`).
-- **Updating:** on a Realm, open the new `.mcpack` files and check that the Realm's active pack shows the new version
+- **Updating:** It is assumed the Realm Bundle and Realm Resources get uploaded to the Realm after each release; the owner does it.
+  On a Realm, the owner then checks that the Realm's active pack shows the new version
   (if not, deactivate and activate it again). On BDS, stop the server, replace the folders and the `version` in the
   two world JSON files, start it. Settings and progress stay: they are in the world, and the bundles keep their uuid.
 - **Update both bundles together.** Realm Resources draws what the Realm Bundle's scripts send: the Minimap's icon
@@ -200,19 +228,13 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 
 - **Measured with simulated players**, not real clients: no chunk sending, simple movement, no client packets. A
   real server spends more time per player outside the scripts, and a Realm's CPU differs from the test machine.
-- **100+ players is untested.** Measurements stop at 40. Above 100 players, the Coordinates HUD's state message lists
-  only the first 100, so the stats ticker and party HUD can draw over it; the Minimap's keep-alive redraws may fill its
-  drawing budget.
-- **The whole bundle is over its own 5 ms budget at 40 players** (6 to 9.5 ms measured), mostly the Minimap (2.9 to
-  3.8 ms against 1 ms). It runs at 18 to 19 TPS there, but leaves less room for everything else your server does.
+- **Current 100-player load acceptance is incomplete.** The current master attempt failed population admission and its only identical retry also could not produce a valid full window; no partial population is a 100-player comparator. Coordinates HUD updates now arrive in bounded parts rather than truncating at 100, but that code change is not a completed current 100-player load or client-rendering test. Minimap keep-alive demand and the separate Saga quest workload still need their actual load evidence.
+- **The measured 40-player separate-pack total is over its under 5 ms target:** **7.972722222222222**, including Minimap **3.738 > 1**. The owner accepted that whole-total miss for this release, not a budget PASS or every individual overrun. It leaves less room for other server work; see the precise scope and exception above.
 - **Ticking areas:** Bedrock allows 10 per world. Farm Loader's farms, Expeditions' dungeon resets (up to `slots`),
   Death Point's `/realm:death_back` and some story and town builds share them, as do any you add with `/tickingarea`.
 - **One cast:** there is one set of twelve townsfolk for the whole world; several towns share them.
-- **Stories:** about 15 story steps assume the town is near world spawn, and steps that wait for night need the
-  daylight cycle.
-- **Moderation is basic:** Realm Mail has a send cooldown and caps, Land Claims (off until an operator enables it in `/realm:config`)
-  protects blocks, containers and listed entities from other players (not from fire, liquids or pistons), and Chest Finder's index covers every unlocked container in the
-  world. There is no block list for mail or party chat yet.
+- **Stories:** operators can set the town anchor with `/realm:saga_place town`. Stopped daylight cycles no longer block the night/time windows, and wait steps use the documented real-time fallback. Targeted native cases do not certify every story path or real client interaction.
+- **Moderation is basic:** Realm Mail has a send cooldown, block lists and unread-sender caps; party mute covers the pack's own command and form, not vanilla chat. Land Claims (off until enabled in `/realm:config`) protects blocks, containers and supported animal interactions, not animal damage, fire, external fluid flow, pistons or endermen. Chest Finder's private index uses opened, owned or shared containers; older worlds retain their previous world-wide choice until changed.
 - Bedrock limits apply: achievements are off with add-ons, and an operator's plain `/title` gets drawn over by the
   HUD within a second or two (use `/realm:admin_title`).
 

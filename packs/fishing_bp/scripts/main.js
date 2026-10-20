@@ -3,6 +3,8 @@ import { CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, ItemSta
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 const PACK = "fishing_bp";
 const PROP_WEATHER = "fishing:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -12,7 +14,7 @@ const PROP_RECORDS = "fishing:records"; // world: JSON { [speciesId]: [cm, name,
 const PROP_BASKET = "fishing:basket"; // player: JSON Record<string, [string, number][]> item typeId -> [[speciesId, sizeCm], ...]
 const PROP_TOURNEY = "fishing:tourney"; // world: JSON of the running tournament (see Tourney)
 const PROP_TMETA = "fishing:tmeta"; // world: JSON { last, warned }: the scheduled starts already handled
-const PROP_OWED = "fishing:owed"; // world: JSON { [player id]: [crowns, note] }: prizes for players who were offline
+// Prizes for players who were offline: one world property per player, "fishing:owed:<player id>" = [crowns, note, quest id], plus the index "fishing:owed_idx" (owed.js).
 const OVERWORLD = "minecraft:overworld";
 const FISH_ITEMS = new Set(["minecraft:cod", "minecraft:salmon", "minecraft:tropical_fish", "minecraft:pufferfish"]);
 const MINUTE = 60000;
@@ -486,6 +488,24 @@ function notable(player, sp, size) {
   return !before || size > before[1] || !rec || size > rec[0];
 }
 
+// Town news: at most one piece per in-game hour from this pack, each catch once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Journal and fishing XP stay outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  send("realm:gossip", msg);
+  return true;
+}
+
 /** Records the catch and tells the player. @param {Player} player @param {Species} sp @param {number} size */
 function caught(player, sp, size) {
   const log = logOf(player);
@@ -520,7 +540,7 @@ function caught(player, sp, size) {
   if (sp.rarity === "legendary" && get("announceLegendary") === true) {
     for (const p of world.getAllPlayers()) if (p.id !== player.id) p.sendMessage(`§6${player.name} caught a legendary ${sp.name} (${size} cm)!`);
   }
-  if (sp.rarity === "legendary") send("realm:gossip", { kind: "fish_legendary", player: player.id, name: player.name, place: sp.name }); // Townsfolk gossip
+  if (sp.rarity === "legendary") gossip(`fish:${player.id}:${sp.id}:${log[sp.id][0]}`, { kind: "fish_legendary", player: player.id, name: player.name, place: sp.name }); // Townsfolk gossip
   send("realm:journal", { player: player.id, page: "fish", entry: sp.id, label: sp.name });
   send("realm:skill_xp", { player: player.id, skill: "fishing", amount: rarities.get(sp.rarity)?.xp ?? 0 });
 }
@@ -786,6 +806,15 @@ function finishTournament() {
   world.sendMessage(lines.join("\n"));
 }
 
+const owedStore = createOwedStore(world, {
+  base: "fishing:owed",
+  normalize: (v) => {
+    if (!Array.isArray(v)) throw new Error("not a prize record");
+    return v;
+  },
+  summarize: (v) => `${Number(v?.[0]) || 0} Crowns (${v?.[1] ?? ""})`,
+});
+
 /**
  * Pays a prize now, or when the player next joins.
  * @param {string} id @param {number} crowns @param {string} note @param {string} questId
@@ -797,22 +826,29 @@ function pay(id, crowns, note, questId) {
     send("realm:quest_done", { player: id, pack: PACK, id: questId, label: note, kind: "tournament" });
     return;
   }
-  const owed = loadWorld(PROP_OWED) ?? {};
-  const prev = Array.isArray(owed[id]) ? owed[id] : [0, ""];
-  owed[id] = [(Number(prev[0]) || 0) + crowns, note, questId];
-  saveWorld(PROP_OWED, owed);
+  const saved = owedStore.update(id, (cur) => [(Array.isArray(cur) ? Number(cur[0]) || 0 : 0) + crowns, note, questId]);
+  if (!saved) console.warn(`[fishing] ${crowns} Crowns for ${id} (${note}) could not be saved`);
 }
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   system.runTimeout(() => {
     try {
-      const owed = loadWorld(PROP_OWED);
-      const due = owed?.[player.id];
-      if (!player.isValid || !Array.isArray(due)) return;
-      delete owed[player.id];
-      saveWorld(PROP_OWED, Object.keys(owed).length ? owed : undefined);
-      if (addCrowns(player, due[0])) {
+      if (!player.isValid) return;
+      const due = owedStore.take(player.id);
+      if (!Array.isArray(due)) return;
+      const { applied } = applyParts(
+        [due],
+        (d) => {
+          if (!addCrowns(player, d[0])) throw new Error("the crowns could not be added");
+        },
+        (failed) => {
+          // Keep them owed for the next join.
+          if (!owedStore.update(player.id, (cur) => [(Array.isArray(cur) ? Number(cur[0]) || 0 : 0) + failed.reduce((a, d) => a + (Number(d[0]) || 0), 0), due[1], due[2]])) throw new Error("could not be saved");
+        },
+        (m) => console.warn(`[fishing] ${m}`),
+      );
+      if (applied) {
         player.sendMessage(`§6+${due[0]} Crowns §7(${due[1]})`);
         send("realm:quest_done", { player: player.id, pack: PACK, id: String(due[2] ?? "tournament"), label: String(due[1]), kind: "tournament" });
       }
@@ -947,7 +983,8 @@ function inventoryOf(player) {
 // tobin, on a level change and when the player joins; kept in memory only.
 /** @type {Map<string, number>} player id -> percent */
 const tobinOff = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:affinity",
   ({ id, message }) => {
     if (id !== "realm:affinity") return;
     try {
@@ -959,7 +996,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 /** @param {Player} player */
 const tobinOffOf = (player) => Math.max(0, Math.min(50, tobinOff.get(player.id) ?? 0));
@@ -1217,7 +1253,8 @@ function opStartTournament(player) {
 /** The NPC each player last talked to, for the menu title. @type {Map<string, string>} */
 const lastNpc = new Map();
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     /** @type {any} */
@@ -1245,7 +1282,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[fishing] npc: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1334,7 +1370,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
 /** @type {Map<string, Record<string, number>>} */
 const callingBonus = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:calling",
   ({ id, message }) => {
     if (id !== "realm:calling") return;
     try {
@@ -1344,7 +1381,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -1355,9 +1391,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "fishing_bp");
   },
-  { namespaces: ["realm"] },
 );

@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Player, ScriptEventSource,
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // One world property per player, so anyone's milestones can be shown while they're offline:
 // "milestones:p:<player id>" -> JSON { n: name, c: { stat: count }, g: { milestone id: tiers reached } }.
@@ -13,7 +14,7 @@ const RECORD_PREFIX = "milestones:p:";
 
 /** @typedef {typeof CONFIG.milestones[number]} Milestone */
 /** @typedef {Milestone["stat"]} Stat */
-/** @typedef {{ n: string, c: Record<string, number>, g?: Record<string, number> }} Rec */
+/** @typedef {{ n: string, c: Record<string, number>, g?: Record<string, number>, tf?: 1 }} Rec */
 
 /** How each stat reads. playtime is counted in minutes and shown in hours. */
 /** @type {Record<Stat, { scale: number, goal: (n: string) => string, have: (n: string) => string }>} */
@@ -221,9 +222,14 @@ function check(player) {
   const first = !r.g;
   const got = (r.g ??= {});
   if (!backfilled.has(player.id)) {
-    // Once a session: top tiers reached before the titles existed (the Titles pack keeps each title once).
     backfilled.add(player.id);
-    for (const m of milestones) if ((got[m.id] ?? 0) >= m.tiers.length) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: title(m, m.tiers.length), from: "milestones_bp" }));
+    // Saved on the record (tf), not just this session: old top tiers are sent once, then a later join
+    // does not send them again. A new top tier still goes through topTier below. Unknown fields stay.
+    if (!r.tf) {
+      for (const m of milestones) if ((got[m.id] ?? 0) >= m.tiers.length) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: title(m, m.tiers.length), from: "milestones_bp" }));
+      r.tf = 1;
+      dirty.add(player.id);
+    }
   }
   /** @type {string[]} */
   const unlocked = [];
@@ -389,15 +395,77 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 });
 
-// Scenario tests (BDS harness): `fill` the world with that many records of players who are offline, as on a big server.
-// Only from the server console: /scriptevent realm:milestones_test {"fill":80}
-// {"player":"<name>","stat":"joins","count":400} sets an online player's own count of a stat.
-system.afterEvents.scriptEventReceive.subscribe(
+/**
+ * The saved fields a server test may see. Not the whole record: unknown fields stay in the save and are not copied out.
+ * @param {Rec | undefined} r @param {string} id @param {string} name @param {string} [error]
+ * @returns {{ player: string, name: string, tf: 0 | 1, joins: number, error?: string }}
+ */
+function recordReport(r, id, name, error) {
+  return {
+    player: String(id).slice(0, 40),
+    name: String(r?.n ?? name).replace(/§./g, "").slice(0, 32),
+    tf: r?.tf === 1 ? 1 : 0,
+    joins: Math.max(0, Math.min(999999, Math.floor(Number(r?.g?.joins) || 0))),
+    ...(error ? { error } : {}),
+  };
+}
+
+/** A script event stays under 2048 characters. A report that does not fit says so instead of being cut. @param {string} text */
+function boundedReport(text) {
+  if (text.length < 2000) return text;
+  return JSON.stringify({ error: "too long", length: text.length });
+}
+
+/** Reads this pack's own saved record and answers the server test hook. @param {Player} player */
+function reportSaved(player) {
+  try {
+    flush([player.id]);
+  } catch (e) {
+    console.warn(`[milestones] ${e}`);
+  }
+  const raw = world.getDynamicProperty(RECORD_PREFIX + player.id);
+  /** @type {Rec | undefined} */
+  let r;
+  /** @type {string | undefined} */
+  let error;
+  if (typeof raw !== "string") error = "missing";
+  else {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.n === "string") r = parsed;
+      else error = "bad";
+    } catch {
+      error = "bad";
+    }
+  }
+  system.sendScriptEvent("realm:milestones_test_report", boundedReport(JSON.stringify(recordReport(r, player.id, player.name, error))));
+}
+
+/** The same player's check again, as a later join would. @param {Player} player */
+function recheck(player) {
+  backfilled.delete(player.id);
+  check(player);
+}
+
+// Scenario tests (BDS harness), server console only. `fill` adds offline records, as on a big server.
+// {"player":"<name>","stat":"joins","count":400} sets an online player's own count.
+// {"player":"<name>","report":true} answers realm:milestones_test_report from this pack's saved record
+// (another add-on cannot read it). {"player":"<name>","recheck":true} runs that check again.
+onScriptEvent(
+  "realm:milestones_test",
   (ev) => {
     if (ev.id !== "realm:milestones_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
       const m = JSON.parse(ev.message);
       const who = typeof m?.player === "string" ? world.getAllPlayers().find((p) => p.name === m.player) : undefined;
+      if (who && m.report === true) {
+        reportSaved(who);
+        return;
+      }
+      if (who && m.recheck === true) {
+        recheck(who);
+        return;
+      }
       if (who && typeof m.stat === "string" && STATS[/** @type {Stat} */ (m.stat)] && typeof m.count === "number") {
         recordOf(who).c[m.stat] = m.count;
         dirty.add(who.id);
@@ -414,13 +482,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[milestones] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "milestones_bp");
   },
-  { namespaces: ["realm"] },
 );

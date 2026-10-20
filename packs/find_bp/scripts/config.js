@@ -18,11 +18,13 @@ export const CONFIG = {
   /** Rows in the results menu. */
   maxResults: 20,
 
-  /** How long the particle column over a chosen container shows, in seconds. */
+  /** How long the bright marker and the direction line show, in seconds. */
   highlightSeconds: 10,
 
-  /**
-   * Block ids that are remembered and searched: chests, trapped chests, copper chests (every stage,
+  /** Players only find containers they opened themselves (a player can open one they own or that was shared with them). Off: the old world-wide index, where anyone finds any remembered container they may open. A world that already had an index keeps the world-wide one until an operator turns this on. */
+  privateIndex: true,
+
+  /** Block ids that are remembered and searched: chests, trapped chests, copper chests (every stage,
    * waxed or not), barrels and placed shulker boxes. Ids this game version doesn't have are skipped.
    */
   containerTypes: ["minecraft:chest", "minecraft:trapped_chest", ...COPPER_CHESTS, "minecraft:barrel", ...SHULKER_BOXES],

@@ -18,6 +18,7 @@
 // inside a zone (the event still happens, it just breaks or places nothing there). Providers call
 // provideZones(src, list) once and the function it returns whenever their list changes.
 import { system, world } from "@minecraft/server";
+import { onScriptEvent } from "./script-events.js";
 
 /**
  * @typedef {object} SafeZone
@@ -268,27 +269,21 @@ export function provideZones(src, getList) {
       }
     });
   };
-  system.afterEvents.scriptEventReceive.subscribe(
-    ({ id }) => {
-      if (id === "realm:zones_ping") publish();
-    },
-    { namespaces: ["realm"] }
-  );
+  onScriptEvent("realm:zones_ping", ({ id }) => {
+    if (id === "realm:zones_ping") publish();
+  });
   world.afterEvents.worldLoad.subscribe(() => system.runTimeout(publish, 100));
   return publish;
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
-    if (id !== "realm:zones") return;
-    try {
-      receiveZones(JSON.parse(message));
-    } catch (e) {
-      console.warn(`[zones] ${e}`);
-    }
-  },
-  { namespaces: ["realm"] }
-);
+onScriptEvent("realm:zones", ({ id, message }) => {
+  if (id !== "realm:zones") return;
+  try {
+    receiveZones(JSON.parse(message));
+  } catch (e) {
+    console.warn(`[zones] ${e}`);
+  }
+});
 
 world.afterEvents.worldLoad.subscribe(() => {
   pingZones();

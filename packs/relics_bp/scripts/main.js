@@ -14,6 +14,8 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 // A relic is a vanilla item that doesn't stack, with a name, lore and the item dynamic property
 // `relic:id` (plus `relic:serial`, a number unique on this realm). An anvil can rename any item, but
@@ -22,7 +24,6 @@ const ITEM_ID = "relic:id";
 const ITEM_SERIAL = "relic:serial";
 const PROP_FOUND = "relics:found"; // player: JSON array of the relic ids this player has had
 const PROP_SERIAL = "relics:serial"; // world: the last serial number handed out
-const PROP_PENDING = "relics:pending"; // world: JSON { playerId: { r: relic ids, s: shards } } for players who were offline
 const PROP_WEATHER = "relics:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 
 const SHARD_ITEM = "minecraft:amethyst_shard"; // the shared Relic Shard item (see the spec's contracts)
@@ -32,7 +33,6 @@ const FALLBACK_ITEM = "minecraft:brush"; // used if a relic's configured item st
 const OVERWORLD = "minecraft:overworld";
 const DRY_GROUND = /sand|terracotta|snow|ice/; // deserts and badlands get no rain; snowy places get snow
 const LORE_WIDTH = 40; // lore lines are kept short: the game limits their length
-const PENDING_PLAYERS = 100;
 const STORM_FRESH_TICKS = 100; // a storm cell report older than this (storm_bp sends one every 2 s) is gone
 const STORM_CELL_REACH = 160; // the Storm Staff also answers this close to a storm cell (Storm Chasing)
 const BOLT_EVIDENCE_TICKS = 1200; // a lightning bolt not made by this pack means a thunderstorm for the next minute
@@ -410,50 +410,51 @@ function giveShards(player, amount) {
   player.sendMessage(`§d+${amount} Relic Shard${amount === 1 ? "" : "s"}${dropped ? " §7(some dropped at your feet: your inventory is full)" : ""}`);
 }
 
-// Gifts for players who weren't online, handed over when they next join.
+// Gifts for players who weren't online, handed over when they next join: one world property per player,
+// "relics:pending:<playerId>" = { r: relic ids, s: shards }, plus the index "relics:pending_idx" (owed.js).
 
-/** @returns {Record<string, { r: string[], s: number }>} */
-function pending() {
-  try {
-    const raw = world.getDynamicProperty(PROP_PENDING);
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-/** @param {Record<string, { r: string[], s: number }>} all */
-function savePending(all) {
-  world.setDynamicProperty(PROP_PENDING, Object.keys(all).length ? JSON.stringify(all) : undefined);
-}
+const pendingStore = createOwedStore(world, {
+  base: "relics:pending",
+  normalize: (v) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("not a gift record");
+    return v;
+  },
+  summarize: (v) => `${Array.isArray(v?.r) ? v.r.length : 0} relics, ${Number(v?.s) || 0} shards`,
+});
 
 /** @param {string} playerId @param {string | undefined} relic @param {number} shards */
 function queue(playerId, relic, shards) {
-  const all = pending();
-  const entry = all[playerId] ?? { r: [], s: 0 };
-  if (!all[playerId] && Object.keys(all).length >= PENDING_PLAYERS) {
-    console.warn(`[relics] too many gifts waiting; dropped one for ${playerId}`);
-    return;
-  }
-  if (relic && entry.r.length < 20) entry.r.push(relic);
-  entry.s = Math.min(6400, entry.s + shards);
-  all[playerId] = entry;
-  savePending(all);
+  const ok = pendingStore.update(playerId, (cur) => {
+    const entry = cur && typeof cur === "object" ? cur : { r: [], s: 0 };
+    if (!Array.isArray(entry.r)) entry.r = [];
+    if (relic && entry.r.length < 20) entry.r.push(relic);
+    entry.s = Math.min(6400, (Number(entry.s) || 0) + shards);
+    return entry;
+  });
+  if (!ok) console.warn(`[relics] a gift for ${playerId} could not be saved (${relic ?? `${shards} shards`})`);
 }
 
 /** @param {Player} player */
 function deliver(player) {
-  const all = pending();
-  const entry = all[player.id];
-  if (!entry || !player.isValid) return;
-  delete all[player.id];
-  savePending(all);
-  for (const id of entry.r ?? []) {
-    const def = relics.get(id);
-    if (def) giveRelic(player, def, "You received");
-  }
-  if (entry.s > 0) giveShards(player, entry.s);
+  if (!player.isValid) return;
+  const entry = pendingStore.take(player.id);
+  if (!entry) return;
+  /** @type {({ relic: string } | { shards: number })[]} */
+  const parts = [];
+  for (const id of Array.isArray(entry.r) ? entry.r : []) if (relics.has(id)) parts.push({ relic: id });
+  if (Number(entry.s) > 0) parts.push({ shards: Number(entry.s) });
+  applyParts(
+    parts,
+    (part) => {
+      if ("relic" in part) giveRelic(player, /** @type {any} */ (relics.get(part.relic)), "You received");
+      else giveShards(player, part.shards);
+    },
+    (failed) => {
+      for (const part of failed) if ("relic" in part) queue(player.id, part.relic, 0);
+      else queue(player.id, undefined, part.shards);
+    },
+    (m) => console.warn(`[relics] ${m}`),
+  );
 }
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
@@ -718,7 +719,9 @@ function passives(player) {
   const wanted = new Map();
   const want = (/** @type {string} */ type, amp = 0) => wanted.set(type, Math.max(wanted.get(type) ?? 0, amp));
   const sets = setsOf(c);
-  if (get("enabled") === true) {
+  // Carrying nothing, no passive can be lit (`has` and `anywhere` are false for every relic): don't read the player's place.
+  const holding = c.carry.size > 0 || c.head !== undefined || c.feet !== undefined;
+  if (holding && get("enabled") === true) {
     const y = player.location.y;
     const now = system.currentTick;
     const overworld = player.dimension.id === OVERWORLD;
@@ -1335,7 +1338,8 @@ const idaOff = new Map();
 const affinity = new Map();
 /** @type {Map<string, Record<string, string>>} */
 const storyFlags = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:affinity", "realm:npc_flags"],
   ({ id, message }) => {
     if (id !== "realm:affinity" && id !== "realm:npc_flags") return;
     try {
@@ -1358,7 +1362,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 /** @param {Player} player */
 const idaOffOf = (player) => Math.max(0, Math.min(50, idaOff.get(player.id) ?? 0));
@@ -1500,6 +1503,24 @@ function materials(player) {
   return { container, essence, shards, glass: countOf(container, isGlass), crowns: crownsOf(player) };
 }
 
+// Town news: at most one piece per in-game hour from this pack, each starlit relic once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). The shard cost stays outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** Ascends the relic with this serial by one stage, taking the cost once. Returns why not, or undefined. @param {Player} player @param {number} serial */
 function ascend(player, serial) {
   if (get("ascension.enabled") !== true) return "Ascension is closed on this realm.";
@@ -1531,7 +1552,7 @@ function ascend(player, serial) {
   player.playSound(asc >= 3 ? "random.totem" : "random.anvil_use", { volume: 0.8 });
   player.sendMessage(`§d${r.def.name} is now +${asc} ${STAGES[asc]}: §f${stageText(r.def, asc)}.${asc >= 3 ? ` §6Starlit: ${ASC[r.def.id]?.star}.` : ""}`);
   if (asc >= 3) {
-    system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "relic_starlit", player: player.id, name: player.name, place: r.def.name }));
+    gossip(`relic:${player.id}:${r.def.id}`, { kind: "relic_starlit", player: player.id, name: player.name, place: r.def.name });
     if (CONFIG.ascension.announceStarlit) for (const p of world.getAllPlayers()) if (p.id !== player.id) p.sendMessage(`§6${player.name}'s ${r.def.name} is Starlit!`);
   }
   return undefined;
@@ -1813,7 +1834,8 @@ function parseSeals(list) {
   return out;
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [...HANDLED],
   ({ id, message }) => {
     if (!HANDLED.has(id)) return;
     /** @type {any} */
@@ -1890,7 +1912,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[relics] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1965,9 +1986,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "relics_bp");
   },
-  { namespaces: ["realm"] },
 );

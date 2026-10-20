@@ -18,8 +18,8 @@
 // is being evaluated, else to the pack in the call stack (a bundle's files are scripts/<folder>/...; walked
 // for intervals, subscriptions and commands always, for run/runTimeout/runJob only while profiling, since
 // those are many and short-lived). A world property key belongs to the pack being evaluated when it is first
-// read or written, else to the pack already using its prefix (text before the first ":"), else to the pack in
-// the call stack. Keys nobody touched since the last reload are "unowned". Alone in its context, a pack owns
+// read or written, unless its declared namespace already identifies its owner. Declarations also cover saved
+// keys nobody touched since the last reload; unknown or ambiguous namespaces remain "unowned". Alone in its context, a pack owns
 // its whole storage.
 //
 // Protocol (realm: script events, JSON, every message under 2048 characters):
@@ -36,6 +36,8 @@
 //                                    (its caches in memory would write old data back), and replies
 //                                    realm:diag_forgot {id, pack, ok, removed, bytes} or {id, pack, ok: false,
 //                                    error}. Scoreboards, tags and data saved on players are not touched.
+//                                    A pack may register one cleanup for what it saves outside world properties (see forget());
+//                                    the answer is then {ok, removed, bytes, note?} or {ok: false, error}, still only one.
 // No listener of its own: the first realm: scriptEventReceive listener a pack subscribes carries the protocol
 // (diag.js subscribes one itself only if no pack did by the first tick, or after that one is unsubscribed).
 // Time is Date.now() (Bedrock has no finer clock): one call reads 0 or 1 ms, sums over many calls are fair.
@@ -43,8 +45,10 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "stash_bp";
-const VERSION = "1.8.1";
+const VERSION = "1.8.7";
 const NAME = "Quick Stack & Sort";
+/** @type {string[]} */
+const PREFIXES = ["stash"];
 
 const API = 1;
 const MAX_TICKS = 1200;
@@ -67,6 +71,11 @@ const S = G.__realmDiag ?? (G.__realmDiag = install());
 const REC = S.packs.get(PACK) ?? { pack: PACK, name: NAME, version: VERSION, ms: 0, calls: 0, cbs: new Map(), forgotten: false, warned: false };
 S.packs.set(PACK, REC);
 S.multi = S.packs.size > 1;
+for (const prefix of PREFIXES) {
+  const had = S.prefixOwner.get(prefix);
+  if (had === undefined) S.prefixOwner.set(prefix, REC);
+  else if (had !== REC) S.prefixOwner.set(prefix, null);
+}
 S.cur = REC; // the rest of this pack's modules evaluate next: what they hand over is this pack's
 
 /** @returns {State} */
@@ -338,12 +347,12 @@ function ownerOfKey(st, k) {
 }
 
 /**
- * The owner of a key seen for the first time: the pack being evaluated, else the pack using its prefix, else the
+ * The owner of a key seen for the first time: the pack using its prefix, else the pack being evaluated, else the
  * pack in the call stack (a bundle's files are scripts/<folder>/...). One stack walk per new prefix at most.
  * @param {State} st @param {string} k @returns {Rec | null}
  */
 function claim(st, k) {
-  const o = st.cur ?? st.prefixOwner.get(prefixOf(k)) ?? owner(st, true, st.packs.size > 1 ? site() : "");
+  const o = st.prefixOwner.get(prefixOf(k)) ?? st.cur ?? owner(st, true, st.packs.size > 1 ? site() : "");
   if (o) learn(st, k, o);
   return o;
 }
@@ -514,7 +523,23 @@ function forget(st, rid, pack, confirm) {
   }
   rec.forgotten = true;
   console.warn(`[diag] ${rec.pack}: forgot ${removed} saved world entries (${bytes} bytes). It saves nothing more until /reload or a restart.`);
-  send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: true, removed, bytes });
+  // A pack that saves more than world properties (structures...) registers one synchronous cleanup in
+  // globalThis.__realmDiagForgetHooks[pack]. It runs after the properties are gone and the pack's writes are blocked, and the
+  // single answer below reports its outcome: {error} makes it ok:false (the properties are gone either way), {note} is added.
+  const hook = G.__realmDiagForgetHooks?.[rec.pack];
+  if (typeof hook !== "function") return void send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: true, removed, bytes });
+  /** @type {any} */
+  let r;
+  try {
+    r = hook({ removed, bytes });
+  } catch (err) {
+    console.warn(`[diag] ${rec.pack}: its forget cleanup threw: ${err}`);
+    r = { error: String(err) };
+  }
+  const error = typeof r?.error === "string" && r.error ? r.error.slice(0, 300) : undefined;
+  const note = typeof r?.note === "string" && r.note ? r.note.slice(0, 300) : undefined;
+  if (error) send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: false, removed, bytes, error: `saved data forgotten, but ${error}` });
+  else send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: true, removed, bytes, ...(note ? { note } : {}) });
 }
 
 /** @param {State} st @param {string} id @param {string} message */

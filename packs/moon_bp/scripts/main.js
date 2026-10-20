@@ -18,6 +18,8 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { isProtected } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
+import { spawnFresh } from "./spawn.js";
 
 // Tonight is one world property, "moon:night" -> JSON { d: day number, s: state, a: 1 while the night is on,
 // alive: [player ids still in the running for the Blood Moon reward] }.
@@ -36,6 +38,10 @@ const CAP_RADIUS = 48; // monsters within this many blocks count toward a player
 const MOTES_EVERY = 3; // seconds between motes around each player
 const SPOT_TRIES = 4; // places tried per monster
 const CLEAR_RADIUS = 12; // no monster appears this close to any player
+const BUILT_CELL = 8; // blocks: the size of one cached "is it built here" cell
+const BUILT_PAD = 4; // blocks around a spot that must hold nothing player-made
+const BUILT_CELLS_MAX = 2048; // cells kept at once (a cell is a short string and a boolean); more starts the cache over
+const MOB_DIMENSIONS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"]; // where the world cap counts Blood Moon monsters
 
 /** @typedef {"blood" | "harvest" | "normal"} State */
 /** @typedef {{ d: number, s: State, a: number, alive: string[] }} Night */
@@ -57,6 +63,8 @@ let seconds = 0;
 let ready = false;
 /** Is it raining or storming in the overworld? Clouds hide the moon: no moon fog then. */
 let wet = false;
+/** Has a weatherChange come in since the scripts started? It is newer than the saved weather and any plan. */
+let weatherSeen = false;
 /** Fog id we pushed per player ("" or absent = none). @type {Map<string, string>} */
 const fogs = new Map();
 /** Players already counted as having seen tonight's moon. @type {Set<string>} */
@@ -64,7 +72,6 @@ const seenTonight = new Set();
 
 /** @param {unknown} s @returns {s is State} */
 const isState = (s) => typeof s === "string" && STATES.includes(/** @type {State} */ (s));
-const overworld = () => world.getDimension(OVERWORLD);
 
 // ---------------------------------------------------------------------------
 // Saved state
@@ -116,6 +123,7 @@ function decide() {
 function startNight(day, state) {
   if (night?.a) stopEffects(night.s);
   seenTonight.clear();
+  dropBuiltCells();
   const players = world.getAllPlayers();
   night = { d: day, s: state, a: 1, alive: state === "blood" ? players.map((p) => p.id) : [] };
   saveNight();
@@ -145,6 +153,7 @@ function startNight(day, state) {
 
 /** Takes off what a moon put on: fogs, extra monsters, the faster growth. @param {State} state */
 function stopEffects(state) {
+  dropBuiltCells();
   for (const p of world.getAllPlayers()) setFog(p, "");
   if (state === "blood") removeMobs();
   if (state === "harvest") restoreTicks();
@@ -314,6 +323,7 @@ world.afterEvents.worldLoad.subscribe(() => {
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
   if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
+  weatherSeen = true;
   wet = newWeather !== WeatherType.Clear;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
@@ -321,6 +331,36 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
     console.warn(`[moon] ${e}`);
   }
 });
+
+/** The overworld weather a realm:weather_plan names right now, or undefined (the Almanac is off, another dimension, garbage). @param {string} message */
+function planNow(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || m.off === true) return undefined;
+    const dim = m.dim ?? m.dimension;
+    if (typeof dim === "string" && dim.replace(/^minecraft:/, "") !== "overworld") return undefined;
+    return m.now === WeatherType.Clear || m.now === WeatherType.Rain || m.now === WeatherType.Thunder ? /** @type {WeatherType} */ (m.now) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The Weather Almanac (if it's installed) knows the weather now: it sends its plan when it changes and answers
+// realm:weather_ask. Until a real weatherChange has come in, a pack added in the middle of a storm takes it from there.
+onScriptEvent("realm:weather_plan", ({ message }) => {
+  if (weatherSeen) return; // the game's own report is newer
+  const now = planNow(message);
+  if (!now || world.getDynamicProperty(PROP_WEATHER) === now) return;
+  wet = now !== WeatherType.Clear;
+  try {
+    world.setDynamicProperty(PROP_WEATHER, now);
+  } catch (e) {
+    console.warn(`[moon] ${e}`);
+  }
+});
+
+// Ask the Weather Almanac (if it's installed) for its plan a little later: every weather pack asks, and it answers once.
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:weather_ask", "{}"), 100));
 
 system.runInterval(() => {
   if (!ready) return;
@@ -352,6 +392,8 @@ function during(n) {
   const fogId = blood ? "realm:sky_blood_moon" : "realm:sky_harvest_moon";
   const every = Math.max(5, Math.floor(Number(get("blood.spawnSeconds")) || 20));
   const spawning = blood && canSpawn();
+  /** The world cap's room, counted once for this second's waves and shared by them. @type {{ left?: number }} */
+  const budget = {};
   for (const p of world.getAllPlayers()) {
     try {
       if (p.dimension.id !== OVERWORLD) {
@@ -368,7 +410,7 @@ function during(n) {
       setFog(p, out && !wet ? fogId : "");
       if (out && (seconds + p.id.length) % MOTES_EVERY === 0) motes(p, blood ? "realm:sky_blood" : "realm:sky_harvest");
       // Each player's waves come at a second of their own, so one second doesn't carry everyone's (25-30 ms with 8 players).
-      if (spawning && (seconds + waveSlot(p.id)) % every === 0) spawnWave(p);
+      if (spawning && (seconds + waveSlot(p.id)) % every === 0) spawnWave(p, budget);
     } catch (e) {
       console.warn(`[moon] ${e}`); // usually an unloaded chunk
     }
@@ -508,15 +550,89 @@ function playerMadeBlocks() {
   return playerMade;
 }
 
-/** Anything player-made in the 9 x 9 columns around the spot, 4 blocks above and below it? @param {Dimension} dim @param {{ x: number, y: number, z: number }} at */
+/**
+ * Which 8-block cells have nothing player-made within BUILT_PAD blocks, asked once per cell for the night:
+ * dimension|cx|cy|cz -> true if something player-made is in the cell's padded box. A cell that reads clear
+ * certifies every spot in it (the padded box covers each spot's own 9 x 9 x 9 box); a cell that reads built
+ * says nothing about a single spot, which then gets the exact 9 x 9 x 9 check, so protection reaches no further than
+ * it always did. A player-made block placed during the night forgets the clear cells it could reach.
+ * @type {Map<string, boolean>}
+ */
+const builtCells = new Map();
+let builtNight = ""; // the night the cells belong to; another night starts the cache over
+let nightSerial = 0; // bumped at every dusk and dawn, so a night that repeats its day number and moon is still another night
+/** @type {Set<string> | undefined} */
+let playerMadeSet;
+
+function dropBuiltCells() {
+  nightSerial++;
+  builtCells.clear();
+  builtNight = "";
+}
+
+/** Cell origins (multiples of 8) whose padded box holds coordinate `b`. @param {number} b */
+function cellOrigins(b) {
+  const out = [];
+  for (let o = Math.ceil((b - BUILT_CELL + 1 - BUILT_PAD) / BUILT_CELL) * BUILT_CELL; o <= b + BUILT_PAD; o += BUILT_CELL) out.push(o);
+  return out;
+}
+
+world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
+  try {
+    if (!builtCells.size) return;
+    playerMadeSet ??= new Set(playerMadeBlocks());
+    if (!playerMadeSet.has(block.typeId)) return;
+    const { x, y, z } = block.location;
+    const dimId = block.dimension.id;
+    for (const cx of cellOrigins(x)) for (const cy of cellOrigins(y)) for (const cz of cellOrigins(z)) {
+      const key = `${dimId}|${cx}|${cy}|${cz}`;
+      if (builtCells.get(key) === false) builtCells.delete(key);
+    }
+  } catch {
+    // the block or its chunk is gone: the next night starts over anyway
+    builtCells.clear();
+  }
+});
+
+/**
+ * Anything player-made in the 9 x 9 x 9 box around the spot? A clear cell answers without a read. Unknown (an unloaded
+ * chunk reached by a read, no block list) counts as built and is never cached. allowUnloadedChunks is false in both
+ * reads (it was true: an unloaded chunk used to read as empty), so near the edge of the loaded world fewer spots pass.
+ * @param {Dimension} dim @param {{ x: number, y: number, z: number }} at
+ */
 function built(dim, at) {
   const types = playerMadeBlocks();
   if (!types.length) return true; // can't tell: don't spawn
-  try {
-    return dim.containsBlock(new BlockVolume({ x: at.x - 4, y: at.y - 4, z: at.z - 4 }, { x: at.x + 4, y: at.y + 4, z: at.z + 4 }), { includeTypes: types }, true);
-  } catch {
-    return true;
+  const exact = () => {
+    try {
+      return dim.containsBlock(new BlockVolume({ x: at.x - 4, y: at.y - 4, z: at.z - 4 }, { x: at.x + 4, y: at.y + 4, z: at.z + 4 }), { includeTypes: types }, false);
+    } catch {
+      return true;
+    }
+  };
+  const id = night?.a ? `${night.d}:${night.s}:${nightSerial}` : "";
+  if (!id) return exact();
+  if (id !== builtNight) {
+    builtCells.clear();
+    builtNight = id;
   }
+  const cx = Math.floor(at.x / BUILT_CELL) * BUILT_CELL, cy = Math.floor(at.y / BUILT_CELL) * BUILT_CELL, cz = Math.floor(at.z / BUILT_CELL) * BUILT_CELL;
+  const key = `${dim.id}|${cx}|${cy}|${cz}`;
+  let cell = builtCells.get(key);
+  if (cell === undefined) {
+    try {
+      cell = dim.containsBlock(
+        new BlockVolume({ x: cx - BUILT_PAD, y: cy - BUILT_PAD, z: cz - BUILT_PAD }, { x: cx + BUILT_CELL - 1 + BUILT_PAD, y: cy + BUILT_CELL - 1 + BUILT_PAD, z: cz + BUILT_CELL - 1 + BUILT_PAD }),
+        { includeTypes: types },
+        false,
+      );
+    } catch {
+      return true;
+    }
+    if (builtCells.size >= BUILT_CELLS_MAX) builtCells.clear();
+    builtCells.set(key, cell);
+  }
+  return cell ? exact() : false;
 }
 
 /** Ground monsters can't stand on, or shouldn't. */
@@ -577,15 +693,44 @@ function pickMob(safe = false) {
   return list.at(-1)?.id;
 }
 
-/** One wave around one player. @param {Player} p */
-function spawnWave(p) {
+/**
+ * How many more Blood Moon monsters the world cap allows: counted once per batch of waves (the first wave that needs
+ * it), in every dimension, skipping any entity that is already gone. Infinity = no world cap; 0 when a count fails, so
+ * an error never lets a wave go over. @param {{ left?: number }} budget
+ */
+function worldRoom(budget) {
+  if (budget.left !== undefined) return budget.left;
+  const cap = Math.max(0, Math.floor(Number(get("blood.maxExtraWorld")) || 0));
+  if (!cap) return (budget.left = Infinity);
+  let alive = 0;
+  try {
+    for (const id of MOB_DIMENSIONS) {
+      for (const e of world.getDimension(id).getEntities({ tags: [MOB_TAG] })) {
+        try {
+          if (e.isValid) alive++;
+        } catch {
+          // gone since it was listed
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[moon] world cap: ${e}`);
+    return (budget.left = 0);
+  }
+  return (budget.left = Math.max(0, cap - alive));
+}
+
+/** One wave around one player. @param {Player} p @param {{ left?: number }} [budget] the world cap's room this second, shared by every wave in it */
+function spawnWave(p, budget = {}) {
   const mode = p.getGameMode();
   if (mode === GameMode.Creative || mode === GameMode.Spectator) return;
   const max = Math.max(0, Math.floor(Number(get("blood.maxExtraPerPlayer")) || 0));
   if (!max) return;
   const near = p.dimension.getEntities({ tags: [MOB_TAG], location: p.location, maxDistance: CAP_RADIUS }).length;
   const lo = Math.max(0, Math.floor(CONFIG.blood.spawnMin)), hi = Math.max(lo, Math.floor(CONFIG.blood.spawnMax));
-  const n = Math.min(max - near, lo + Math.floor(Math.random() * (hi - lo + 1)));
+  let n = Math.min(max - near, lo + Math.floor(Math.random() * (hi - lo + 1)));
+  if (n <= 0) return;
+  n = Math.min(n, worldRoom(budget));
   for (let i = 0; i < n; i++) {
     const at = spot(p);
     if (!at) continue;
@@ -594,32 +739,29 @@ function spawnWave(p) {
     const id = pickMob(safe);
     if (!id) continue;
     try {
-      // A world whose entity ids repeat (an old level.dat put back) can hand back an existing entity (a pet, an
-      // item): tagged, dawn would remove it. Leave that one alone and spawn again.
-      // typeId always has the namespace; a config id may be written without it ("zombie").
-      const want = id.includes(":") ? id : `minecraft:${id}`;
-      let mob = p.dimension.spawnEntity(id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
-      for (let k = 0; k < 3 && mob.typeId !== want; k++) mob = p.dimension.spawnEntity(id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
-      if (mob.typeId !== want) continue;
-      mob.addTag(MOB_TAG);
+      // Never an existing entity (a pet, an item): tagged, dawn would remove it.
+      spawnFresh(p.dimension, id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, { attempts: 4 }).addTag(MOB_TAG);
+      if (budget.left !== undefined && budget.left !== Infinity) budget.left--;
     } catch (e) {
       console.warn(`[moon] spawn ${id}: ${e}`);
     }
   }
 }
 
-/** Removes every Blood Moon monster in loaded chunks; ones in unloaded chunks go when they load. */
+/** Removes every Blood Moon monster in loaded chunks (every dimension: the world cap counts them all); ones in unloaded chunks go when they load. */
 function removeMobs() {
-  try {
-    for (const e of overworld().getEntities({ tags: [MOB_TAG] })) {
-      try {
-        e.remove();
-      } catch {
-        // already gone
+  for (const id of MOB_DIMENSIONS) {
+    try {
+      for (const e of world.getDimension(id).getEntities({ tags: [MOB_TAG] })) {
+        try {
+          if (e.isValid && e.hasTag(MOB_TAG)) e.remove();
+        } catch {
+          // already gone
+        }
       }
+    } catch (e) {
+      console.warn(`[moon] ${e}`);
     }
-  } catch (e) {
-    console.warn(`[moon] ${e}`);
   }
 }
 
@@ -642,8 +784,11 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       }
       return;
     }
-    if (!deadEntity.hasTag(MOB_TAG) || !(damageSource.damagingEntity instanceof Player)) return;
-    dropXp(deadEntity, damageSource.damagingEntity);
+    // A monster that is already gone has no tag to read; its kill can't be rewarded without the killer either.
+    if (!deadEntity.isValid || !deadEntity.hasTag(MOB_TAG)) return;
+    const killer = damageSource.damagingEntity;
+    if (!(killer instanceof Player) || !killer.isValid) return;
+    dropXp(deadEntity, killer);
   } catch (e) {
     console.warn(`[moon] ${e}`);
   }
@@ -847,7 +992,8 @@ function skyRequest(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:sky_request"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "moon_bp");
     else if (id === "realm:sky_request") {
@@ -858,5 +1004,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

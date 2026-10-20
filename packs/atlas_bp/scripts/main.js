@@ -27,6 +27,8 @@ import { ACT_NAMES, ADJECTIVES, GROUPS, KINDS, KIND_HINTS, KIND_NAMES, NOUNS, SU
 import { PREFABS, turn } from "./prefabs.js";
 import { get, getFor } from "./settings.js";
 import { protectedBox } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
+import { spawnFresh } from "./spawn.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -1380,19 +1382,6 @@ function noBanner(ent) {
   }
 }
 
-/**
- * spawnEntity, but never another entity: with reused entity ids it can hand back one that already exists (a dropped
- * item, a pet), which the fight would then tag and remove at its end. Retries, then throws.
- * @param {import("@minecraft/server").Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at
- */
-function spawnFresh(dim, type, at) {
-  for (let k = 0; k < 8; k++) {
-    const e = dim.spawnEntity(/** @type {any} */ (type), at);
-    if (e.typeId === type) return e;
-  }
-  throw new Error(`spawnEntity(${type}) kept returning another entity`);
-}
-
 /** Spawns fight mobs around a site. @param {Fight} f @param {string[]} types @param {string} [name] */
 function spawnMobs(f, types, name) {
   const dim = world.getDimension(OVERWORLD);
@@ -1840,7 +1829,8 @@ function debug(msg) {
 
 const EVENTS = new Set(["realm:saga_progress", "realm:place_ready", "realm:sky_event", "realm:calendar", "realm:claims_check_result", "realm:atlas_debug", "realm:atlas_ping"]);
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_pong", ...EVENTS],
   ({ id, message, sourceEntity }) => {
     if (id === "realm:help_pong") {
       scanning?.add(message.trim());
@@ -1882,7 +1872,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[atlas] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1955,9 +1944,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "atlas_bp");
   },
-  { namespaces: ["realm"] },
 );

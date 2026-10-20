@@ -14,6 +14,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, OPTIONS, set, setFor } from "./settings.js";
 import { COLORS, STATS } from "./stats.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("@minecraft/server").ScoreboardObjective} ScoreboardObjective */
 /** @typedef {(typeof STATS)[number]} Stat */
@@ -214,6 +215,39 @@ let hudPlayers = new Set();
 let hudHeard = -Infinity;
 /** The HUD repeats its state every 5 seconds: after 10 without one, it's gone. */
 const HUD_STALE_TICKS = 200;
+const HUD_PART_TIMEOUT = 100;
+/** The realm:hud_state list still arriving: one `seq`, its parts so far. @type {{ parts: number, seq: unknown, got: Map<number, string[]>, tick: number } | null} */
+let hudAssembly = null;
+
+/** Seq and tick of the last completed list: an older publication replayed late must not replace it. @type {{ seq: number, tick: number } | null} */
+let hudDone = null;
+
+/** Takes one realm:hud_state part; the player list is replaced only when every part of one publication is here. Malformed messages change nothing. @param {any} msg */
+function takeHudState(msg) {
+  if (!Array.isArray(msg.players)) return;
+  const now = system.currentTick;
+  const parts = msg.parts === undefined ? 1 : msg.parts;
+  const part = msg.part === undefined ? 1 : msg.part;
+  if (typeof parts !== "number" || typeof part !== "number" || !Number.isInteger(parts) || !Number.isInteger(part)) return;
+  if (!(parts >= 1 && parts <= 1000 && part >= 1 && part <= parts)) return;
+  const seq = typeof msg.seq === "number" && Number.isFinite(msg.seq) ? msg.seq : undefined;
+  // Older than what is already whole (or arriving): a late replay. After HUD_STALE_TICKS a restarted HUD's low numbers are accepted again.
+  if (seq !== undefined && hudDone && now - hudDone.tick <= HUD_STALE_TICKS && seq < hudDone.seq) return;
+  const ids = msg.players.map(String);
+  const finish = (/** @type {string[]} */ list) => {
+    hudAssembly = null;
+    hudPlayers = new Set(list);
+    hudHeard = now;
+    hudDone = seq === undefined ? null : { seq, tick: now };
+  };
+  if (parts === 1) return finish(ids);
+  let a = hudAssembly;
+  if (a && now - a.tick <= HUD_PART_TIMEOUT && typeof a.seq === "number" && seq !== undefined && seq < a.seq) return; // a late part of an older publication
+  if (!a || a.parts !== parts || a.seq !== seq || now - a.tick > HUD_PART_TIMEOUT) a = hudAssembly = { parts, seq, got: new Map(), tick: now };
+  a.got.set(part, ids);
+  if (a.got.size < parts) return;
+  finish([...a.got.values()].flat());
+}
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   tickers.delete(playerId);
@@ -327,16 +361,15 @@ system.runInterval(() => {
   }
 }, 20);
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:actionbar", "realm:hud_state"],
   ({ id, message }) => {
     if (id !== "realm:actionbar" && id !== "realm:hud_state") return;
     try {
       const msg = JSON.parse(message);
       if (!msg || typeof msg !== "object") return;
       if (id === "realm:hud_state") {
-        if (!Array.isArray(msg.players)) return;
-        hudPlayers = new Set(msg.players.map(String));
-        hudHeard = system.currentTick;
+        takeHudState(msg);
       } else if (typeof msg.player === "string") {
         // Another pack put a message on this player's bar (the Coordinates HUD does the same): wait, then redraw.
         const ticks = Math.min(Math.max(Number(msg.ticks) || 40, 0), 200);
@@ -348,7 +381,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not for us
     }
   },
-  { namespaces: ["realm"] }
 );
 // Ask the HUD who sees it, rather than wait up to 5 seconds for its next update.
 world.afterEvents.worldLoad.subscribe(() => system.sendScriptEvent("realm:hud_ping", "{}"));
@@ -659,9 +691,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stats_bp");
   },
-  { namespaces: ["realm"] }
 );

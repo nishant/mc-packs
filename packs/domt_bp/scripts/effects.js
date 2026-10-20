@@ -31,13 +31,13 @@ import {
   sightSpot,
   sound,
   spawnAround,
-  spawnFresh,
   spotNear,
   standable,
   strike,
   UNTIL_DEATH,
   wait,
 } from "./helpers.js";
+import { spawnFresh } from "./spawn.js";
 
 /**
  * @typedef {object} Ctx

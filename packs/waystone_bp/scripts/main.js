@@ -3,6 +3,7 @@ import { Block, CommandPermissionLevel, CustomCommandStatus, Dimension, Player, 
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PACK = "waystone_bp";
 const PROP_LIST = "waystone:list"; // world: JSON Waystone[]
@@ -259,7 +260,8 @@ function sendKnown(player) {
   parts.forEach((p, i) => send("realm:waystones_known", { player: player.id, part: i + 1, parts: parts.length, list: p }));
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:waystones_known_ping",
   ({ id, message }) => {
     if (id !== "realm:waystones_known_ping") return;
     try {
@@ -269,7 +271,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] }
 );
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -892,7 +893,8 @@ function findNpc(player, npc) {
 // elsie, on a level change and when the player joins; kept in memory only.
 /** @type {Map<string, number>} player id -> percent */
 const elsieOff = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:affinity",
   ({ id, message }) => {
     if (id !== "realm:affinity") return;
     try {
@@ -904,7 +906,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 /** @param {Player} player */
 const elsieOffOf = (player) => Math.max(0, Math.min(50, elsieOff.get(player.id) ?? 0));
@@ -952,7 +953,8 @@ async function bedMenu(player, npc, title) {
   player.playSound("random.orb", { pitch: 0.6 });
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:npc_talk", "realm:npc_choose", "realm:sky_event"],
   ({ id, message }) => {
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:sky_event") return;
     /** @type {any} */
@@ -988,7 +990,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[waystone] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1064,7 +1065,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // Scenario tests (BDS harness): an empty-hand tap on a lodestone, which simulated players can't make.
 // Only from the server console or an operator.
 //   /scriptevent realm:waystone_test {"action":"tap","player"?:"<name>","x":..,"y":..,"z":..}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:waystone_test",
   (ev) => {
     if (ev.id !== "realm:waystone_test") return;
     const src = ev.sourceEntity;
@@ -1079,14 +1081,14 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[waystone] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // Callings (Skills): realm:calling carries each player's talent numbers (`bonus`: waystoneOff: Pathfinder's percent off). Kept in memory; Skills
 // sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
 /** @type {Map<string, Record<string, number>>} */
 const callingBonus = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:calling",
   ({ id, message }) => {
     if (id !== "realm:calling") return;
     try {
@@ -1096,7 +1098,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -1107,9 +1108,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "waystone_bp");
   },
-  { namespaces: ["realm"] },
 );

@@ -1,6 +1,10 @@
 // Performance soak: many simulated players spread around the world for a few minutes, walking, looking
 // around, sneaking, jumping and running a few common commands, so the packs do their usual per-player
-// work. Meant for run.mjs --profile (it checks nothing but that the players stay in the world).
+// work. Meant for run.mjs --profile. A soak only counts as an N-player measurement when all N players
+// spawned, all of them stayed in the world at every second of the soak, the declared water and Nether
+// players were placed, and the full steady window ran: the scenario fails otherwise and reports
+// {declared, spawned, retention, soak window} as `perf-workload`, which run.mjs puts into the profile JSON
+// next to its acceptance verdict (lib/perf-acceptance.mjs).
 //   node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 900
 // Arguments (--arg key=value): players (default 10), seconds (default 300), group (players per
 // group, default 5), spread (blocks between far groups, default 240), commands (seconds between one
@@ -18,6 +22,9 @@ export default async function (t) {
   const GROUP = Math.max(1, Number(a.group ?? 5));
   const SPREAD = Math.max(50, Number(a.spread ?? 240));
   const CMD_EVERY = Math.max(0, Number(a.commands ?? 45));
+// Hotbar Refill: every `refill` seconds a land player's hotbar slot 0 is emptied and refill_bp/stash_bp are asked to
+// refill it (rockets that sit on the first page, then a request nothing can answer, which the page index must refuse cheaply).
+const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   const WATER = Math.min(N, Math.max(0, Number(a.water ?? 2)));
   const NETHER = Math.min(Math.max(0, N - WATER - 1), Math.max(0, Number(a.nether ?? 2)));
   const over = t.world.getDimension("overworld");
@@ -27,8 +34,22 @@ export default async function (t) {
   t.server("/gamerule sendcommandfeedback false");
   t.server("/gamerule showcoordinates false");
 
+  const clearedAreas = new Set();
+  // Never remove a production pack's loader while preparing the simulated population.
   const clearAreas = () => {
-    for (const d of [over, nether]) { try { d.runCommand("tickingarea remove_all"); } catch (e) { /* none */ } }
+    const raw = t.world.getDynamicProperty("harness:tickingAreas");
+    const areas = raw === undefined ? [] : JSON.parse(raw);
+    if (!Array.isArray(areas)) throw new Error("The harness ticking-area list is not an array");
+    for (const area of areas) {
+      const key = `${area.dimension}|${area.name}`;
+      if (clearedAreas.has(key)) continue;
+      if (!/^harness_\d+_\d+$/.test(area.name) || !["minecraft:overworld", "minecraft:nether", "minecraft:the_end"].includes(area.dimension))
+        throw new Error("Refusing to remove an area not owned by the harness");
+      const result = t.world.getDimension(area.dimension).runCommand(`tickingarea remove "${area.name}"`);
+      if (!(result.successCount > 0)) throw new Error(`Could not remove fixture area ${area.name}`);
+      clearedAreas.add(key);
+    }
+    try { nether.runCommand("tickingarea remove soak_nether"); } catch (e) { /* optional scenario-owned pocket */ }
   };
   const rnd = (n) => Math.floor(Math.random() * n);
   const ringSpot = (k) => {
@@ -55,6 +76,7 @@ export default async function (t) {
     t.server(`/fill ${x - 3} ${y - 3} ${z - 3} ${x + 3} ${y} ${z + 3} water`);
     pool = { x, y: y - 2, z };
     clearAreas();
+    await t.wait(1);
   }
   // Nether pocket.
   let pocket = null;
@@ -83,6 +105,7 @@ export default async function (t) {
     // A busy server sometimes misses the harness's chunk wait: try again a little further on.
     for (let attempt = 0; attempt < 3; attempt++) {
       clearAreas();
+      await t.wait(1);
       const at = attempt && kind === "land" ? { ...spot, x: spot.x + attempt * 7, z: spot.z - attempt * 5 } : spot;
       try {
         const p = await t.player(name(i), { ...at, dimension: kind === "nether" ? "nether" : "overworld", op: i === 0, settle: 2 });
@@ -95,9 +118,16 @@ export default async function (t) {
       }
     }
     clearAreas();
+    await t.wait(1);
   }
   t.log(`spawned ${made}/${N} players in ${((t.tick - t0) / 20).toFixed(0)} s (${players.filter((x) => x.kind === "water").length} in water, ${players.filter((x) => x.kind === "nether").length} in the Nether, ${Math.ceil(N / GROUP)} groups)`);
-  t.assert(made > 0, "at least one simulated player spawned");
+  const kinds = { land: players.filter((x) => x.kind === "land").length, water: players.filter((x) => x.kind === "water").length, nether: players.filter((x) => x.kind === "nether").length, groups: Math.ceil(N / GROUP) };
+  const declared = { players: N, seconds: SECONDS, group: GROUP, spread: SPREAD, commands: CMD_EVERY, refill: REFILL_EVERY, water: WATER, nether: NETHER };
+  const spawnGameSeconds = (t.tick - t0) / 20;
+  // The profile only counts as an N-player measurement when all N spawned (the old guard was `made > 0`): report what
+  // happened first, so a short run is documented in the profile JSON, then fail.
+  t.report("perf-workload", { schema: 1, declared, spawned: made, spawnGameSeconds, kinds });
+  t.assert(made === N, `all ${N} declared players spawned (${made} did)`);
 
   const COMMANDS = [
     ["help_bp", "/realm:help"], ["stats_bp", "/realm:stats"], ["hud_bp", "/realm:hud"], ["quests_bp", "/realm:quests"],
@@ -107,14 +137,18 @@ export default async function (t) {
 
   // The soak itself: one decision per player per second; commands staggered across players.
   const start = t.tick;
-  let commands = 0, moves = 0, lastLog = start;
+  let refills = 0;
+  if (REFILL_EVERY) for (const s of players) if (s.kind === "land") { try { t.cmd(s.p, "/give @s firework_rocket 64"); } catch (e) { /* left already */ } }
+  let commands = 0, moves = 0, lastLog = start, samples = 0, minValid = Infinity;
   const valid = (p) => { try { return p.isValid; } catch (e) { return false; } };
   while (t.tick - start < SECONDS * 20) {
     await t.wait(20);
     const sec = Math.floor((t.tick - start) / 20);
+    let validNow = 0;
     for (let i = 0; i < players.length; i++) {
       const s = players[i];
       if (!valid(s.p)) continue;
+      validNow++;
       const r = Math.random();
       try {
         if (s.kind === "land" && r < 0.35) {
@@ -131,17 +165,34 @@ export default async function (t) {
           s.p.stopMoving();
         }
       } catch (e) { /* a player in an odd spot: ignore */ }
+      if (REFILL_EVERY && s.kind === "land" && (sec + i * 3) % REFILL_EVERY === 0) {
+        try {
+          s.p.getComponent("minecraft:inventory").container.setItem(0, undefined);
+          t.system.sendScriptEvent("realm:refill_need", JSON.stringify({ player: s.p.id, slot: 0, id: refills % 2 ? "minecraft:pufferfish" : "minecraft:firework_rocket" }));
+          refills++;
+        } catch (e) { /* a player in an odd spot: ignore */ }
+      }
       if (CMD_EVERY && COMMANDS.length && (sec + i * 7) % CMD_EVERY === 0) {
         t.cmd(s.p, COMMANDS[(sec + i) % COMMANDS.length]);
         commands++;
       }
     }
+    samples++;
+    minValid = Math.min(minValid, validNow);
     if (t.tick - lastLog >= 1200) {
       lastLog = t.tick;
       t.log(`soak ${sec} s: ${players.filter((x) => valid(x.p)).length} players in the world, ${moves} walks, ${commands} commands`);
     }
   }
   const alive = players.filter((x) => valid(x.p)).length;
-  t.log(`soak done: ${SECONDS} s, ${alive}/${players.length} players still in the world, ${moves} walks, ${commands} commands`);
-  t.check(alive > 0, "players stayed in the world");
+  t.log(`soak done: ${SECONDS} s, ${alive}/${N} players still in the world, ${moves} walks, ${commands} commands`);
+  const soakTicks = t.tick - start;
+  t.report("perf-workload", {
+    schema: 1, declared, spawned: made, spawnGameSeconds, kinds,
+    soak: { startTick: start, endTick: t.tick, ticks: soakTicks, seconds: soakTicks / 20 },
+    retention: { samples, minValid: samples ? minValid : 0, endValid: alive },
+    walks: moves, commands,
+  });
+  t.check(samples > 0 && minValid === N && alive === N, `all ${N} players stayed in the world for the whole ${SECONDS} s soak (fewest at any second: ${samples ? minValid : 0}, at the end: ${alive})`);
+  t.check(soakTicks >= SECONDS * 20, `the steady window ran its full ${SECONDS} s of game time (${(soakTicks / 20).toFixed(1)} s)`);
 }

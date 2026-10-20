@@ -144,8 +144,8 @@ async function show(player, activeSlot) {
 }
 
 export function cancelCopyCut(player) {
-    player.onScreenDisplay.setActionBar(t("eb.bar.copy_cancelled"));
     lockActionBar(player.id, 1500);
+    player.onScreenDisplay.setActionBar(t("eb.bar.copy_cancelled"));
 }
 
 export async function showCopyCutPrompt(player, corner1, corner2) {
@@ -172,10 +172,10 @@ export function finishCopyCut(player, corner1, corner2, isCut) {
     const clip = getState(player).clipboard;
     if (count > 0 && clip) autoSaveToStore(player, clip);
 
+    lockActionBar(player.id, 2500);
     player.onScreenDisplay.setActionBar(count > 0
         ? t(isCut ? "eb.bar.cut_done" : "eb.bar.copy_done", count)
         : t("eb.bar.copy_empty"));
-    lockActionBar(player.id, 2500);
 }
 
 export async function showClipboardUI(player, slot = newestSlot(player)) {

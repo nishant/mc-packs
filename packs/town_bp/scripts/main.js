@@ -17,15 +17,16 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
 // town's contributor lists never come near the 32 KB property limit. Rewards for contributors who
-// were offline when a project finished wait in "town:owed" until they join.
+// were offline when a project finished wait in "town:owed:<playerId>" (one property each) until they join.
 
 const TOWN_PREFIX = "town:t:";
 const PROG_PREFIX = "town:p:";
-const PROP_OWED = "town:owed";
 const MAX_LEVEL = 5;
 const NAME_LENGTH = 24;
 const PROP_LIMIT = 30000;
@@ -192,28 +193,36 @@ function guildFor(p) {
 // Rewards (paid now, or kept until the contributor joins)
 // ---------------------------------------------------------------------------
 
-/** @returns {Record<string, Owed>} */
-function owedAll() {
-  const raw = readJson(PROP_OWED);
-  /** @type {Record<string, Owed>} */
-  const out = {};
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
-  for (const [pid, o] of Object.entries(raw)) {
-    if (!o || typeof o !== "object") continue;
-    const q = Array.isArray(o.q) ? o.q.filter((/** @type {unknown} */ x) => Array.isArray(x) && x.length === 3 && x.every((y) => typeof y === "string")) : [];
-    out[pid] = { cr: Math.max(0, Math.floor(Number(o.cr) || 0)), q };
-  }
-  return out;
+/** What a contributor is owed: crowns and their latest finished projects. Unknown or damaged records are repaired as they are read. @param {any} o @returns {Owed} */
+function normalizeOwed(o) {
+  if (!o || typeof o !== "object" || Array.isArray(o)) throw new Error("not an owed record");
+  const q = Array.isArray(o.q) ? o.q.filter((/** @type {unknown} */ x) => Array.isArray(x) && x.length === 3 && x.every((y) => typeof y === "string")) : [];
+  return { ...o, cr: Math.max(0, Math.floor(Number(o.cr) || 0)), q: q.slice(-10) };
 }
 
-/** @param {Player} p @param {number} crowns @param {[string, string, string][]} quests @param {string} why */
-function payNow(p, crowns, quests, why) {
+// One world property per player ("town:owed:<playerId>") plus the index "town:owed_idx" (owed.js): no more shared-property cliff.
+const owedStore = createOwedStore(world, { base: "town:owed", normalize: normalizeOwed, summarize: (v) => `${v?.cr ?? 0} Crowns, ${v?.q?.length ?? 0} projects` });
+
+/** @param {Player} p @param {number} crowns @param {[string, string, string][]} quests @param {string} why @param {(crowns: number) => void} [keep] called with Crowns that could not be added */
+function payNow(p, crowns, quests, why, keep) {
   if (crowns > 0) {
-    try {
-      crownsObjective()?.addScore(p, Math.floor(crowns));
-      p.sendMessage(`§6+${Math.floor(crowns)} Crowns §7(${why})`);
-    } catch (e) {
-      console.warn(`[town] crowns: ${e}`);
+    const whole = Math.floor(crowns);
+    const { applied } = applyParts(
+      [whole],
+      (n) => {
+        const obj = crownsObjective();
+        if (!obj) throw new Error("no crowns scoreboard");
+        obj.addScore(p, n);
+      },
+      (failed) => keep?.(failed[0]),
+      (m) => console.warn(`[town] ${m}`),
+    );
+    if (applied) {
+      try {
+        p.sendMessage(`§6+${whole} Crowns §7(${why})`);
+      } catch (e) {
+        console.warn(`[town] crowns message: ${e}`);
+      }
     }
   }
   const rep = get("repPerProject");
@@ -225,33 +234,24 @@ function payNow(p, crowns, quests, why) {
 
 /** @param {string} pid @param {number} crowns @param {[string, string, string]} quest */
 function owe(pid, crowns, quest) {
-  const all = owedAll();
-  const o = all[pid] ?? { cr: 0, q: [] };
-  o.cr += crowns;
-  o.q = [...o.q, quest].slice(-10);
-  all[pid] = o;
-  // Many offline contributors: keep everyone's Crowns, and only their latest finished projects.
-  let json = JSON.stringify(all);
-  for (let keep = 5; json.length > PROP_LIMIT && keep >= 0; keep--) {
-    for (const v of Object.values(all)) v.q = v.q.slice(-keep);
-    json = JSON.stringify(all);
-  }
-  try {
-    world.setDynamicProperty(PROP_OWED, json);
-  } catch (e) {
-    console.warn(`[town] owed: ${e}`);
-  }
+  const saved = owedStore.update(pid, (cur) => {
+    const o = cur ? normalizeOwed(cur) : { cr: 0, q: [] };
+    o.cr += crowns;
+    o.q = [...o.q, quest].slice(-10);
+    return o;
+  });
+  if (!saved) console.warn(`[town] owed: ${crowns} Crowns for ${pid} could not be saved`);
 }
 
 /** @param {Player} p */
 function payOwed(p) {
-  const all = owedAll();
-  const o = all[p.id];
-  if (!o) return;
-  delete all[p.id];
-  world.setDynamicProperty(PROP_OWED, Object.keys(all).length ? JSON.stringify(all) : undefined);
+  const raw = owedStore.take(p.id);
+  if (!raw) return;
+  const o = normalizeOwed(raw);
   p.sendMessage("§6Town projects you helped with were finished while you were away. Thank you!");
-  payNow(p, o.cr, o.q, "Town projects");
+  payNow(p, o.cr, o.q, "Town projects", (crowns) => {
+    if (!owedStore.update(p.id, (cur) => ({ ...o, ...(cur ? normalizeOwed(cur) : {}), cr: crowns + (cur ? normalizeOwed(cur).cr : 0), q: [] }))) console.warn(`[town] owed: ${crowns} Crowns for ${p.id} could not be saved`);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +395,14 @@ function finishProject(t, p, pr) {
   ranked.forEach(([id, name, n], i) => {
     const crowns = CONFIG.topCrowns[i] ?? 0;
     const pl = online(id);
-    if (pl) payNow(pl, crowns, [quest], `${p.name}, ${t.n}`);
+    if (pl)
+      payNow(pl, crowns, [quest], `${p.name}, ${t.n}`, (kept) => {
+        // The quest lines went out already: only the Crowns that could not be added are owed.
+        owedStore.update(id, (cur) => {
+          const o = cur ? normalizeOwed(cur) : { cr: 0, q: [] };
+          return { ...o, cr: o.cr + kept };
+        });
+      });
     else {
       owe(id, crowns, quest);
       if (letters++ >= LETTERS_MAX) return;
@@ -1766,7 +1773,8 @@ world.afterEvents.worldLoad.subscribe(() =>
     send("realm:town_state_ping", {});
   }, 100),
 );
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:zones_ping", "realm:town_list_ping", "realm:town_state"],
   ({ id, message }) => {
     if (id === "realm:zones_ping" || id === "realm:town_list_ping") zonesChanged();
     else if (id === "realm:town_state") {
@@ -1779,7 +1787,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1787,7 +1794,8 @@ system.afterEvents.scriptEventReceive.subscribe(
 //   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?}
 // ---------------------------------------------------------------------------
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:town_test",
   (ev) => {
     if (ev.id !== "realm:town_test") return;
     const src = ev.sourceEntity;
@@ -1839,14 +1847,14 @@ system.afterEvents.scriptEventReceive.subscribe(
       tell(`error: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
 // Townsfolk (npc_bp): mayors offer the nearest town's projects
 // ---------------------------------------------------------------------------
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     let msg;
@@ -1872,7 +1880,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[town] npc: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
@@ -1997,9 +2004,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "town_bp");
   },
-  { namespaces: ["realm"] },
 );

@@ -6,6 +6,7 @@ import { getMaxBlocks, getUndoThreshold, getDestroyDrops, getBuildSpeed } from "
 import { recordSnapshot } from "./UndoRedo.js";
 import { lockActionBar } from "../utils/ActionBar.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
+import { bedPartnerPos, isBedType, expandDestroyForClaims, dropIncompleteBeds, trimPlacement, chargeUnits } from "./beds.js";
 
 export const UNBREAKABLE = new Set([
     "minecraft:bedrock",
@@ -357,10 +358,21 @@ export function destroyBlocks(player, positions, onComplete) {
     const dimId    = dim.id;
     const yMin     = dimId === "minecraft:nether" || dimId === "minecraft:the_end" ? 0 : -64;
     const yMax     = dimId === "minecraft:nether" ? 127 : dimId === "minecraft:the_end" ? 255 : 319;
-    const safePos  = filterSafeZonePositions(player, dim.id, positions, true).filter(p => p.y >= yMin && p.y <= yMax);
+    const expanded = expandDestroyForClaims(positions, (p) => {
+        try {
+            const block = dim.getBlock(p);
+            if (!block) return null;
+            return { typeId: block.typeId, states: block.permutation.getAllStates() };
+        } catch { return null; }
+    });
+    const safePos  = dropIncompleteBeds(filterSafeZonePositions(player, dim.id, expanded, true).filter(p => p.y >= yMin && p.y <= yMax));
     if (!safePos.length) { onComplete?.(0); return; }
     const cap      = getMaxBlocks(player);
-    let   capped   = safePos.length > cap ? safePos.slice(0, cap) : safePos;
+    let   capped   = trimPlacement(safePos.map((p) => ({
+        ...p,
+        _bedBlocks: p._bedBlocks ?? 1,
+        _bedItems: p._bedItems ?? (p._bedHead ? 0 : 1),
+    })), cap).positions;
     const creative = isCreative(player);
 
     let equip          = null;
@@ -448,6 +460,7 @@ export function destroyBlocks(player, positions, onComplete) {
     let idx           = 0;
     let pendingRetries = 0;
     const pending  = [];
+    const clearedBeds = new Set();
 
     const blocksPerTick = Math.ceil(capped.length / getBuildSpeed(player));
 
@@ -485,14 +498,17 @@ export function destroyBlocks(player, positions, onComplete) {
             }
             try {
                 const pos   = capped[idx];
+                const posKey = `${pos.x},${pos.y},${pos.z}`;
+                if (clearedBeds.has(posKey)) continue;
                 const block = dim.getBlock(pos);
                 if (!block) { pending.push(pos); continue; }
                 if (block.isAir || UNBREAKABLE.has(block.typeId)) continue;
                 if (!creative && !canMineWith(toolTypeId, block.typeId, !!lootMgr)) continue;
 
+                const bedHead = isBedType(block.typeId) && (pos._bedHead === true || block.permutation.getAllStates()?.head_piece_bit === true);
                 let lootItems = null;
                 let drop      = null;
-                if (spawnDrops) {
+                if (spawnDrops && !bedHead) {
                     if (lootMgr) {
                         lootItems = lootMgr.generateLootFromBlockPermutation(block.permutation, tool);
                     } else {
@@ -505,9 +521,38 @@ export function destroyBlocks(player, positions, onComplete) {
                 let snapBef = null;
                 if (snapshot) {
                     const packed = block.typeId.startsWith("minecraft:") ? block.typeId.slice(10) : block.typeId;
-                    snapBef = { x: pos.x, y: pos.y, z: pos.z, t: packed, s: block.permutation.getAllStates() };
+                    const states = block.permutation.getAllStates();
+                    const units = chargeUnits(block.typeId, states, pos._bedHead === true);
+                    snapBef = { x: pos.x, y: pos.y, z: pos.z, t: packed, s: states, u: units };
+                }
+                const bedStates = isBedType(block.typeId) ? block.permutation.getAllStates() : null;
+                const partner = bedStates ? bedPartnerPos(pos, bedStates) : null;
+                const pk = partner ? `${partner.x},${partner.y},${partner.z}` : null;
+                if (partner && pk && !clearedBeds.has(pk)) {
+                    if (!filterSafeZonePositions(player, dim.id, [partner], false).length) continue;
+                    try {
+                        const other = dim.getBlock(partner);
+                        if (!other || !isBedType(other.typeId) || UNBREAKABLE.has(other.typeId)) continue;
+                    } catch { continue; }
                 }
                 try { block.setType("minecraft:air"); } catch { continue; }
+                clearedBeds.add(posKey);
+                if (bedStates && partner && pk && !clearedBeds.has(pk)) {
+                    try {
+                        const other = dim.getBlock(partner);
+                        if (other && isBedType(other.typeId)) {
+                            if (snapshot) {
+                                const packed = other.typeId.startsWith("minecraft:") ? other.typeId.slice(10) : other.typeId;
+                                const otherStates = other.permutation.getAllStates();
+                                const head = otherStates?.head_piece_bit === true || chargeUnits(other.typeId, otherStates) === 0;
+                                snapshot.bef.push({ x: partner.x, y: partner.y, z: partner.z, t: packed, s: otherStates, u: head ? 0 : 1 });
+                                snapshot.aft.push({ x: partner.x, y: partner.y, z: partner.z, t: "air", s: {} });
+                            }
+                            other.setType("minecraft:air");
+                            clearedBeds.add(pk);
+                        }
+                    } catch {}
+                }
 
                 totalXp += xpGain;
                 if (snapshot && snapBef) {
@@ -550,8 +595,8 @@ export function destroyBlocks(player, positions, onComplete) {
 
         if (idx < capped.length) {
             try {
-                player.onScreenDisplay.setActionBar(t("eb.bar.destroying", (capped.length - idx) + pending.length));
                 lockActionBar(player.id, 200);
+                player.onScreenDisplay.setActionBar(t("eb.bar.destroying", (capped.length - idx) + pending.length));
             } catch { }
             return;
         }
@@ -561,8 +606,8 @@ export function destroyBlocks(player, positions, onComplete) {
             capped = pending.splice(0);
             idx    = 0;
             try {
-                player.onScreenDisplay.setActionBar(t("eb.bar.destroying", capped.length));
                 lockActionBar(player.id, 200);
+                player.onScreenDisplay.setActionBar(t("eb.bar.destroying", capped.length));
             } catch { }
             return;
         }

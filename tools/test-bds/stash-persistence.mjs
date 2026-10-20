@@ -6,11 +6,16 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-const { values } = parseArgs({ options: { port: { type: "string", default: "19362" } } });
+const { values } = parseArgs({ options: {
+  port: { type: "string", default: "19362" },
+  scenario: { type: "string" },
+  keep: { type: "boolean", default: false },
+  log: { type: "string" },
+} });
 const port = Number(values.port);
 if (!Number.isInteger(port) || port < 1024 || port > 65534) throw new Error("--port must be an integer from 1024 to 65534 (the next port is also reserved)");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const cache = path.join(root, "tools", "test-bds", ".cache", "stash-persistence");
+const cache = process.env.BDS_HARNESS_CACHE || path.join(root, "tools", "test-bds", ".cache", "stash-persistence");
 fs.mkdirSync(cache, { recursive: true });
 const temp = fs.mkdtempSync(path.join(cache, "packs-"));
 const pack = path.join(temp, "stash_bp");
@@ -55,13 +60,20 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
     } else if (op === "checkpoint") {
       world.setDynamicProperty("stash:test:index", player.getDynamicProperty("stash:native"));
       world.setDynamicProperty("stash:test:active", JSON.stringify(testSave(player, testCarried(inv))));
+      world.setDynamicProperty("stash:test:playerId", player.id);
     } else if (op === "restore") {
       player.setDynamicProperty("stash:native", world.getDynamicProperty("stash:test:index"));
       const items = testLoad(player, JSON.parse(world.getDynamicProperty("stash:test:active")));
       for (let s = 0; s < inv.size; s++) inv.setItem(s, items.find((e) => e.s === s)?.item);
+    } else if (op === "force_pending") {
+      const state = testState(player);
+      const keep = testCarried(inv);
+      const before = testSave(player, keep);
+      const after = testSave(player, []);
+      player.setDynamicProperty("stash:native", JSON.stringify({ ...state, pending: { before, after } }));
     } else if (op === "status") {
       const state = testState(player);
-      player.sendMessage("stash layout status " + JSON.stringify({ layout: state.layout, cur: state.cur,
+      player.sendMessage("stash layout status " + JSON.stringify({ layout: state.layout, cur: state.cur, savedPlayerId: world.getDynamicProperty("stash:test:playerId"),
         refs: Object.fromEntries(Object.entries(state.pages).map(([page, ref]) => [page, ref.layout || 1])) }));
     } else if (op !== "configure") throw new Error("unknown test operation");
     player.sendMessage("stash identity " + op + " done");
@@ -70,11 +82,14 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 `);
   const result = spawnSync(process.execPath, [
     path.join(root, "tools", "test-bds", "run.mjs"), "--packs", temp, "--only", "stash_bp",
-    "--scenario", path.join(root, "tools", "test-bds", "examples", "stash-pages-persistence.js"),
+    "--scenario", values.scenario ? path.resolve(root, values.scenario) : path.join(root, "tools", "test-bds", "examples", "stash-pages-persistence.js"),
     "--prop", `server-port=${port}`, "--prop", `server-portv6=${port + 1}`, "--strict", "--quiet", "--timeout", "240",
+    ...(values.keep ? ["--keep"] : []),
+    ...(values.log ? ["--log", path.resolve(values.log)] : []),
   ], { cwd: root, stdio: "inherit", env: { ...process.env, BDS_HARNESS_CACHE: process.env.BDS_HARNESS_CACHE || cache } });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 } finally {
-  fs.rmSync(temp, { recursive: true, force: true });
+  if (values.keep) console.log(`test pack folder kept: ${temp}`);
+  else fs.rmSync(temp, { recursive: true, force: true });
 }

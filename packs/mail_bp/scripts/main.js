@@ -3,6 +3,8 @@ import { CommandPermissionLevel, CustomCommandStatus, Player, ScriptEventSource,
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { planSystemLetter } from "./policy.js";
 
 // One world property per letter: "mail:l:<id>" -> JSON Letter. A letter is one small property (a
 // subject and up to bodyLength characters), so no property gets near the 32 KB limit however many
@@ -28,7 +30,8 @@ const PARTY = "*party"; // draft.to for a letter to the whole party
 // after each change and on realm:party_members_ping). Kept in memory; asked for again when the world loads.
 /** @type {Map<string, [string, string][]>} party code -> [player id, gamertag] */
 const partyMembers = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:party_members",
   ({ id, message }) => {
     if (id !== "realm:party_members") return;
     try {
@@ -42,7 +45,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[mail] party_members: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 system.runTimeout(() => system.sendScriptEvent("realm:party_members_ping", "{}"), 60);
 
@@ -102,6 +104,29 @@ const inboxOf = (id) => [...letters().values()].filter((l) => l.t === id && !l.d
 const sentOf = (id) => [...letters().values()].filter((l) => l.f === id && !l.ds).sort((a, b) => b.at - a.at || b.id - a.id);
 /** @param {string} id */
 const unreadCount = (id) => inboxOf(id).filter((l) => !l.r).length;
+
+// ---------------------------------------------------------------------------
+// Block lists: one world property per player ("mail:b:<id>" -> JSON [{ i, n }]), because a recipient who is
+// offline has no readable player properties. A blocked player's letters to the blocker aren't delivered.
+// ---------------------------------------------------------------------------
+
+const BLOCK_PREFIX = "mail:b:";
+
+/** @param {string} id @returns {{ i: string, n: string }[]} */
+function blockedBy(id) {
+  try {
+    const raw = world.getDynamicProperty(BLOCK_PREFIX + id);
+    const v = typeof raw === "string" ? JSON.parse(raw) : [];
+    return Array.isArray(v) ? v.filter((b) => b && typeof b.i === "string").map((b) => ({ ...b, i: b.i, n: String(b.n ?? "?") })) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** @param {string} id @param {{ i: string, n: string }[]} list */
+function saveBlocks(id, list) {
+  world.setDynamicProperty(BLOCK_PREFIX + id, list.length ? JSON.stringify(list) : undefined);
+}
 
 // ---------------------------------------------------------------------------
 // Roster: everyone who has joined since the pack was installed
@@ -361,6 +386,10 @@ function send(player, to, subject, body, shortened, group = false) {
   const wait = get("sendCooldownSeconds") * 1000 - (Date.now() - (lastSent.get(player.id) ?? 0));
   if (wait > 0 && !group) return `Wait ${Math.ceil(wait / 1000)} more seconds before sending another letter, then press Send again.`;
   if (letters().size >= MAX_LETTERS) return "The realm's mail is full. Ask players to delete old letters.";
+  if (blockedBy(to.i).some((b) => b.i === player.id)) return `${to.n} isn't accepting letters from you.`;
+  const cap = Math.max(0, Math.floor(Number(get("senderUnreadCap")) || 0));
+  const waiting = cap > 0 ? inboxOf(to.i).filter((l) => l.f === player.id && !l.r).length : 0;
+  if (cap > 0 && waiting >= cap) return `${to.n} already has ${waiting} unread letters from you. Try again once they've read some.`;
   // Make room: the oldest letters the recipient has already read go first.
   const inbox = inboxOf(to.i);
   const limit = get("inboxLimit");
@@ -412,11 +441,11 @@ function sendToParty(player, mates, subject, body, shortened) {
   for (const m of mates) {
     const problem = send(player, m, subject, body, shortened, true);
     if (!problem) got.push(m.n);
-    else if (/full of unread/.test(problem)) skipped.push(m.n);
+    else if (/full of unread|unread letters from you|isn't accepting/.test(problem)) skipped.push(m.n);
     else return got.length ? (player.sendMessage(`§aLetter sent to ${got.join(", ")}. §c${problem}`), undefined) : problem;
   }
-  if (!got.length) return `Every mailbox in your party is full of unread letters (${skipped.join(", ")}). Try again once they've read some.`;
-  player.sendMessage(`§aLetter sent to your party: ${got.join(", ")}.${skipped.length ? ` §c${skipped.join(", ")}'s mailbox is full of unread letters, so they didn't get it.` : ""}${shortened ? " §7(It was shortened to fit.)" : ""}`);
+  if (!got.length) return `Nobody in your party could get it right now (${skipped.join(", ")}): mailboxes full of unread letters, or not taking your letters. Try again later.`;
+  player.sendMessage(`§aLetter sent to your party: ${got.join(", ")}.${skipped.length ? ` §c${skipped.join(", ")} didn't get it: a mailbox full of unread letters, or not taking your letters.` : ""}${shortened ? " §7(It was shortened to fit.)" : ""}`);
   player.playSound("random.orb", { pitch: 1.4, volume: 0.6 });
   return undefined;
 }
@@ -430,6 +459,22 @@ async function readLetter(player, l) {
   await menu(player, `§l${l.s}`, body, [
     // A letter from a pack (a townsfolk, the realm) has no writer to reply to.
     ...(l.f ? [{ text: "Reply", run: () => write(player, { to: l.f, subject: (l.s.startsWith("Re: ") ? l.s : `Re: ${l.s}`).slice(0, Math.min(BOX, CONFIG.subjectLength)) }) }] : []),
+    ...(l.f
+      ? [
+          {
+            text: "§cBlock sender\n§8Their letters to you stop",
+            run: () => {
+              const list = blockedBy(player.id);
+              const max = Math.max(1, Math.floor(Number(get("blockListMax")) || 30));
+              if (!list.some((b) => b.i === l.f)) {
+                if (list.length >= max) return player.sendMessage(`§cYou have blocked ${max} players, the most there can be. Unblock someone first (/realm:mail, Blocked players).`);
+                saveBlocks(player.id, [...list, { i: l.f, n: l.fn.slice(0, 32) }]);
+              }
+              player.sendMessage(`§7${l.fn} is blocked: their letters to you aren't delivered. Unblock them in /realm:mail, Blocked players.`);
+            },
+          },
+        ]
+      : []),
     {
       text: "§cDelete",
       run: () => {
@@ -505,6 +550,52 @@ async function sent(player) {
   await menu(player, "§lSent", body, actions);
 }
 
+/** Players this one has blocked, to unblock. @param {Player} player */
+async function blockedMenu(player) {
+  const list = blockedBy(player.id);
+  /** @type {{ text: string, run: () => void | Promise<void> }[]} */
+  const actions = list.map((b) => ({
+    text: `${b.n}\n§8Tap to unblock`,
+    run: () => {
+      saveBlocks(player.id, blockedBy(player.id).filter((x) => x.i !== b.i));
+      player.sendMessage(`§7${b.n} is unblocked.`);
+      return blockedMenu(player);
+    },
+  }));
+  actions.push({ text: "Back", run: () => mainMenu(player) });
+  await menu(player, "§lBlocked players", list.length ? "Their letters to you aren't delivered. Tap a name to unblock." : "You haven't blocked anyone. Block a sender from one of their letters.", actions);
+}
+
+/** Operators: deletes every letter a player wrote, from every inbox and Sent. @param {Player} player */
+async function purgeMenu(player) {
+  if (!isOp(player)) return;
+  const res = await show(player, new ModalFormData().title("§lDelete letters").textField("Gamertag of the writer", "Steve").submitButton("Find"));
+  if (!res || res.canceled || !player.isValid) return;
+  const typed = String(noCodes(String(res.formValues?.find((v) => typeof v === "string") ?? ""))).trim();
+  if (!typed) return;
+  const want = typed.toLowerCase();
+  const all = [...letters().values()].filter((l) => l.f);
+  const ids = new Set([
+    ...members().filter((x) => x.n.toLowerCase() === want || x.i.toLowerCase() === want).map((x) => x.i),
+    ...all.filter((l) => l.fn.toLowerCase() === want || l.f.toLowerCase() === want).map((l) => l.f),
+  ]);
+  const mine = all.filter((l) => ids.has(l.f));
+  if (!mine.length) return player.sendMessage(`§7No letters from "${typed}".`);
+  const sure = await show(player, new ActionFormData().title("§lDelete letters").body(`Delete ${mine.length} letter${mine.length === 1 ? "" : "s"} from ${mine[0].fn}, from every inbox and their Sent list? This can't be undone.`).button("§cDelete").button("Cancel"));
+  if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can delete other players' letters."); // de-opped while the form was open
+  let n = 0;
+  for (const l of [...letters().values()]) {
+    if (!l.f || !ids.has(l.f)) continue;
+    save({ ...l, di: 1, ds: 1 });
+    n++;
+  }
+  player.sendMessage(`§aDeleted ${n} letter${n === 1 ? "" : "s"} from ${mine[0].fn}.`);
+}
+
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
 /** /realm:mail @param {Player} player */
 async function mainMenu(player) {
   if (!members().some((m) => m.i === player.id && m.n === player.name)) remember(player);
@@ -518,6 +609,8 @@ async function mainMenu(player) {
     { text: `Inbox\n§8${total} letter${total === 1 ? "" : "s"}, ${n} unread`, run: () => inbox(player) },
     { text: "Write a letter", run: () => write(player) },
     { text: "Sent\n§8Letters you sent, read or not", run: () => sent(player) },
+    { text: `Blocked players\n§8${blockedBy(player.id).length} blocked`, run: () => blockedMenu(player) },
+    ...(isOp(player) ? [{ text: "§4Delete letters from a player\n§8Operators", run: () => purgeMenu(player) }] : []),
   ]);
 }
 
@@ -544,8 +637,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // realm:mail_send { to, from, subject, body }: a letter from another pack (a townsfolk, the realm). `to` is a
 // player id or name from the roster, `from` any display name. No send cooldown and no Sent copy; it isn't
-// delivered when the recipient's inbox is full of unread letters (the oldest read ones make room first).
-system.afterEvents.scriptEventReceive.subscribe(
+// delivered when the recipient's inbox has no room that the oldest read pack letters can free: a letter from a player is never dropped for it.
+onScriptEvent(
+  "realm:mail_send",
   ({ id, message }) => {
     if (id !== "realm:mail_send") return;
     try {
@@ -558,16 +652,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       const subject = clean(m.subject, Math.min(BOX, CONFIG.subjectLength), false).text || "(no subject)";
       const body = clean(m.body, CONFIG.bodyLength, true).text;
       if (!body) return;
-      if (letters().size >= MAX_LETTERS) return console.warn("[mail] mail_send: the realm's mail is full");
-      const inbox = inboxOf(to.i);
-      const limit = get("inboxLimit");
-      const read = inbox.filter((l) => l.r).reverse();
-      if (inbox.length - read.length >= limit) return console.warn(`[mail] mail_send: ${to.n}'s inbox is full of unread letters`);
-      for (let n = inbox.length; n >= limit; n--) {
-        const old = /** @type {Letter} */ (read.shift());
-        save({ ...old, di: 1 });
+      const plan = planSystemLetter(letters().values(), to.i, Date.now(), { systemInboxLimit: get("systemInboxLimit"), systemLetterDays: get("systemLetterDays"), systemReserve: get("systemReserve"), inboxLimit: get("inboxLimit"), maxLetters: MAX_LETTERS });
+      for (const id of plan.drop) {
+        const old = letters().get(id);
+        if (old) save({ ...old, di: 1, ds: 1 });
       }
-      const next = world.getDynamicProperty(PROP_NEXT);
+      if (!plan.ok) return console.warn(`[mail] mail_send: ${plan.reason} (${to.n}'s letters from players are kept)`);      const next = world.getDynamicProperty(PROP_NEXT);
       const lid = typeof next === "number" ? next : 1;
       world.setDynamicProperty(PROP_NEXT, lid + 1);
       save({ id: lid, f: "", fn: from, t: to.i, tn: to.n, s: subject, b: body, at: Date.now(), r: 0, di: 0, ds: 1 });
@@ -580,12 +670,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[mail] mail_send: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // Scenario tests (BDS harness): add `roster` players who joined long ago (offline), as on a big server. Only from the
 // server console: /scriptevent realm:mail_test {"roster":300}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:mail_test",
   (ev) => {
     if (ev.id !== "realm:mail_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -599,13 +689,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[mail] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "mail_bp");
   },
-  { namespaces: ["realm"] },
 );

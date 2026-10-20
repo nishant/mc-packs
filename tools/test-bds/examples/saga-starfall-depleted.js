@@ -7,12 +7,10 @@
 // pack-gated, so chapterDone is false and endChapter returns with no form until the startup scan
 // (worldLoad + 60 ticks, then a 40-tick window) sets installed.ready. That wait is not a guidance result.
 //
-// Official suite skip is a fixture prerequisite, not a content result. --packs needs a bash recipe, and
-// this stager is not one suite.mjs recognizes. Do not add mkdir/cp: the Windows suite mangles those
-// paths (ENOENT). Do not edit the official harness or stage into packs/ or a baseline tree. Run from
-// this worktree with a unique stage and log:
-//   node tools/test-bds/hooks/saga-starfall-stage.mjs tools/test-bds/.cache/o74-starfall-<run-id>
-//   node tools/test-bds/run.mjs --quiet --flat --packs tools/test-bds/.cache/o74-starfall-<run-id> --only saga_bp,party_bp --scenario tools/test-bds/examples/saga-starfall-depleted.js --timeout 900 --log tools/test-bds/logs/o74-starfall-<run-id>.log
+// The suite stages this scenario like any --packs header (a Node stager, no cp/sed): the hook copies the
+// packs into a unique stage folder and leaves the source packs and every baseline tree untouched.
+//   mkdir -p /tmp/o74-starfall && node tools/test-bds/hooks/saga-starfall-stage.mjs /tmp/o74-starfall
+//   node tools/test-bds/run.mjs --quiet --flat --packs /tmp/o74-starfall --only saga_bp,party_bp --scenario tools/test-bds/examples/saga-starfall-depleted.js --timeout 900
 //
 // Disclosed limits: setType depletion is not physical mining input. The hook copies actual saga:p bytes
 // through native world properties because simulated IDs change; that is not an ordinary rejoin. It adapts

@@ -25,6 +25,8 @@ import { ACTIVITIES, FESTIVALS, SEASON_DAYS, SEASONS, SIEGE_LINES, STOCK, TALES,
 import { get, onChange } from "./settings.js";
 import { holdTitle, sideBoxes } from "./side.js";
 import { escapeZones, protectedBox } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
+import { spawnFresh } from "./spawn.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
 /** @typedef {import("@minecraft/server").Entity} Entity */
@@ -521,6 +523,24 @@ function festivalEnd(key) {
   if (fid === "midsummer_regatta") regattaResult(key);
 }
 
+// Town news: at most one piece per in-game hour from this pack, each event once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Titles and Crowns stay outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  send("realm:gossip", msg);
+  return true;
+}
+
 /** The carve-off's winner: the entry with the most votes (ties: the first entered). @param {string} key */
 function fairResult(key) {
   const fair = readJson(PROP_FAIR);
@@ -549,7 +569,7 @@ function fairResult(key) {
       : `§6[Lantern Fair] ${name} won the Pumpkin Carve-off with ${votes} vote${votes === 1 ? "" : "s"}!`,
   );
   send("realm:title_unlock", { player: best, title: "Pumpkin Champion" });
-  send("realm:gossip", { kind: "carve_off", player: best, name, n: votes });
+  gossip(`carve:${key}`, { kind: "carve_off", player: best, name, n: votes });
   fair.done = 1;
   writeJson(PROP_FAIR, fair);
 }
@@ -563,7 +583,7 @@ function regattaResult(key) {
   const [pid, name, ms] = b.top[0];
   world.sendMessage(`§e[Regatta] ${name} won the Midsummer Regatta with ${clock(ms)}!`);
   send("realm:title_unlock", { player: pid, title: "Regatta Champion" });
-  send("realm:gossip", { kind: "regatta", player: pid, name, place: clock(ms) });
+  gossip(`regatta:${key}`, { kind: "regatta", player: pid, name, place: clock(ms) });
 }
 
 // ---------------------------------------------------------------------------
@@ -931,8 +951,7 @@ function startNest(player, force = false) {
   for (let k = 0; k < n; k++) {
     try {
       const a = (k / n) * Math.PI * 2;
-      const e = spawnFresh(dim, "minecraft:turtle", { x: x + Math.cos(a) * 1.5, y: y + 0.2, z: z + Math.sin(a) * 1.5 }, { spawnEvent: "minecraft:entity_born" });
-      if (!e) continue;
+      const e = spawnFresh(dim, "minecraft:turtle", { x: x + Math.cos(a) * 1.5, y: y + 0.2, z: z + Math.sin(a) * 1.5 }, { spawnEvent: "minecraft:entity_born", attempts: 4 });
       e.addTag(FX_TAG);
       e.addTag(`realm:cal_nest_${id}`);
       e.nameTag = "Hatchling";
@@ -976,8 +995,7 @@ function nestTick() {
           const top = dim.getTopmostBlock(at);
           const water = waterOver(top) !== undefined; // a drowned on the bed under it
           const type = water ? "minecraft:drowned" : Math.random() < 0.3 ? "minecraft:husk" : "minecraft:zombie";
-          const e = spawnFresh(dim, type, { x: at.x, y: (top?.y ?? w.y) + 1, z: at.z });
-          if (!e) continue;
+          const e = spawnFresh(dim, type, { x: at.x, y: (top?.y ?? w.y) + 1, z: at.z }, { attempts: 4 });
           e.addTag(FX_TAG);
           e.addTag(`realm:cal_nest_${w.id}`);
         } catch {
@@ -986,20 +1004,6 @@ function nestTick() {
       }
     }
   }
-}
-
-/**
- * spawnEntity, checked: a world whose entity ids repeat (an old level.dat put back) can hand back an existing entity
- * (a pet, a dropped item). Tagging that one would have the nest's end remove it, so it's left alone and we spawn again.
- * @param {Dimension} dim @param {string} type @param {Vector3} at @param {import("@minecraft/server").SpawnEntityOptions} [opts]
- */
-function spawnFresh(dim, type, at, opts) {
-  for (let k = 0; k < 4; k++) {
-    const e = dim.spawnEntity(/** @type {any} */ (type), at, opts);
-    if (e.typeId === type) return e;
-  }
-  console.warn(`[calendar] spawning ${type} kept returning another entity`);
-  return undefined;
 }
 
 /** @param {{ pid: string, id: number }} w @param {boolean} ok @param {Player | undefined} player @param {string} text */
@@ -1828,11 +1832,10 @@ function endSiege(result, noGround = false) {
     if (held) title(p, "§6The siege is broken", `§7${s.town.n} held`);
   }
   const who = Object.keys(s.who).filter((pid) => takesPart(s, pid));
+  const told = who.find((pid) => String(s.who[pid][0] ?? "").trim());
+  if (told) gossip(`siege:${s.id}:${result}`, { kind: held ? "siege" : "siege_lost", player: told, name: s.who[told][0], place: s.town.n, n: who.length });
   for (const pid of who) {
     const p = online(pid);
-    const name = s.who[pid][0];
-    if (held) send("realm:gossip", { kind: "siege", player: pid, name, place: s.town.n });
-    else send("realm:gossip", { kind: "siege_lost", player: pid, name, place: s.town.n });
     if (!p) continue;
     if (held) {
       addCrowns(p, int("heldCrowns"));
@@ -2287,7 +2290,8 @@ function onQuestDone(msg) {
 
 const EVENTS = new Set(["realm:calendar", "realm:calendar_ping", "realm:town_list", "realm:town_state_ping", "realm:quest_done", "realm:npc_gift", "realm:saga_progress", "realm:place_ready", "realm:claims_check_result", "realm:npc_talk", "realm:npc_choose", "realm:calendar_debug"]);
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_pong", "realm:actionbar", ...EVENTS],
   ({ id, message, sourceEntity }) => {
     if (id === "realm:help_pong") {
       scanning?.add(message.trim());
@@ -2352,7 +2356,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[calendar] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -2506,10 +2509,10 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:siege_ping"],
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "calendar_bp");
     else if (id === "realm:siege_ping") sendMarks();
   },
-  { namespaces: ["realm"] },
 );

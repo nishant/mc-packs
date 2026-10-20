@@ -9,6 +9,7 @@ import {
   CustomCommandStatus,
   Dimension,
   EquipmentSlot,
+  MolangVariableMap,
   Player,
   system,
   world,
@@ -16,6 +17,7 @@ import {
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_SHARD = "find:idx:"; // world: find:idx:0, find:idx:1, … JSON shards of the index
 const SHARD_CHARS = 30000; // Bedrock caps a string property at ~32k characters
@@ -38,9 +40,16 @@ const containerTypes = () => (types ??= new Set(CONFIG.containerTypes.filter((t)
 // ---------------------------------------------------------------------------
 
 /**
- * `t`: [item id without "minecraft:", count] pairs; `at`: epoch ms of the last look; `b`: block id, short.
- * @typedef {{ t: [string, number][], at: number, b: string }} Entry
+ * `t`: [item id without "minecraft:", count] pairs; `at`: epoch ms of the last look; `b`: block id, short;
+ * `w`: ids of the players who opened it (newest last, at most MAX_VIEWERS), who may find it while the index is private;
+ * `o`: ids of the players who placed it (at most MAX_OWNERS, kept apart from `w` so many viewers never push an owner out).
+ * @typedef {{ t: [string, number][], at: number, b: string, w?: string[], o?: string[] }} Entry
  */
+
+const MAX_VIEWERS = 8;
+const MAX_OWNERS = 8;
+const MAX_UNKNOWN = 48; // candidates asked about in private mode whose owner the index cannot tell
+const PROP_MIGRATED = "find:mig"; // world: set once the index mode was decided for this world
 
 /** @type {Map<string, Entry> | undefined} */
 let index;
@@ -49,11 +58,52 @@ let dirty = false;
 /** An entry as saved, checked so one damaged entry can't break every search. @param {any} v @returns {v is Entry} */
 const valid = (v) =>
   !!v && Array.isArray(v.t) && typeof v.at === "number" && typeof v.b === "string" &&
+  (v.w === undefined || (Array.isArray(v.w) && v.w.every((/** @type {any} */ x) => typeof x === "string"))) &&
+  (v.o === undefined || (Array.isArray(v.o) && v.o.every((/** @type {any} */ x) => typeof x === "string"))) &&
   v.t.every((/** @type {any} */ p) => Array.isArray(p) && typeof p[0] === "string" && typeof p[1] === "number");
 
 /** The shards as last written, so a save only rewrites the ones that changed. @type {string[]} */
 let written = [];
 
+/** Saved data other packs write by themselves when a world loads: not a sign of an older world (as in Welcome's own check). */
+const BOOT_PREFIXES = ["diag:", "settings:", "admin:", "news:", "help:", "realm:", "weather:"];
+const BOOT_KEYS = new Set(["atlas:origin", "expedition:migrated", "bounty:day", "caravan:last"]);
+
+/**
+ * Decides the index mode once, when the world loads and before the settings cache is read. A world that already had
+ * data (a saved index, saved Chest Finder settings, or any player or progress data) keeps the world-wide index it was
+ * promised unless an operator already chose; a world with nothing saved but load-time data starts private.
+ * Written straight into find:cfg so the settings module only ever sees the final value.
+ */
+function decideMode() {
+  try {
+    if (world.getDynamicProperty(PROP_MIGRATED) !== undefined) return;
+    const cfgRaw = world.getDynamicProperty("find:cfg");
+    let cfg = {};
+    if (typeof cfgRaw === "string") {
+      try {
+        const p = JSON.parse(cfgRaw);
+        if (p && typeof p === "object" && !Array.isArray(p)) cfg = p;
+      } catch {
+        // damaged: leave it for the settings module to report
+      }
+    }
+    const existing =
+      typeof cfgRaw === "string" ||
+      world.getDynamicProperty(PROP_SHARD + 0) !== undefined ||
+      world
+        .getDynamicPropertyIds()
+        .some((k) => !k.startsWith("find:") && !BOOT_PREFIXES.some((p) => k.startsWith(p)) && !BOOT_KEYS.has(k));
+    if (existing && !Object.hasOwn(cfg, "privateIndex")) {
+      world.setDynamicProperty("find:cfg", JSON.stringify({ ...cfg, privateIndex: false }));
+    }
+    world.setDynamicProperty(PROP_MIGRATED, 1);
+  } catch (e) {
+    console.warn(`[find] index mode: ${e}`);
+  }
+}
+
+world.afterEvents.worldLoad.subscribe(decideMode);
 /** @returns {Map<string, Entry>} */
 function getIndex() {
   if (index) return index;
@@ -216,10 +266,12 @@ function record(block, sigOf = signatures()) {
   const container = containerTypes().has(block.typeId) ? containerOf(block) : undefined;
   if (!container) {
     if (idx.delete(keyOf(block.dimension, block.location))) dirty = true;
-    return;
+    return undefined;
   }
   const { main, other } = canonical(block, container, sigOf);
-  if (other) idx.delete(keyOf(other.dimension, other.location));
+  const otherKey = other ? keyOf(other.dimension, other.location) : undefined;
+  const otherEntry = otherKey ? idx.get(otherKey) : undefined;
+  if (otherKey) idx.delete(otherKey);
   /** @type {Map<string, number>} */
   const counts = new Map();
   for (let i = 0; i < container.size; i++) {
@@ -227,34 +279,92 @@ function record(block, sigOf = signatures()) {
     if (it) counts.set(short(it.typeId), (counts.get(short(it.typeId)) ?? 0) + it.amount);
   }
   const key = keyOf(main.dimension, main.location);
-  if (counts.size) idx.set(key, { t: [...counts], at: Date.now(), b: short(main.typeId) });
-  else idx.delete(key);
+  const type = short(main.typeId);
+  // Who opened or placed it carries over from the entry this one replaces and from the other half of a double chest,
+  // but only while it is the same kind of block: whatever replaced a container does not inherit its viewers.
+  const prev = idx.get(key);
+  const keep = [prev, otherEntry].filter((e) => e && e.b === type);
+  const w = [...new Set(keep.flatMap((e) => e?.w ?? []))].slice(-MAX_VIEWERS);
+  const o = [...new Set(keep.flatMap((e) => e?.o ?? []))].slice(-MAX_OWNERS);
+  if (counts.size || o.length) {
+    const { w: _w, o: _o, ...rest } = prev && prev.b === type ? prev : /** @type {Partial<Entry>} */ ({});
+    idx.set(key, { ...rest, t: [...counts], at: Date.now(), b: type, ...(w.length ? { w } : {}), ...(o.length ? { o } : {}) });
+  } else idx.delete(key);
   dirty = true;
+  return key;
 }
 
 /** @param {Dimension} dimension @param {import("@minecraft/server").Vector3} p @param {(b: Block) => string | undefined} [sigOf] */
 function recordAt(dimension, p, sigOf) {
   try {
     const b = dimension.getBlock(p);
-    if (b) record(b, sigOf);
+    return b ? record(b, sigOf) : undefined;
   } catch {
-    // chunk unloaded since: keep what we knew
+    return undefined; // chunk unloaded since: keep what we knew
   }
 }
 
-world.afterEvents.playerInteractWithBlock.subscribe(({ block }) => {
+/** Bumped whenever a container is placed or broken at a spot, so a delayed look scheduled before that is dropped. @type {Map<string, number>} */
+const generations = new Map();
+const generationOf = (/** @type {string} */ key) => generations.get(key) ?? 0;
+function bumpGeneration(/** @type {string} */ key) {
+  generations.set(key, generationOf(key) + 1);
+  if (generations.size > 4096) generations.delete(/** @type {string} */ (generations.keys().next().value));
+}
+
+/**
+ * Reads a container the player opened and notes that they opened it, unless the spot changed since `generation`
+ * or no longer holds a `type` block.
+ * @param {Dimension} dimension @param {import("@minecraft/server").Vector3} p @param {string} playerId @param {number} generation @param {string} type
+ */
+function seen(dimension, p, playerId, generation, type) {
+  if (generationOf(keyOf(dimension, p)) !== generation) return;
+  try {
+    const b = dimension.getBlock(p);
+    if (!b || short(b.typeId) !== type) return;
+  } catch {
+    return;
+  }
+  const key = recordAt(dimension, p);
+  const entry = key === undefined ? undefined : getIndex().get(key);
+  if (key === undefined || !entry) return;
+  const w = [...(entry.w ?? []).filter((x) => x !== playerId), playerId].slice(-MAX_VIEWERS);
+  getIndex().set(key, { ...entry, w });
+  dirty = true;
+}
+
+world.afterEvents.playerInteractWithBlock.subscribe(({ block, player }) => {
   if (!containerTypes().has(block.typeId)) return;
   const { dimension } = block;
   const p = block.location;
-  recordAt(dimension, p);
-  system.runTimeout(() => recordAt(dimension, p), RECHECK_TICKS); // after the player put things in or took them out
-  system.runTimeout(() => recordAt(dimension, p), LATE_RECHECK_TICKS);
+  const id = player.id;
+  const generation = generationOf(keyOf(dimension, p));
+  const type = short(block.typeId);
+  seen(dimension, p, id, generation, type);
+  system.runTimeout(() => seen(dimension, p, id, generation, type), RECHECK_TICKS); // after the player put things in or took them out
+  system.runTimeout(() => seen(dimension, p, id, generation, type), LATE_RECHECK_TICKS);
+});
+
+// A container a player places is theirs for the private index, even before anything is in it.
+// (Optional chaining keeps the older seam tests' event mock working; the real game always has the event.)
+world.afterEvents.playerPlaceBlock?.subscribe(({ block, player }) => {
+  if (!containerTypes().has(block.typeId)) return;
+  const { dimension } = block;
+  const spot = keyOf(dimension, block.location);
+  bumpGeneration(spot);
+  const idx = getIndex();
+  const key = recordAt(dimension, block.location) ?? spot;
+  const entry = idx.get(key) ?? { t: [], at: Date.now(), b: short(block.typeId) };
+  const o = [...(entry.o ?? []).filter((x) => x !== player.id), player.id].slice(-MAX_OWNERS);
+  idx.set(key, { ...entry, o });
+  dirty = true;
 });
 
 world.afterEvents.playerBreakBlock.subscribe(({ block, brokenBlockPermutation }) => {
   if (!containerTypes().has(brokenBlockPermutation.type.id)) return;
   const { dimension } = block;
   const p = block.location;
+  bumpGeneration(keyOf(dimension, p));
   if (getIndex().delete(keyOf(dimension, p))) dirty = true;
   // The other half of a double chest is now a single chest, possibly remembered under this key.
   // Read it a moment later, once it reports its own 27 slots.
@@ -290,7 +400,9 @@ const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const direction = (dx, dz) => COMPASS[(Math.round(Math.atan2(dx, -dz) / (Math.PI / 4)) + 8) % 8];
 
 /**
- * @typedef {{ key: string, dim: string, x: number, y: number, z: number, entry: Entry, items: [string, number][], dist: number }} Hit
+ * `known`: the index itself says the player may find it (they opened or placed it, or the index is not private); the rest
+ * are listed only if an access answer says the container is theirs (their claim or lock).
+ * @typedef {{ key: string, dim: string, x: number, y: number, z: number, entry: Entry, items: [string, number][], dist: number, known: boolean }} Hit
  */
 
 /** @param {Player} player */
@@ -325,19 +437,22 @@ function normalize(query) {
  */
 function matches(player, q) {
   const here = short(player.dimension.id);
+  const idx = getIndex();
+  const priv = get("privateIndex") === true;
   const { x: px, y: py, z: pz } = player.location;
   /** @type {Hit[]} */
   const exact = [];
   /** @type {Hit[]} */
   const partial = [];
-  for (const [key, entry] of getIndex()) {
+  for (const [key, entry] of idx) {
+    const known = !priv || !!entry.w?.includes(player.id) || !!entry.o?.includes(player.id);
     const items = entry.t.filter(([id]) => id === q);
     const loose = items.length ? items : entry.t.filter(([id]) => id.includes(q));
     if (!loose.length) continue;
     const [dim, pos] = key.split(":");
     const [x, y, z] = pos.split(",").map(Number);
     const dist = dim === here ? Math.hypot(x + 0.5 - px, y + 0.5 - py, z + 0.5 - pz) : Infinity;
-    (items.length ? exact : partial).push({ key, dim, x, y, z, entry, items: loose, dist });
+    (items.length ? exact : partial).push({ key, dim, x, y, z, entry, items: loose, dist, known });
   }
   const hits = exact.length ? exact : partial;
   return hits.sort((a, b) => a.dist - b.dist || a.dim.localeCompare(b.dim) || b.entry.at - a.entry.at);
@@ -399,16 +514,24 @@ async function search(player, query) {
   await job(liveScan(player));
   if (!player.isValid) return;
   const maxResults = get("maxResults");
-  const found = stillThere(matches(player, q).slice(0, maxResults * 2));
+  const all = matches(player, q);
+  // While the index is private, containers nobody here opened or placed are asked about too: the player may own them
+  // through a claim or a lock without ever having opened them.
+  const found = stillThere([...all.filter((h) => h.known).slice(0, maxResults * 2), ...all.filter((h) => !h.known).slice(0, MAX_UNKNOWN)]);
   // Containers this player can't open (someone else's lock or claim) aren't shown to them.
-  const closed = await closedSpots(player.id, found.map((h) => [`minecraft:${h.dim}`, h.x, h.y, h.z]));
+  const { closed, ours } = await closedSpots(player.id, found.map((h) => [`minecraft:${h.dim}`, h.x, h.y, h.z]));
   if (!player.isValid) return;
-  const hits = found.filter((_, i) => !closed.has(i)).slice(0, maxResults);
+  const hits = found
+    .filter((h, i) => !closed.has(i) && (h.known || ours.has(i)))
+    .sort((a, b) => a.dist - b.dist || a.dim.localeCompare(b.dim) || b.entry.at - a.entry.at)
+    .slice(0, maxResults);
   if (!hits.length) {
     player.sendMessage(
       closed.size
         ? `§7Only containers you can't open (locked, or in someone else's claim) have "${q}".`
-        : `§7No remembered container has "${q}". Containers are remembered once someone opens them, or when you search within ${get("liveScanRadius")} blocks.`
+        : get("privateIndex") === true
+          ? `§7None of the containers you opened has "${q}". Containers are listed once you've opened them (the index is private on this realm).`
+          : `§7No remembered container has "${q}". Containers are remembered once someone opens them, or when you search within ${get("liveScanRadius")} blocks.`
     );
     return;
   }
@@ -434,33 +557,236 @@ async function pick(player, form, hits) {
   }
 }
 
-/** @type {Map<string, number>} player id → the run drawing their current mark */
-const marks = new Map();
-world.afterEvents.playerLeave.subscribe(({ playerId }) => marks.delete(playerId));
-
-// The mark's outline: points along the 12 edges of the container's block, 0.15 outside it on every side, so in a
-// wall of chests the front outline sits in the air in front of the wall (a column over the chest alone ends up
-// inside the chest above it). Each edge gets its ends and 3 points between: 8 corners + 36 = 44 points.
-const OUTLINE = (() => {
-  const lo = -0.15;
-  const hi = 1.15;
-  /** @type {{ x: number, y: number, z: number }[]} */
-  const pts = [];
-  const steps = [0.25, 0.5, 0.75].map((t) => lo + (hi - lo) * t);
-  for (const x of [lo, hi]) for (const y of [lo, hi]) for (const z of [lo, hi]) pts.push({ x, y, z });
-  for (const a of [lo, hi]) {
-    for (const b of [lo, hi]) {
-      for (const t of steps) {
-        pts.push({ x: t, y: a, z: b }, { x: a, y: t, z: b }, { x: a, y: b, z: t });
-      }
-    }
-  }
-  return pts;
-})();
+/** Bright yellow vanilla flame. Stands out on orange chests, oak signs and blue glass; no new asset. */
+export const MARK_COLOR = { red: 1, green: 0.95, blue: 0.2 };
+export const MARK_BEAM = "minecraft:colored_flame_particle";
+export const MARK_PULSE = "minecraft:basic_flame_particle";
+export const MARKER_CAP = 24;
+/** Above the story tracker (20), below build mode (30): a short search guide, not a flight or build line. */
+export const MARK_STEADY = 25;
+/** At least 3 redraws (every 10 ticks) so other steady lines keep waiting while the arrow shows. */
+export const MARK_HOLD = 30;
+const MARK_FROM = "find_bp";
 
 /**
- * An outline of green sparkles around the container and a particle column over it, every 10 ticks, that only this
- * player sees. A new mark replaces the player's previous one.
+ * @typedef {{ generation: number, run?: number }} Mark
+ * @typedef {{ next: number, byId: Map<string, Mark> }} Marks
+ */
+
+/** @returns {Marks} */
+export function createMarks() {
+  return { next: 1, byId: new Map() };
+}
+
+/** @param {Marks} marks @param {string} id */
+export function beginMark(marks, id) {
+  const generation = marks.next++;
+  const previous = marks.byId.get(id);
+  marks.byId.set(id, { generation });
+  return { generation, previousRun: previous?.run };
+}
+
+/** @param {Marks} marks @param {string} id @param {number} generation @param {number} run */
+export function claimRun(marks, id, generation, run) {
+  const mark = marks.byId.get(id);
+  if (!mark || mark.generation !== generation) return false;
+  mark.run = run;
+  return true;
+}
+
+/** @param {Marks} marks @param {string} id @param {number} generation */
+export function endMark(marks, id, generation) {
+  const mark = marks.byId.get(id);
+  if (!mark || mark.generation !== generation) return { ended: false, run: undefined };
+  marks.byId.delete(id);
+  return { ended: true, run: mark.run };
+}
+
+/** @param {Marks} marks @param {string} id */
+export function endPlayer(marks, id) {
+  const mark = marks.byId.get(id);
+  if (!mark) return { ended: false, run: undefined };
+  marks.byId.delete(id);
+  return { ended: true, run: mark.run, generation: mark.generation };
+}
+
+/**
+ * @param {{ valid: boolean, dead: boolean, sameDimension: boolean, tick: number, until: number, generation: number, current: number | undefined }} state
+ */
+export function markShouldDraw(state) {
+  return state.valid === true && state.dead !== true && state.sameDimension === true && state.tick <= state.until && state.generation === state.current;
+}
+
+/**
+ * Downward arrow above a sign on the chest face. Phase 1 adds a wider pulse. At most MARKER_CAP points.
+ * @param {number} phase @returns {{ x: number, y: number, z: number, particle: string }[]}
+ */
+export function markerDraw(phase) {
+  /** @type {{ x: number, y: number, z: number, particle: string }[]} */
+  const pts = [];
+  const beam = phase % 2 === 1 ? MARK_PULSE : MARK_BEAM;
+  for (let i = 0; i < 7; i++) pts.push({ x: 0.5, y: 2.6 + i * 0.45, z: 0.5, particle: beam });
+  const tipY = 1.85;
+  pts.push({ x: 0.5, y: tipY, z: 0.5, particle: MARK_PULSE });
+  for (const s of [0.35, 0.62]) {
+    const y = tipY + s * 0.85;
+    const particle = phase % 2 === 0 ? MARK_BEAM : MARK_PULSE;
+    pts.push(
+      { x: 0.5 - s, y, z: 0.5, particle },
+      { x: 0.5 + s, y, z: 0.5, particle },
+      { x: 0.5, y, z: 0.5 - s, particle },
+      { x: 0.5, y, z: 0.5 + s, particle }
+    );
+  }
+  if (phase % 2 === 1) {
+    const top = 2.6 + 6 * 0.45;
+    pts.push(
+      { x: 0.15, y: top, z: 0.5, particle: MARK_PULSE },
+      { x: 0.85, y: top, z: 0.5, particle: MARK_PULSE },
+      { x: 0.5, y: top, z: 0.15, particle: MARK_PULSE },
+      { x: 0.5, y: top, z: 0.85, particle: MARK_PULSE }
+    );
+  }
+  return pts.slice(0, MARKER_CAP);
+}
+
+/** @param {number} dx @param {number} dy @param {number} dz */
+export function markerGuide(dx, dy, dz) {
+  const dist = Math.max(0, Math.round(Math.hypot(dx, dy, dz)));
+  const dir = direction(dx, dz);
+  const up = Math.round(dy);
+  const vertical = up >= 2 ? `, ${up} above` : up <= -2 ? `, ${-up} below` : "";
+  return { dist, dir, vertical, text: `${dist} blocks ${dir}${vertical}` };
+}
+
+/** Searcher-only guide. Block name and direction, never the items or raw coordinates. @param {string} blockTitle @param {number} dx @param {number} dy @param {number} dz */
+export function markerText(blockTitle, dx, dy, dz) {
+  const name = String(blockTitle).replace(/[^\x20-\x7e]/g, "").slice(0, 48);
+  return `§e${name}§r ${markerGuide(dx, dy, dz).text}`;
+}
+
+/** @param {string} playerId @param {number} [ticks] */
+export function barPayload(playerId, ticks = MARK_HOLD) {
+  return { player: playerId, ticks, from: MARK_FROM, steady: MARK_STEADY };
+}
+
+/** True when this redraw must leave the bar alone. Notes and higher ranks hold; our own request does not. @param {any} msg */
+export function foreignBarHolds(msg, ourFrom = MARK_FROM, ourSteady = MARK_STEADY) {
+  if (!msg || typeof msg.player !== "string") return false;
+  if (msg.from === ourFrom || msg.background) return false;
+  if (Number.isFinite(msg.steady) && (msg.steady < ourSteady || (msg.steady === ourSteady && String(msg.from) > ourFrom))) return false;
+  return true;
+}
+
+const marks = createMarks();
+/** @type {Map<string, number>} */
+const heldAt = new Map();
+/** @type {Map<string, number>} */
+const barHeld = new Map();
+/** @type {MolangVariableMap | undefined} */
+let beamColor;
+
+function beamVars() {
+  if (!beamColor) {
+    beamColor = new MolangVariableMap();
+    beamColor.setColorRGB("variable.color", MARK_COLOR);
+  }
+  return beamColor;
+}
+
+/** @param {string} id */
+function releasePlayer(id) {
+  const ended = endPlayer(marks, id);
+  if (ended.run !== undefined) {
+    try {
+      system.clearRun(ended.run);
+    } catch {
+      // already cleared
+    }
+  }
+  heldAt.delete(id);
+  barHeld.delete(id);
+}
+
+world.afterEvents.playerLeave.subscribe(({ playerId }) => releasePlayer(playerId));
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+  if (deadEntity instanceof Player) releasePlayer(deadEntity.id);
+});
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => {
+  if (player instanceof Player) releasePlayer(player.id);
+});
+
+/** @param {string} id @param {number} generation */
+function stopOwnedMark(id, generation) {
+  const ended = endMark(marks, id, generation);
+  if (!ended.ended || ended.run === undefined) return;
+  try {
+    system.clearRun(ended.run);
+  } catch {
+    // already cleared
+  }
+}
+
+/** @param {Player} player */
+function requestBar(player) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify(barPayload(player.id)));
+}
+
+/** @param {string} message */
+function noteForeignBar(message) {
+  const msg = JSON.parse(message);
+  if (!foreignBarHolds(msg)) return;
+  const until = system.currentTick + Math.min(200, Math.max(0, Number(msg.ticks) || 0));
+  if (until > (barHeld.get(msg.player) ?? 0)) barHeld.set(msg.player, until);
+}
+
+/**
+ * One redraw of the searcher's arrow and direction line. An old generation cannot clear a newer mark,
+ * and ending the mark never writes an empty action bar (that would erase another pack's note).
+ * @param {Player} player @param {Hit} h @param {string} id @param {number} generation @param {number} until
+ */
+function drawMark(player, h, id, generation, until) {
+  const current = marks.byId.get(id)?.generation;
+  let same = false;
+  let dead = !player.isValid;
+  if (player.isValid) {
+    try {
+      same = short(player.dimension.id) === h.dim;
+      const health = player.getComponent("minecraft:health");
+      if (health && health.currentValue <= 0) dead = true;
+    } catch {
+      dead = true;
+      same = false;
+    }
+  }
+  if (!markShouldDraw({ valid: player.isValid, dead, sameDimension: same, tick: system.currentTick, until, generation, current })) {
+    stopOwnedMark(id, generation);
+    return;
+  }
+  try {
+    const phase = Math.floor(system.currentTick / 10) % 2;
+    for (const p of markerDraw(phase)) {
+      const at = { x: h.x + p.x, y: h.y + p.y, z: h.z + p.z };
+      player.spawnParticle(p.particle, at, p.particle === MARK_BEAM ? beamVars() : undefined);
+    }
+  } catch {
+    // spot not loaded for this player
+  }
+  const now = system.currentTick;
+  if (now - (heldAt.get(id) ?? -Infinity) >= MARK_HOLD / 3) {
+    heldAt.set(id, now);
+    requestBar(player);
+  }
+  if ((barHeld.get(id) ?? 0) > now) return;
+  const dx = h.x + 0.5 - player.location.x;
+  const dy = h.y + 0.5 - player.location.y;
+  const dz = h.z + 0.5 - player.location.z;
+  player.onScreenDisplay.setActionBar(markerText(title(h.entry.b), dx, dy, dz));
+}
+
+/**
+ * A bright arrow over the container and a direction line, every 10 ticks, that only this player sees.
+ * A new mark replaces the player's previous one. Another dimension gets coordinates in chat only.
  * @param {Player} player @param {Hit} h
  */
 function highlight(player, h) {
@@ -473,22 +799,22 @@ function highlight(player, h) {
   player.sendMessage(`§e${title(h.entry.b)}§r at ${at}, marked for ${seconds} s.`);
   const until = system.currentTick + seconds * 20;
   const id = player.id;
-  const previous = marks.get(id);
-  if (previous !== undefined) system.clearRun(previous);
-  const run = system.runInterval(() => {
-    if (!player.isValid || system.currentTick > until || short(player.dimension.id) !== h.dim) {
-      system.clearRun(run);
-      if (marks.get(id) === run) marks.delete(id);
-      return;
-    }
+  const started = beginMark(marks, id);
+  if (started.previousRun !== undefined) {
     try {
-      for (const p of OUTLINE) player.spawnParticle("minecraft:villager_happy", { x: h.x + p.x, y: h.y + p.y, z: h.z + p.z });
-      for (let k = 0; k < 8; k++) player.spawnParticle("minecraft:endrod", { x: h.x + 0.5, y: h.y + 1.2 + k * 0.5, z: h.z + 0.5 });
+      system.clearRun(started.previousRun);
     } catch {
-      // spot not loaded for this player
+      // already cleared
     }
-  }, 10);
-  marks.set(id, run);
+  }
+  const run = system.runInterval(() => drawMark(player, h, id, started.generation, until), 10);
+  if (!claimRun(marks, id, started.generation, run)) {
+    try {
+      system.clearRun(run);
+    } catch {
+      // replaced before the run was stored
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -530,7 +856,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 const ACCESS_CHUNK = 40;
 /** Packs that have answered an access check: an ask waits for each of them. @type {Set<string>} */
 const accessResponders = new Set();
-/** @type {Map<string, { got: Set<string>, offset: number, closed: Set<number>, check: () => void }>} */
+/** @type {Map<string, { got: Set<string>, offset: number, closed: Set<number>, ours: Set<number>, check: () => void }>} */
 const accessAsks = new Map();
 let accessNext = 1;
 
@@ -538,13 +864,15 @@ let accessNext = 1;
  * The indexes of these spots the player may not open, as the packs that answer access checks say. Waits until
  * every pack that has answered before answers (2 s at most), or 5 ticks when none has yet.
  * @param {string} playerId @param {[string, number, number, number][]} spots
- * @returns {Promise<Set<number>>}
+ * @returns {Promise<{ closed: Set<number>, ours: Set<number> }>}
  */
 function closedSpots(playerId, spots) {
   return new Promise((resolve) => {
     /** @type {Set<number>} */
     const closed = new Set();
-    if (!spots.length) return resolve(closed);
+    /** @type {Set<number>} */
+    const ours = new Set();
+    if (!spots.length) return resolve({ closed, ours });
     const waitFor = [...accessResponders];
     /** @type {string[]} */
     const ids = [];
@@ -553,7 +881,7 @@ function closedSpots(playerId, spots) {
       if (done) return;
       done = true;
       for (const id of ids) accessAsks.delete(id);
-      resolve(closed);
+      resolve({ closed, ours });
     };
     const check = () => {
       if (waitFor.length && ids.every((id) => waitFor.every((r) => accessAsks.get(id)?.got.has(r)))) finish();
@@ -561,7 +889,7 @@ function closedSpots(playerId, spots) {
     for (let offset = 0; offset < spots.length; offset += ACCESS_CHUNK) {
       const id = `find${accessNext++}`;
       ids.push(id);
-      accessAsks.set(id, { got: new Set(), offset, closed, check });
+      accessAsks.set(id, { got: new Set(), offset, closed, ours, check });
       system.sendScriptEvent("realm:access_check", JSON.stringify({ id, player: playerId, spots: spots.slice(offset, offset + ACCESS_CHUNK) }));
     }
     system.runTimeout(finish, waitFor.length ? 40 : 5);
@@ -578,6 +906,7 @@ function accessResult(message) {
   if (!ask) return;
   ask.got.add(from);
   if (Array.isArray(m.closed)) for (const i of m.closed) if (Number.isInteger(i) && i >= 0 && i < ACCESS_CHUNK) ask.closed.add(ask.offset + i);
+  if (Array.isArray(m.ours)) for (const i of m.ours) if (Number.isInteger(i) && i >= 0 && i < ACCESS_CHUNK) ask.ours.add(ask.offset + i);
   ask.check();
 }
 
@@ -587,7 +916,8 @@ world.afterEvents.worldLoad.subscribe(() =>
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:access_check_result", "realm:actionbar"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "find_bp");
     else if (id === "realm:access_check_result") {
@@ -596,7 +926,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       } catch (e) {
         console.warn(`[find] ${e}`);
       }
+    } else if (id === "realm:actionbar") {
+      try {
+        noteForeignBar(message);
+      } catch {
+        // not ours
+      }
     }
   },
-  { namespaces: ["realm"] }
 );

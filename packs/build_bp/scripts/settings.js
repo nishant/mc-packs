@@ -24,6 +24,16 @@ const writeWorld = (prop) => (/** @type {any} */ v) => {
   } catch {}
 };
 
+/** Live block cap. A missing save uses config.js. Raising this does not write a higher default. */
+function liveCap() {
+  try {
+    const saved = world.getDynamicProperty("eb:adminMaxBlocksCap");
+    if (typeof saved === "number" && Number.isFinite(saved) && saved >= 1) return Math.min(300000, Math.floor(saved));
+  } catch {}
+  const cfg = Number(CONFIG.maxBlocksCap);
+  return Number.isFinite(cfg) && cfg >= 1 ? Math.min(300000, Math.floor(cfg)) : 50000;
+}
+
 /**
  * Why a player can't use Easy Building at all right now (operators only, or a tag they don't have), for /realm:prefs.
  * @param {Player} p
@@ -48,7 +58,33 @@ const OPTIONS = [
     max: 300000,
     step: 64,
     read: readWorld("eb:adminMaxBlocksCap"),
-    write: writeWorld("eb:adminMaxBlocksCap"),
+    write: (v) => {
+      writeWorld("eb:adminMaxBlocksCap")(v);
+      syncBlockLimitPrefs();
+    },
+  },
+  {
+    key: "defaultMaxBlocks",
+    type: "int",
+    scope: "world",
+    label: "Default blocks per build",
+    help: "Players with no saved limit. Raising the cap does not change this. Operators only.",
+    min: 64,
+    get max() { return liveCap(); },
+    step: 64,
+    read: () => {
+      const cap = liveCap();
+      let saved;
+      try { saved = world.getDynamicProperty("eb:defaultMaxBlocks"); } catch {}
+      const chosen = typeof saved === "number" && Number.isFinite(saved) ? saved : Number(CONFIG.defaultMaxBlocks) || 50000;
+      return Math.max(1, Math.min(cap, Math.floor(chosen)));
+    },
+    write: (v) => {
+      if (v === undefined) { writeWorld("eb:defaultMaxBlocks")(undefined); return; }
+      const cap = liveCap();
+      const n = Math.max(1, Math.min(cap, Math.floor(Number(v))));
+      writeWorld("eb:defaultMaxBlocks")(n);
+    },
   },
   {
     key: "modeComplexity",
@@ -191,7 +227,7 @@ const OPTIONS = [
   { key: "flickPreview", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:flickPreview", default: false, label: "Flick preview (only flash when aim moves)" },
   { key: "simpleModes", type: "bool", scope: "player", lock: [["enabled", false], ["modeComplexity", "simple"], ["modeComplexity", "advanced"]], locked: (p) => cantBuild(p), prop: "eb:simpleModes", default: false, label: "Simple mode list (Line, Wall, Floor, Cube)" },
   { key: "buildSpeed", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:buildSpeed", default: 20, label: "Build speed (wave ticks, 1 = instant)", min: 1, max: 100, step: 1 },
-  { key: "maxBlocks", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:maxBlocks", base: "maxBlocksCap", label: "My max blocks per build", min: 64, max: 300000, step: 64 },
+  { key: "maxBlocks", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => { syncBlockLimitPrefs(p); return cantBuild(p); }, get prop() { syncBlockLimitPrefs(); return "eb:maxBlocks"; }, base: "defaultMaxBlocks", label: "My max blocks per build", min: 64, get max() { return liveCap(); }, step: 64 },
   { key: "replaceBlocks", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:replaceBlocks", default: true, label: "Replace blocks in Creative mode" },
   { key: "infiniteReach", type: "bool", scope: "player", lock: [["enabled", false], ["allowInfiniteReach", false]], locked: (p) => cantBuild(p), prop: "eb:infiniteReach", default: false, label: "Infinite Reach" },
   { key: "infiniteReachDistance", type: "int", scope: "player", lock: [["enabled", false], ["allowInfiniteReach", false]], locked: (p) => cantBuild(p), prop: "eb:infiniteReachDistance", default: 64, label: "Infinite Reach distance (blocks)", min: 4, max: 256, step: 4 },
@@ -241,6 +277,24 @@ const OPTIONS = [
   { key: "hintsEnabled", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:hintsEnabled", default: true, label: "Show gameplay hints" },
 ];
 
+/** Clamp a saved player limit that is above the live cap so prefs and builds agree. A later cap increase does not restore the old number. */
+/** @param {import("@minecraft/server").Player} [player] */
+export function syncBlockLimitPrefs(player) {
+  const cap = liveCap();
+  /** @param {import("@minecraft/server").Player} who */
+  const clampOne = (who) => {
+    try {
+      const v = who.getDynamicProperty("eb:maxBlocks");
+      if (typeof v === "number" && Number.isFinite(v) && v > cap) who.setDynamicProperty("eb:maxBlocks", cap);
+    } catch {}
+  };
+  if (player) { clampOne(player); return; }
+  try { for (const p of world.getAllPlayers()) clampOne(p); } catch {}
+}
+try {
+  world.afterEvents.playerSpawn.subscribe(({ player }) => syncBlockLimitPrefs(player));
+} catch {}
+
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
 
 // What every pack can change in game, and how. Above this part each pack's scripts/settings.js
@@ -271,6 +325,7 @@ const OPTIONS = [
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
  * @property {string} [prop] player only: its own dynamic property instead of `<PREFIX>:pref`
+ * @property {boolean} [sticky] player only: keep an explicit choice even when it matches the realm default
  * @property {[string, unknown][]} [lock] player only: world options that make this preference do nothing, each with
  *   the value that does it ([["enabled", false]]); /realm:prefs then shows it as set by the operators
  * @property {(player: Player) => string | undefined} [locked] player only: why it can't change for this player now, when
@@ -432,8 +487,8 @@ export function getFor(player, key) {
 }
 
 /**
- * Saves a player's own choice. Choosing what the realm has clears it, so the player follows later
- * changes to the realm's value.
+ * Saves a player's own choice. Unless the option is sticky, choosing what the realm has clears it
+ * so the player follows later changes to the realm's value.
  * @param {Player} player @param {string} key @param {unknown} value @returns {string | undefined} why it wasn't saved
  */
 export function setFor(player, key, value) {
@@ -441,7 +496,7 @@ export function setFor(player, key, value) {
   if (!opt) return "isn't a preference";
   const bad = problem(opt, value);
   if (bad) return bad;
-  const keep = /** @type {boolean | number | string | undefined} */ (value === playerBase(opt) ? undefined : value);
+  const keep = /** @type {boolean | number | string | undefined} */ (opt.sticky !== true && value === playerBase(opt) ? undefined : value);
   if (opt.prop) player.setDynamicProperty(opt.prop, keep);
   else {
     const prefs = prefsOf(player);
@@ -482,6 +537,8 @@ function changed(key, player) {
 // ---------------------------------------------------------------------------
 // Realm Settings protocol
 // ---------------------------------------------------------------------------
+
+import { onScriptEvent } from "./script-events.js";
 
 /**
  * Why a player's preference does nothing right now because of the operators, in words for /realm:prefs ("Coordinates
@@ -582,22 +639,19 @@ function applySet(req) {
   system.sendScriptEvent("realm:cfg_ack", JSON.stringify(ack));
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
-    if (id !== "realm:cfg_ping" && id !== "realm:cfg_set" && id !== "realm:cfg_reset") return;
-    try {
-      const req = JSON.parse(message);
-      if (!req || typeof req !== "object") return;
-      if (id === "realm:cfg_ping") answer(req);
-      else if (req.pack !== PACK) return;
-      else if (id === "realm:cfg_set") applySet(req);
-      else {
-        reset();
-        system.sendScriptEvent("realm:cfg_ack", JSON.stringify({ id: req.id, pack: PACK, key: "*", ok: true }));
-      }
-    } catch (e) {
-      console.warn(`[${PREFIX}] settings: ${e}`);
+onScriptEvent(["realm:cfg_ping", "realm:cfg_set", "realm:cfg_reset"], ({ id, message }) => {
+  if (id !== "realm:cfg_ping" && id !== "realm:cfg_set" && id !== "realm:cfg_reset") return;
+  try {
+    const req = JSON.parse(message);
+    if (!req || typeof req !== "object") return;
+    if (id === "realm:cfg_ping") answer(req);
+    else if (req.pack !== PACK) return;
+    else if (id === "realm:cfg_set") applySet(req);
+    else {
+      reset();
+      system.sendScriptEvent("realm:cfg_ack", JSON.stringify({ id: req.id, pack: PACK, key: "*", ok: true }));
     }
-  },
-  { namespaces: ["realm"] }
-);
+  } catch (e) {
+    console.warn(`[${PREFIX}] settings: ${e}`);
+  }
+});

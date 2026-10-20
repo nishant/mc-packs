@@ -12,6 +12,7 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Taming: feeding a wild dolphin raw cod or salmon has a chance to tame it. The vanilla feeding still
 // happens (the dolphin may lead you to treasure). A tamed dolphin gets the `realm:dolphin_tamed`
@@ -282,7 +283,8 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
 
 // For operators and tests (needs cheats): `/scriptevent realm:dolphin_feed` feeds the nearest
 // dolphin within 5 blocks the fish in your hand, exactly as a tap would.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:dolphin_feed",
   ({ id, sourceEntity }) => {
     if (id !== "realm:dolphin_feed" || !(sourceEntity instanceof Player) || !isOp(sourceEntity)) return;
     const p = sourceEntity;
@@ -296,7 +298,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[dolphin] ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // Only riders allowed by the settings stay on.
@@ -747,9 +748,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "dolphin_bp");
   },
-  { namespaces: ["realm"] },
 );

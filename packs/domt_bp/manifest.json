@@ -4,20 +4,38 @@
     "name": "Deck of Many Things",
     "description": "Draw a card for a random effect: 132 cards from a snack to a lightning bolt to a wish, plus 15 wild ones. /realm:domt",
     "uuid": "05d21c58-bb35-45a5-90b5-6126aa314e8d",
-    "version": [1, 1, 9],
-    "min_engine_version": [1, 21, 100]
+    "version": [
+      1,
+      1,
+      13
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      100
+    ]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
       "uuid": "b9bf32e0-2340-44c7-b63f-b98d9e9d6f58",
-      "version": [1, 0, 0],
+      "version": [
+        1,
+        0,
+        0
+      ],
       "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.1.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
   ]
 }

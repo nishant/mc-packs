@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { allZones, isProtected, protectedBox, zonesAt } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_WEATHER = "tornado:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 
@@ -20,6 +21,7 @@ const WIND_RANGE = 48;
 const RUMBLE_RANGE = 100;
 const WIND_EVERY = 5; // seconds
 const RUMBLE_EVERY = 6;
+const SOUND_BAND = 8; // blocks: players this far apart hear the same volume
 const CAPTURE_RADIUS = 5.5; // once pulled within this distance of the funnel axis, the player spins up inside the vortex
 const SPIN_TICKS = 56; // ticks (~2.8 s) spent spiraling up the funnel before shooting out the top into the sky
 const LAUNCH_COOLDOWN = 110; // ticks (~5.5 s) after being shot out the top before the funnel can grab the same player again
@@ -45,6 +47,7 @@ const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 /** @type {WeatherType} */
 let weather = WeatherType.Clear;
+let weatherSeen = false; // a weatherChange came in since the scripts started: newer than the saved weather and any plan
 /** @type {{ at: number, attempts: number } | undefined} the tornado this thunderstorm will bring */
 let pending;
 /** @type {Tornado | undefined} */
@@ -132,6 +135,7 @@ function sendJournal(player) {
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather, previousWeather }) => {
   if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
+  weatherSeen = true;
   weather = newWeather;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
@@ -148,9 +152,42 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather, previousWeat
   if (tornado?.natural) tornado.endsAt = Math.min(tornado.endsAt, system.currentTick + CLEAR_FADE_TICKS);
 });
 
+/** The overworld weather a realm:weather_plan names right now, or undefined (the Almanac is off, another dimension, garbage). @param {string} message */
+function planNow(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || m.off === true) return undefined;
+    const dim = m.dim ?? m.dimension;
+    if (typeof dim === "string" && dim.replace(/^minecraft:/, "") !== "overworld") return undefined;
+    return m.now === WeatherType.Clear || m.now === WeatherType.Rain || m.now === WeatherType.Thunder ? /** @type {WeatherType} */ (m.now) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The Weather Almanac (if it's installed) knows the weather now: it sends its plan when it changes and answers
+// realm:weather_ask. Until a real weatherChange has come in, a pack added in the middle of a storm takes it from there
+// (no tornado is rolled for a storm already under way: that happens when a storm starts).
+onScriptEvent("realm:weather_plan", ({ message }) => {
+  if (weatherSeen) return; // the game's own report is newer
+  const now = planNow(message);
+  if (!now || now === weather) return;
+  weather = now;
+  try {
+    world.setDynamicProperty(PROP_WEATHER, now);
+  } catch (e) {
+    console.warn(`[tornado] ${e}`);
+  }
+  if (now === WeatherType.Thunder) return;
+  pending = undefined;
+  if (tornado?.natural) tornado.endsAt = Math.min(tornado.endsAt, system.currentTick + CLEAR_FADE_TICKS);
+});
+
 world.afterEvents.worldLoad.subscribe(() => {
   const saved = world.getDynamicProperty(PROP_WEATHER);
   if (saved === WeatherType.Rain || saved === WeatherType.Thunder) weather = saved;
+  // Ask the Weather Almanac (if it's installed) for its plan a little later: every weather pack asks, and it answers once.
+  system.runTimeout(() => system.sendScriptEvent("realm:weather_ask", "{}"), 100);
 });
 
 // Every 5 s: is it time for this thunderstorm's tornado?
@@ -324,29 +361,38 @@ function everySecond(t, dim) {
   const horn = CONFIG.hornEvery > 0 && t.hornIn <= 0;
   const wind = t.windIn <= 0;
   const rumble = t.rumbleIn <= 0;
+  /** @type {(Record<string, number> | undefined)[]} volumes per distance band, worked out once this second */
+  const bandVolumes = [];
   for (const player of dim.getPlayers()) {
-    const l = player.location;
-    const dist = Math.hypot(l.x - t.x, l.z - t.z);
-    if (dist <= view && Math.abs(l.y - t.y) < 100) {
-      t.viewers.push({ player, dist });
-      if (!t.seen.has(player.id)) {
-        t.seen.add(player.id);
-        sendJournal(player);
-      }
-    }
-    if (dist > warn) continue;
     try {
+      if (!player.isValid) continue;
+      const l = player.location;
+      const dist = Math.hypot(l.x - t.x, l.z - t.z);
+      if (dist <= view && Math.abs(l.y - t.y) < 100) {
+        t.viewers.push({ player, dist });
+        if (!t.seen.has(player.id)) {
+          t.seen.add(player.id);
+          sendJournal(player);
+        }
+      }
+      if (dist > warn) continue;
+      const band = Math.floor(dist / SOUND_BAND);
+      const volumes = (bandVolumes[band] ??= {
+        horn: bandVolume(0.45, band, warn),
+        wind: bandVolume(1, band, WIND_RANGE),
+        rumble: bandVolume(0.8, band, RUMBLE_RANGE),
+      });
       if (!t.warned.has(player.id)) {
         t.warned.add(player.id);
         const m = Math.max(10, Math.round(dist / 10) * 10);
         player.sendMessage(`§cTornado! ${m}m to the ${compass(t.x - l.x, t.z - l.z)}, moving ${heading}.`);
       }
-      if (horn) soundToward(player, t, dist, CONFIG.sounds.horn, 0.45, 1, warn);
+      if (horn) soundToward(player, t, dist, CONFIG.sounds.horn, volumes.horn, 1);
       if (wind && dist <= WIND_RANGE) {
         player.runCommand(`stopsound @s ${CONFIG.sounds.wind}`); // the clips overlap otherwise
-        soundToward(player, t, dist, CONFIG.sounds.wind, 1, 0.7, WIND_RANGE);
+        soundToward(player, t, dist, CONFIG.sounds.wind, volumes.wind, 0.7);
       }
-      if (rumble && dist <= RUMBLE_RANGE) soundToward(player, t, dist, CONFIG.sounds.rumble, 0.8, 0.5, RUMBLE_RANGE);
+      if (rumble && dist <= RUMBLE_RANGE) soundToward(player, t, dist, CONFIG.sounds.rumble, volumes.rumble, 0.5);
     } catch (e) {
       console.warn(`[tornado] ${e}`);
     }
@@ -357,14 +403,26 @@ function everySecond(t, dim) {
 }
 
 /**
- * Plays a sound to one player from the tornado's direction, a few blocks away, louder when it's close.
- * @param {Player} player @param {Tornado} t @param {number} dist @param {string} id @param {number} volume @param {number} pitch @param {number} range
+ * The volume of a sound for players in one distance band (SOUND_BAND blocks wide, measured at the band's middle):
+ * louder when close, never below 0.15. Players in a band share it, so it is worked out once per band each second.
+ * @param {number} volume at the funnel @param {number} band @param {number} range
  */
-function soundToward(player, t, dist, id, volume, pitch, range) {
+function bandVolume(volume, band, range) {
+  const middle = Math.min(range, (band + 0.5) * SOUND_BAND);
+  return Math.max(0.15, volume * (1 - middle / range));
+}
+
+/**
+ * Plays a sound to one player from the tornado's direction, a few blocks away. Player.playSound is the only call that
+ * reaches just that player (World.playSound would reach everyone, in every dimension) and its spot differs per
+ * player, so each listener still costs one call; the bands only share the volume.
+ * @param {Player} player @param {Tornado} t @param {number} dist @param {string} id @param {number} volume @param {number} pitch
+ */
+function soundToward(player, t, dist, id, volume, pitch) {
   const l = player.location;
   const k = dist > 0.1 ? Math.min(dist, 6) / dist : 0;
   const location = { x: l.x + (t.x - l.x) * k, y: l.y + 1, z: l.z + (t.z - l.z) * k };
-  player.playSound(id, { location, volume: Math.max(0.15, volume * (1 - dist / range)), pitch });
+  player.playSound(id, { location, volume, pitch });
 }
 
 /**
@@ -829,9 +887,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "tornado_bp");
   },
-  { namespaces: ["realm"] }
 );

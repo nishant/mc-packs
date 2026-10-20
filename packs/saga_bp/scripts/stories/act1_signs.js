@@ -273,7 +273,7 @@ export const STORIES = [
             text: "Since midsummer, Brother Hollis has dreamed of a drowned man in a chapel keeper's robe, ringing a bell in a storm and trying to teach him how. At the old chapel the candles go out after midnight, and a voice says: Nothing lost. Nothing missed. Ring it slow, little keeper.",
           },
         },
-        hint: "Light the candles with flint and steel (or a fire charge) inside the Old Chapel; if they're already lit, put them out and light them again. Then stay in the chapel after midnight for a minute and a half. A bed won't help you here: you have to be awake.",
+        hint: "Light the candles with flint and steel (or a fire charge) inside the Old Chapel; if they're already lit, put them out and light them again. If the chapel's candles are gone, place new candles of your own within 10 blocks of the chapel: one placed candle is enough, since every tap or lighting counts toward the 4. Then stay in the chapel after midnight for a minute and a half. A bed won't help you here: you have to be awake.",
       },
 
       // 4 ------------------------------------------------------------------------------------------

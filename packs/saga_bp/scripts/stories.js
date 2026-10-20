@@ -33,6 +33,7 @@ export const NPC_NAMES = /** @type {Record<string, string>} */ ({
  * tracker and story log call it.
  */
 export const PLACES = /** @type {Record<string, string>} */ ({
+  town: "Town",
   lighthouse: "Lighthouse",
   sunken_bell: "Sunken Bell",
   old_chapel: "Old Chapel",
@@ -190,7 +191,7 @@ const PROLOGUE = [
           `${I}A roar? Then the bell had a keeper. Go to Mayor Bram before you go back down. If this becomes a fight, the town should know.`,
         ],
         reward: { levels: 5, items: [{ item: "minecraft:golden_apple", amount: 2 }] },
-        hint: "The sunken bell is under the sea where the old tower fell. Take water breathing or a turtle helmet. Tap or hit the bell block itself three times.",
+        hint: "The sunken bell is under the sea where the old tower fell. Take water breathing or a turtle helmet. Tap or hit the bell block itself three times. If the bell has been mined out, place a bell of your own within 8 blocks of where it hung and tap that one; any bell counts.",
       },
       {
         id: "warden",

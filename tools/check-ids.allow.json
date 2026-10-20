@@ -1,30 +1,131 @@
 {
-  "comment": "Ids check-ids.mjs flags that pack code still has. Each one needs a fix in its pack (owning track): remove it here in the same commit as the fix; check-ids warns when a listed id is gone. Most are Java Edition names from the Effortless Building port (build_bp) or pre-1.21 names (leaves, log) kept beside the current one; translucent_bp/entities/player.json is a vanilla copy (sulfur_cube_archetype is a damage domain, not an entity); eb:destroy is a build mode id compared with typeId.",
+  "comment": "Ids check-ids.mjs flags that pack code still has. Each id has its own reason. Remove the id and its reason in the same commit as the pack fix. A line without a specific reason does not suppress the finding. Most new lines are Java names in regexes or lists (dead_bush, note_block) or a sound missing from the pinned bedrock-samples list. Do not globally suppress a kind.",
   "packs/build_bp/scripts/core/BlockDestroyer.js": [
     "minecraft:end_gateway"
-  ],
-  "packs/build_bp/scripts/core/BlockPlacer.js": [
-    "minecraft:black_bed",
-    "minecraft:blue_bed",
-    "minecraft:brown_bed",
-    "minecraft:cyan_bed",
-    "minecraft:gray_bed",
-    "minecraft:green_bed",
-    "minecraft:light_blue_bed",
-    "minecraft:light_gray_bed",
-    "minecraft:lime_bed",
-    "minecraft:magenta_bed",
-    "minecraft:orange_bed",
-    "minecraft:pink_bed",
-    "minecraft:purple_bed",
-    "minecraft:red_bed",
-    "minecraft:white_bed",
-    "minecraft:yellow_bed"
   ],
   "packs/build_bp/scripts/main.js": [
     "eb:destroy"
   ],
   "packs/translucent_bp/entities/player.json": [
     "minecraft:sulfur_cube_archetype"
-  ]
+  ],
+  "packs/atlas_bp/scripts/main.js": [
+    "dead_bush",
+    "item_frame",
+    "lily_pad",
+    "note_block"
+  ],
+  "packs/bounty_bp/scripts/main.js": [
+    "item_frame",
+    "note_block"
+  ],
+  "packs/calendar_bp/scripts/main.js": [
+    "item_frame",
+    "note_block"
+  ],
+  "packs/climate_bp/scripts/main.js": [
+    "dead_bush"
+  ],
+  "packs/domt_bp/scripts/events.js": [
+    "dirt_path"
+  ],
+  "packs/domt_bp/scripts/helpers.js": [
+    "dead_bush",
+    "lily_pad"
+  ],
+  "packs/elite_bp/scripts/main.js": [
+    "dead_bush",
+    "item_frame",
+    "note_block"
+  ],
+  "packs/elytra_bp/scripts/main.js": [
+    "mob.breeze.wind_burst"
+  ],
+  "packs/journal_bp/scripts/config.js": [
+    "lily_pad",
+    "stained_hardened_clay"
+  ],
+  "packs/journal_bp/scripts/main.js": [
+    "glow_item_frame",
+    "item_frame"
+  ],
+  "packs/map_bp/scripts/terrain.js": [
+    "dead_bush",
+    "lily_pad"
+  ],
+  "packs/maps_bp/scripts/main.js": [
+    "dead_bush",
+    "dirt_path",
+    "note_block",
+    "rooted_dirt"
+  ],
+  "packs/meteor_bp/scripts/main.js": [
+    "dead_bush"
+  ],
+  "packs/npc_bp/scripts/main.js": [
+    "dead_bush",
+    "dirt_path"
+  ],
+  "packs/rainbow_bp/scripts/main.js": [
+    "dead_bush",
+    "rooted_dirt"
+  ],
+  "packs/saga_bp/scripts/places.js": [
+    "item_frame",
+    "note_block"
+  ],
+  "packs/saga_bp/scripts/prefabs.js": [
+    "rooted_dirt"
+  ],
+  "packs/storm_bp/scripts/main.js": [
+    "item_frame"
+  ],
+  "packs/tornado_bp/scripts/main.js": [
+    "mob.breeze.wind_burst"
+  ],
+  "packs/waystone_bp/scripts/main.js": [
+    "dead_bush"
+  ],
+  "reasons": {
+    "packs/build_bp/scripts/core/BlockDestroyer.js|minecraft:end_gateway": "Pinned vanilla-data has no minecraft:end_gateway. Kept unbreakable until a native BlockTypes or command resolve proves the id invalid. Not a guess that it can be destroyed.",
+    "packs/build_bp/scripts/main.js|eb:destroy": "Build mode id compared with typeId. It is not an entity, item, or block. Known false positive until the comparison is narrowed.",
+    "packs/translucent_bp/entities/player.json|minecraft:sulfur_cube_archetype": "Vanilla player.json damage domain copied from Mojang, not an entity id. False positive. Do not delete the vanilla copy to silence it.",
+    "packs/atlas_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/atlas_bp/scripts/main.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/atlas_bp/scripts/main.js|lily_pad": "Java name lily_pad in a block list or regex. Bedrock id is waterlily. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/atlas_bp/scripts/main.js|note_block": "Java name note_block in a built-block regex. Bedrock id is noteblock, so the token never matches. W9/O49 owns the elite_bp copy; the other copies are the same classifier. Pack edit is outside W7.",
+    "packs/bounty_bp/scripts/main.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/bounty_bp/scripts/main.js|note_block": "Java name note_block in a built-block regex. Bedrock id is noteblock, so the token never matches. W9/O49 owns the elite_bp copy; the other copies are the same classifier. Pack edit is outside W7.",
+    "packs/calendar_bp/scripts/main.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/calendar_bp/scripts/main.js|note_block": "Java name note_block in a built-block regex. Bedrock id is noteblock, so the token never matches. W9/O49 owns the elite_bp copy; the other copies are the same classifier. Pack edit is outside W7.",
+    "packs/climate_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/domt_bp/scripts/events.js|dirt_path": "dirt_path is not in pinned @minecraft/vanilla-data 1.26.52 block, item, or entity sets. The classifier keeps the token. Do not fetch a newer list during check. Pack edit is outside W7.",
+    "packs/domt_bp/scripts/helpers.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/domt_bp/scripts/helpers.js|lily_pad": "Java name lily_pad in a block list or regex. Bedrock id is waterlily. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/elite_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/elite_bp/scripts/main.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/elite_bp/scripts/main.js|note_block": "Java name note_block in a built-block regex. Bedrock id is noteblock, so the token never matches. W9/O49 owns the elite_bp copy; the other copies are the same classifier. Pack edit is outside W7.",
+    "packs/elytra_bp/scripts/main.js|mob.breeze.wind_burst": "Not in pinned bedrock-samples 1.26.50.4 sound_definitions. Nearest ids are breeze_wind_charge.burst and mob.breeze.shoot. elytra_bp and tornado_bp edits are outside W7.",
+    "packs/journal_bp/scripts/config.js|lily_pad": "Java name lily_pad in a block list or regex. Bedrock id is waterlily. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/journal_bp/scripts/config.js|stained_hardened_clay": "Java name stained_hardened_clay in a journal block list. Bedrock uses terracotta colors. Pack edit is outside W7.",
+    "packs/journal_bp/scripts/main.js|glow_item_frame": "Java name glow_item_frame mapped to minecraft:glow_item_frame. Bedrock block id is glow_frame. Pack edit is outside W7.",
+    "packs/journal_bp/scripts/main.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/map_bp/scripts/terrain.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/map_bp/scripts/terrain.js|lily_pad": "Java name lily_pad in a block list or regex. Bedrock id is waterlily. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/maps_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/maps_bp/scripts/main.js|dirt_path": "dirt_path is not in pinned @minecraft/vanilla-data 1.26.52 block, item, or entity sets. The classifier keeps the token. Do not fetch a newer list during check. Pack edit is outside W7.",
+    "packs/maps_bp/scripts/main.js|note_block": "Java name note_block in a built-block regex. Bedrock id is noteblock, so the token never matches. W9/O49 owns the elite_bp copy; the other copies are the same classifier. Pack edit is outside W7.",
+    "packs/maps_bp/scripts/main.js|rooted_dirt": "Java name rooted_dirt in a block regex. Bedrock id is dirt_with_roots. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/meteor_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/npc_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/npc_bp/scripts/main.js|dirt_path": "dirt_path is not in pinned @minecraft/vanilla-data 1.26.52 block, item, or entity sets. The classifier keeps the token. Do not fetch a newer list during check. Pack edit is outside W7.",
+    "packs/rainbow_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/rainbow_bp/scripts/main.js|rooted_dirt": "Java name rooted_dirt in a block regex. Bedrock id is dirt_with_roots. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/saga_bp/scripts/places.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/saga_bp/scripts/places.js|note_block": "Java name note_block in a built-block regex. Bedrock id is noteblock, so the token never matches. W9/O49 owns the elite_bp copy; the other copies are the same classifier. Pack edit is outside W7.",
+    "packs/saga_bp/scripts/prefabs.js|rooted_dirt": "Java name rooted_dirt in a block regex. Bedrock id is dirt_with_roots. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/storm_bp/scripts/main.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
+    "packs/tornado_bp/scripts/main.js|mob.breeze.wind_burst": "Not in pinned bedrock-samples 1.26.50.4 sound_definitions. Nearest ids are breeze_wind_charge.burst and mob.breeze.shoot. elytra_bp and tornado_bp edits are outside W7.",
+    "packs/waystone_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception."
+  }
 }

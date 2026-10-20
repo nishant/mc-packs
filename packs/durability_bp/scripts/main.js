@@ -2,6 +2,7 @@ import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Player property "durability:off" (true = warnings off) is the "off" preference in settings.js.
 
@@ -20,6 +21,10 @@ const REARM = 0.02;
 
 /** player id → slot key → { typeId, level } of the last check */
 const state = new Map();
+/** Item type → max durability, and the types with none (a type's durability is fixed while the world runs). @type {Map<string, number>} */
+const maxOf = new Map();
+/** @type {Set<string>} */
+const undamageable = new Set();
 
 let round = 0;
 system.runInterval(() => {
@@ -53,22 +58,37 @@ function check(player, slots) {
     // Each hotbar slot counts separately, so switching to another worn tool warns again.
     const key = slot === EquipmentSlot.Mainhand ? `${slot}:${player.selectedSlotIndex}` : slot;
     const item = equippable.getEquipment(slot);
-    const durability = item?.getComponent("minecraft:durability");
+    if (!item) {
+      seen.delete(key);
+      continue;
+    }
+    const typeId = item.typeId;
 
-    if (!item || !durability || durability.maxDurability <= 0) {
+    // An item type's durability never changes while the world runs: ask the game once per type.
+    if (undamageable.has(typeId)) {
+      seen.delete(key);
+      continue;
+    }
+    const durability = item.getComponent("minecraft:durability");
+    let max = maxOf.get(typeId);
+    if (max === undefined) {
+      max = durability?.maxDurability ?? 0;
+      if (max <= 0) undamageable.add(typeId);
+      else maxOf.set(typeId, max);
+    }
+    if (!durability || max <= 0) {
       seen.delete(key);
       continue;
     }
 
-    const max = durability.maxDurability;
     const left = max - durability.damage;
     const prev = seen.get(key);
-    const prevLevel = prev && prev.typeId === item.typeId ? prev.level : OK;
+    const prevLevel = prev && prev.typeId === typeId ? prev.level : OK;
     // A level only clears once the item is a little above it again (REARM of its durability), so a
     // Mending tool hovering at the line (each ore's XP repairs a point or two) doesn't warn every few blocks.
     const rearm = Math.ceil(max * REARM);
     const level = Math.max(levelFor(left, max), Math.min(prevLevel, levelFor(left - rearm, max)));
-    seen.set(key, { typeId: item.typeId, level });
+    seen.set(key, { typeId, level });
 
     // Only notify when it gets worse; a new item or a repair resets.
     if (level > prevLevel) notify(player, itemName(item), left, max, level);
@@ -144,9 +164,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "durability_bp");
   },
-  { namespaces: ["realm"] }
 );

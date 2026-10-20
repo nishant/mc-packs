@@ -21,6 +21,7 @@ import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, LOOK
 import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get, getFor } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -46,12 +47,13 @@ const OVERWORLD = "minecraft:overworld";
 const NETHER = "minecraft:nether";
 const DIMENSIONS = [OVERWORLD, NETHER, "minecraft:the_end"];
 
+const LABEL_OBSERVER_RANGE = 36;
 const nameLabels = createNameLabels({
   labelType: LABEL_TYPE,
   ownerTag: OWNER_TAG,
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
-  observerRange: 36,
+  observerRange: LABEL_OBSERVER_RANGE,
   spectatorsExcluded: true,
 });
 
@@ -688,6 +690,7 @@ function updateLabels() {
         return [];
       }
     });
+  /** @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string }[]} */
   const targets = [];
   for (const rec of Object.values(live)) {
     const ent = entityById(rec.e);
@@ -700,7 +703,42 @@ function updateLabels() {
     const id = `camp:${wid}`;
     if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
   }
-  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
+  nameLabels.sync(targets, () => labelObservers(targets), dims);
+}
+
+/** Players further than this from every wanderer can't see a label (`nameLabels`' range, with room for a head's height). */
+const LABEL_REACH = LABEL_OBSERVER_RANGE + 4;
+/** With this many players or fewer (or about as many as wanderers) every player is read: asking for the ones near each wanderer saves nothing. */
+const LABEL_QUERY_PLAYERS = 8;
+/** Asking per wanderer costs one native query each: never for more wanderers than this. */
+const LABEL_QUERY_TARGETS = 16;
+let onlineN = 0;
+let onlineAt = -Infinity;
+
+/**
+ * Who a label sync reads: every player, or, on a busy server, only the players near a wanderer (one native query
+ * per wanderer instead of a read of every player's place on every sync; the sync still measures the real
+ * distance, so what it does is the same).
+ * @param {{ entity: Entity }[]} targets
+ */
+function labelObservers(targets) {
+  const every = () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] });
+  const tick = system.currentTick;
+  if (tick - onlineAt >= 100 || tick < onlineAt) {
+    onlineN = world.getAllPlayers().length;
+    onlineAt = tick;
+  }
+  if (onlineN <= LABEL_QUERY_PLAYERS || onlineN <= targets.length * 2 || targets.length > LABEL_QUERY_TARGETS) return every();
+  /** @type {Map<string, Player>} */
+  const near = new Map();
+  for (const t of targets) {
+    try {
+      for (const p of t.entity.dimension.getPlayers({ location: t.entity.location, maxDistance: LABEL_REACH, excludeGameModes: [GameMode.Spectator] })) near.set(p.id, p);
+    } catch {
+      // unloaded or removed this tick: nobody can be near it
+    }
+  }
+  return [...near.values()];
 }
 
 /**
@@ -883,10 +921,11 @@ function upkeep() {
     if (p && !far && hasOffer.get(`${ent.id}|${p.id}`) && across(p.location, rec) <= 32) sparkle(p, ent);
   }
   // At camps: there while someone on that chain is near, gone otherwise (and while an escort's copy walks).
-  const players = world.getAllPlayers();
+  const players = [];
+  if (enabled && Object.keys(camps).length) for (const p of world.getAllPlayers()) players.push({ p, dim: p.dimension.id, at: p.location }); // read once, not once per camp
   for (const [wid, c] of Object.entries(camps)) {
     const ent = entityById(c.e);
-    const needers = enabled ? players.filter((p) => p.dimension.id === c.d && across(p.location, c) <= CONFIG.campRange && ["a", "o"].includes(states.get(p.id)?.ch[wid] ?? "")) : [];
+    const needers = enabled ? players.filter((o) => o.dim === c.d && across(o.at, c) <= CONFIG.campRange && ["a", "o"].includes(states.get(o.p.id)?.ch[wid] ?? "")).map((o) => o.p) : [];
     const hide = (hidden.get(wid) ?? 0) > now;
     if (ent) {
       if (hide || !needers.length) {
@@ -1291,7 +1330,19 @@ function onPoi(msg) {
   sites.set(key, { dim: msg.dim, x: msg.x, z: msg.z });
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:npc_offer",
+    "realm:wander_state",
+    "realm:wander_done",
+    "realm:wander_hide",
+    "realm:place_ready",
+    "realm:poi",
+    "realm:quest_done",
+    "realm:bounty_targets",
+    "realm:map_leg",
+    "realm:wander_debug",
+  ],
   ({ id, message, sourceEntity }) => {
     if (
       id !== "realm:npc_offer" &&
@@ -1344,7 +1395,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[wander] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /**
@@ -1568,9 +1618,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "wander_bp");
   },
-  { namespaces: ["realm"] },
 );

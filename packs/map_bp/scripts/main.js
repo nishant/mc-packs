@@ -31,12 +31,14 @@
 import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
-import { Budget } from "./budget.js";
+import { Budget, oldestDue } from "./budget.js";
 import { CONFIG } from "./config.js";
 import { G } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
 import { aheadPicks, colKey, COL, glyphAt, KEY_BIAS, KEY_SPAN, MISS_RETRY, readColumn, sampleCoord, spendBudget, TerrainWorld } from "./terrain.js";
+import { onScriptEvent } from "./script-events.js";
+import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetPlayer, staleForm, WORLD_GEN } from "./reset.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -223,6 +225,7 @@ const arrived = new Map();
 
 /** @param {Player} player @returns {Waypoint | undefined} */
 function waypointOf(player) {
+  checkReset(player);
   if (wpCache.has(player.id)) return wpCache.get(player.id) ?? undefined;
   /** @type {Waypoint | null} */
   let wp = null;
@@ -250,6 +253,7 @@ function setWaypoint(player, wp) {
 }
 /** @param {Player} player @returns {Spot[]} */
 function marksOf(player) {
+  checkReset(player);
   const hit = marksCache.get(player.id);
   if (hit) return hit;
   /** @type {Spot[]} */
@@ -274,6 +278,49 @@ function saveMarks(player, list) {
   } catch (e) {
     console.warn(`[map] save: ${e}`);
   }
+}
+
+// /realm:map_reset: see reset.js. The world's generation is read once and kept; each player is checked once per visit.
+/** @type {number | undefined} */
+let worldGen;
+/** @type {Set<string>} */
+const resetChecked = new Set();
+function currentGen() {
+  if (worldGen === undefined) {
+    try {
+      worldGen = generationOf(world.getDynamicProperty(WORLD_GEN));
+    } catch {
+      return 0; // the world isn't loaded yet: read again next time
+    }
+  }
+  return worldGen;
+}
+/** Clears this player's marks and destination once if a reset ran since they were last here. @param {Player} player */
+function applyReset(player) {
+  resetChecked.add(player.id);
+  try {
+    const gen = currentGen();
+    if (!needsReset(gen, player.getDynamicProperty(PLAYER_GEN))) return;
+    resetPlayer(player, gen);
+    wpCache.set(player.id, null);
+    marksCache.set(player.id, []);
+    lastSent.delete(player.id);
+    views.delete(player.id);
+    passAt.delete(player.id);
+    player.sendMessage("§7[Map] An operator reset everyone's destination and marked spots.");
+  } catch (e) {
+    console.warn(`[map] reset: ${e}`);
+  }
+}
+/** @param {Player} player */
+function checkReset(player) {
+  if (!resetChecked.has(player.id)) applyReset(player);
+}
+/** True (and says so) when an operator reset the map after `gen` was read, so a menu opened before it must not save what it shows. @param {number} gen @param {Player} player */
+function resetSince(gen, player) {
+  if (!staleForm(gen, currentGen())) return false;
+  if (player.isValid) player.sendMessage("§e[Map] An operator reset the map while this menu was open. Open it again.");
+  return true;
 }
 
 /**
@@ -346,7 +393,7 @@ let costPasses = 0;
 let costPlayers = 0;
 
 /** A live player's position, if they're online. @param {string} id @param {Player[]} all */
-const onlineById = (id, all) => all.find((p) => p.id === id);
+const onlineById = (id, all) => all.find((p) => p.isValid && p.id === id);
 
 /** The siege spot for a player: the nearest circle still singing, else the town (the warning). @param {Player} player */
 function siegeSpot(player) {
@@ -637,12 +684,25 @@ let scanEachPeak = 0;
 /** Of scanMs, the time spent planning (which columns each viewer still needs). */
 let scanPlanMs = 0;
 
+let playersTick = -1;
+/** @type {Player[]} */
+let playersList = [];
+/** The online players, read from the game once a tick and shared by the scanner and the passes (callers don't change the list). */
+function playersNow() {
+  const tick = system.currentTick;
+  if (tick !== playersTick) {
+    playersList = world.getAllPlayers();
+    playersTick = tick;
+  }
+  return playersList;
+}
+
 system.runInterval(() => {
   if (get("enabled") !== true) return;
   const t0 = Date.now();
   const now = system.currentTick;
   scanBudget.tick();
-  const all = world.getAllPlayers();
+  const all = playersNow();
   planTurn.left = PLAN_EACH_TICK;
   // Each viewer is checked (moved, turned, a new list from their radar, the roof) every PLAN_EVERY ticks, a share of
   // them each tick, taking turns; the plans in between are read from where they stopped.
@@ -771,9 +831,13 @@ function planFor(player, now) {
   // minecart has little velocity of its own).
   const got = player.getVelocity?.() ?? { x: 0, z: 0 };
   const prev = lastPose.get(player.id);
-  lastPose.set(player.id, { x: at.x, z: at.z, tick: now });
   const dt = prev ? now - prev.tick : 0;
   const moved = prev && dt > 0 && dt <= 40 ? { x: (at.x - prev.x) / dt, z: (at.z - prev.z) / dt } : { x: 0, z: 0 };
+  if (prev) {
+    prev.x = at.x;
+    prev.z = at.z;
+    prev.tick = now;
+  } else lastPose.set(player.id, { x: at.x, z: at.z, tick: now });
   const vel = Math.abs(moved.x) + Math.abs(moved.z) > Math.abs(got.x) + Math.abs(got.z) && Math.abs(moved.x) + Math.abs(moved.z) < 16 ? moved : got;
   const lead = { x: Math.max(-28, Math.min(28, vel.x * 8)), z: Math.max(-28, Math.min(28, vel.z * 8)) };
   // Roof detection uses an exact surface sample from this same budget, never an extra per-viewer native read.
@@ -1113,11 +1177,10 @@ function pass(player, all, seen, now) {
  * sent only when its text changed, or with `refresh` when it is REFRESH ticks old (so it never fades); the title
  * is drawn once for both.
  * @param {Player} player @param {View} v @param {number} now @param {boolean} refresh
+ * @param {number} [heading] the facing the redraw's check already read (else read here, inside the draw budget) @param {{ x: number, y: number, z: number }} [at] the position it read
  * @returns {boolean} whether anything was sent
  */
-function render(player, v, now, refresh) {
-  const heading = headingOf(player);
-  const at = player.location;
+function render(player, v, now, refresh, heading = headingOf(player), at = player.location) {
   v.heading = heading;
   v.x = at.x;
   v.y = at.y;
@@ -1145,7 +1208,18 @@ function render(player, v, now, refresh) {
   // What realm:map_debug reports (kept as references; the pose object is made only when asked).
   let shot = lastText.get(player.id);
   if (!shot) lastText.set(player.id, (shot = { strip, line2: v.second, radar, dest: v.dest, target: v.target, at, dim: v.dim, heading, radius: v.radius, north: v.north }));
-  else Object.assign(shot, { strip, line2: v.second, radar, dest: v.dest, target: v.target, at, dim: v.dim, heading, radius: v.radius, north: v.north });
+  else {
+    shot.strip = strip;
+    shot.line2 = v.second;
+    shot.radar = radar;
+    shot.dest = v.dest;
+    shot.target = v.target;
+    shot.at = at;
+    shot.dim = v.dim;
+    shot.heading = heading;
+    shot.radius = v.radius;
+    shot.north = v.north;
+  }
   const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
   if (side.held(player)) return false;
   const sent = lastSent.get(player.id);
@@ -1219,7 +1293,7 @@ system.runInterval(() => {
   if (!views.size) return;
   const t0 = Date.now();
   const now = system.currentTick;
-  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. @type {{ p: Player, v: View, refresh: boolean, moved: boolean }[]} */
+  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. `heading` and `at` are what the check read, so render() doesn't read them again. @type {{ p: Player, v: View, refresh: boolean, moved: boolean, heading: number | undefined, at: Vector3 }[]} */
   const due = [];
   const n = views.size;
   const checks = Math.min(n, TURN_CHECKS);
@@ -1240,11 +1314,13 @@ system.runInterval(() => {
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
       const sent = lastSent.get(p.id);
       const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
-      const moved = refresh || !!v.dirty || Math.abs(wrap(headingOf(p) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      /** @type {number | undefined} read only when the checks before it didn't already settle `moved` (as before); render() reads it otherwise, inside the draw budget */
+      let heading;
+      const moved = refresh || !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
       if (!moved && !v.lag) continue;
       // Moving fast (flying, riding): the scanner plans ahead for them often.
       if (Math.abs(at.x - v.x) + Math.abs(at.z - v.z) > 0.6 * Math.max(1, now - (v.drawn ?? now))) planNow.add(p.id);
-      due.push({ p, v, refresh, moved });
+      due.push({ p, v, refresh, moved, heading, at });
     } catch (e) {
       console.warn(`[map] turn: ${e}`);
     }
@@ -1257,7 +1333,7 @@ system.runInterval(() => {
   let sends = 0;
   let built = 0;
   const refreshBefore = refreshSends;
-  for (const { p, v, refresh, moved } of due) {
+  for (const { p, v, refresh, moved, heading, at } of due) {
     if (sends >= TURN_BUDGET || built >= RENDER_BUDGET || !drawBudget.ok) break;
     // A radar waiting for its terrain, with nothing else new, waits for a rebuild in the budget.
     if (!moved && !rebuildBudget.ok) continue;
@@ -1265,7 +1341,7 @@ system.runInterval(() => {
     try {
       turnDraws++;
       built++;
-      if (render(p, v, now, refresh)) {
+      if (render(p, v, now, refresh, heading, at)) {
         sends++;
         if (refresh) refreshSends++;
       }
@@ -1345,7 +1421,7 @@ let seenAt = -Infinity;
 system.runInterval(() => {
   const now = system.currentTick;
   passBudget.tick();
-  const all = world.getAllPlayers();
+  const all = playersNow();
   if (!all.length) return;
   if (now - seenAt >= INTERVAL) {
     seenAt = now;
@@ -1360,18 +1436,17 @@ system.runInterval(() => {
     }
     costPasses++;
   }
-  /** @type {Player[]} */
-  let due = [];
-  for (const p of all) if (now - (passAt.get(p.id) ?? -Infinity) >= INTERVAL) due.push(p);
-  if (!due.length) return;
   const each = Math.min(PASS_EACH, Math.max(1, Math.ceil(all.length / INTERVAL)));
-  if (due.length > each) due = due.sort((a, b) => (passAt.get(a.id) ?? -Infinity) - (passAt.get(b.id) ?? -Infinity)).slice(0, each);
+  const due = oldestDue(all, passAt, now, INTERVAL, each);
+  if (!due.length) return;
   for (const p of due) {
     if (!passBudget.ok) break;
+    // The shared list can hold a player who left earlier this tick: no entry for them (playerLeave already ran).
+    if (!p.isValid) continue;
     passAt.set(p.id, now);
     const t = Date.now();
     try {
-      if (p.isValid) pass(p, all, seen, now);
+      pass(p, all, seen, now);
     } catch (e) {
       console.warn(`[map] ${e}`);
     }
@@ -1450,6 +1525,7 @@ function toggleCompass(player) {
 
 /** @param {Player} player */
 async function menu(player) {
+  const gen = currentGen();
   const all = world.getAllPlayers();
   const dest = destination(player, all, new Map());
   const wp = waypointOf(player);
@@ -1479,14 +1555,16 @@ async function menu(player) {
   form.button("Close");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length || !player.isValid) return;
+  if (resetSince(gen, player)) return;
   await actions[res.selection][1]();
 }
 
 /** @param {Player} player */
 async function markMenu(player) {
+  const gen = currentGen();
   const form = new ModalFormData().title("Mark this spot").textField("Name", "e.g. Iron cave", { defaultValue: `Spot ${marksOf(player).length + 1}` });
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid || resetSince(gen, player)) return;
   const vals = /** @type {unknown[]} */ (res.formValues ?? []).filter((v) => v !== undefined);
   player.sendMessage(markHere(player, String(vals[0] ?? "")));
 }
@@ -1523,24 +1601,25 @@ function choices(player) {
 /** @param {Player} player */
 async function pickMenu(player) {
   while (player.isValid) {
+    const gen = currentGen();
     const groups = choices(player);
     const form = new ActionFormData().title("Pick a destination").body("§7The gold star on your compass strip and radar points there. A destination clears when you arrive.");
     for (const [name, list] of groups) form.button(`${name}\n§8${list.length ? `${list.length} to pick from` : "None yet"}`);
     form.button("Back");
     const res = await show(player, form);
-    if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+    if (!res || res.canceled || res.selection === undefined || !player.isValid || resetSince(gen, player)) return;
     if (res.selection >= groups.length) return menu(player);
     const [name, list] = groups[res.selection];
     if (!list.length) {
       player.sendMessage(`§7[Map] ${name}: none yet.`);
       continue;
     }
-    if (await listMenu(player, name, list)) return;
+    if (await listMenu(player, name, list, gen)) return;
   }
 }
 
-/** @param {Player} player @param {string} title @param {Waypoint[]} list @returns {Promise<boolean>} whether one was picked (or the menu closed) */
-async function listMenu(player, title, list) {
+/** @param {Player} player @param {string} title @param {Waypoint[]} list @param {number} gen the reset generation `list` was read at @returns {Promise<boolean>} whether one was picked (or the menu closed) */
+async function listMenu(player, title, list, gen) {
   const sorted = [...list].sort((a, b) => distTo(player, a) - distTo(player, b)).slice(0, MENU_MAX);
   const marks = sorted[0]?.k === "mark";
   const form = new ActionFormData().title(title);
@@ -1549,6 +1628,7 @@ async function listMenu(player, title, list) {
   form.button("Back");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return true;
+  if (resetSince(gen, player)) return true;
   if (marks && res.selection === sorted.length) {
     await forgetMenu(player);
     return false;
@@ -1562,12 +1642,13 @@ async function listMenu(player, title, list) {
 
 /** @param {Player} player */
 async function forgetMenu(player) {
+  const gen = currentGen();
   const list = marksOf(player);
   const form = new ActionFormData().title("Forget a spot");
   for (const m of list) form.button(`${m.n}\n§8${where(player, m)}`);
   form.button("Back");
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined || res.selection >= list.length || !player.isValid) return;
+  if (!res || res.canceled || res.selection === undefined || res.selection >= list.length || !player.isValid || resetSince(gen, player)) return;
   const gone = list[res.selection];
   saveMarks(
     player,
@@ -1717,6 +1798,8 @@ function onEvent(id, m, source) {
         pose: t ? { ...t.at, dim: t.dim, heading: t.heading, radius: t.radius, north: t.north } : undefined,
         target: t?.target,
         wp: player ? waypointOf(player) ?? null : null,
+        marks: player ? marksOf(player) : [],
+        resetGen: currentGen(),
         terrain: player ? {
           store: storeFor(player.id, player.dimension.id).id,
           surface: surface ? { columns: surface.cols.size, fine: surface.fine.size } : undefined,
@@ -1758,7 +1841,8 @@ function onEvent(id, m, source) {
   }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [...EVENTS],
   ({ id, message, sourceEntity }) => {
     if (!EVENTS.has(id)) return;
     try {
@@ -1768,7 +1852,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] }
 );
 
 /** Asks the packs that own the data to send it (for one player, or everyone). @param {string} [player] */
@@ -1792,6 +1875,8 @@ world.afterEvents.worldLoad.subscribe(() => {
 });
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
+  resetChecked.delete(player.id);
+  applyReset(player);
   const id = player.id;
   system.runTimeout(() => ping(id), 40);
 });
@@ -1829,6 +1914,35 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       system.run(() => {
         if (player.isValid) player.sendMessage(markHere(player, typeof name === "string" ? name : ""));
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:map_reset",
+      description: "Operators: clear every player's map destination and marked spots (offline players on their next join). Run it with confirm",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      optionalParameters: [{ name: "confirm", type: CustomCommandParamType.String }],
+    },
+    (origin, confirm) => {
+      const who = origin.initiator ?? origin.sourceEntity;
+      if (who instanceof Player && !isOp(who)) return { status: CustomCommandStatus.Failure, message: "Only operators can reset the map." };
+      if (!confirmed(confirm)) {
+        return { status: CustomCommandStatus.Success, message: "This clears every player's map destination and marked spots, and offline players' on their next join. Run /realm:map_reset confirm to do it." };
+      }
+      system.run(() => {
+        try {
+          const gen = nextGeneration(world.getDynamicProperty(WORLD_GEN));
+          world.setDynamicProperty(WORLD_GEN, gen);
+          worldGen = gen;
+          for (const p of world.getAllPlayers()) applyReset(p);
+          console.warn(`[map] reset ${gen}: destinations and marked spots cleared for ${world.getAllPlayers().length} online players; offline players on their next join`);
+          if (who instanceof Player && who.isValid) who.sendMessage("§a[Map] Reset done: online players now, everyone else when they next join.");
+        } catch (e) {
+          console.warn(`[map] reset: ${e}`);
+        }
       });
       return { status: CustomCommandStatus.Success };
     }
@@ -1872,9 +1986,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "map_bp");
   },
-  { namespaces: ["realm"] }
 );

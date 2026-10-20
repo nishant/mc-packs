@@ -20,7 +20,7 @@ const RUNG = { "drowned_bell.bell": "ring" };
 const SHARED = { "last_map.map": "share" };
 const KEPT = { "last_map.map": "keep" };
 
-// Offsets from world spawn (the tracker names them with `mark`).
+// Offsets in the town stories (TOWN_STORIES in places.js) are from the town (`/realm:saga_place town`, default world spawn); every other offset is from world spawn (the tracker names them with `mark`).
 const OUTPOST = { x: -640, z: 520 };
 const FARM = { x: 260, z: -310 };
 const RED_CAMP = { x: 520, z: -560 };
@@ -39,8 +39,8 @@ const WEST = { x: -1400, z: -120 };
 const FORGE = { x: -40, z: 28 };
 
 const NIGHT_MOBS = ["minecraft:zombie", "minecraft:skeleton", "minecraft:spider", "minecraft:creeper", "minecraft:husk", "minecraft:stray"];
-const FENCES = ["minecraft:oak_fence", "minecraft:spruce_fence", "minecraft:birch_fence", "minecraft:jungle_fence", "minecraft:acacia_fence", "minecraft:dark_oak_fence", "minecraft:mangrove_fence", "minecraft:cherry_fence", "minecraft:bamboo_fence", "minecraft:pale_oak_fence", "minecraft:crimson_fence", "minecraft:warped_fence"];
-const PLANKS = ["minecraft:oak_planks", "minecraft:spruce_planks", "minecraft:birch_planks", "minecraft:jungle_planks", "minecraft:acacia_planks", "minecraft:dark_oak_planks", "minecraft:mangrove_planks", "minecraft:cherry_planks", "minecraft:bamboo_planks", "minecraft:pale_oak_planks", "minecraft:crimson_planks", "minecraft:warped_planks"];
+const FENCES = ["minecraft:oak_fence", "minecraft:spruce_fence", "minecraft:birch_fence", "minecraft:jungle_fence", "minecraft:acacia_fence", "minecraft:dark_oak_fence", "minecraft:mangrove_fence", "minecraft:cherry_fence", "minecraft:bamboo_fence", "minecraft:pale_oak_fence", "minecraft:poplar_fence", "minecraft:crimson_fence", "minecraft:warped_fence"];
+const PLANKS = ["minecraft:oak_planks", "minecraft:spruce_planks", "minecraft:birch_planks", "minecraft:jungle_planks", "minecraft:acacia_planks", "minecraft:dark_oak_planks", "minecraft:mangrove_planks", "minecraft:cherry_planks", "minecraft:bamboo_planks", "minecraft:pale_oak_planks", "minecraft:poplar_planks", "minecraft:crimson_planks", "minecraft:warped_planks"];
 const BOATS = ["minecraft:boat", "minecraft:chest_boat"];
 
 /** @type {Story} */
@@ -627,7 +627,7 @@ const MAYORS_BURDEN = {
       ],
       reward: { levels: 2, crowns: 25 },
       rep: [{ guild: "growers", amount: 5 }],
-      hint: "The clues are in the town square near world spawn: tap near each faint sparkle. Then feed any goat 3 wheat (hold wheat and use it on the goat). Wren keeps goats at Wren's Meadow, and goats live wild in the mountains.",
+      hint: "The clues are in the town square: tap near each faint sparkle. Then feed any goat 3 wheat (hold wheat and use it on the goat). Wren keeps goats at Wren's Meadow, and goats live wild in the mountains.",
     },
     {
       id: "feud",
@@ -706,7 +706,7 @@ const MAYORS_BURDEN = {
       ],
       reward: { levels: 3, crowns: 35 },
       rep: [{ guild: "growers", amount: 5 }],
-      hint: "Both farms are a little over 200 blocks southeast of spawn, on the tracker. Hattie and Garrow appear when you get close; talk to each. Then place 12 fences of any wood within 16 blocks of the disputed field between the two farms.",
+      hint: "Both farms are a little over 200 blocks southeast of town, on the tracker. Hattie and Garrow appear when you get close; talk to each. Then place 12 fences of any wood within 16 blocks of the disputed field between the two farms.",
     },
     {
       id: "unveiling",
@@ -735,7 +735,7 @@ const MAYORS_BURDEN = {
         codex: { id: "goat_statue", title: "The Goat in the Square", text: "Mayor Aldric Bram paid a sculptor for a statue of himself forty years ago. The sculptor took the money and carved a goat wearing a mayor's chain. It sat under a sheet in a barn until his son unveiled it before the election. The town has decided it is the best statue it owns." },
       },
       rep: [{ guild: "growers", amount: 5 }],
-      hint: "Place 16 stone-type blocks (stone, smooth stone, stone bricks, polished stone or quartz) within 12 blocks of the town square near spawn, bring Bram 4 white wool, then use 3 firework rockets in the square.",
+      hint: "Place 16 stone-type blocks (stone, smooth stone, stone bricks, polished stone or quartz) within 12 blocks of the town square, bring Bram 4 white wool, then use 3 firework rockets in the square.",
     },
     {
       id: "fathers_name",
@@ -1139,7 +1139,7 @@ const SINGING_FORGE = {
         codex: { id: "dunmore", title: "Dunmore's Fifth Blade", text: "Old Dunmore, Ida's master, forged the first relics from star-iron: metal from the craters of fallen stars, which hums if you listen. He tried four times to forge a singing blade and four blades broke. His recipe: 'Born of the deep fire, tempered in the hot stone, quenched where the souls burn, named true.'" },
       },
       rep: [{ guild: "miners", amount: 5 }],
-      hint: "Dunmore's old forge is about 50 blocks from spawn, on the tracker. Tap near the three faint sparkles and lay a hand on the anvil (stand right by the spot). Then bring Ida 16 iron ingots.",
+      hint: "Dunmore's old forge is about 50 blocks from the town center, on the tracker. Tap near the three faint sparkles and lay a hand on the anvil (stand right by the spot). Then bring Ida 16 iron ingots.",
     },
     {
       id: "deep_fire",
@@ -1228,7 +1228,7 @@ const SINGING_FORGE = {
         codex: { id: "answering_note", title: "The Note That Answered", text: "When the singing blade was quenched in soul fire, monsters came out of the dark to listen, among them drowned with rope on their wrists. And under the blade's note, Ida heard something answer: far off and deep down, like a door opening slowly in a big empty house." },
       },
       rep: [{ guild: "miners", amount: 10 }],
-      hint: "Craft a soul campfire (soul sand or soul soil, logs and sticks) and place it within 12 blocks of Dunmore's old forge near spawn. Use it 3 times, then stay within 20 blocks while three waves come. Lighting the area first keeps extra monsters away.",
+      hint: "Craft a soul campfire (soul sand or soul soil, logs and sticks) and place it within 12 blocks of Dunmore's old forge near town. Use it 3 times, then stay within 20 blocks while three waves come. Lighting the area first keeps extra monsters away.",
     },
     {
       id: "named_true",
@@ -1275,7 +1275,7 @@ const SINGING_FORGE = {
       ],
       reward: { levels: 5, crowns: 60, relic: "singing_blade", title: "Forge-Singer", journal: { entry: "singing_forge", label: "The Forge That Sings" } },
       rep: [{ guild: "miners", amount: 15 }],
-      hint: "Sol and Tobin are in town. Then stay within 12 blocks of Dunmore's old forge near spawn between midnight and just before dawn, for 1 minute.",
+      hint: "Sol and Tobin are in town. Then stay within 12 blocks of Dunmore's old forge near town between midnight and just before dawn, for 1 minute.",
     },
   ],
 };

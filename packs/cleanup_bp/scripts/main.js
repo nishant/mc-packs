@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Entity, Player, system, wo
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Every checkSeconds the pack counts dropped items (item entities in loaded chunks) in every
 // dimension. Above the threshold it warns everyone, waits warnSeconds, then removes the dropped items
@@ -315,9 +316,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "cleanup_bp");
   },
-  { namespaces: ["realm"] }
 );

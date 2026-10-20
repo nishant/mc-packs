@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 176 commands in 64 packs */
+/** @type {Pack[]} 180 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -122,6 +122,7 @@ export const PACKS = [
     pack: "Crowns",
     commands: [
       {"name":"realm:crowns","description":"Crowns: a menu of what you can do (balance, pay, market; operators: give)","permission":"any","params":[]},
+      {"name":"realm:crowns_audit","description":"Crowns: the last 200 pays and gives (operators)","permission":"op","params":[]},
       {"name":"realm:crowns_balance","description":"Crowns: your balance and the richest players","permission":"any","params":[]},
       {"name":"realm:crowns_give","description":"Crowns: give players Crowns (a negative amount takes them)","permission":"op","params":[{"name":"player","type":"PlayerSelector","optional":false},{"name":"amount","type":"Integer","optional":false}]},
       {"name":"realm:crowns_market","description":"Crowns: open the market (where the realm allows it)","permission":"any","params":[]},
@@ -278,6 +279,7 @@ export const PACKS = [
       {"name":"realm:map","description":"Minimap: get Mara's Field Map, pick a destination for your compass strip, mark spots","permission":"any","params":[]},
       {"name":"realm:map_clear","description":"Clear your destination (the strip follows your story again)","permission":"any","params":[]},
       {"name":"realm:map_mark","description":"Mark the spot where you stand, to pick it as a destination later","permission":"any","params":[{"name":"name","type":"String","optional":true}]},
+      {"name":"realm:map_reset","description":"Operators: clear every player's map destination and marked spots (offline players on their next join). Run it with confirm","permission":"op","params":[{"name":"confirm","type":"String","optional":true}]},
       {"name":"realm:minimap","description":"Toggle your minimap radar on or off","permission":"any","params":[]},
     ],
   },
@@ -475,6 +477,7 @@ export const PACKS = [
     commands: [
       {"name":"realm:inv","description":"Expansive Inventory: switch between your inventory pages, scan every page for an item, sort, quick stack and change the page buttons. More: /realm:stash_help","permission":"any","params":[]},
       {"name":"realm:inv_pages","description":"Operators: set how many inventory pages you have, 2 to 25 (1 = a single vanilla page, 0 or nothing = the realm's count). Only you; items on removed pages move to the pages left","permission":"op","params":[{"name":"pages","type":"Integer","optional":true}]},
+      {"name":"realm:inv_recover","description":"Operators: recover a player's stuck inventory move. Asks you to confirm, then puts their saved items into chests next to you","permission":"op","params":[{"name":"player","type":"PlayerSelector","optional":false}]},
       {"name":"realm:sort","description":"Sorts your inventory: merges stacks, then orders by item. The hotbar too if that's on in /realm:prefs. More: /realm:stash_help","permission":"any","params":[]},
       {"name":"realm:stash","description":"Quick stack: moves your main inventory into storage within 8 blocks that already holds the same items. More: /realm:stash_help","permission":"any","params":[]},
       {"name":"realm:stash_help","description":"How Quick Stack & Sort works: the sneak-tap menu, /realm:stash and /realm:sort, with usage","permission":"any","params":[]},
@@ -504,6 +507,7 @@ export const PACKS = [
     commands: [
       {"name":"realm:titles","description":"Titles & Trails: choose the title under your name and the trail that follows you","permission":"any","params":[]},
       {"name":"realm:titles_give","description":"Operators: give a player a title (or a trail: \"trail:cloud\", leaves, ember, sparkle, hearts, glyphs, confetti, notes)","permission":"op","params":[{"name":"player","type":"String","optional":false},{"name":"title","type":"String","optional":false}]},
+      {"name":"realm:titles_take","description":"Operators: take a title (or a trail: \"trail:cloud\", leaves, ember, sparkle, hearts, glyphs, confetti, notes) away from a player, online or not","permission":"op","params":[{"name":"player","type":"String","optional":false},{"name":"title","type":"String","optional":false}]},
     ],
   },
   {
@@ -578,7 +582,7 @@ export const ENUMS = {
   "realm:moon_state": ["blood","harvest","normal"],
   "realm:npc_id": ["mara","tobin","reyes","elsie","bram","quill","ida","sol","hollis","moss","wren","bea"],
   "realm:relic_id": ["storm_staff","rain_charm","tide_boots","lantern_deep","storm_meter","compass_echoes","frost_band","sun_pendant","miners_lamp","wayfarer_boots","lantern_shard","choir_mask","hal_compass","vesna_charm","singing_blade","hollow_crown","keeper_lamp"],
-  "realm:saga_place_name": ["lighthouse","sunken_bell","old_chapel","graveyard","observatory","sea_cave","choir_ring","witch_hut","old_mine","watchtower","meadow","starfall","seal_tide","seal_stone","seal_sky","hollow_gate"],
+  "realm:saga_place_name": ["town","lighthouse","sunken_bell","old_chapel","graveyard","observatory","sea_cave","choir_ring","witch_hut","old_mine","watchtower","meadow","starfall","seal_tide","seal_stone","seal_sky","hollow_gate"],
   "realm:sidebar_stat": ["playtime","deaths","mobkills","pvpkills","mined","placed","travelled","flown","joins","cycle","off"],
   "realm:silly_book": ["random","grunt_birthday","hyper_jump","squeak","bubbles","rainbow_trail","hat_trick","disco","moo","confetti_swing","tiny_thunder","fish_slap","glow","duck","hiccups"],
   "realm:town_project": ["well","notice_board","lamps","garden","stall","dock","bell_tower"],

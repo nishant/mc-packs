@@ -499,7 +499,7 @@ const BRAM = {
         items: [{ item: "minecraft:leather_helmet", amount: 1, name: "The Mayoral Hat (Replica)", lore: ["Fits much better", "than the real one.", "Smells of nothing at all."] }],
         codex: { id: "bram_drawer", title: "The Locked Drawer", text: "Mayor Bram's father made the town forget the Long Storm, and never once visited his wife's grave. He left one letter, locked away, saying so. Bram read it, took flowers to his mother, and gave a speech about remembering." },
       },
-      hint: "Fireworks are crafted from paper and gunpowder. Use 3 within 16 blocks of the town square (just off world spawn).",
+      hint: "Fireworks are crafted from paper and gunpowder. Use 3 within 16 blocks of the town square.",
     },
   ],
 };
@@ -819,7 +819,7 @@ const HOLLIS = {
         `${H}It passed. It passed and I'm still here. I'm still me. Oh. Oh, I think I'm tired. I think I'm actually tired.`,
       ],
       reward: { levels: 4, crowns: 40 },
-      hint: "Tap 4 candles in the Old Chapel (light them with flint and steel if they're out), then stay within 12 blocks between time 17000 and 20000 for 2 minutes.",
+      hint: "Tap 4 candles in the Old Chapel (light them with flint and steel if they're out; if they're gone, place new candles of your own within 10 blocks of the chapel), then stay within 12 blocks between time 17000 and 20000 for 2 minutes.",
     },
     {
       id: "plain_sleep",

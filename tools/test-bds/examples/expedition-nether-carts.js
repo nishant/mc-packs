@@ -3,7 +3,7 @@
 // Overworld at the same coordinates, where world.structureManager.place() leaves a structure's entities while that
 // Overworld chunk is loaded), and no stash cart is left anywhere afterwards. On BDS the engine bug shows only for a
 // player who spawned in the Nether and stayed there (a simulated player sent back by teleport is placed correctly,
-// and one that rejoins gets a new id), so this passes with the old code too: it guards the round trip.
+// and one that rejoins gets a new id), so this is NOT a fail-before test: the claim that it fails on the old code is\n// withdrawn (not reproducible on BDS). It guards the round trip only.
 // node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-nether-carts.js --timeout 600
 export default async function (t) {
   t.formTimeout = 400;

@@ -19,6 +19,7 @@ import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
 import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
 // the game's skins in its NPC editor). Each one lives inside its own house and stays there: its one spot (its
@@ -739,6 +740,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return;
   const { player, target } = ev;
   try {
     if (target.typeId !== NPC_TYPE || !target.hasTag(OWNER_TAG)) return;
@@ -843,7 +845,8 @@ async function tapped(player, entity, id, gift = false) {
   }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:npc_offer",
   ({ id, message }) => {
     if (id !== "realm:npc_offer") return;
     try {
@@ -858,7 +861,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours to fix: ignore malformed offers
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1271,8 +1273,11 @@ function gossipLine(player, t) {
   const g = alive.filter((x) => !heard.includes(x.i)).sort((a, b) => b.i - a.i)[0];
   if (!g) return undefined;
   const self = !!g.p && g.p === player.id; // town news (no player) is never about the listener
-  const pool = [...(HEARTH[t.id]?.gossip?.[g.k] ?? []), ...(GOSSIP[g.k] ?? (g.p ? GOSSIP.other : GOSSIP.news))];
-  const pair = pick(pool);
+  // A playerless piece names nobody. Lines that need {name} fall back to the nameless news line, so the
+  // name is never left empty and no player is invented. A caravan line names a place, so it stays.
+  const voiced = [...(HEARTH[t.id]?.gossip?.[g.k] ?? []), ...(GOSSIP[g.k] ?? (g.p ? GOSSIP.other : GOSSIP.news))];
+  const pool = g.p ? voiced : voiced.filter((pair) => !pair[0].includes("{name}") && !pair[1].includes("{name}"));
+  const pair = pick(pool.length ? pool : GOSSIP.news);
   if (!pair) return undefined;
   const kept = heard.filter((i) => alive.some((x) => x.i === i));
   kept.push(g.i);
@@ -2156,7 +2161,15 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // Hearth & Hearsay events from other packs.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:npc_places_ping",
+    "realm:gossip",
+    "realm:npc_flags",
+    "realm:quest_done",
+    "realm:calendar",
+    "realm:calendar_ping",
+  ],
   ({ id, message }) => {
     if (id === "realm:npc_places_ping") {
       if (ready) sendPlaces(true);
@@ -2189,7 +2202,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[npc] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /** realm:npc_flags { player, flags } from Story Questlines: the story flags the townsfolk react to. @param {any} msg */
@@ -2226,7 +2238,8 @@ function questDone(msg) {
 // players' taps fire no interact events, so the test scenarios tap this way.
 // { action: "gossip" } answers realm:npc_gossip { count, kinds: { kind: count }, last: [[kind, name, place], ...] }
 // (the newest 6), so a scenario can see what the town remembers.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:npc_debug",
   ({ id, message, sourceEntity }) => {
     if (id !== "realm:npc_debug" || !ready) return;
     if (sourceEntity instanceof Player && sourceEntity.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return;
@@ -2251,12 +2264,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[npc] debug: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // realm:npc_summon { id, player }: another pack (Relics' relicsmith) places a townsfolk at an operator,
 // exactly like /realm:npc_add run by that player. Answers realm:npc_summoned { id, player, ok, error? }.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:npc_summon",
   ({ id, message }) => {
     if (id !== "realm:npc_summon") return;
     /** @type {any} */
@@ -2282,13 +2295,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       reply(false, String(e));
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "npc_bp");
   },
-  { namespaces: ["realm"] },
 );

@@ -9,6 +9,7 @@ import {
 } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const CHECK_TICKS = 20;
 /** After /afk, ignore small movements (closing chat, camera settling) for this long. */
@@ -278,9 +279,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "afk_bp");
   },
-  { namespaces: ["realm"] }
 );

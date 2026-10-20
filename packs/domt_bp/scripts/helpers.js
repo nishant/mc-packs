@@ -1,5 +1,7 @@
 // Small tools the cards use: safe teleports, gifts, spawns, safe zones and timed block restores.
 import { Dimension, Entity, EntityDamageCause, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
+import { onScriptEvent } from "./script-events.js";
+import { spawnFresh } from "./spawn.js";
 
 // ---------------------------------------------------------------------------
 // Basics
@@ -451,21 +453,6 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 // ---------------------------------------------------------------------------
 
 /**
- * spawnEntity, but never another entity: in a world with reused entity ids it can hand back one that already exists
- * (a dropped item, a pet), and the deck tags and later removes what it spawns. Retries, then throws.
- * @param {import("@minecraft/server").Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at
- * @returns {Entity}
- */
-export function spawnFresh(dim, type, at) {
-  const want = type.includes(":") ? type : `minecraft:${type}`;
-  for (let k = 0; k < 8; k++) {
-    const e = dim.spawnEntity(/** @type {any} */ (type), at);
-    if (e.typeId === want) return e;
-  }
-  throw new Error(`spawnEntity(${type}) kept returning another entity`);
-}
-
-/**
  * Spawns `n` of a mob on safe spots `minR` to `maxR` blocks around the player, within 8 blocks of
  * their height (at their feet when there's no room).
  * @param {Player} p @param {string} type @param {number} n @param {number} [minR] @param {number} [maxR]
@@ -558,7 +545,8 @@ function takeZones(msg) {
   } else incoming.set(msg.src, buf);
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:zones",
   ({ id, message }) => {
     if (id !== "realm:zones") return;
     try {
@@ -567,7 +555,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // malformed: ignore
     }
   },
-  { namespaces: ["realm"] },
 );
 system.runTimeout(() => attempt(() => system.sendScriptEvent("realm:zones_ping", "{}")), 120);
 

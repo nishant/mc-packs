@@ -14,12 +14,14 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { ACTIONS, TITLE_MAX_SECONDS, showTitle } from "./actions.js";
 import { ENUMS, PACKS } from "./catalog.js";
+import { alive, bump, genOf } from "./lifecycle.js";
 import { CONFIG } from "./config.js";
 import { DEFAULT_SECONDS, MAX_SECONDS, diagnostics } from "./diagnostics.js";
 import { GROUPS, LINE, NAMES, OP_COLOR, OP_TEXT, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
 import { get, onChange } from "./settings.js";
 import { facts, markOf, remind, sizePage, state as setupState, statusOf, wizard } from "./setup.js";
 import { allZones, pingZones } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Realm Configuration: one item, one menu, every realm: command. Every player gets the item and sees the
 // commands they may use; operators see everything, their own entries in red. The commands come from
@@ -78,13 +80,13 @@ const listening = new Set();
 /** @type {{ tick: number, set: Set<string> | undefined }} */
 let installedCache = { tick: -1e9, set: undefined };
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_pong", "realm:help_ping"],
   ({ id, message }) => {
     if (id === "realm:help_pong") for (const s of listening) s.add(message);
     // /realm:help lists this pack while it's installed: answer its ping with the folder name.
     else if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "admin_bp");
   },
-  { namespaces: ["realm"] }
 );
 
 /** The installed pack folders, or undefined if nobody answered (then every command shows). */
@@ -122,9 +124,11 @@ async function available(player) {
  */
 async function show(player, form) {
   const once = resumed.delete(player.id);
+  const gen = genOf(player.id);
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (!player.isValid) return undefined;
+    if (!alive(player, gen)) return undefined;
     const res = /** @type {any} */ (await form.show(player));
+    if (!alive(player, gen)) return undefined;
     if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
       if (once) return undefined; // the command they just ran opened its own menu: that one stays
       await system.waitTicks(20);
@@ -132,7 +136,7 @@ async function show(player, form) {
     }
     return res.canceled ? undefined : res;
   }
-  if (player.isValid) player.sendMessage("§eCouldn't open the menu. Close chat or your inventory and try again.");
+  if (alive(player, gen)) player.sendMessage("§eCouldn't open the menu. Close chat or your inventory and try again.");
   return undefined;
 }
 
@@ -147,13 +151,14 @@ const resumed = new Set();
  */
 async function resume(player, back) {
   if (!back) return;
+  const gen = genOf(player.id);
   await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10) * 2 + 5); // Realm Settings pings twice before it opens
-  if (!player.isValid) return;
+  if (!alive(player, gen)) return;
   resumed.add(player.id);
   try {
     return await back();
   } finally {
-    resumed.delete(player.id);
+    if (alive(player, gen)) resumed.delete(player.id);
   }
 }
 
@@ -649,6 +654,7 @@ async function opsPage(player, back) {
 /** What Set up this world (setup.js) uses from this file. @type {import("./setup.js").Ctx} */
 const setupCtx = {
   show,
+  clearResumed: (player) => void resumed.delete(player.id),
   available,
   openCommand,
   nameOf,
@@ -663,27 +669,48 @@ const setupCtx = {
 /** What Pack diagnostics (diagnostics.js) uses from this file. @type {import("./diagnostics.js").Ctx} */
 const diagCtx = { show, installed, names: new Map(PACKS.map((p) => [p.folder, p.pack])) };
 
-/** @type {Set<string>} players with the menu open */
-const open = new Set();
-// A player who leaves with the menu open (or while it waits for the packs to answer) keeps the same id
+/** @type {Map<string, object>} players with the menu open: a token per opening, so an old one ending can't clear a newer one */
+const open = new Map();
+// A player who leaves or dies with the menu open (or while it waits for the packs to answer) keeps the same id
 // when they come back: without this they couldn't open it again until the world restarts.
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   open.delete(playerId);
   resumed.delete(playerId);
+  bump(playerId);
   toldFull.delete(playerId);
   toldFailed.delete(playerId);
   updatingItem.delete(playerId);
   dirtyWhileUpdating.delete(playerId);
   scheduledItem.delete(playerId);
 });
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+  if (deadEntity.typeId !== "minecraft:player") return;
+  open.delete(deadEntity.id);
+  resumed.delete(deadEntity.id);
+  bump(deadEntity.id);
+});
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (initialSpawn) return;
+  open.delete(player.id);
+  resumed.delete(player.id);
+  bump(player.id);
+});
+
+/** Runs one page for the player unless one is open. @param {Player} player @param {() => Promise<unknown>} run */
+function begin(player, run) {
+  if (open.has(player.id)) return;
+  const token = {};
+  open.set(player.id, token);
+  run()
+    .catch((/** @type {unknown} */ e) => console.warn(`[admin] ${e}`))
+    .finally(() => {
+      if (open.get(player.id) === token) open.delete(player.id);
+    });
+}
 
 /** @param {Player} player */
 function openMenu(player) {
-  if (open.has(player.id)) return;
-  open.add(player.id);
-  mainMenu(player)
-    .catch((e) => console.warn(`[admin] ${e}`))
-    .finally(() => open.delete(player.id));
+  begin(player, () => mainMenu(player));
 }
 
 // ---------------------------------------------------------------------------
@@ -1272,13 +1299,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       const player = originPlayer(origin);
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       if (!isOp(player)) return { status: CustomCommandStatus.Failure, message: "Set up this world is for operators." };
-      system.run(() => {
-        if (open.has(player.id)) return;
-        open.add(player.id);
-        wizard(setupCtx, player, undefined)
-          .catch((/** @type {unknown} */ e) => console.warn(`[admin] ${e}`))
-          .finally(() => open.delete(player.id));
-      });
+      system.run(() => begin(player, () => wizard(setupCtx, player, undefined)));
       return { status: CustomCommandStatus.Success };
     }
   );

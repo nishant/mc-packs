@@ -2,11 +2,16 @@
 // through script events, collects their "PROFILE ..." console lines, and prints/writes the report.
 import fs from "node:fs";
 import { execSync } from "node:child_process";
+import { evaluatePerf } from "./perf-acceptance.mjs";
 
 const LINE = /^\[Scripting\] (?:\[[^\]]*\] )?(PROFILE|PROFILE_TICKS|PROFILE_SERVER) (\{.*\})\s*$/;
 
+// The process figures below come from /proc, so only Linux has them (and only Linux has getconf: elsewhere the
+// call printed a "not recognized" error line into every run's output).
 let CLK_TCK = 100;
-try { CLK_TCK = Number(execSync("getconf CLK_TCK", { encoding: "utf8" }).trim()) || 100; } catch (e) { /* default */ }
+if (process.platform === "linux") {
+  try { CLK_TCK = Number(execSync("getconf CLK_TCK", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()) || 100; } catch (e) { /* default */ }
+}
 
 /** bedrock_server's CPU time (ms) and resident memory (MB), Linux only. */
 function procStats(pid) {
@@ -38,7 +43,12 @@ export class Profile {
     this.interval = null;
     this.cpu0 = this.cpu1 = null;
     this.startedAt = null;
+    this.workload = null;
+    this.acceptance = null;
   }
+
+  /** The scenario's own account of its workload (perf-soak's `perf-workload` report). */
+  setWorkload(workload) { this.workload = workload; }
 
   send(cmd) { try { this.bds.send(cmd); } catch (e) { /* server gone */ } }
 
@@ -114,8 +124,8 @@ export class Profile {
     this.say(L.join("\n"));
   }
 
-  /** Whole-bundle per-tick ms (sum over packs, tick by tick). */
-  bundleTicks() {
+  /** Whole-bundle per-tick ms (sum over packs, tick by tick); from/to limit it to a window (the steady soak). */
+  bundleTicks(from, to) {
     const sum = new Map();
     for (const [pack, e] of this.tickParts) {
       if (e.parts.filter((x) => x !== undefined).length < e.n) continue;
@@ -124,11 +134,23 @@ export class Profile {
     }
     const final = [...this.final.values()];
     if (!final.length) return null;
-    const start = Math.min(...final.map((r) => r.startTick)), end = Math.max(...final.map((r) => r.endTick));
+    const start = from ?? Math.min(...final.map((r) => r.startTick)), end = to ?? Math.max(...final.map((r) => r.endTick));
     const per = [];
     for (let t = start; t < end; t++) per.push(sum.get(t) || 0);
     const sorted = [...per].sort((a, b) => a - b);
     return { ticks: per.length, avg: per.reduce((a, b) => a + b, 0) / Math.max(1, per.length), p50: pct(sorted, 0.5), p95: pct(sorted, 0.95), p99: pct(sorted, 0.99), max: sorted[sorted.length - 1] || 0, over50: per.filter((x) => x > 50).length };
+  }
+
+  /** One pack's average ms/tick over a tick window from its already collected per-tick data; null if its data is incomplete. */
+  packWindowAvg(pack, from, to) {
+    const e = this.tickParts.get(pack);
+    if (!e || to <= from || e.parts.filter((x) => x !== undefined).length < e.n) return null;
+    let sum = 0;
+    e.parts.join("").split(",").forEach((v, i) => {
+      const tick = e.startTick + i;
+      if (v && tick >= from && tick < to) sum += Number(v);
+    });
+    return sum / (to - from);
   }
 
   report() {
@@ -153,17 +175,32 @@ export class Profile {
     if (s) L.push(`  server: ${f2(s.tps)} TPS; tick interval avg ${f2(s.tickIntervalAvgMs)} / p95 ${s.tickIntervalP95Ms} / p99 ${s.tickIntervalP99Ms} / max ${s.tickIntervalMaxMs} ms; ${s.ticksOver50ms} ticks over 55 ms, ${s.ticksOver100ms} over 100 ms`);
     if (cpu) L.push(`  bedrock_server process: ${f2(cpu.cpuMsPerTick)} CPU ms/tick (${cpu.cpuPct.toFixed(0)}% of one core), RSS ${cpu.rssMB?.toFixed(0)} MB, ${cpu.threads} threads`);
     L.push(...this.table(rows).map((l) => "  " + l));
+    let steady = null;
+    if (this.workload) {
+      const win = this.workload.soak;
+      if (win && Number.isFinite(win.startTick) && Number.isFinite(win.endTick)) {
+        steady = this.bundleTicks(win.startTick, win.endTick);
+        for (const r of rows) r.steadyMsPerTick = this.packWindowAvg(r.pack, win.startTick, win.endTick);
+      }
+      this.acceptance = evaluatePerf({ args: this.args, workload: this.workload, profile: { ticks, packs: rows } });
+      L.push(`  perf acceptance: ${this.acceptance.ok ? "VALID" : "INVALID"} for ${this.acceptance.declared?.players ?? "?"} players over ${this.acceptance.declared?.seconds ?? "?"} s${this.acceptance.ok ? "" : ` - ${this.acceptance.reasons.join("; ")}`}`);
+      if (steady) L.push(`  steady soak window only (${steady.ticks} ticks): ${f3(steady.avg)} ms/tick summed over packs, p95 ${steady.p95} / p99 ${steady.p99} / max ${steady.max} ms`);
+    }
     L.push(`  profile JSON: ${this.json}`);
-    this.write(rows, bundle, cpu, s, totals, ticks);
+    this.write(rows, bundle, cpu, s, totals, ticks, steady);
     return L;
   }
 
-  write(rows, bundle, cpu, server = null, totals = null, ticks = 0) {
+  write(rows, bundle, cpu, server = null, totals = null, ticks = 0, steady = null) {
     try {
       fs.writeFileSync(this.json, JSON.stringify({
         date: new Date().toISOString(), scenario: this.scenario, args: this.args, ticks,
         server, process: cpu,
-        bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks } : null,
+        workload: this.workload, acceptance: this.acceptance,
+        // Every figure is time inside callbacks the packs handed to the game; time after an await in an async callback
+        // is not attributed (see lib/profile.js), and a run of separate packs sums separate script contexts.
+        measurement: { unattributed: ["time after an await inside an async callback"], contexts: rows.length },
+        bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, steadyWindow: steady, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks } : null,
         packs: rows.map((r) => ({ ...r, dynWritesPerTick: r.dynWrites / r.ticks, actionBarPerTick: r.actionBar / r.ticks, setTitlePerTick: r.titles / r.ticks, runCommandPerTick: r.commands / r.ticks })),
       }, null, 2));
     } catch (e) {

@@ -45,8 +45,14 @@ export default async function (t) {
     await t.waitUntil(() => mapStates.length, { timeout: 40, message: "the Minimap's state" });
     return mapStates[0];
   }
-  const LARGE = { "map_bp:budgetLevel": "low", "map_bp:mobRadiusMax": 24, "elite_bp:maxAlive": 16, "cleanup_bp:threshold": 1500, "find_bp:liveScanRadius": 8, "admin_bp:checkSeconds": 60, "mail_bp:sendCooldownSeconds": 30, "afk_bp:sleep.percent": 50 };
-  const SMALL = { "map_bp:budgetLevel": "normal", "map_bp:mobRadiusMax": 32, "elite_bp:maxAlive": 8, "cleanup_bp:threshold": 500, "find_bp:liveScanRadius": 16, "admin_bp:checkSeconds": 30, "mail_bp:sendCooldownSeconds": 10, "afk_bp:sleep.percent": 100 };
+  // Champions ceiling: default (Small Realm) and Large server preset. tools/test-bds/lib/size-profile-constants.test.mjs keeps these equal to elite_bp config.js and admin_bp presets.js.
+  const eliteSmall = 80;
+  const eliteLarge = 80;
+  const LARGE = { "map_bp:budgetLevel": "low", "map_bp:mobRadiusMax": 24, "elite_bp:maxAlive": eliteLarge, "cleanup_bp:threshold": 1500, "find_bp:liveScanRadius": 8, "admin_bp:checkSeconds": 60, "mail_bp:sendCooldownSeconds": 30, "afk_bp:sleep.percent": 50 };
+  const SMALL = { "map_bp:budgetLevel": "normal", "map_bp:mobRadiusMax": 32, "elite_bp:maxAlive": eliteSmall, "cleanup_bp:threshold": 500, "find_bp:liveScanRadius": 16, "admin_bp:checkSeconds": 30, "mail_bp:sendCooldownSeconds": 10, "afk_bp:sleep.percent": 100 };
+  const changes = Object.keys(LARGE).filter((k) => LARGE[k] !== SMALL[k]).length;
+  t.assert(changes >= 7, `at least the 7 other settings differ between sizes (${changes})`);
+  const alike = Object.keys(LARGE).length - changes;
   const matches = (/** @type {Map<string, any>} */ v, /** @type {Record<string, any>} */ want) => Object.entries(want).filter(([k, x]) => v.get(k) !== x).map(([k, x]) => `${k} is ${v.get(k)}, not ${x}`);
 
   // 1. Members can't open it.
@@ -86,7 +92,8 @@ export default async function (t) {
   let ask = await tap(page, "Large server");
   t.assert(ask?.type === "message" && title(ask) === "Apply Large server?", `a confirmation with the list came first (got "${title(ask)}")`);
   t.log(plain(ask.body));
-  t.check(/^These 8 settings change, for the whole world:\nMinimap: Minimap script time a tick: Normal \(about 2\.9 ms a tick\) -> Low \(about 2 ms a tick\)\nMinimap: Largest mob range players may pick \(blocks\): 32 -> 24\n/.test(plain(ask.body)), "it lists each change, old -> new, in menu words");
+  t.check(alike === 0 || new RegExp(`${alike} more already match\\.`).test(plain(ask.body)), `the list says how many settings already match (${alike})`);
+  t.check(new RegExp(`^These ${changes} settings change, for the whole world:\nMinimap: Minimap script time a tick: Normal \\(about 2\\.9 ms a tick\\) -> Low \\(about 2 ms a tick\\)\nMinimap: Largest mob range players may pick \\(blocks\\): 32 -> 24\n`).test(plain(ask.body)), "it lists each change, old -> new, in menu words");
   page = await tap(ask, 1);
   t.check(title(page) === "Operator Tools", `Cancel goes back (got "${title(page)}")`);
   v = await values();
@@ -95,7 +102,7 @@ export default async function (t) {
   // 5. Yes: every option changes, the Minimap's budgets drop.
   page = await tap(page, "Server size");
   ask = await tap(page, "Large server");
-  const done = t.waitMessage(op, /Server size: Large server\. Changed 8 settings\./, { pack: "admin_bp", timeout: 100 });
+  const done = t.waitMessage(op, new RegExp(`Server size: Large server\\. Changed ${changes} settings\\.`), { pack: "admin_bp", timeout: 100 });
   page = await tap(ask, 0);
   t.log((await done).plain);
   v = await values();
@@ -108,8 +115,8 @@ export default async function (t) {
   page = await tap(page, "Server size");
   t.check(/Now: Large server/.test(plain(page.body)) && lines(page).some((/** @type {string} */ b) => b.startsWith("Large server (now)")), "the size page says Large server now");
   ask = await tap(page, "Small Realm");
-  t.check(/^These 8 settings change, for the whole world:\nMinimap: Minimap script time a tick: Low \(about 2 ms a tick\) -> Normal/.test(plain(ask.body)), "Small Realm lists the way back");
-  const back = t.waitMessage(op, /Server size: Small Realm\. Changed 8 settings\./, { pack: "admin_bp", timeout: 100 });
+  t.check(new RegExp(`^These ${changes} settings change, for the whole world:\nMinimap: Minimap script time a tick: Low \\(about 2 ms a tick\\) -> Normal`).test(plain(ask.body)), "Small Realm lists the way back");
+  const back = t.waitMessage(op, new RegExp(`Server size: Small Realm\\. Changed ${changes} settings\\.`), { pack: "admin_bp", timeout: 100 });
   page = await tap(ask, 0);
   await back;
   v = await values();

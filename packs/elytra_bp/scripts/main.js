@@ -13,6 +13,7 @@ import {
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
 import { isSlot, sideBoxes } from "./side.js";
+import { onScriptEvent } from "./script-events.js";
 
 // While a player glides, a few times a second, the bar above the hotbar shows their speed, height,
 // elytra durability left and firework rockets (plus NOS Rockets when carried). Players who aren't
@@ -708,7 +709,8 @@ const STEADY = 50;
 // skips its redraws while one lasts, and keeps asking steady lines to wait. A `background` steady line
 // (the Party HUD) and a lower steady line (`steady` below ours, or equal from a pack named after ours) wait
 // for this HUD instead.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:actionbar",
   ({ id, message }) => {
     if (id !== "realm:actionbar") return;
     try {
@@ -721,7 +723,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] }
 );
 
 const side = sideBoxes("elytra");
@@ -733,11 +734,14 @@ system.runInterval(() => {
   const now = system.currentTick;
   for (const player of world.getAllPlayers()) {
     try {
-      const where = getFor(player, "where");
-      if (!player.isGliding || hudOff(player) || where === "hotbar") {
+      const gliding = player.isGliding;
+      // Only a gliding player's HUD is drawn: a player on the ground needs neither their `where` setting nor `hudOff` read.
+      const off = gliding && hudOff(player);
+      const where = gliding ? getFor(player, "where") : undefined;
+      if (!gliding || off || where === "hotbar") {
         // Landed (or switched to the hotbar): take the box away now instead of when it runs out.
         if (inBox.delete(player.id)) side.clear(player);
-        if (!player.isGliding || hudOff(player)) {
+        if (!gliding || off) {
           speedHistory.delete(player.id);
           continue;
         }
@@ -850,9 +854,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "elytra_bp");
   },
-  { namespaces: ["realm"] }
 );

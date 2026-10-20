@@ -3,6 +3,8 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Pl
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { memberOf, planParty, stale, unknownFields } from "./prune.js";
 
 // Each party is one world property (party:p:<code>), so members who are offline stay in theirs and however many
 // parties a big server collects, none gets near a property's size limit. Every member
@@ -12,7 +14,7 @@ import { get, getFor } from "./settings.js";
 //
 // The stable Script API can't stop damage before it happens, so party mates can still hurt each other.
 
-/** @typedef {{ l: string, m: [string, string][] }} Party leader id; members as [player id, gamertag when last seen], in joining order */
+/** @typedef {{ l: string, m: [string, string, number?][] }} Party leader id; members as [player id, gamertag when last seen, when last seen (ms; 0 or none = not yet known)], in joining order */
 
 const PREFIX = "party:p:"; // world: one JSON Party per party, keyed by its code
 const LEGACY = "party:data"; // world, older versions: JSON { <code>: Party } of every party (moved to PREFIX on load)
@@ -42,10 +44,17 @@ let index;
 function parse(p) {
   const any = /** @type {any} */ (p);
   if (!any || typeof any.l !== "string" || !Array.isArray(any.m)) return undefined;
-  /** @type {[string, string][]} */
-  const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => [m[0], String(m[1] ?? "")]);
+  /** @type {[string, string, number?][]} */
+  const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => memberOf(m));
   if (!members.length) return undefined;
-  return { l: members.some((m) => m[0] === any.l) ? any.l : members[0][0], m: members };
+  const l = members.some((m) => m[0] === any.l) ? any.l : members[0][0];
+  const out = { ...unknownFields(any, ["l", "m"]), l, m: members };
+  if (Array.isArray(any.mu)) {
+    const mu = any.mu.filter((/** @type {unknown} */ x) => x !== l); // a leader is never muted
+    if (mu.length) /** @type {any} */ (out).mu = mu;
+    else delete (/** @type {any} */ (out).mu);
+  }
+  return out;
 }
 
 /** @returns {Map<string, Party>} code -> party */
@@ -188,7 +197,7 @@ function tell(code, text) {
 /** @param {Player} player @returns {string} the new party's code */
 function create(player) {
   const code = newCode();
-  parties().set(code, { l: player.id, m: [[player.id, player.name]] });
+  parties().set(code, { l: player.id, m: [[player.id, player.name, Date.now()]] });
   save(code);
   syncTag(player);
   return code;
@@ -199,7 +208,7 @@ function join(player, code) {
   const p = parties().get(code);
   if (!p) return;
   tell(code, `§d[Party] ${player.name} joined the party.`);
-  p.m.push([player.id, player.name]);
+  p.m.push([player.id, player.name, Date.now()]);
   save(code);
   syncTag(player);
 }
@@ -214,10 +223,19 @@ function remove(id, why) {
   if (!code) return;
   const p = /** @type {Party} */ (parties().get(code));
   p.m = p.m.filter((m) => m[0] !== id);
+  const anyP = /** @type {any} */ (p);
+  if (Array.isArray(anyP.mu)) {
+    anyP.mu = anyP.mu.filter((/** @type {unknown} */ x) => x !== id);
+    if (!anyP.mu.length) delete anyP.mu;
+  }
   if (!p.m.length) parties().delete(code);
   else if (p.l === id) {
     const next = p.m.find((m) => online(m[0])) ?? p.m[0];
     p.l = next[0];
+    if (Array.isArray(anyP.mu)) {
+      anyP.mu = anyP.mu.filter((/** @type {unknown} */ x) => x !== p.l);
+      if (!anyP.mu.length) delete anyP.mu;
+    }
     why += ` ${next[1]} leads the party now.`;
   }
   save(code);
@@ -277,6 +295,13 @@ function leave(player) {
   player.sendMessage("§dYou left the party.");
 }
 
+/** Ids of the members the leader muted (saved as the party's `mu`; only current members count). @param {string} code @returns {string[]} */
+function mutedIn(code) {
+  const p = /** @type {any} */ (parties().get(code));
+  if (!p || !Array.isArray(p.mu)) return [];
+  return p.mu.filter((/** @type {unknown} */ id) => typeof id === "string" && id !== p.l && p.m.some((/** @type {any[]} */ m) => m[0] === id));
+}
+
 /** Tick each player last sent a party chat message: one a second at most. @type {Map<string, number>} */
 const lastChat = new Map();
 
@@ -286,9 +311,11 @@ function chat(player, text) {
   if (!code) return player.sendMessage("§cYou're not in a party. Start one with /realm:party");
   const msg = text.replace(/§/g, "").trim().slice(0, get("chatMaxLength"));
   if (!msg) return player.sendMessage('§cType a message: /realm:party_chat "see you there"');
+  if (mutedIn(code).includes(player.id)) return player.sendMessage("§cThe party leader muted you: your party messages aren't sent.");
   const now = system.currentTick;
   if (now - (lastChat.get(player.id) ?? -Infinity) < 20) return player.sendMessage("§7Slow down: one party message a second.");
   lastChat.set(player.id, now);
+  if (lastChat.size > 32) for (const [id, at] of lastChat) if (now - at >= 20) lastChat.delete(id);
   tell(code, `§d[Party] ${player.name}: §f${msg}`);
 }
 
@@ -334,19 +361,50 @@ let hudPlayers = new Set();
 let hudHeard = -Infinity;
 /** The Coordinates HUD repeats its state every 5 seconds: after 10 without one, it's gone. */
 const HUD_STALE_TICKS = 200;
+const HUD_PART_TIMEOUT = 100;
+/** The realm:hud_state list still arriving: one `seq`, its parts so far. @type {{ parts: number, seq: unknown, got: Map<number, string[]>, tick: number } | null} */
+let hudAssembly = null;
+
+/** Seq and tick of the last completed list: an older publication replayed late must not replace it. @type {{ seq: number, tick: number } | null} */
+let hudDone = null;
+
+/** Takes one realm:hud_state part; the player list is replaced only when every part of one publication is here. Malformed messages change nothing. @param {any} msg */
+function takeHudState(msg) {
+  if (!Array.isArray(msg.players)) return;
+  const now = system.currentTick;
+  const parts = msg.parts === undefined ? 1 : msg.parts;
+  const part = msg.part === undefined ? 1 : msg.part;
+  if (typeof parts !== "number" || typeof part !== "number" || !Number.isInteger(parts) || !Number.isInteger(part)) return;
+  if (!(parts >= 1 && parts <= 1000 && part >= 1 && part <= parts)) return;
+  const seq = typeof msg.seq === "number" && Number.isFinite(msg.seq) ? msg.seq : undefined;
+  // Older than what is already whole (or arriving): a late replay. After HUD_STALE_TICKS a restarted HUD's low numbers are accepted again.
+  if (seq !== undefined && hudDone && now - hudDone.tick <= HUD_STALE_TICKS && seq < hudDone.seq) return;
+  const ids = msg.players.map(String);
+  const finish = (/** @type {string[]} */ list) => {
+    hudAssembly = null;
+    hudPlayers = new Set(list);
+    hudHeard = now;
+    hudDone = seq === undefined ? null : { seq, tick: now };
+  };
+  if (parts === 1) return finish(ids);
+  let a = hudAssembly;
+  if (a && now - a.tick <= HUD_PART_TIMEOUT && typeof a.seq === "number" && seq !== undefined && seq < a.seq) return; // a late part of an older publication
+  if (!a || a.parts !== parts || a.seq !== seq || now - a.tick > HUD_PART_TIMEOUT) a = hudAssembly = { parts, seq, got: new Map(), tick: now };
+  a.got.set(part, ids);
+  if (a.got.size < parts) return;
+  finish([...a.got.values()].flat());
+}
 
 // Other packs' notes and steady lines (an expedition's run line, the Elytra HUD) hold the bar: the
 // party line waits, so the two don't take turns.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:actionbar", "realm:hud_state"],
   ({ id, message }) => {
     if (id !== "realm:actionbar" && id !== "realm:hud_state") return;
     try {
       const m = JSON.parse(message);
       if (id === "realm:hud_state") {
-        if (m && Array.isArray(m.players)) {
-          hudPlayers = new Set(m.players.map(String));
-          hudHeard = system.currentTick;
-        }
+        if (m && typeof m === "object") takeHudState(m);
         return;
       }
       if (!m || typeof m.player !== "string" || m.from === "party_bp") return;
@@ -357,7 +415,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // The HUD, every 2 seconds: mates within hudRange, nearest first. Nothing is written when nobody is
@@ -404,14 +461,15 @@ system.runInterval(() => {
 }, HUD_TICKS);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
-  if (!initialSpawn) return;
+  if (!initialSpawn) return void bump(player.id);
   try {
     syncTag(player);
     const code = partyOf(player.id);
     const p = code ? parties().get(code) : undefined;
     const me = p?.m.find((m) => m[0] === player.id);
-    if (code && me && me[1] !== player.name) {
+    if (code && me && (me[1] !== player.name || stale(me[2], Date.now()))) {
       me[1] = player.name; // keep the saved gamertag current for offline lists
+      me[2] = Date.now();
       write(code);
       sendMembers(code);
     }
@@ -420,8 +478,43 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   }
 });
 
+/** Deletes parties of one member nobody has played in for `forgetSoloAfterDays`, and starts the clock for members with no saved time. */
+function* forgetOld() {
+  for (const code of [...parties().keys()]) {
+    // Read again for each party: the job yields between them, and a player may join or the setting change.
+    const days = Number(get("forgetSoloAfterDays"));
+    const now = Date.now();
+    try {
+      const p = parties().get(code);
+      if (p) {
+        const plan = planParty(p, now, (id) => !!online(id), days);
+        if (plan.drop) {
+          parties().delete(code);
+          console.warn(`[party] deleted party ${code}: its only member was not seen for over ${days} days`);
+          save(code);
+        } else if (plan.changed) write(code);
+      }
+    } catch (e) {
+      console.warn(`[party] ${e}`);
+    }
+    yield;
+  }
+}
+system.runTimeout(() => system.runJob(forgetOld()), 1600);
+system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
+
+/** Per-player counter, bumped when a player leaves, dies, respawns or changes dimension: forms opened before that are stale. @type {Map<string, number>} */
+const lives = new Map();
+const bump = (/** @type {string} */ id) => lives.set(id, (lives.get(id) ?? 0) + 1);
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => bump(player.id));
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+  if (deadEntity.typeId === "minecraft:player") bump(deadEntity.id);
+});
+
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  lastChat.delete(playerId);
+  bump(playerId);
+  // An active one-a-second cooldown outlives leaving and rejoining; an expired one is dropped.
+  if (system.currentTick - (lastChat.get(playerId) ?? -Infinity) >= 20) lastChat.delete(playerId);
   invites.delete(playerId);
   barHeld.delete(playerId);
 });
@@ -437,9 +530,11 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
  * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 async function show(player, form) {
+  const life = lives.get(player.id) ?? 0;
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (!player.isValid) return undefined;
+    if (!player.isValid || (lives.get(player.id) ?? 0) !== life) return undefined;
     const res = /** @type {any} */ (await form.show(player));
+    if (!player.isValid || (lives.get(player.id) ?? 0) !== life) return undefined;
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), 20));
   }
@@ -495,6 +590,10 @@ async function mainMenu(player) {
   if (leader && p.m.length > 1) {
     form.button("Remove a member\n§8Leader only");
     actions.push(() => kickMenu(player));
+  }
+  if (leader && p.m.length > 1) {
+    form.button("Mute or unmute a member\n§8Leader only");
+    actions.push(() => muteMenu(player));
   }
   form.button("Leave the party");
   actions.push(() => leave(player));
@@ -553,6 +652,33 @@ async function kickMenu(player) {
   remove(picked[0], `${player.name} removed ${picked[1]} from the party.`);
   online(picked[0])?.sendMessage(`§d${player.name} removed you from the party.`);
   player.sendMessage(`§dRemoved ${picked[1]}.`);
+}
+
+/** The leader toggles a member's party chat mute. @param {Player} player */
+async function muteMenu(player) {
+  const code = partyOf(player.id);
+  const p = code ? parties().get(code) : undefined;
+  if (!code || !p || p.l !== player.id) return;
+  const members = p.m.filter((m) => m[0] !== player.id);
+  if (!members.length) return;
+  const muted = mutedIn(code);
+  const form = new ActionFormData().title("§lMute a member").body("A muted member can still read the party chat but their messages aren't sent. Tap a member to mute or unmute them.");
+  for (const [id, name] of members) form.button(`${name}\n§8${muted.includes(id) ? "Muted: tap to unmute" : "Tap to mute"}`);
+  form.button("Back");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const picked = members[res.selection];
+  if (!picked) return mainMenu(player);
+  const now = /** @type {any} */ (parties().get(code));
+  if (!now || now.l !== player.id || !now.m.some((/** @type {any[]} */ m) => m[0] === picked[0])) return;
+  const list = mutedIn(code);
+  const was = list.includes(picked[0]);
+  const next = was ? list.filter((x) => x !== picked[0]) : [...list, picked[0]];
+  if (next.length) now.mu = next;
+  else delete now.mu;
+  save(code);
+  player.sendMessage(`§d${picked[1]} is ${was ? "unmuted" : "muted"} in the party chat.`);
+  online(picked[0])?.sendMessage(was ? "§dThe party leader unmuted you." : "§cThe party leader muted you in the party chat.");
 }
 
 // ---------------------------------------------------------------------------
@@ -628,7 +754,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
 // players (a big server after a few months), save one party (`legacy`: its code) the way older versions did (read
 // after the next restart), or `report` in chat how many parties there are and whether that code is one.
 // /scriptevent realm:party_test {"fill":400}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:party_test",
   (ev) => {
     if (ev.id !== "realm:party_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -653,11 +780,11 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[party] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:party_members_ping"],
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "party_bp");
     else if (id === "realm:party_members_ping") {
@@ -668,5 +795,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

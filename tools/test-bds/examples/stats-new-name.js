@@ -4,6 +4,18 @@
 // Run with: node tools/test-bds/run.mjs --quiet --only stats_bp --scenario tools/test-bds/examples/stats-new-name.js
 export default async function (t) {
   t.echoActionBar = true;
+  let offAck;
+  const onAck = ({ id, message }) => {
+    if (id === "realm:cfg_ack") {
+      const m = JSON.parse(message);
+      if (m.id === "zero_fixture_off") offAck = m;
+    }
+  };
+  t.system.afterEvents.scriptEventReceive.subscribe(onAck, { namespaces: ["realm"] });
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "zero_fixture_off", pack: "stats_bp", key: "tickerDefaultOn", value: false }));
+  await t.waitUntil(() => offAck, { timeout: 40, message: "private ticker default-off acknowledgement" });
+  t.system.afterEvents.scriptEventReceive.unsubscribe(onAck);
+  t.assert(offAck.ok === true, "the zero-score fixture controls its initial ticker state; default-on has separate coverage");
   const p = await t.player("Nell");
   await t.wait(10);
   // No score anywhere: forget every score the joining counted.
@@ -20,7 +32,8 @@ export default async function (t) {
   for (const s of ["playtime", "mobkills", "mined", "travelled"])
     t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "s" + s, pack: "stats_bp", key: `tickerShows.${s}`, value: s === "mined", player: p.id }));
   const since = t.tick;
-  t.cmd(p, "/realm:stats_ticker");
+  t.assert(t.cmd(p, "/realm:stats_ticker").ok, "the ticker toggle runs");
+  await t.waitMessage(p, /Stats ticker: Enabled\./, { kind: "chat", timeout: 40, since });
   const m = await t.waitMessage(p, /Mined/i, { kind: "actionbar", timeout: 100, since });
   t.log("Nell sees:", m.plain);
   t.check(/Mined 0/i.test(m.plain), "the ticker shows 0 for a name with no scores");

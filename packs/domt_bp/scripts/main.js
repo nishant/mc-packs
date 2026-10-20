@@ -13,6 +13,7 @@ import { CARDS, RARITIES, RARITY_COLOR, RARITY_NAME } from "./effects.js";
 import { showWish, wishPending } from "./events.js";
 import { attempt, burst, crownsOf, pendingTasks, sound, wait, zoneCount } from "./helpers.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // The Deck of Many Things: /realm:domt opens the deck's menu. Drawing picks a rarity by weight, then
 // a card of that rarity, shows it with a little ceremony and runs its handler (effects.js). A card
@@ -622,7 +623,8 @@ async function runTests(p, which) {
   console.warn(`[domt] TEST SUMMARY ${passed}/${results.length} passed${passed < results.length ? `; failed: ${results.filter((r) => !r.ok).map((r) => r.id).join(", ")}` : ""}`);
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:domt_test",
   ({ id, message, sourceEntity, sourceBlock }) => {
     if (id !== "realm:domt_test") return;
     try {
@@ -643,7 +645,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[domt] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -722,9 +723,9 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "domt_bp");
   },
-  { namespaces: ["realm"] },
 );

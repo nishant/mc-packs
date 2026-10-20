@@ -3,6 +3,8 @@ import { CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Playe
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 /** @typedef {"miners" | "growers" | "wardens" | "wayfarers"} Guild */
 /** @typedef {import("@minecraft/server").ScoreboardObjective} ScoreboardObjective */
@@ -14,13 +16,11 @@ import { get, getFor } from "./settings.js";
 
 // Reputation lives in the scoreboards rep_miners, rep_growers, rep_wardens and rep_wayfarers, so
 // other packs (and /scoreboard) can read it. Reputation for players who are offline when it's
-// earned waits in the world property "guilds:pending" until they join.
+// earned waits in the world properties "guilds:pending:<playerId>" (one per player, with the index "guilds:pending_idx", see owed.js) until they join.
 /** @type {Guild[]} */
 const GUILDS = ["miners", "growers", "wardens", "wayfarers"];
 const PROP_PROG = "guilds:prog";
-const PROP_PENDING = "guilds:pending";
 const PLACED_MEMORY = 5000; // ores and melons/pumpkins placed lately: breaking them again earns nothing
-const PENDING_MAX = 300; // offline players with reputation waiting (oldest dropped beyond this)
 
 /** @param {unknown} g @returns {g is Guild} */
 const isGuild = (g) => typeof g === "string" && /** @type {string[]} */ (GUILDS).includes(g);
@@ -161,6 +161,24 @@ function unlockTitle(p, g, r) {
   if (title) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: p.id, title, from: "guilds_bp" }));
 }
 
+// Town news: at most one piece per in-game hour from this pack, each master once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Rank titles stay outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** @param {Player} p @param {Guild} g @param {number} from @param {number} to @param {number} rep */
 function rankedUp(p, g, from, to, rep) {
   const rank = RANKS[to].name;
@@ -173,7 +191,7 @@ function rankedUp(p, g, from, to, rep) {
   p.playSound("random.levelup", { pitch: 1.2, volume: 0.9 });
   for (let r = from + 2; r <= to + 1; r++) unlockTitle(p, g, r);
   // Townsfolk gossip (Hearth & Hearsay) about a new Master (the top rank).
-  if (to === RANKS.length - 1 && from < to) system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "guild_master", player: p.id, name: p.name, place: guildName(g) }));
+  if (to === RANKS.length - 1 && from < to) gossip(`guild:${p.id}:${g}`, { kind: "guild_master", player: p.id, name: p.name, place: guildName(g) });
   if (CONFIG.announceRanks.includes(to + 1)) {
     for (const other of world.getAllPlayers()) if (other.id !== p.id) other.sendMessage(`§6${p.name} reached ${rank} in the ${guildName(g)}!`);
   }
@@ -183,27 +201,23 @@ function rankedUp(p, g, from, to, rep) {
 // Reputation for players who are offline
 // ---------------------------------------------------------------------------
 
-/** @returns {Record<string, Partial<Record<Guild, number>>>} */
-function pending() {
-  try {
-    const raw = world.getDynamicProperty(PROP_PENDING);
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
+/** Reputation waiting per offline player: { guild: points }. */
+const pendingStore = createOwedStore(world, {
+  base: "guilds:pending",
+  normalize: (v) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("not a reputation record");
+    return v;
+  },
+});
 
 /** @param {string} playerId @param {Guild} g @param {number} amount */
 function addPending(playerId, g, amount) {
-  const all = pending();
-  const mine = all[playerId] ?? {};
-  delete all[playerId]; // re-add at the end: the oldest go first when it's full
-  mine[g] = (mine[g] ?? 0) + Math.trunc(amount);
-  all[playerId] = mine;
-  const ids = Object.keys(all);
-  for (const id of ids.slice(0, Math.max(0, ids.length - PENDING_MAX))) delete all[id];
-  world.setDynamicProperty(PROP_PENDING, JSON.stringify(all));
+  const ok = pendingStore.update(playerId, (cur) => {
+    const mine = cur && typeof cur === "object" ? cur : {};
+    mine[g] = (Number(mine[g]) || 0) + Math.trunc(amount);
+    return mine;
+  });
+  if (!ok) console.warn(`[guilds] ${Math.trunc(amount)} ${g} reputation for ${playerId} could not be saved`);
 }
 
 /**
@@ -229,12 +243,16 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     }
   }, 220);
   try {
-    const all = pending();
-    const mine = all[player.id];
+    const mine = pendingStore.take(player.id);
     if (!mine) return;
-    delete all[player.id];
-    world.setDynamicProperty(PROP_PENDING, Object.keys(all).length ? JSON.stringify(all) : undefined);
-    for (const g of GUILDS) if (mine[g]) addRep(player, g, /** @type {number} */ (mine[g]), "while you were away");
+    applyParts(
+      GUILDS.filter((g) => mine[g]),
+      (g) => addRep(player, g, /** @type {number} */ (mine[g]), "while you were away"),
+      (failed) => {
+        for (const g of failed) addPending(player.id, g, /** @type {number} */ (mine[g]));
+      },
+      (m) => console.warn(`[guilds] ${m}`),
+    );
   } catch (e) {
     console.warn(`[guilds] ${e}`);
   }
@@ -289,7 +307,14 @@ function championSlain(m) {
   }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:quest_done",
+    "realm:rep_add",
+    "realm:champion_slain",
+    "realm:npc_talk",
+    "realm:npc_choose",
+  ],
   ({ id, message }) => {
     if (id !== "realm:quest_done" && id !== "realm:rep_add" && id !== "realm:champion_slain" && id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     let m;
@@ -314,7 +339,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[guilds] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -734,9 +758,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "guilds_bp");
   },
-  { namespaces: ["realm"] },
 );

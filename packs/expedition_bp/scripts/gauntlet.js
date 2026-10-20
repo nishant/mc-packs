@@ -11,12 +11,58 @@
 
 import { EnchantmentType, EquipmentSlot, ItemStack, Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { spawnFresh as spawnShared } from "./spawn.js";
 
 /** Lore line on kit and boon gear: taken away when the run ends. */
 export const RUN_LORE = "§8Expedition gear: stays in the dungeon";
 const STASH_PROP = "expedition:stash"; // player: JSON { id, tag, placed? }: where their own items are while they run with the kit
 const STASH_NEXT = "expedition:stash_next"; // world: the next stash number
 const STASH_TAG = "realm:exp_stash";
+/** Saved structure ids this pack makes: expedition:stash_<n> and expedition:parcel_<n>, nothing else. */
+const OWN_STRUCTURE = /^expedition:(stash|parcel)_\d+$/;
+/** False from a confirmed "forget" until /reload: realm:diag blocks this pack's world saves then, so a new stash or parcel couldn't be tracked. */
+let saving = true;
+
+/** @param {boolean} on */
+export function setSaving(on) {
+  saving = on;
+}
+
+/**
+ * Deletes this pack's saved structures of one kind (`expedition:<kind>_<n>`; never another pack's or a player's own
+ * structures), except the ones `hold` names, which are counted as kept, and checks each is really gone.
+ * @param {"stash" | "parcel"} kind @param {() => boolean} hold
+ * @returns {{ deleted: number, kept: number, failed: number, error?: string }}
+ */
+export function forgetStructures(kind, hold) {
+  /** @type {{ deleted: number, kept: number, failed: number, error?: string }} */
+  const out = { deleted: 0, kept: 0, failed: 0 };
+  const sm = world.structureManager;
+  /** @type {string[]} */
+  let ids;
+  try {
+    ids = sm.getWorldStructureIds().filter((id) => OWN_STRUCTURE.test(id) && id.startsWith(`expedition:${kind}_`));
+  } catch (e) {
+    out.failed = -1;
+    out.error = `couldn't list saved structures: ${String(e).slice(0, 120)}`;
+    return out;
+  }
+  for (const id of ids) {
+    if (hold()) {
+      out.kept++;
+      continue;
+    }
+    try {
+      sm.delete(id);
+      if (sm.get(id)) throw new Error("still saved");
+      out.deleted++;
+    } catch (e) {
+      out.failed++;
+      out.error ??= `${id}: ${String(e).slice(0, 120)}`;
+    }
+  }
+  return out;
+}
 /** Slots 0 to 35 are the inventory; then the armor and the offhand. */
 const EQUIP = [EquipmentSlot.Head, EquipmentSlot.Chest, EquipmentSlot.Legs, EquipmentSlot.Feet, EquipmentSlot.Offhand];
 const SLOTS = 36 + EQUIP.length;
@@ -48,23 +94,11 @@ export function makeItem(id, count = 1, opts = {}) {
 }
 
 /**
- * Spawns an entity and makes sure the game handed back the new one: a world whose entity ids repeat (an old
- * level.dat put back) can return an entity that already exists, such as a dropped item or someone's minecart, and
- * tagging, filling or later removing that one would lose it. Throws when it keeps happening.
+ * The shared spawnFresh (scripts/spawn.js) with the strict check: someone's chest minecart or pet wolf is the same type,
+ * so a new entity must also stand where it was spawned, untagged, in the dimension asked for.
  * @param {import("@minecraft/server").Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at
  */
-export function spawnFresh(dim, type, at) {
-  const want = type.includes(":") ? type : `minecraft:${type}`;
-  for (let k = 0; k < 8; k++) {
-    const e = dim.spawnEntity(/** @type {any} */ (type), at);
-    // The type alone isn't enough: someone's chest minecart or pet wolf is the same type. A new entity stands where
-    // it was spawned, untagged, in the dimension asked for.
-    if (e.typeId !== want || e.dimension.id !== dim.id) continue;
-    const l = e.location;
-    if (Math.abs(l.x - at.x) < 0.5 && Math.abs(l.z - at.z) < 0.5 && Math.abs(l.y - at.y) < 1.5 && !e.getTags().length) return e;
-  }
-  throw new Error(`spawnEntity(${type}) kept returning another entity`);
-}
+export const spawnFresh = (dim, type, at) => spawnShared(dim, type, at, { fresh: true });
 
 /** The best gear tier for a level: iron, diamond from Nightmare 8, netherite from Nightmare 15. @param {number} L */
 const metal = (L) => (L >= 17 ? "netherite" : L >= 10 ? "diamond" : "iron");
@@ -190,7 +224,7 @@ export function stripRunGear(p) {
 // The stash: the player's own items while they run with the kit
 // ---------------------------------------------------------------------------
 
-/** @param {Player} p @returns {{ id: string, tag: string, placed?: boolean, at?: { x: number, y: number, z: number, d: string } } | undefined} */
+/** @param {Player} p @returns {{ id: string, tag: string, placed?: boolean, seen?: boolean, at?: { x: number, y: number, z: number, d: string } } | undefined} */
 export function stashOf(p) {
   try {
     const raw = p.getDynamicProperty(STASH_PROP);
@@ -219,6 +253,7 @@ function carried(p) {
  * @param {Player} p @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at
  */
 export function saveStash(p, dim, at) {
+  if (!saving) return false; // forgotten: the next numbers can't be saved, so no structure and no stripped inventory
   if (stashOf(p)) return false; // a stash from before is still waiting: never overwrite it
   const { inv, eq, items } = carried(p);
   if (!inv || !eq) return false;
@@ -295,9 +330,12 @@ function loadedAt(dim, at) {
  * the player's feet now. A player just sent home can stand in chunks that aren't loaded yet, and a structure placed
  * there puts nothing down (without an error), so it's only placed where the chunk is loaded. The record is marked as
  * put down before the carts appear (never placed twice while they exist); one put down where the carts never
- * appeared is placed again, since the structure is only deleted once everything is handed over.
+ * appeared is placed again, since the structure is only deleted once everything is handed over. Once its carts have been
+ * found, `seen` is saved: a seen record whose carts are gone (broken, emptied) is never placed again, which would hand
+ * the same items out twice, and resolves `null`. Any owned cart found, in any dimension, is used: fewer than `want`
+ * is returned as is (the caller says so) and the structure is never placed over survivors.
  * Resolves the carts, `null` when the structure is missing, or `undefined` to try again later.
- * @template {{ id: string, tag: string, placed?: boolean, at?: { x: number, y: number, z: number, d: string } }} R
+ * @template {{ id: string, tag: string, placed?: boolean, seen?: boolean, at?: { x: number, y: number, z: number, d: string } }} R
  * @param {Player} p @param {R} rec @param {(r: R) => void} save @param {number} want how many carts it has
  * @returns {Promise<import("@minecraft/server").Entity[] | null | undefined>}
  */
@@ -347,17 +385,20 @@ async function cartsOf(p, rec, save, want) {
     if (!carts) return undefined;
     if (carts.length) {
       dropStrays(rec.at.d);
+      if (!rec.seen) save({ ...rec, seen: true });
       return carts;
     }
     // Put down by an older version into the wrong dimension (the Overworld at the same spot) and loaded there: use those.
     for (const d of DIMS) {
       if (d === rec.at.d) continue;
       const there = find(d);
-      if (there.length >= want) {
+      if (there.length) {
         dropStrays(d);
+        if (!rec.seen) save({ ...rec, seen: true });
         return there;
       }
     }
+    if (rec.seen) return null;
   }
   if (!world.structureManager.get(rec.id)) return null;
   for (let t = 0; t < 20; t++) {
@@ -369,7 +410,10 @@ async function cartsOf(p, rec, save, want) {
       save({ ...rec, placed: true, at: { ...at, d: dim.id } });
       placeCarts(rec.id, dim, at);
       const carts = await look(dim.id);
-      if (carts?.length) dropStrays(dim.id);
+      if (carts?.length) {
+        dropStrays(dim.id);
+        save({ ...rec, placed: true, seen: true, at: { ...at, d: dim.id } });
+      }
       return carts?.length ? carts : undefined;
     }
     await wait(5);
@@ -475,6 +519,7 @@ export async function restoreStash(p) {
     // already gone
   }
   p.sendMessage(`§aYour own items are back with you.${spilled ? " Some are at your feet: those slots were taken." : ""}`);
+  if (carts.length < 2) p.sendMessage(`§cOnly ${carts.length} of 2 storage carts could be found, so some of your stored items are missing. Tell an operator.`);
   return true;
 }
 
@@ -487,7 +532,7 @@ const PARCELS = "expedition:parcels:"; // + player id. world: JSON Parcel[]
 const PARCEL_NEXT = "expedition:parcel_next"; // world: the next parcel number
 const PARCEL_TAG = "realm:exp_parcel";
 
-/** @typedef {{ id: string, tag: string, k: string, c?: number, placed?: boolean, at?: { x: number, y: number, z: number, d: string } }} Parcel k: what it holds ("spoils", "dropped"); c: its carts */
+/** @typedef {{ id: string, tag: string, k: string, c?: number, placed?: boolean, seen?: boolean, at?: { x: number, y: number, z: number, d: string } }} Parcel k: what it holds ("spoils", "dropped"); c: its carts */
 
 /** @param {string} owner @returns {Parcel[]} */
 function parcelsOf(owner) {
@@ -515,6 +560,7 @@ export const hasParcels = (owner) => parcelsOf(owner).length > 0;
 export function saveParcel(owner, kind, items, dim, at) {
   const keep = items.filter((it) => !isRunGear(it));
   if (!keep.length) return true;
+  if (!saving) return false; // forgotten: the caller keeps the items
   const nRaw = world.getDynamicProperty(PARCEL_NEXT);
   const n = typeof nRaw === "number" ? nRaw : 1;
   world.setDynamicProperty(PARCEL_NEXT, n + 1);
@@ -577,6 +623,9 @@ export async function openParcels(p) {
 /** Players whose parcels are being handed over right now. @type {Set<string>} */
 const opening = new Set();
 
+/** Is a parcel hand-over running (its carts may be standing, its structure still needed)? */
+export const handingOver = () => opening.size > 0;
+
 /** @param {Player} p @returns {Promise<{ kinds: Set<string>, spilled: boolean } | false>} */
 async function handOver(p) {
   const kinds = new Set();
@@ -621,6 +670,7 @@ async function handOver(p) {
       // already gone
     }
     kinds.add(rec.k);
+    if (carts.length < (rec.c ?? 1)) p.sendMessage(`§cOnly ${carts.length} of ${rec.c} carts holding your items could be found, so some items are missing. Tell an operator.`);
   }
   return { kinds, spilled };
 }

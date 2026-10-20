@@ -1,0 +1,21 @@
+{
+  "vanillaData": {
+    "package": "@minecraft/vanilla-data",
+    "version": "1.26.52",
+    "license": "MIT",
+    "usedFor": "Separate block, item, and entity identifier sets. check-ids does not fetch a newer package."
+  },
+  "bedrockSamples": {
+    "repo": "https://github.com/Mojang/bedrock-samples",
+    "commit": "46ba6ea985fb5a92d79a9419198f10dda14c199d",
+    "version": "1.26.50.4",
+    "date": "2026-09-16",
+    "license": "MIT",
+    "files": [
+      "resource_pack/particles/*.json identifier fields",
+      "resource_pack/sounds/sound_definitions.json keys"
+    ],
+    "attribution": "Particle and sound identifier strings are extracted from Mojang's MIT-licensed bedrock-samples. No sample code, assets, or Nish pack code is copied into this folder."
+  },
+  "note": "Identifier strings only. check-ids reads these files offline and must not fetch. Samples 1.26.50.4 is the newest bedrock-samples commit at pin time; block, item, and entity sets stay on @minecraft/vanilla-data 1.26.52."
+}

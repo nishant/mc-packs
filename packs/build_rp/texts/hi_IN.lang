@@ -154,6 +154,8 @@ eb.settings.admin_destroy_creative=§cव्यवस्थापक§r - Destro
 eb.settings.admin_allow_inf_reach=§cव्यवस्थापक§r - अनंत रेंज अनुमति दें\n§7बंद: अनंत रेंज वैश्विक रूप से अक्षम
 eb.settings.admin_max_reach_cap=§cव्यवस्थापक§r - अधिकतम अनंत रेंज दूरी\n§7वर्तमान: §e%1  §70 = कोई सीमा नहीं
 eb.settings.admin_max_blocks_cap=§cएडमिन§r - अधिकतम ब्लॉक सीमा (प्रति खिलाड़ी)\n§7अभी: §e%1  §7ऊपरी सीमा: §e%2
+eb.settings.admin_default_max_blocks=§cएडमिन§r - डिफ़ॉल्ट ब्लॉक सीमा (प्रति निर्माण)\n§7बिना सहेजी सीमा वाले खिलाड़ी. अभी: §e%1  §7ऊपरी सीमा: §e%2
+eb.set.admin_default_blocks=डिफ़ॉल्ट ब्लॉक सीमा
 eb.settings.admin_auto_give_book=§cव्यवस्थापक§r - बिल्डिंग बुक स्वतः दें\n§7चालू: खिलाड़ियों को शामिल होने पर बुक मिलती है
 eb.settings.admin_config_tag=आवश्यक टैग के लिए /config प्रतिबंधित करें\n§7यदि चालू है, तो केवल आवश्यक टैग वाले खिलाड़ी ही /config का उपयोग कर सकते हैं।
 
@@ -397,7 +399,6 @@ eb.join.welcome=§a[Effortless Building] §rआपको §6बिल्डि�
 eb.help.title=सहायता
 eb.help.body=§f§6ट्यूटोरियल§f बुक सब कुछ चित्रों से समझाती है। इसे हाथ में लें और यह आपके सामने खुल जाती है।
 eb.help.btn.book=§lट्यूटोरियल बुक§r\n§8इसे पाएँ, या देखें कि कैसे खुलती है
-eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
 eb.help.btn.setup=§lत्वरित सेटअप§r\n§8ऐडऑन को अपने डिवाइस के अनुसार ढालें
 eb.help.book_hold=§a[EB] §rआपके पास §6ट्यूटोरियल§r बुक पहले से है। इसे हाथ में लें और यह आपके सामने खुल जाती है।
 eb.help.book_given=§a[EB] §rयह रही §6ट्यूटोरियल§r बुक। इसे हाथ में लें और यह आपके सामने खुल जाती है।
@@ -449,7 +450,6 @@ eb.set.admin_auto_give_book=जुड़ने पर बुक दें
 eb.set.admin_lock_quality=पूर्वावलोकन गुणवत्ता लॉक करें
 eb.set.admin_vanilla_menus=सबके लिए सादे मेनू
 eb.set.book_language=बुक की भाषा
-eb.set.book_language.tip=बुक की भाषा\n§7ट्यूटोरियल बुक की और तैरते मेनू के\n§7संकेतों व पाठों की भाषा।
 eb.help.btn.language=§lबुक की भाषा§r\n§8English, Español, Deutsch, 日本語 ...
 entity.eb:language_picker.name=भाषा
 eb.palette.dist.dissolve_x=घुलना X

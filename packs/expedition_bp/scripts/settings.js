@@ -15,6 +15,7 @@ const OPTIONS = [
   { key: "maxParty", type: "int", scope: "world", label: "Most players in one expedition", min: 1, max: 4, step: 1 },
   { key: "timeLimitMinutes", type: "int", scope: "world", label: "Time limit for 7 rooms (minutes)", help: "Scaled by each run's room count; applies from the next run", min: 5, max: 60, step: 1 },
   { key: "exitSeconds", type: "int", scope: "world", label: "Seconds to collect the treasure", help: "Opening a chest near the end adds 20 more", min: 10, max: 300, step: 5 },
+  { key: "announceFromLevel", type: "enum", scope: "world", label: "Announce clears in chat from", help: "Only the chat line for everyone changes; the party's own message, rewards and progress stay the same", choices: Array.from({ length: 23 }, (_, i) => String(i)), names: ["Easy (every clear)", "Normal", "Hard", ...Array.from({ length: 20 }, (_, i) => `Nightmare ${i + 1}`)] },
   { key: "gauntletEnabled", type: "bool", scope: "world", label: "Gauntlets can start", help: "Long runs with boons" },
   { key: "gauntletRooms", type: "int", scope: "world", label: "Rooms in a Gauntlet", min: 10, max: 20, step: 1 },
   { key: "boonEvery", type: "int", scope: "world", label: "Rooms between Gauntlet sanctuaries", min: 3, max: 8, step: 1 },
@@ -60,6 +61,7 @@ const OPTIONS = [
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
  * @property {string} [prop] player only: its own dynamic property instead of `<PREFIX>:pref`
+ * @property {boolean} [sticky] player only: keep an explicit choice even when it matches the realm default
  * @property {[string, unknown][]} [lock] player only: world options that make this preference do nothing, each with
  *   the value that does it ([["enabled", false]]); /realm:prefs then shows it as set by the operators
  * @property {(player: Player) => string | undefined} [locked] player only: why it can't change for this player now, when
@@ -221,8 +223,8 @@ export function getFor(player, key) {
 }
 
 /**
- * Saves a player's own choice. Choosing what the realm has clears it, so the player follows later
- * changes to the realm's value.
+ * Saves a player's own choice. Unless the option is sticky, choosing what the realm has clears it
+ * so the player follows later changes to the realm's value.
  * @param {Player} player @param {string} key @param {unknown} value @returns {string | undefined} why it wasn't saved
  */
 export function setFor(player, key, value) {
@@ -230,7 +232,7 @@ export function setFor(player, key, value) {
   if (!opt) return "isn't a preference";
   const bad = problem(opt, value);
   if (bad) return bad;
-  const keep = /** @type {boolean | number | string | undefined} */ (value === playerBase(opt) ? undefined : value);
+  const keep = /** @type {boolean | number | string | undefined} */ (opt.sticky !== true && value === playerBase(opt) ? undefined : value);
   if (opt.prop) player.setDynamicProperty(opt.prop, keep);
   else {
     const prefs = prefsOf(player);
@@ -271,6 +273,8 @@ function changed(key, player) {
 // ---------------------------------------------------------------------------
 // Realm Settings protocol
 // ---------------------------------------------------------------------------
+
+import { onScriptEvent } from "./script-events.js";
 
 /**
  * Why a player's preference does nothing right now because of the operators, in words for /realm:prefs ("Coordinates
@@ -371,22 +375,19 @@ function applySet(req) {
   system.sendScriptEvent("realm:cfg_ack", JSON.stringify(ack));
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
-    if (id !== "realm:cfg_ping" && id !== "realm:cfg_set" && id !== "realm:cfg_reset") return;
-    try {
-      const req = JSON.parse(message);
-      if (!req || typeof req !== "object") return;
-      if (id === "realm:cfg_ping") answer(req);
-      else if (req.pack !== PACK) return;
-      else if (id === "realm:cfg_set") applySet(req);
-      else {
-        reset();
-        system.sendScriptEvent("realm:cfg_ack", JSON.stringify({ id: req.id, pack: PACK, key: "*", ok: true }));
-      }
-    } catch (e) {
-      console.warn(`[${PREFIX}] settings: ${e}`);
+onScriptEvent(["realm:cfg_ping", "realm:cfg_set", "realm:cfg_reset"], ({ id, message }) => {
+  if (id !== "realm:cfg_ping" && id !== "realm:cfg_set" && id !== "realm:cfg_reset") return;
+  try {
+    const req = JSON.parse(message);
+    if (!req || typeof req !== "object") return;
+    if (id === "realm:cfg_ping") answer(req);
+    else if (req.pack !== PACK) return;
+    else if (id === "realm:cfg_set") applySet(req);
+    else {
+      reset();
+      system.sendScriptEvent("realm:cfg_ack", JSON.stringify({ id: req.id, pack: PACK, key: "*", ok: true }));
     }
-  },
-  { namespaces: ["realm"] }
-);
+  } catch (e) {
+    console.warn(`[${PREFIX}] settings: ${e}`);
+  }
+});

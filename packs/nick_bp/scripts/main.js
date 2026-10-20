@@ -3,6 +3,8 @@ import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } fr
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { stale, sweepGamertags } from "./prune.js";
 
 // A nickname shows above the player's head (Player.nameTag). The stable Script API has no chat
 // events, so chat, the player list and death messages keep the gamertag.
@@ -18,7 +20,22 @@ import { get, onChange } from "./settings.js";
 
 const KEY_PREFIX = "nick:p:"; // world property per player: nick:p:<player id> -> Nick
 const SEEN_PREFIX = "nick:g:"; // world property per gamertag ever seen here: nick:g:<lowercase gamertag> -> player id
+const TIME_PREFIX = "nick:t:"; // world property per player: nick:t:<player id> -> when last seen (ms)
 const NAME_RULE = /^[A-Za-z0-9_ ]{3,16}$/;
+const LIST_MAX = 40; // entries read from a reserved list
+/** A name as compared with the reserved lists: lowercase, without spaces or underscores ("Ad min" and "Admin_" are "admin"). @param {string} s */
+const squash = (s) => s.toLowerCase().replace(/[ _]/g, "");
+/** @param {string} key "reservedNames" or "reservedGamertags" @returns {Set<string>} */
+function reservedSet(key) {
+  const v = get(key);
+  const out = new Set();
+  if (typeof v !== "string") return out;
+  for (const part of v.split(/[,\n]/).slice(0, LIST_MAX)) {
+    const s = squash(part.trim());
+    if (s) out.add(s);
+  }
+  return out;
+}
 const DISABLED = "Nicknames are disabled on this realm. An operator can enable them in /realm:config (Nicknames).";
 
 /** The colors to choose from: name, and the code after §. */
@@ -135,10 +152,39 @@ function noteGamertag(player) {
   const key = SEEN_PREFIX + player.name.toLowerCase();
   try {
     if (world.getDynamicProperty(key) !== player.id) world.setDynamicProperty(key, player.id);
+    const now = Date.now();
+    if (stale(world.getDynamicProperty(TIME_PREFIX + player.id), now)) world.setDynamicProperty(TIME_PREFIX + player.id, now);
   } catch (e) {
     console.warn(`[nick] ${e}`);
   }
 }
+
+/** Forgets the gamertags of players not seen for `forgetGamertagsAfterDays` (their nicknames stay). A player with no saved time starts counting now. */
+function* forgetOld() {
+  if (!(Number(get("forgetGamertagsAfterDays")) > 0)) return;
+  let ids;
+  try {
+    ids = world.getDynamicPropertyIds().filter((k) => k.startsWith(SEEN_PREFIX));
+  } catch {
+    return;
+  }
+  yield* sweepGamertags({
+    keys: () => ids,
+    owner: (key) => world.getDynamicProperty(key),
+    online: (id) => world.getAllPlayers().some((p) => p.id === id),
+    seen: (id) => world.getDynamicProperty(TIME_PREFIX + id),
+    days: () => Number(get("forgetGamertagsAfterDays")),
+    now: () => Date.now(),
+    start: (id, now) => world.setDynamicProperty(TIME_PREFIX + id, now),
+    drop: (key, id, days) => {
+      world.setDynamicProperty(key, undefined);
+      world.setDynamicProperty(TIME_PREFIX + id, undefined);
+      console.warn(`[nick] forgot the gamertag ${key.slice(SEEN_PREFIX.length)}: not seen for over ${days} days`);
+    },
+    warn: (e) => console.warn(`[nick] ${e}`),
+  });
+}system.runTimeout(() => system.runJob(forgetOld()), 1200);
+system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (initialSpawn) noteGamertag(player);
@@ -171,11 +217,26 @@ async function show(player, form) {
 }
 
 /**
+ * Is `name` a reserved word or a listed operator gamertag that this player may not take? Operators may use the reserved
+ * words; nobody is held back from their own gamertag. The game doesn't tell packs which offline players are operators,
+ * so only the listed gamertags (and every gamertag seen here) are protected while their owner is away.
+ * @param {Player} player @param {string} name
+ */
+function isReserved(player, name, op = isOp(player)) {
+  const key = squash(name);
+  if (name.toLowerCase() === player.name.toLowerCase()) return false;
+  if (reservedSet("reservedGamertags").has(key)) return true;
+  if (world.getAllPlayers().some((p) => p.id !== player.id && isOp(p) && squash(p.name) === key)) return true;
+  return !op && reservedSet("reservedNames").has(key);
+}
+
+/**
  * Why `name` can't be this player's nickname, or undefined.
  * @param {Player} player @param {string} name
  */
 function problem(player, name) {
   if (!NAME_RULE.test(name)) return "A nickname is 3 to 16 characters: letters A-Z, digits, spaces and _.";
+  if (isReserved(player, name)) return `${name} is a reserved name.`;
   const lower = name.toLowerCase();
   for (const p of world.getAllPlayers()) {
     if (p.id !== player.id && p.name.toLowerCase() === lower) return `${p.name} is someone else's gamertag.`;
@@ -231,18 +292,58 @@ async function editMine(player, tried) {
   player.sendMessage(`§aYour nickname is now §${c.code}${name}§a.§r Chat still shows your gamertag.`);
 }
 
-/** Operators: every saved nickname, to clear any of them. @param {Player} player */
-async function allNicks(player) {
-  const list = [...nicks()].sort((a, b) => a[1].n.localeCompare(b[1].n));
+const PAGE_SIZE = 20; // nicknames per page of the operators' list: a form with hundreds of buttons is unusable and slow to send
+
+/** A saved nickname that the reserved lists would refuse today (it is kept; operators can clear it). @param {Nick} nick */
+const reservedNow = (nick) => {
+  const key = squash(nick.n);
+  if (nick.n.toLowerCase() === String(nick.g ?? "").toLowerCase()) return false;
+  return reservedSet("reservedNames").has(key) || reservedSet("reservedGamertags").has(key) || world.getAllPlayers().some((p) => isOp(p) && p.name.toLowerCase() !== String(nick.g ?? "").toLowerCase() && squash(p.name) === key);
+};
+
+/**
+ * Operators: saved nicknames, a page at a time and searchable by nickname or gamertag, to clear any of them.
+ * @param {Player} player @param {number} [page] @param {string} [query]
+ */
+async function allNicks(player, page = 0, query = "") {
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can see other players' nicknames.");
+  const want = query.trim().toLowerCase();
+  const list = [...nicks()]
+    .filter(([, nick]) => !want || nick.n.toLowerCase().includes(want) || nick.g.toLowerCase().includes(want))
+    .sort((a, b) => a[1].n.localeCompare(b[1].n));
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const at = Math.min(Math.max(0, page), pages - 1);
+  const shownHere = list.slice(at * PAGE_SIZE, (at + 1) * PAGE_SIZE);
   const form = new ActionFormData()
     .title("§lPlayers' nicknames")
-    .body(list.length ? "Tap a nickname to clear it." : "Nobody has a nickname.");
-  for (const [, nick] of list) form.button(`§${nick.c}${nick.n}§r\n§8${nick.g || "unknown gamertag"}`);
-  form.button("Back");
+    .body(
+      (list.length ? `Tap a nickname to clear it. ${list.length} ${want ? "match" : "saved"}${pages > 1 ? `, page ${at + 1} of ${pages}` : ""}.` : want ? "No nickname or gamertag matches." : "Nobody has a nickname.") +
+        (want ? `\n§7Search: ${query.trim().replace(/§/g, "")}` : "")
+    );
+  for (const [, nick] of shownHere) form.button(`§${nick.c}${nick.n}§r${reservedNow(nick) ? " §c(reserved)" : ""}\n§8${nick.g || "unknown gamertag"}`);
+  const extra = /** @type {string[]} */ ([]);
+  extra.push("search");
+  if (want) extra.push("clear");
+  if (at > 0) extra.push("prev");
+  if (at < pages - 1) extra.push("next");
+  extra.push("back");
+  const labels = { search: "Search by name", clear: "Show everyone", prev: "Previous page", next: "Next page", back: "Back" };
+  for (const e of extra) form.button(labels[/** @type {keyof typeof labels} */ (e)]);
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  const picked = list[res.selection];
-  if (!picked) return mainMenu(player);
+  const picked = shownHere[res.selection];
+  if (!picked) {
+    const action = extra[res.selection - shownHere.length];
+    if (action === "search") {
+      const ask = await show(player, new ModalFormData().title("§lSearch nicknames").textField("Part of a nickname or gamertag", "", { defaultValue: query }).submitButton("Search"));
+      if (!ask || ask.canceled || !player.isValid) return allNicks(player, at, query);
+      return allNicks(player, 0, String(ask.formValues?.[0] ?? "").slice(0, 32));
+    }
+    if (action === "clear") return allNicks(player, 0, "");
+    if (action === "prev") return allNicks(player, at - 1, query);
+    if (action === "next") return allNicks(player, at + 1, query);
+    return mainMenu(player);
+  }
   const [id, nick] = picked;
   const sure = await show(
     player,
@@ -253,8 +354,9 @@ async function allNicks(player) {
       .button("Back")
   );
   if (!sure || sure.canceled || !player.isValid) return;
-  if (sure.selection !== 0) return allNicks(player);
+  if (sure.selection !== 0) return allNicks(player, at, query);
   if (!isOp(player)) return player.sendMessage("§cOnly operators can clear other players' nicknames."); // de-opped while the menu was open
+  if (nicks().get(id) !== nick) return allNicks(player, at, query); // changed while the form was open: don't clear the wrong one
   save(id, undefined);
   const target = world.getAllPlayers().find((p) => p.id === id);
   if (target) {
@@ -262,7 +364,7 @@ async function allNicks(player) {
     if (target.id !== player.id) target.sendMessage("§7An operator cleared your nickname.");
   }
   player.sendMessage(`§7Cleared ${nick.n} (${nick.g || "unknown gamertag"}).`);
-  return allNicks(player);
+  return allNicks(player, at, query);
 }
 
 /** @param {Player} player */
@@ -303,9 +405,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "nick_bp");
   },
-  { namespaces: ["realm"] }
 );

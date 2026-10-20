@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import * as calling from "./calling.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Six skills, each with its XP in a scoreboard (skill_mining, ...), so other packs, /scoreboard and
 // sidebars can read them. The level is worked out from the XP with the curve in config.js, so the
@@ -870,7 +871,8 @@ system.runInterval(() => {
 // XP from other packs: realm:skill_xp { player, skill, amount }
 // ---------------------------------------------------------------------------
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:skill_xp",
   ({ id, message }) => {
     if (id !== "realm:skill_xp") return;
     try {
@@ -885,7 +887,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not JSON: ignore
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -991,9 +992,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 calling.init({ levelFor, active, names: NAMES, skills: SKILLS });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "skills_bp");
   },
-  { namespaces: ["realm"] },
 );

@@ -15,6 +15,8 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { isProtected } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
+import { spawnFresh } from "./spawn.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -327,13 +329,52 @@ const AURA_RANGE_SQ = 64 * 64;
 /** Time spent in the aura, shown to operators in the menu: [total ms, runs, champion puffs]. */
 const auraCost = [0, 0, 0];
 
-/** One aura puff for every loaded champion with a player within 64 blocks. */
+/**
+ * Most champions one aura run or one approach run looks at. The rest wait for the next runs, in a round robin
+ * (`turnOf`), so a crowd of champions costs no more per run than this many, and each one still comes up every
+ * ceil(champions / cap) runs.
+ */
+const AURA_PER_RUN = 12;
+const APPROACH_PER_RUN = 8;
+/**
+ * An approach step covers the time since the champion's last one, up to this many steps' worth. A step never
+ * exceeds 0.9 block (the collision-safe bound), so with more champions than fit in a run the crowd walks slower
+ * than `approach.speed` (by up to the same factor) and detours and rests (counted in step-times) keep real time.
+ */
+const APPROACH_CATCHUP = 4;
+/** The last champion each round robin served (the next run continues after it, whatever was removed meanwhile). @type {string | undefined} */
+let auraCursor;
+/** @type {string | undefined} */
+let approachCursor;
+
+/**
+ * The next `cap` of `ids` in a round robin that continues after the id `after` (from the start if it is gone or
+ * unset): with more ids than the cap, every id comes up once every ceil(ids.length / cap) runs. No id is skipped
+ * for good, and none is looked at twice in a run.
+ * @param {string[]} ids @param {string | undefined} after @param {number} cap @returns {{ batch: string[], last: string | undefined }}
+ */
+function turnOf(ids, after, cap) {
+  const n = ids.length;
+  if (!n) return { batch: [], last: undefined };
+  const take = Math.min(n, Math.max(1, Math.floor(cap) || 1));
+  const start = (ids.indexOf(/** @type {string} */ (after)) + 1) % n;
+  /** @type {string[]} */
+  const batch = [];
+  for (let i = 0; i < take; i++) batch.push(ids[(start + i) % n]);
+  return { batch, last: batch[take - 1] };
+}
+
+/** One aura puff for the champions whose turn it is, when a player is within 64 blocks. */
 function aura() {
   const started = Date.now();
   const players = world.getAllPlayers().map((p) => ({ dim: p.dimension.id, at: p.location }));
   if (!players.length) return;
   let n = 0;
-  for (const [id, e] of live) {
+  const turn = turnOf([...live.keys()], auraCursor, AURA_PER_RUN);
+  auraCursor = turn.last;
+  for (const id of turn.batch) {
+    const e = live.get(id);
+    if (!e) continue;
     try {
       if (!e.isValid) {
         live.delete(id);
@@ -416,7 +457,7 @@ function night() {
 
 world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
   try {
-    if (cause !== EntityInitializationCause.Spawned) return;
+    if (cause !== EntityInitializationCause.Spawned || !entity.isValid) return;
     if (entity.typeId === "minecraft:item") {
       noteItem(entity);
       return;
@@ -438,13 +479,46 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
   }
 });
 
+/**
+ * How many natural champions may be loaded at once with `players` online: `maxAlive` is the ceiling for the
+ * whole world (what it always meant); `perPlayer` lets a quiet world stay below it (0 = no per-player limit, the
+ * fixed `maxAlive` of before). At least one, so a single player still meets champions.
+ * @param {unknown} maxAlive @param {unknown} perPlayer @param {number} players
+ */
+function aliveCap(maxAlive, perPlayer, players) {
+  const ceiling = typeof maxAlive === "number" && Number.isFinite(maxAlive) && maxAlive >= 1 ? Math.floor(maxAlive) : 1;
+  if (typeof perPlayer !== "number" || !Number.isFinite(perPlayer) || perPlayer <= 0) return ceiling;
+  const online = Number.isFinite(players) && players > 0 ? players : 0;
+  return Math.min(ceiling, Math.max(1, Math.ceil(online * perPlayer - 1e-9)));
+}
+
+/** Champions within this many blocks of a new one count as its neighbors (`maxAliveNearby`): about the reach of the approach. */
+const NEARBY_RADIUS = 64;
+
+/**
+ * Are there already `limit` champions near (x, z) in the same dimension? 0 (or no number) = no limit. Reads the
+ * last known spots only (no native calls): at most `maxAlive` entries, a few seconds old.
+ * @param {Iterable<{ dim: string, at: Vector3 }>} infos @param {string} dim @param {Vector3} at @param {unknown} limit
+ */
+function crowdedAround(infos, dim, at, limit) {
+  const most = typeof limit === "number" && Number.isFinite(limit) ? Math.floor(limit) : 0;
+  if (most <= 0) return false;
+  let near = 0;
+  for (const i of infos) {
+    if (i.dim === dim && (i.at.x - at.x) ** 2 + (i.at.z - at.z) ** 2 <= NEARBY_RADIUS * NEARBY_RADIUS && ++near >= most) return true;
+  }
+  return false;
+}
+
 /** Makes a natural spawn a champion if every rule allows it. @param {Entity} e */
 function convert(e) {
   if (!e.isValid || e.hasTag(CHAMP) || e.hasTag(SPLIT)) return;
   if (loaded >= get("maxAlive")) return;
+  if (loaded >= aliveCap(get("maxAlive"), get("maxAlivePerPlayer"), world.getAllPlayers().length)) return;
   if (get("nightOnly") === true && !night()) return;
   const at = e.location;
   const dim = e.dimension;
+  if (crowdedAround(known.values(), dim.id, at, get("maxAliveNearby"))) return;
   if (get("surfaceOnly") === true) {
     const top = dim.getTopmostBlock({ x: Math.floor(at.x), z: Math.floor(at.z) });
     if (top && top.y > Math.floor(at.y) + 1) return; // a roof or a cave ceiling above it
@@ -516,7 +590,7 @@ function championHit(champ, victim, damage) {
 
 /** Blocks players make and nature doesn't (terracotta only when glazed: plain terracotta is natural in badlands). */
 const BUILT =
-  /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|note_block|scaffolding|ladder|stairs|slab|brick|polished|item_frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate/;
+  /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|noteblock|scaffolding|ladder|stairs|slab|brick|polished|item_frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate/;
 
 /**
  * Is there anything player-made in the 9 x 9 columns around (x, z), from the surface down 4?
@@ -709,9 +783,9 @@ const ownedElsewhere = (e) => e.getTags().some((t) => t.startsWith("realm:exp"))
 const BODY = 0.4;
 /** Its body's half width across the way it goes (the leading edge's two corners are looked at too). */
 const SIDE = 0.28;
-/** Steps a detour round something may take before the champion gives up for a while (60 s). */
+/** Step-times (`STEP_TICKS` each, counted by elapsed time) a detour round something may take before the champion gives up for a while (60 s). */
 const DETOUR_STEPS = 240;
-/** Steps it rests after a detour that led nowhere (20 s), before it tries the other way round. */
+/** Step-times it rests after a detour that led nowhere (20 s), before it tries the other way round. */
 const REST_STEPS = 80;
 /**
  * How far from the player a detour may take it (blocks): `LEASH`, or up to `LEASH_GRACE` further than
@@ -777,8 +851,12 @@ function feet(e) {
   return undefined;
 }
 
-/** One champion's step toward the nearest player in range, if any. @param {Entity} e @param {number} step */
-function approachStep(e, step) {
+/**
+ * One champion's step toward the nearest player in range, if any. `units` is the time since its last step in
+ * step-times (1 = `STEP_TICKS`): the detour and rest timers run on it, so they keep their real duration however
+ * seldom a crowd's turn comes. @param {Entity} e @param {number} step @param {number} [units]
+ */
+function approachStep(e, step, units = 1) {
   if (!e.isValid || ownedElsewhere(e)) return;
   if (e.isInWater) return;
   const dim = e.dimension;
@@ -804,7 +882,8 @@ function approachStep(e, step) {
     return;
   }
   if (d && d.rest !== undefined) {
-    if (--d.rest > 0) return;
+    d.rest -= units;
+    if (d.rest > 0) return;
     d = { side: -d.side, steps: 0 }; // rested: the other way round this time
     detours.set(e.id, d);
   }
@@ -843,7 +922,8 @@ function approachStep(e, step) {
     detours.delete(e.id);
     return;
   }
-  if (++d.steps > DETOUR_STEPS) {
+  d.steps += units;
+  if (d.steps > DETOUR_STEPS) {
     detours.set(e.id, { side: d.side, steps: 0, rest: REST_STEPS }); // a river or a cliff: rest, then the other way
     return;
   }
@@ -861,19 +941,45 @@ function approachStep(e, step) {
 /** @param {Vector3} a @param {Vector3} b */
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
-system.runInterval(() => {
+/** How far a champion steps after `elapsed` ticks since its last step: the pace times that time (at least one step's, at most `APPROACH_CATCHUP`), but under 0.9 block (collision safety), so a pace above 0.9 block a step-time or a crowd bigger than a run slows the walk.
+ * @param {number} speed @param {number} elapsed
+ */
+function stepFor(speed, elapsed) {
+  const ticks = Math.min(Math.max(Number(elapsed) || 0, STEP_TICKS), STEP_TICKS * APPROACH_CATCHUP);
+  return Math.min(0.9, (Math.max(0, Number(speed) || 0) * ticks) / 20);
+}
+
+/** Tick of each champion's last approach step. @type {Map<string, number>} */
+const approachSeen = new Map();
+
+/** One approach run: a step for the champions whose turn it is (`APPROACH_PER_RUN` at most). */
+function approachRun() {
   if (get("approach.enabled") !== true || !live.size) return;
-  const step = (Math.max(0, Number(get("approach.speed")) || 0) * STEP_TICKS) / 20;
-  if (step <= 0) return;
-  for (const e of live.values()) {
+  const speed = Math.max(0, Number(get("approach.speed")) || 0);
+  if (speed <= 0) return;
+  const now = system.currentTick;
+  const turn = turnOf([...live.keys()], approachCursor, APPROACH_PER_RUN);
+  approachCursor = turn.last;
+  for (const id of turn.batch) {
+    const e = live.get(id);
+    if (!e) continue;
+    if (!e.isValid) {
+      live.delete(id);
+      approachSeen.delete(id);
+      continue;
+    }
+    const elapsed = Math.max(STEP_TICKS, now - (approachSeen.get(id) ?? now - STEP_TICKS));
+    approachSeen.set(id, now);
     try {
-      approachStep(e, Math.min(step, 0.9));
+      approachStep(e, stepFor(speed, elapsed), elapsed / STEP_TICKS);
     } catch (err) {
       // an unloaded column or a champion that just died: try again next step
       if (!String(err).includes("LocationInUnloadedChunk") && !String(err).includes("InvalidEntity")) console.warn(`[elite] approach: ${err}`);
     }
   }
-}, STEP_TICKS);
+}
+
+system.runInterval(approachRun, STEP_TICKS);
 
 // ---------------------------------------------------------------------------
 // Death
@@ -885,20 +991,6 @@ function shards(n) {
   s.nameTag = "§r§dRelic Shard";
   s.setLore(["§7Bring 8 to a relicsmith"]);
   return s;
-}
-
-/**
- * Spawns a mob and checks what came back: a world whose entity ids repeat (an old level.dat put back) can hand back
- * an entity that already exists (a dropped item), and tagging that one would make a champion that isn't there.
- * Spawns again (the next id is usually free); throws if it never gets the mob.
- * @param {Dimension} dim @param {string} type @param {Vector3} loc @param {any} [opts]
- */
-function spawnFresh(dim, type, loc, opts) {
-  for (let k = 0; k < 8; k++) {
-    const e = opts ? dim.spawnEntity(/** @type {any} */ (type), loc, opts) : dim.spawnEntity(/** @type {any} */ (type), loc);
-    if (e.typeId === type) return e;
-  }
-  throw new Error(`spawnEntity(${type}) kept returning another entity`);
 }
 
 /** Copies a Splitting champion leaves behind. @param {Dimension} dim @param {Vector3} at @param {string} mob */
@@ -949,7 +1041,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   if (!info) return;
   if (info.gear) purgeGear(info.dim, info.at, info.gear, fresh ? 2.5 : 6);
   try {
-    slain(info, damageSource.damagingEntity, hitters.get(id));
+    slain(info, damageSource.damagingEntity, hitters.get(id), id);
   } catch (e) {
     console.warn(`[elite] death: ${e}`);
   }
@@ -958,14 +1050,34 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   known.delete(id);
   live.delete(id);
   detours.delete(id);
+  approachSeen.delete(id);
   loaded = Math.max(0, loaded - 1);
 });
+
+// Town news: at most one piece per in-game hour from this pack, each event once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Rewards stay outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
 
 /**
  * @param {Info} info
  * @param {Entity | undefined} killerEntity @param {Map<string, number> | undefined} hits
+ * @param {string} [entityId] the dead champion, so one kill is one story
  */
-function slain(info, killerEntity, hits) {
+function slain(info, killerEntity, hits, entityId) {
   const now = Date.now();
   const window = CONFIG.helperSeconds * 1000;
   // Players who hurt it lately, most recent first.
@@ -1015,8 +1127,11 @@ function slain(info, killerEntity, hits) {
   if (killerId) msg.player = killerId;
   if (info.tag) msg.tag = info.tag;
   system.sendScriptEvent("realm:champion_slain", JSON.stringify(msg));
-  // Townsfolk gossip (Hearth & Hearsay): the town talks about who brought it down.
-  if (killerId) system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "champion", player: killerId, place: String(info.name).replace(/§./g, "") }));
+  // Townsfolk gossip (Hearth & Hearsay): the town talks about who brought it down. One champion, once.
+  if (killerId) {
+    const spot = `${info.trait}:${Math.floor(info.at.x)}:${Math.floor(info.at.y)}:${Math.floor(info.at.z)}`;
+    gossip(`champ:${entityId || info.tag || spot}`, { kind: "champion", player: killerId, place: String(info.name).replace(/§./g, "") });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1029,6 +1144,7 @@ function slain(info, killerEntity, hits) {
  * @param {Entity} e
  */
 function upkeep(e) {
+  if (!e.isValid) return;
   const trait = traitOf(e);
   if (!trait) return;
   const name = nameOf(e);
@@ -1085,6 +1201,7 @@ function refresh() {
   for (const id of known.keys()) if (!seen.has(id)) known.delete(id);
   for (const id of live.keys()) if (!seen.has(id)) live.delete(id);
   for (const id of detours.keys()) if (!seen.has(id)) detours.delete(id);
+  for (const id of approachSeen.keys()) if (!seen.has(id)) approachSeen.delete(id);
   for (const id of nextStrike.keys()) if (!seen.has(id)) nextStrike.delete(id);
   const now = Date.now();
   for (const [id, m] of hitters) {
@@ -1135,7 +1252,8 @@ function spawnRequested(req) {
   }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:moon", "realm:champion_spawn"],
   ({ id, message }) => {
     if (id !== "realm:moon" && id !== "realm:champion_spawn") return;
     let req;
@@ -1154,7 +1272,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[elite] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1416,9 +1533,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "elite_bp");
   },
-  { namespaces: ["realm"] },
 );

@@ -7,6 +7,43 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
+/** @type {typeof import("node:fs").readFileSync | null} */
+let readFileSyncStory = null;
+/** @type {typeof import("node:fs").readdirSync | null} */
+let readdirSyncStory = null;
+/** @type {Map<string, string> | null} */
+let storyLines = null;
+
+const STOP_NAME = new Set(["the", "old", "and", "for", "with"]);
+const UNBREAKABLE = new Set(["reinforced_deepslate", "bedrock", "barrier", "end_portal", "end_portal_frame", "command_block", "structure_block", "jigsaw", "allow", "deny"]);
+const COMMON_TERRAIN = new Set(["stone", "cobblestone", "mossy_cobblestone", "stone_bricks", "mossy_stone_bricks", "cracked_stone_bricks", "dirt", "grass_block", "coarse_dirt", "podzol", "sand", "gravel", "deepslate", "netherrack", "andesite", "diorite", "granite"]);
+const DEFAULT_DROPS = {
+  amethyst_cluster: ["minecraft:amethyst_shard"],
+  small_amethyst_bud: ["minecraft:amethyst_shard"],
+  medium_amethyst_bud: ["minecraft:amethyst_shard"],
+  large_amethyst_bud: ["minecraft:amethyst_shard"],
+  coal_ore: ["minecraft:coal"],
+  deepslate_coal_ore: ["minecraft:coal"],
+  iron_ore: ["minecraft:raw_iron"],
+  deepslate_iron_ore: ["minecraft:raw_iron"],
+  copper_ore: ["minecraft:raw_copper"],
+  deepslate_copper_ore: ["minecraft:raw_copper"],
+  gold_ore: ["minecraft:raw_gold"],
+  deepslate_gold_ore: ["minecraft:raw_gold"],
+  redstone_ore: ["minecraft:redstone"],
+  deepslate_redstone_ore: ["minecraft:redstone"],
+  lapis_ore: ["minecraft:lapis_lazuli"],
+  deepslate_lapis_ore: ["minecraft:lapis_lazuli"],
+  diamond_ore: ["minecraft:diamond"],
+  deepslate_diamond_ore: ["minecraft:diamond"],
+  emerald_ore: ["minecraft:emerald"],
+  deepslate_emerald_ore: ["minecraft:emerald"],
+  nether_gold_ore: ["minecraft:gold_nugget"],
+  nether_quartz_ore: ["minecraft:quartz"],
+};
+
+const direct = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (direct) {
 const root = join(import.meta.dirname, "..");
 const scripts = join(root, "packs", "saga_bp", "scripts");
 const { STORIES, PLACES, NPC_NAMES } = await import(pathToFileURL(join(scripts, "stories.js")).href);
@@ -670,4 +707,376 @@ if (errors.length) {
   process.exit(1);
 }
 const chapters = STORIES.reduce((n, /** @type {any} */ s) => n + s.chapters.length, 0);
-console.log(`check-stories: ${STORIES.length} stories, ${chapters} chapters, ${FAVORS.length} favors, ${readKeys.length} flag reads OK (${seen.size} warnings)`);
+const content = await liveContentFindings(root, { STORIES, FAVORS, WANDERERS, WANDER_TEMPLATES, NPC_NAMES });
+const contentAllow = applyStoryAllowlist(content.findings, loadStoryAllow(root).entries ?? []);
+for (const f of contentAllow.findings) errors.push(`${f.at}: ${f.code}: ${f.message}`);
+if (!process.argv.includes("--list")) {
+  for (const entry of loadStoryAllow(root).entries ?? []) {
+    if (!content.findings.some((f) => f.code === entry.code && f.at === entry.at)) console.warn(`warning: tools/check-stories.allow.json: ${entry.code} at ${entry.at} is fixed or gone: remove it`);
+  }
+} else {
+  for (const f of content.findings) console.log(`${f.code}\t${f.at}\t${f.message}`);
+}
+if (errors.length) {
+  for (const e of errors) console.error(`check-stories: ${e}`);
+  process.exit(1);
+}
+console.log(`check-stories: ${STORIES.length} stories, ${chapters} chapters, ${FAVORS.length} favors, ${readKeys.length} flag reads OK (${seen.size} warnings, ${contentAllow.allowed.length} allowlisted content findings)`);
+}
+
+
+/** @param {string} id */
+function bareId(id) {
+  return String(id ?? "").replace(/^minecraft:/, "");
+}
+
+/** @param {string} name */
+function nameTokens(name) {
+  return [...new Set(String(name).replace(/§./g, "").split(/[^A-Za-z]+/).map((t) => t.toLowerCase()).filter((t) => t.length >= 3 && !STOP_NAME.has(t)))];
+}
+
+/** @param {{ id: string, name: string, short?: string }[]} wanderers @param {Record<string, string>} npcs */
+function castIndex(wanderers, npcs) {
+  /** @type {{ id: string, name: string, first: string, tokens: string[] }[]} */
+  const people = [];
+  for (const [id, name] of Object.entries(npcs ?? {})) {
+    const tokens = nameTokens(name);
+    people.push({ id, name, first: tokens[0] ?? "", tokens });
+  }
+  for (const w of wanderers ?? []) {
+    const tokens = nameTokens(`${w.name} ${w.short ?? ""}`);
+    people.push({ id: w.id, name: w.name, first: nameTokens(w.short || w.name)[0] ?? "", tokens });
+  }
+  return people;
+}
+
+/** @param {string} text */
+function signpostedAlternate(text) {
+  return /geode|\blogs\b|\btrees?\b|taiga|\bcraft|\brecipe\b|\bsmelt\b|already (?:have|carried|carry)|party mate|party member|any source|from any source/i.test(text);
+}
+
+/** @param {string} text */
+function signpostedReplacement(text) {
+  return /place (?:a |one |new |your own)|if (?:they are|they're|none are|it's|it is) (?:gone|bare|left)|bring candles|place them if none|place one in|put them back/i.test(text);
+}
+
+/**
+ * O38 content rules. Returns findings; it does not print or exit.
+ * @param {any} input
+ * @param {{ engineAcceptsInventory?: boolean }} [options]
+ */
+export function auditStoryRules(input, options = {}) {
+  const findings = [];
+  const stories = input.stories ?? [];
+  const cast = castIndex(input.wanderers ?? [], input.npcs ?? {});
+  const wanderIds = new Set((input.wanderers ?? []).map((/** @type {any} */ w) => w.id));
+  const traits = new Set(input.traits ?? []);
+  const families = input.families ?? {};
+  const prefabs = input.prefabs ?? {};
+  const drops = input.drops ?? DEFAULT_DROPS;
+  const packItems = input.packItems ?? [];
+  void options.engineAcceptsInventory;
+
+  /** @param {string} code @param {string} at @param {string} message */
+  const add = (code, at, message) => findings.push({ code, at, severity: "warning", message });
+
+  /** @param {any} reward @param {string} at @param {string} kind @param {number} index @param {number} count */
+  const rewardScale = (reward, at, kind, index, count) => {
+    if (!reward) return;
+    const levels = Number(reward.levels ?? 0);
+    const crowns = Number(reward.crowns ?? 0);
+    const finale = index === count - 1 || /dawn_/.test(at) || !!(reward.title || reward.relic || reward.relicRoll);
+    /** @type {{ levels: number, crowns: number, label: string }} */
+    let cap;
+    if (kind === "one-off") cap = { levels: 3, crowns: 30, label: "wanderer one-off 1-3 levels / 10-30 Crowns" };
+    else if (kind === "wander") cap = finale
+      ? { levels: 8, crowns: 150, label: "wanderer finale 8 levels / 100-150 Crowns" }
+      : { levels: 5, crowns: 60, label: "wanderer chapter 2-5 levels / 30-60 Crowns" };
+    else if (kind === "main") cap = (index === count - 1 || /dawn_/.test(at))
+      ? { levels: 10, crowns: 300, label: "act finale 10 levels / 150-300 Crowns" }
+      : { levels: 8, crowns: 120, label: "main chapter 3-8 levels / 40-120 Crowns" };
+    else cap = { levels: 5, crowns: 60, label: "side chapter 2-5 levels / 20-60 Crowns" };
+    if (levels <= cap.levels && crowns <= cap.crowns) return;
+    add("reward-scale", at, `reward ${levels} levels and ${crowns} Crowns is above ${cap.label}`);
+  };
+
+  /** @param {any} o @param {string} at */
+  const partialFamily = (o, at) => {
+    const text = `${o.label ?? ""} ${o.hint ?? ""}`;
+    for (const list of [o.blocks, o.items]) {
+      if (!Array.isArray(list)) continue;
+      const names = list.map(bareId);
+      for (const [fam, members] of Object.entries(families)) {
+        if (!Array.isArray(members) || !members.length) continue;
+        const hit = members.filter((m) => names.includes(m));
+        if (hit.length < 2 || hit.length >= members.length) continue;
+        const word = fam.replaceAll("_", " ");
+        const implied = hit.length / members.length >= 0.5 || new RegExp(`\\b(any|every|all)\\b[\\s\\S]{0,40}\\b${word}\\b|\\b${word}s\\b`, "i").test(text);
+        if (!implied) continue;
+        const missing = members.filter((m) => !names.includes(m));
+        add("partial-family", at, `${o.type} list has ${hit.length} of ${members.length} ${fam} ids and misses ${missing.join(", ")}`);
+      }
+    }
+  };
+
+  /** @param {any} o @param {string} at */
+  const reusedName = (o, at) => {
+    for (const who of [o.who, o.ward]) {
+      if (!who?.name) continue;
+      const tokens = nameTokens(who.name);
+      for (const person of cast) {
+        if (!person.tokens.some((t) => tokens.includes(t))) continue;
+        if (who.id === person.id || who.id === `w_${person.id}` || String(who.id).startsWith(`${person.id}_`)) continue;
+        add("reused-name", at, `who.name "${who.name}" reuses ${person.name} (${person.id})`);
+        return;
+      }
+    }
+  };
+
+  /** @param {any} story @param {any} chapter */
+  const reusedSpeakers = (story, chapter, atBase) => {
+    const texts = [...(chapter.intro ?? []), ...(chapter.outro ?? []), ...(chapter.objectives ?? []).flatMap((/** @type {any} */ o) => [o.label, o.hint, ...(o.pages ?? [])])];
+    for (const page of texts) {
+      const text = typeof page === "string" ? page : page?.text;
+      if (!text) continue;
+      for (const m of String(text).matchAll(/§.([^:§]{1,40}):§r/g)) {
+        const speaker = m[1];
+        const tokens = nameTokens(speaker);
+        if (tokens.length < 2) continue;
+        for (const person of cast) {
+          if (!person.tokens.some((t) => tokens.includes(t))) continue;
+          if (story.kind === "wander" && story.giver === `w_${person.id}`) continue;
+          add("reused-name", atBase, `speaker "${speaker}" reuses ${person.name} (${person.id})`);
+          return;
+        }
+      }
+    }
+  };
+
+  /** @param {any} o @param {string} at @param {any} story */
+  const reusedWanderer = (o, at, story) => {
+    const id = o.who?.id;
+    if (!id || !wanderIds.has(id)) return;
+    if (story.kind === "wander" && story.giver === `w_${id}`) return;
+    add("reused-wanderer-id", at, `who.id "${id}" is a wanderer id outside that wanderer's own chain`);
+  };
+
+  /** @param {any} o @param {any} chapter @param {any} story @param {string} at */
+  const packGate = (o, chapter, story, at) => {
+    if (!["collect", "deliver"].includes(o.type) || o.optional || !o.name) return;
+    const hit = packItems.find((/** @type {any} */ p) => String(o.name).toLowerCase() === String(p.name).toLowerCase());
+    if (!hit) return;
+    const flags = { ...(story.requires?.flags ?? {}), ...(chapter.when ?? {}), ...(o.when ?? {}) };
+    const missing = hit.packs.filter((/** @type {string} */ p) => flags[`pack:${p}`] !== "on");
+    if (!missing.length) return;
+    add("ungated-pack-item", at, `"${o.name}" comes from ${hit.packs.join(" and ")} but this step is not gated on ${missing.map((/** @type {string} */ p) => `pack:${p}`).join(" and ")}`);
+  };
+
+  /** @param {any} chapter @param {Record<string, any>} built */
+  const chapterPlaces = (chapter, built) => {
+    /** @type {Set<string>} */
+    const names = new Set();
+    for (const o of chapter.objectives ?? []) {
+      for (const place of [o.place, o.from?.place, o.to?.place, o.spawnAt?.place]) {
+        if (typeof place === "string" && built[place]) names.add(place);
+      }
+    }
+    return [...names];
+  };
+
+  /** @param {string} block @param {string} item */
+  const produces = (block, item) => {
+    const b = bareId(block);
+    const want = bareId(item);
+    if (!want) return false;
+    if (b === want) return true;
+    return (drops[b] ?? []).some((x) => bareId(x) === want);
+  };
+
+  for (const story of stories) {
+    const kind = story.kind ?? "side";
+    const chapters = story.chapters ?? [];
+    chapters.forEach((/** @type {any} */ chapter, /** @type {number} */ ci) => {
+      const places = chapterPlaces(chapter, prefabs);
+      const guidance = [chapter.hint, ...(chapter.intro ?? []).map((/** @type {any} */ p) => (typeof p === "string" ? p : p?.text ?? ""))].join("\n");
+      reusedSpeakers(story, chapter, `${story.id}/${chapter.id}`);
+      rewardScale(chapter.reward, `${story.id}/${chapter.id}`, kind, ci, chapters.length);
+      (chapter.objectives ?? []).forEach((/** @type {any} */ o, /** @type {number} */ i) => {
+        const at = `${story.id}/${chapter.id} objective ${i + 1}`;
+        partialFamily(o, at);
+        reusedName(o, at);
+        reusedWanderer(o, at, story);
+        packGate(o, chapter, story, at);
+        if (o.champion?.trait && !traits.has(o.champion.trait)) add("unknown-trait", at, `champion trait "${o.champion.trait}" is not one of ${[...traits].join(", ")}`);
+        if (o.bonus) rewardScale(o.bonus, `${at} bonus`, kind, ci, chapters.length);
+        if (["collect", "deliver", "mine"].includes(o.type) && !(o.type === "mine" && !o.place)) {
+          const items = o.item ? [o.item] : (o.blocks ?? []);
+          const overlap = [];
+          for (const place of places) {
+            for (const block of Object.keys(prefabs[place] ?? {})) {
+              if (items.some((item) => produces(block, item) || (o.type === "mine" && bareId(item) === bareId(block)))) overlap.push(place);
+            }
+          }
+          const unique = [...new Set(overlap)];
+          const text = `${guidance}\n${o.hint ?? ""}\n${o.label ?? ""}`;
+          if (unique.length && !signpostedAlternate(text)) add("prefab-gather", at, `${o.type} overlaps once-built ${unique.join(", ")} (${items.join(", ")}) and neither the intro nor the hint names a renewable alternate`);
+        }
+        if (o.type === "interact" && o.place && prefabs[o.place]) {
+          const placed = prefabs[o.place];
+          const scarce = (o.blocks ?? []).map(bareId).filter((id) => (placed[`minecraft:${id}`] || placed[id]) && !UNBREAKABLE.has(id) && !COMMON_TERRAIN.has(id));
+          const text = `${chapter.hint ?? ""}\n${o.hint ?? ""}\n${o.label ?? ""}`;
+          if (scarce.length && !signpostedReplacement(text)) add("finite-interact", at, `interact at ${o.place} needs finite prefab ${scarce.join(", ")} (${scarce.map((id) => `${id} x${placed[`minecraft:${id}`] || placed[id]}`).join(", ")}). A later player can mine them out.`);
+        }
+      });
+    });
+  }
+  for (const t of input.templates ?? []) rewardScale(t.reward, `wander template ${t.id}`, "one-off", 0, 1);
+  return { findings };
+}
+
+/**
+ * A category-wide or empty reason does not suppress a finding.
+ * @param {{ code: string, at: string, message?: string }[]} findings
+ * @param {{ code?: string, at?: string, reason?: string }[]} entries
+ */
+export function applyStoryAllowlist(findings, entries = []) {
+  /** @type {typeof findings} */
+  const kept = [];
+  /** @type {{ code: string, at: string, message?: string, reason: string }[]} */
+  const allowed = [];
+  for (const f of findings) {
+    const hit = entries.find((e) => e.code === f.code && e.at === f.at && e.at !== "*" && !String(e.at).includes("*") && typeof e.reason === "string" && e.reason.length >= 40);
+    if (hit) allowed.push({ ...f, reason: /** @type {string} */ (hit.reason) });
+    else kept.push(f);
+  }
+  return { findings: kept, allowed };
+}
+
+/** @param {string} root */
+export function loadStoryAllow(root) {
+  const file = join(root, "tools", "check-stories.allow.json");
+  if (!existsSync(file)) return { entries: [] };
+  const raw = JSON.parse(readFileSyncAllow(file));
+  return { entries: Array.isArray(raw.entries) ? raw.entries : [] };
+}
+
+/** @param {string} file */
+function readFileSyncAllow(file) {
+  if (!readFileSyncStory) throw new Error("check-stories allowlist read before fs init");
+  return readFileSyncStory(file);
+}
+
+/**
+ * @param {string} root
+ * @param {{ STORIES: any[], FAVORS: any[], WANDERERS: any[], WANDER_TEMPLATES: any[], NPC_NAMES: Record<string, string> }} loaded
+ */
+export async function liveContentFindings(root, loaded) {
+  const { readFileSync, readdirSync } = await import("node:fs");
+  readFileSyncStory = readFileSync;
+  readdirSyncStory = readdirSync;
+  const { join: joinPath } = await import("node:path");
+  const vanilla = await import("@minecraft/vanilla-data");
+  const elite = await import(pathToFileURL(joinPath(root, "packs", "elite_bp", "scripts", "config.js")).href);
+  const recipes = await import(pathToFileURL(joinPath(root, "packs", "cooking_bp", "scripts", "recipes.js")).href);
+  const prefabs = await loadPrefabCounts(joinPath(root, "packs", "saga_bp", "scripts"));
+  const findings = auditStoryRules({
+    stories: loaded.STORIES,
+    wanderers: loaded.WANDERERS,
+    npcs: loaded.NPC_NAMES,
+    traits: Object.keys(elite.CONFIG.traits),
+    packItems: packItemsFrom(recipes.DISHES ?? [], recipes.INGREDIENTS ?? []),
+    families: familiesFrom(vanilla),
+    prefabs,
+    drops: DEFAULT_DROPS,
+    templates: loaded.WANDER_TEMPLATES,
+  }).findings;
+  return { findings: findings.map((f) => ({ ...f, message: `${locateStory(root, f.at)}: ${f.message}` })) };
+}
+
+/** @param {any[]} dishes @param {any[]} ingredients */
+function packItemsFrom(dishes, ingredients) {
+  /** @type {{ name: string, packs: string[] }[]} */
+  const items = [];
+  for (const d of dishes) {
+    const packs = ["cooking_bp"];
+    if (/champion/i.test(d.name)) packs.push("elite_bp");
+    items.push({ name: d.name, packs });
+  }
+  for (const i of ingredients) {
+    if (i.id === "champions_heart") items.push({ name: i.name, packs: ["cooking_bp", "elite_bp"] });
+    if (i.id === "harvest_saffron") items.push({ name: i.name, packs: ["cooking_bp", "moon_bp"] });
+  }
+  return items;
+}
+
+/** @param {any} vanilla */
+function familiesFrom(vanilla) {
+  const blocks = Object.values(vanilla.MinecraftBlockTypes).map((id) => String(id).replace(/^minecraft:/, ""));
+  const items = Object.values(vanilla.MinecraftItemTypes).map((id) => String(id).replace(/^minecraft:/, ""));
+  const notHard = (/** @type {string} */ id) => !id.startsWith("hard_");
+  return {
+    candle: blocks.filter((id) => /^(candle|[a-z0-9_]+_candle)$/.test(id) && !id.includes("cake") && notHard(id)),
+    stained_glass: blocks.filter((id) => id.endsWith("_stained_glass") && notHard(id)),
+    stained_glass_pane: blocks.filter((id) => id.endsWith("_stained_glass_pane") && notHard(id)),
+    fence: blocks.filter((id) => id.endsWith("_fence") && id !== "nether_brick_fence"),
+    sapling: blocks.filter((id) => id.endsWith("_sapling") || id === "mangrove_propagule"),
+    wool: blocks.filter((id) => id.endsWith("_wool")),
+    planks: blocks.filter((id) => id.endsWith("_planks")),
+    helmet: items.filter((id) => id.endsWith("_helmet")),
+  };
+}
+
+/** @param {string} scripts */
+async function loadPrefabCounts(scripts) {
+  const { readFileSync } = await import("node:fs");
+  const { join: joinPath } = await import("node:path");
+  const src = readFileSync(joinPath(scripts, "prefabs.js"), "utf8").replace(/^import \{[^}]*\} from "@minecraft\/server";/m, "const BlockPermutation = {}; const LiquidType = {};");
+  const { PREFABS, blueprint } = await import(`data:text/javascript,${encodeURIComponent(src)}`);
+  /** @type {Record<string, Record<string, number>>} */
+  const out = {};
+  for (const name of Object.keys(PREFABS)) {
+    /** @type {Record<string, number>} */
+    const counts = {};
+    for (const e of blueprint(name, { x: 0, y: 64, z: 0 }).entries) {
+      if (e.k === 2 || e.k === 3) continue;
+      counts[e.b.id] = (counts[e.b.id] ?? 0) + 1;
+    }
+    out[name] = counts;
+  }
+  return out;
+}
+
+/** @param {string} root @param {string} at */
+function locateStory(root, at) {
+  const m = /^([^/\s]+)\/([^\s]+)/.exec(at);
+  if (!m || !readFileSyncStory || !readdirSyncStory) return "stories";
+  if (!storyLines) storyLines = indexStoryLines(root);
+  return storyLines.get(`${m[1]}/${m[2]}`) ?? storyLines.get(m[1]) ?? "packs/saga_bp/scripts/stories";
+}
+
+/** Chapter ids repeat across files, so index story id, then that story's chapter. */
+function indexStoryLines(root) {
+  const map = new Map();
+  const dir = join(root, "packs", "saga_bp", "scripts", "stories");
+  const files = [join(root, "packs", "saga_bp", "scripts", "stories.js")];
+  for (const name of readdirSyncStory(dir)) if (name.endsWith(".js")) files.push(join(dir, name));
+  for (const file of files) {
+    const rel = file.slice(root.length + 1).replaceAll("\\", "/");
+    const lines = readFileSyncStory(file, "utf8").split(/\n/);
+    let story = null;
+    lines.forEach((line, i) => {
+      const id = /^(\s*)id:\s*"([^"]+)"/.exec(line);
+      if (!id) return;
+      const window = lines.slice(i, i + 8).join("\n");
+      if (!/title:\s*"/.test(window)) return;
+      if (id[1].length <= 4) {
+        story = id[2];
+        if (!map.has(story)) map.set(story, `${rel}:${i + 1}`);
+      } else if (story) {
+        const key = `${story}/${id[2]}`;
+        if (!map.has(key)) map.set(key, `${rel}:${i + 1}`);
+      }
+    });
+  }
+  return map;
+}

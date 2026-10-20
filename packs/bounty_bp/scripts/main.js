@@ -10,6 +10,8 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
+import { applyParts, createOwedStore } from "./owed.js";
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -29,7 +31,7 @@ import { get, getFor } from "./settings.js";
 
 const PROP_BOARDS = "bounty:boards"; // world: JSON Board[] (the first in the overworld places the targets)
 const PROP_DAY = "bounty:day"; // world: JSON Day
-const PROP_PENDING = "bounty:pending"; // world: JSON { playerId: crowns } owed to players who were offline
+// Crowns owed to players who were offline: one world property per player, "bounty:pending:<playerId>", plus the index "bounty:pending_idx" (owed.js).
 const TAG = "realm:bounty:"; // + bounty id, on the target champion (elite_bp adds it for us)
 const LECTERN = "minecraft:lectern";
 const OVERWORLD = "minecraft:overworld";
@@ -111,6 +113,15 @@ function crownsObjective() {
   }
 }
 
+const owedStore = createOwedStore(world, {
+  base: "bounty:pending",
+  normalize: (v) => {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    throw new Error("not a crowns amount");
+  },
+  summarize: (v) => `${v} Crowns`,
+});
+
 /** Pays a player by id now, or when they next join. @param {string} playerId @param {number} n @param {string} why */
 function pay(playerId, n, why) {
   n = Math.floor(n);
@@ -121,23 +132,23 @@ function pay(playerId, n, why) {
     p.sendMessage(`§6+${fmt(n)} Crowns §7(${why})`);
     return;
   }
-  const owed = readJson(PROP_PENDING) ?? {};
-  owed[playerId] = (typeof owed[playerId] === "number" ? owed[playerId] : 0) + n;
-  const ids = Object.keys(owed);
-  for (const id of ids.slice(0, Math.max(0, ids.length - 300))) delete owed[id];
-  world.setDynamicProperty(PROP_PENDING, JSON.stringify(owed));
+  if (!owedStore.update(playerId, (cur) => (typeof cur === "number" ? cur : 0) + n)) console.warn(`[bounty] ${n} Crowns for ${playerId} could not be saved`);
 }
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   try {
-    const owed = readJson(PROP_PENDING);
-    const n = owed?.[player.id];
+    const n = owedStore.take(player.id);
     if (typeof n !== "number") return;
-    delete owed[player.id];
-    world.setDynamicProperty(PROP_PENDING, Object.keys(owed).length ? JSON.stringify(owed) : undefined);
-    crownsObjective().addScore(player, Math.floor(n));
-    player.sendMessage(`§6+${fmt(n)} Crowns §7(Bounty rewards while you were away)`);
+    const { applied } = applyParts(
+      [Math.floor(n)],
+      (crowns) => crownsObjective().addScore(player, crowns),
+      (failed) => {
+        if (!owedStore.update(player.id, (cur) => (typeof cur === "number" ? cur : 0) + failed.reduce((a, b) => a + b, 0))) throw new Error("could not be saved");
+      },
+      (m) => console.warn(`[bounty] ${m}`),
+    );
+    if (applied) player.sendMessage(`§6+${fmt(n)} Crowns §7(Bounty rewards while you were away)`);
   } catch (e) {
     console.warn(`[bounty] ${e}`);
   }
@@ -724,7 +735,15 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   }
 });
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:help_pong",
+    "realm:bounty_targets_ping",
+    "realm:champion_slain",
+    "realm:npc_talk",
+    "realm:npc_choose",
+    "realm:bounty_rival",
+  ],
   ({ id, message }) => {
     if (id === "realm:help_pong") {
       if (message === "elite_bp") eliteSeen = true;
@@ -773,7 +792,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[bounty] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -972,9 +990,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "bounty_bp");
   },
-  { namespaces: ["realm"] },
 );

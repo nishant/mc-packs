@@ -11,9 +11,13 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "inboxLimit", type: "int", scope: "world", label: "Letters per inbox", help: "When a full inbox gets a letter, its oldest read letters are dropped first", min: 10, max: 200, step: 10 },
+  { key: "systemInboxLimit", type: "int", scope: "world", label: "Pack letters per inbox", help: "Letters from townsfolk and goals; a newer one pushes out the oldest. Letters from players are never pushed out", min: 1, max: 50, step: 1 },
+  { key: "systemLetterDays", type: "int", scope: "world", label: "Days a pack letter is kept", help: "Read or not, then it is deleted", min: 1, max: 365, step: 1 },
+  { key: "systemReserve", type: "int", scope: "world", label: "Letters kept free for players", help: "Pack letters stop arriving when the realm holds 5000 minus this", min: 0, max: 4000, step: 100 },
   { key: "sentLimit", type: "int", scope: "world", label: "Letters kept in Sent", min: 0, max: 100, step: 10 },
   { key: "notifyOnJoin", type: "bool", scope: "world", label: "Unread letters notice on join", help: "A chat line on joining for players with unread letters" },
   { key: "sendCooldownSeconds", type: "int", scope: "world", label: "Seconds between letters", help: "Per player. 0 = no wait", min: 0, max: 120, step: 5 },
+  { key: "senderUnreadCap", type: "int", scope: "world", label: "Unread letters per sender", help: "Most unread letters from one player in one inbox. 0 = no cap", min: 0, max: 50, step: 1 },
   { key: "joinNotice", type: "bool", scope: "player", base: "notifyOnJoin", label: "Unread letters notice on join", help: "A chat line when you join with unread letters" },
 ];
 
@@ -47,6 +51,7 @@ const OPTIONS = [
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
  * @property {string} [prop] player only: its own dynamic property instead of `<PREFIX>:pref`
+ * @property {boolean} [sticky] player only: keep an explicit choice even when it matches the realm default
  * @property {[string, unknown][]} [lock] player only: world options that make this preference do nothing, each with
  *   the value that does it ([["enabled", false]]); /realm:prefs then shows it as set by the operators
  * @property {(player: Player) => string | undefined} [locked] player only: why it can't change for this player now, when
@@ -208,8 +213,8 @@ export function getFor(player, key) {
 }
 
 /**
- * Saves a player's own choice. Choosing what the realm has clears it, so the player follows later
- * changes to the realm's value.
+ * Saves a player's own choice. Unless the option is sticky, choosing what the realm has clears it
+ * so the player follows later changes to the realm's value.
  * @param {Player} player @param {string} key @param {unknown} value @returns {string | undefined} why it wasn't saved
  */
 export function setFor(player, key, value) {
@@ -217,7 +222,7 @@ export function setFor(player, key, value) {
   if (!opt) return "isn't a preference";
   const bad = problem(opt, value);
   if (bad) return bad;
-  const keep = /** @type {boolean | number | string | undefined} */ (value === playerBase(opt) ? undefined : value);
+  const keep = /** @type {boolean | number | string | undefined} */ (opt.sticky !== true && value === playerBase(opt) ? undefined : value);
   if (opt.prop) player.setDynamicProperty(opt.prop, keep);
   else {
     const prefs = prefsOf(player);
@@ -258,6 +263,8 @@ function changed(key, player) {
 // ---------------------------------------------------------------------------
 // Realm Settings protocol
 // ---------------------------------------------------------------------------
+
+import { onScriptEvent } from "./script-events.js";
 
 /**
  * Why a player's preference does nothing right now because of the operators, in words for /realm:prefs ("Coordinates
@@ -358,22 +365,19 @@ function applySet(req) {
   system.sendScriptEvent("realm:cfg_ack", JSON.stringify(ack));
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
-    if (id !== "realm:cfg_ping" && id !== "realm:cfg_set" && id !== "realm:cfg_reset") return;
-    try {
-      const req = JSON.parse(message);
-      if (!req || typeof req !== "object") return;
-      if (id === "realm:cfg_ping") answer(req);
-      else if (req.pack !== PACK) return;
-      else if (id === "realm:cfg_set") applySet(req);
-      else {
-        reset();
-        system.sendScriptEvent("realm:cfg_ack", JSON.stringify({ id: req.id, pack: PACK, key: "*", ok: true }));
-      }
-    } catch (e) {
-      console.warn(`[${PREFIX}] settings: ${e}`);
+onScriptEvent(["realm:cfg_ping", "realm:cfg_set", "realm:cfg_reset"], ({ id, message }) => {
+  if (id !== "realm:cfg_ping" && id !== "realm:cfg_set" && id !== "realm:cfg_reset") return;
+  try {
+    const req = JSON.parse(message);
+    if (!req || typeof req !== "object") return;
+    if (id === "realm:cfg_ping") answer(req);
+    else if (req.pack !== PACK) return;
+    else if (id === "realm:cfg_set") applySet(req);
+    else {
+      reset();
+      system.sendScriptEvent("realm:cfg_ack", JSON.stringify({ id: req.id, pack: PACK, key: "*", ok: true }));
     }
-  },
-  { namespaces: ["realm"] }
-);
+  } catch (e) {
+    console.warn(`[${PREFIX}] settings: ${e}`);
+  }
+});

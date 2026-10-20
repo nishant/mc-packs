@@ -13,6 +13,7 @@ import {
   world,
 } from "@minecraft/server";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PLATYPUS = "realm:platypus";
 /** How far the Perry message reaches, in blocks. */
@@ -163,9 +164,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "platypus_bp");
   },
-  { namespaces: ["realm"] }
 );

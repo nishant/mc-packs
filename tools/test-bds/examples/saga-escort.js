@@ -4,6 +4,19 @@
 // restart no story villager is left over. (Simulated players' taps fire no interact events, so "no trading" is
 // checked in code: saga cancels every interaction with an entity tagged saga:actor.)
 //   node tools/test-bds/run.mjs --quiet --flat --only saga_bp,wander_bp --scenario tools/test-bds/examples/saga-escort.js --timeout 600
+
+/** Yaw (Bedrock: 0 faces +z, -90 faces +x) of a direction. */
+const yawOf = (dx, dz) => (Math.atan2(-dx, dz) * 180) / Math.PI;
+const within = (yaw, want, tol) => Math.abs(((yaw - want + 540) % 360) - 180) < tol;
+/**
+ * Whether a villager's reported (head) yaw counts as "facing the way he walks". A villager's look-at-player goal turns
+ * the head toward a close player whatever the body does, so the head facing the player counts too.
+ * @param {number} yaw @param {{ dx: number, dz: number }} move @param {{ dx: number, dz: number }} toPlayer
+ */
+export function facesWay(yaw, move, toPlayer) {
+  return within(yaw, yawOf(move.dx, move.dz), 30) || (Math.abs(toPlayer.dx) + Math.abs(toPlayer.dz) > 0.01 && within(yaw, yawOf(toPlayer.dx, toPlayer.dz), 30));
+}
+
 export default async function (t) {
   const sys = t.system;
   /** @type {{ id: string, m: any, tick: number }[]} */
@@ -110,7 +123,7 @@ export default async function (t) {
   const start = { ...p.location };
   const goal = { x: X + 48.5, z: Z + 0.5 };
   const steps = Math.ceil(Math.hypot(goal.x - start.x, goal.z - start.z) / 0.4);
-  /** @type {{ x: number, y: number, z: number, yaw: number }[]} */
+  /** @type {{ x: number, y: number, z: number, yaw: number, px: number, pz: number }[]} */
   const seen = [];
   let lightning = false;
   for (let i = 1; i <= steps + 60; i++) {
@@ -118,7 +131,7 @@ export default async function (t) {
     p.teleport({ x: start.x + (goal.x - start.x) * k, y: gy, z: start.z + (goal.z - start.z) * k }, { rotation: { x: 0, y: -90 } });
     await t.wait(2);
     const now = pells()[0];
-    if (now) seen.push({ ...now.location, yaw: now.getRotation().y });
+    if (now) seen.push({ ...now.location, yaw: now.getRotation().y, px: p.location.x, pz: p.location.z });
     if (!lightning && i === Math.floor(steps / 2) && now) {
       // Lightning: a villager becomes a witch.
       // Also place a foreign adult villager 1.2m away with bare "§r": the lightning bolt transforms BOTH Pell and the
@@ -161,7 +174,7 @@ export default async function (t) {
     if (d > 1.3 && d < 8) big++; // (8+: the respawn after the lightning)
     if (d > 0.05) {
       moving++;
-      if (Math.abs(((seen[i].yaw + 90 + 540) % 360) - 180) < 30) facing++;
+      if (facesWay(seen[i].yaw, { dx: seen[i].x - seen[i - 1].x, dz: seen[i].z - seen[i - 1].z }, { dx: seen[i].px - seen[i].x, dz: seen[i].pz - seen[i].z })) facing++;
     }
   }
   t.log(`samples ${seen.length}, moving ${moving}, steps over 1.3 blocks ${big}, facing east ${facing}`);

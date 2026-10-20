@@ -3,6 +3,7 @@ import { GameMode, system, world } from "@minecraft/server";
 import { get } from "../settings.js";
 import { allZones } from "../zones.js";
 import { isOp } from "../utils/Permissions.js";
+import { onScriptEvent } from "../script-events.js";
 
 const callingBonus = new Map();
 const askingClaims = new Map();
@@ -132,7 +133,8 @@ export async function filterAllowedPositionsAsync(player, dimId, positions, noti
 }
 
 try {
-    system.afterEvents.scriptEventReceive.subscribe(
+    onScriptEvent(
+        ["realm:calling", "realm:claims_check_result"],
         ({ id, message }) => {
             if (id === "realm:calling") {
                 try {
@@ -164,7 +166,6 @@ try {
                 } catch {}
             }
         },
-        { namespaces: ["realm"] }
     );
     world.afterEvents.worldLoad.subscribe(() => {
         system.runTimeout(() => {
