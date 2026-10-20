@@ -1791,6 +1791,15 @@ test("F4 recover: a player who still carries everything gets no chest, only a cl
   assert.ok(!mc.structures.has(pending.before.id) && !mc.structures.has(pending.after.id), "both images discarded");
 });
 
+test("F4 recover: a stack held on the cursor counts as carried", async () => {
+  const { p, op, dim } = stuck();
+  p.cursor.item = stack("minecraft:diamond", 3);
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  assert.match(await pages.recoverInventory(op, p), /nothing was exported/);
+  assert.equal(chestsOf(dim).length, 0);
+  p.cursor.item = undefined;
+});
+
 test("F4 recover: an inventory that changes while the operator decides exports nothing", async () => {
   const { p, op, dim } = stuck();
   mc.formResponses.set(op.id, [() => { p.container.setItem(18, stack("minecraft:diamond", 3)); return { selection: 0 }; }]);

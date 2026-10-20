@@ -476,6 +476,13 @@ function planOf(target, pending, skip) {
     const inv = target.getComponent("minecraft:inventory")?.container;
     if (!inv) throw new Error("the player's inventory is unavailable");
     const live = carried(inv).filter((e) => !(skip && skip(e)));
+    // A stack held on the cursor (the inventory screen is open) is still carried.
+    try {
+      const held = target.getComponent("minecraft:cursor_inventory")?.item;
+      if (held) live.push({ s: -1, item: held });
+    } catch {
+      // no cursor component: nothing held
+    }
     plan = missingPlan(before, live);
   }
   const bySlot = new Map(before.map((e) => [e.s, e.item]));
