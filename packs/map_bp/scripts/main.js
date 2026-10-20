@@ -1,7 +1,9 @@
 // Minimap: a compass strip at the top of the screen, an optional radar, destinations and Mara's Field Map.
 // Scripts can't draw on the HUD or on map items, so the picture is made of glyphs (glyphs.js, drawn by the
 // glyph page in Side HUD, hud_rp) sent in the Side HUD title (side.js: the strip in slot "top", the radar in
-// slot "radar" as the part "map/radar"). The land itself is Bedrock's own locator map, held in the offhand.
+// slot "radar" as the part "map/radar"). The Minimap is the side boxes' compositor: it draws the title of the players
+// it shows something to, with every other pack's box in it, and never broadcasts its own parts (side.js, the
+// compositor claim). The land itself is Bedrock's own locator map, held in the offhand.
 //
 // Every intervalTicks per player who has the strip or the radar on (the pass, spread over the ticks between): one
 // entity search for monsters within their mob radius (the nearest maxMobs), one for realm:npc within npcRange;
@@ -97,7 +99,7 @@ const FRIEND_ARR = [G.Q_FRIEND_0, G.Q_FRIEND_1, G.Q_FRIEND_2, G.Q_FRIEND_3, G.Q_
 const PARTY_ARR = [G.Q_PARTY_0, G.Q_PARTY_1, G.Q_PARTY_2, G.Q_PARTY_3, G.Q_PARTY_4, G.Q_PARTY_5, G.Q_PARTY_6, G.Q_PARTY_7];
 const STAR_ARR = [G.Q_STAR_0, G.Q_STAR_1, G.Q_STAR_2, G.Q_STAR_3, G.Q_STAR_4, G.Q_STAR_5, G.Q_STAR_6, G.Q_STAR_7];
 
-const side = sideBoxes("map");
+const side = sideBoxes("map", { compositor: true });
 const isOp = (/** @type {Player} */ p) => p.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 /** @param {string} id @param {unknown} msg */
 const send = (id, msg) => {
@@ -387,7 +389,7 @@ const lastSent = new Map();
 /** One shared render snapshot drives both compass and radar (realm:map_debug). @type {Map<string, { strip: string, line2: string, radar: string, dest?: string, target?: Spot, at: Vector3, dim: string, heading: number, radius: number, north: boolean }>} */
 const lastText = new Map();
 let costMs = 0;
-/** Of costMs, the time spent sending the title (side.js: two realm:side events and setTitle). */
+/** Of costMs, the time spent sending the title (side.js: setTitle; the compositor sends no realm:side). */
 let drawMs = 0;
 let costPasses = 0;
 let costPlayers = 0;
@@ -592,7 +594,8 @@ const terrain = new TerrainWorld(6000, 24);
  * drawn from it (`rows`: the base plus this draw's markers, which `touched` lists, so the next draw puts back only
  * those). A player who doesn't move or turn far enough for the terrain to change costs no terrain lookups.
  * `need` is what the scanner should read for it (missing columns nearest first, then stale ones), made at `needAt`.
- * @type {Map<string, { key: string, base: string[], rows: string[], touched: number[], need: import("./terrain.js").Pick[], needAt: number, needStore?: import("./terrain.js").Store }>}
+ * `slot`: the player's turn for the STALE_EVERY rebuild (staleSlot).
+ * @type {Map<string, { key: string, base: string[], rows: string[], touched: number[], need: import("./terrain.js").Pick[], needAt: number, needStore?: import("./terrain.js").Store, slot: number }>}
  */
 const terrainBaseMemo = new Map();
 /** The store each player's radar reads, set by the scan every tick (roofed players read their layer). @type {Map<string, import("./terrain.js").Store>} */
@@ -808,6 +811,8 @@ system.runInterval(() => {
   scanTicks++;
 }, 1);
 
+/** Blocks up or down that change a roofed viewer's layer even in the air (a jump is about 1.25). */
+const LAYER_KEEP = 3;
 /** @param {Player} player @param {number} now @returns {ScanPlan | undefined} */
 function planFor(player, now) {
   if (!player.isValid) return undefined;
@@ -822,7 +827,20 @@ function planFor(player, now) {
   const surface = terrain.store(dim.id, undefined);
   const top = terrain.get(surface, at.x, at.z, 1, true);
   const roof = dim.id === "minecraft:nether" || (!!top && top.kind !== "water" && top.y > at.y + 6);
-  const py = Math.floor(at.y);
+  // The layer is the height they stand at: a jump (or a step off a ledge) keeps the layer they stood on, since every
+  // layer is a store of its own that the scanner reads again from nothing (O1). A move of LAYER_KEEP blocks or more
+  // (a fall, a ladder, swimming) changes it at once.
+  let py = Math.floor(at.y);
+  const before = scanPlans.get(player.id);
+  if (roof && before?.roof && before.dim.id === dim.id && py !== before.py && Math.abs(py - before.py) < LAYER_KEEP) {
+    let grounded = true;
+    try {
+      grounded = player.isOnGround;
+    } catch {
+      // left meanwhile: the layer doesn't matter
+    }
+    if (!grounded) py = before.py;
+  }
   const store = terrain.store(dim.id, roof ? py : undefined);
   playerStore.set(player.id, store);
   // Where the radar draws its terrain from (radarOf: whole blocks).
@@ -914,6 +932,16 @@ let radarRebuilds = 0;
 let radarStale = false;
 /** The radar is built again this often anyway, so columns that went stale are found (and read again). */
 const STALE_EVERY = 200;
+/**
+ * Each player's turn within STALE_EVERY (a hash, FNV-1a, of their id), so these rebuilds are spread over the ticks
+ * instead of every still player's at once (a wave of 0.8 ms rebuilds every 200 ticks, O10).
+ * @param {string} id
+ */
+function staleSlot(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return h % STALE_EVERY;
+}
 /** The terrain grid turns in steps of this many degrees and moves in whole blocks (an edge cell moves under a block). */
 const TERRAIN_TURN = 2;
 
@@ -933,7 +961,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
   const store = useTerrain ? storeFor(playerId, dimId) : undefined;
   let memo = playerId ? terrainBaseMemo.get(playerId) : undefined;
   if (!memo) {
-    memo = { key: "", base: EMPTY_ROWS.slice(), rows: EMPTY_ROWS.slice(), touched: [], need: [], needAt: -1 };
+    memo = { key: "", base: EMPTY_ROWS.slice(), rows: EMPTY_ROWS.slice(), touched: [], need: [], needAt: -1, slot: staleSlot(playerId) };
     if (playerId) terrainBaseMemo.set(playerId, memo);
   }
   const { base, rows, touched } = memo;
@@ -941,8 +969,8 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
   const tz = Math.round(at.z);
   const th = north ? 0 : Math.round(heading / TERRAIN_TURN) * TERRAIN_TURN;
   // Built again when the pose (whole blocks, TERRAIN_TURN degrees) or the land near the player changed, and every
-  // STALE_EVERY ticks so columns older than SCAN_MAX_AGE are found and read again.
-  const key = !store ? "empty" : `${terrainVerOf(playerId, dimId, at, radius)}|${tx}|${tz}|${th}|${radius}|${Math.floor(now / STALE_EVERY)}`;
+  // STALE_EVERY ticks (each player at their own turn) so columns older than SCAN_MAX_AGE are found and read again.
+  const key = !store ? "empty" : `${terrainVerOf(playerId, dimId, at, radius)}|${tx}|${tz}|${th}|${radius}|${Math.floor((now + memo.slot) / STALE_EVERY)}`;
   radarStale = false;
   if (memo.key !== key && !rebuild && memo.key && key !== "empty") {
     // No time to build the terrain again: this tick's markers go on the last picture (radarStale tells the caller).
@@ -1112,10 +1140,27 @@ function line2Of(region, dest) {
 /**
  * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
  * markers, the second line, which parts show, and the heading and place they were last drawn for.
- * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string, drawn?: number, lag?: boolean, fresh?: number, dirty?: boolean }} View
+ * `shown` and `shownSecond`: the markers and second line it was last drawn with (a pass that finds the same draws nothing).
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string, drawn?: number, lag?: boolean, fresh?: number, dirty?: boolean, shown?: Marker[], shownSecond?: string }} View
  */
 /** @type {Map<string, View>} */
 const views = new Map();
+
+/** Markers closer than this (blocks) to where they were drawn count as unmoved: a strip cell is 5 degrees and a radar cell 2.4 blocks or more. */
+const MARKER_SLACK = 0.25;
+/**
+ * Would these markers draw the same as the ones last drawn (same kinds in the same order, none moved MARKER_SLACK)?
+ * @param {Marker[] | undefined} a @param {Marker[]} b
+ */
+function sameMarkers(a, b) {
+  if (!a || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const m = a[i];
+    const n = b[i];
+    if (m.kind !== n.kind || m.clamp !== n.clamp || Math.abs(m.x - n.x) >= MARKER_SLACK || Math.abs(m.z - n.z) >= MARKER_SLACK) return false;
+  }
+  return true;
+}
 
 /** 0 = north, clockwise. @param {Player} player */
 const headingOf = (player) => (((player.getRotation().y + 180) % 360) + 360) % 360;
@@ -1164,9 +1209,12 @@ function pass(player, all, seen, now) {
   /** @type {View} */
   const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, terrain: pr.terrain, dest: dest?.spot?.n, target: dest?.spot, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, y: 0, z: 0 };
   const old = views.get(player.id);
-  if (old && old.dim === view.dim) Object.assign(view, { heading: old.heading, x: old.x, y: old.y, z: old.z, tv: old.tv, drawn: old.drawn, fresh: old.fresh });
-  // Drawn by the per-tick redraw, within its budget (next tick unless many players are waiting).
-  view.dirty = true;
+  const same = !!old && old.dim === view.dim;
+  if (same) Object.assign(view, { heading: old.heading, x: old.x, y: old.y, z: old.z, tv: old.tv, drawn: old.drawn, fresh: old.fresh, shown: old.shown, shownSecond: old.shownSecond });
+  // Drawn by the per-tick redraw, within its budget (next tick unless many players are waiting), unless the pass found
+  // what is already on screen: then only turning, moving, new land or the refresh draws it (a still player's pass
+  // costs no strip and radar).
+  view.dirty = !same || !!old.dirty || !lastSent.has(player.id) || old.compass !== view.compass || old.radar !== view.radar || old.radius !== view.radius || old.north !== view.north || old.terrain !== view.terrain || view.shownSecond !== view.second || !sameMarkers(view.shown, view.markers);
   views.set(player.id, view);
   costMs += Date.now() - t0;
   costPlayers++;
@@ -1222,6 +1270,9 @@ function render(player, v, now, refresh, heading = headingOf(player), at = playe
   }
   const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
   if (side.held(player)) return false;
+  // On screen from now (or already): a pass that finds the same markers and line doesn't draw again.
+  v.shown = v.markers;
+  v.shownSecond = v.second;
   const sent = lastSent.get(player.id);
   let showC = v.compass && (!sent || !sent.compass || sent.ctext !== compassText || (refresh && now - sent.cat >= REFRESH));
   let showR = v.radar && (!sent || !sent.radar || sent.rtext !== radar || (refresh && now - sent.rat >= REFRESH));
@@ -1248,6 +1299,33 @@ function render(player, v, now, refresh, heading = headingOf(player), at = playe
 }
 
 /**
+ * The refresh of a player who hasn't turned, moved or got new markers or land since their last draw: their strip and
+ * radar would come out the same, so the title they have is drawn again for HOLD more ticks (side.js keep: the
+ * compositor reuses the subtitle it made and sends no message).
+ * @param {Player} player @param {View} v @param {number} now @returns {boolean} whether it was drawn
+ */
+function keepAlive(player, v, now) {
+  const sent = lastSent.get(player.id);
+  if (!sent || side.held(player)) return false;
+  const t1 = Date.now();
+  // One of its parts isn't up any more (it ran out, e.g. during a real title or a late refresh): build and send both
+  // again. Keeping only the part still up would stamp the other as sent while it stays off for good.
+  /** @type {string[]} */
+  const parts = [];
+  if (sent.compass) parts.push("");
+  if (sent.radar) parts.push("radar");
+  if (!side.keep(player, HOLD, parts)) {
+    sent.ctext = sent.rtext = "";
+    return render(player, v, now, true);
+  }
+  if (sent.compass) sent.cat = now;
+  if (sent.radar) sent.rat = now;
+  v.drawn = now;
+  drawMs += Date.now() - t1;
+  return true;
+}
+
+/**
  * Turning by less than this (degrees) or moving less than this (blocks) since the last draw doesn't redraw: a strip
  * cell is 5 degrees and a radar cell 2.4 blocks or more (a marker 20 blocks away moves a cell every ~6 degrees), so
  * smaller steps hardly ever change the text, and building it is the cost.
@@ -1257,9 +1335,8 @@ const MOVE_MIN = 0.5;
 /** Moved farther than this (blocks) since the pass: a teleport, so the markers wait for the next pass. */
 const FAR_MOVE = 256;
 /**
- * Titles sent per tick at most by the per-tick redraw. Each one is also two realm:side messages that every other
- * pack with side boxes reads, so with many players turning at once the ones drawn longest ago go first and the rest
- * follow a tick later.
+ * Titles sent per tick at most by the per-tick redraw (the compositor sends no realm:side for them), so with many
+ * players turning at once the ones drawn longest ago go first and the rest follow a tick later.
  */
 const TURN_BUDGET = 8;
 /** Strips and radars built per tick at most (building one whose text didn't change is the cost without the send). */
@@ -1280,6 +1357,8 @@ let turnDraws = 0;
 let turnSends = 0;
 /** Sends by the per-tick redraw that refreshed an unchanged part before it faded (not counted in turnSends). */
 let refreshSends = 0;
+/** Of refreshSends, those that drew the same title again without building the strip and radar (keepAlive). */
+let keepSends = 0;
 /** Of turnMs, the time spent finding who is due. */
 let turnCheckMs = 0;
 let radarMs = 0;
@@ -1293,7 +1372,12 @@ system.runInterval(() => {
   if (!views.size) return;
   const t0 = Date.now();
   const now = system.currentTick;
-  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. `heading` and `at` are what the check read, so render() doesn't read them again. @type {{ p: Player, v: View, refresh: boolean, moved: boolean, heading: number | undefined, at: Vector3 }[]} */
+  /**
+   * `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. `keep`:
+   * only the refresh is due (nothing they see changed), so the title is drawn again as it is (keepAlive). `heading` and
+   * `at` are what the check read, so render() doesn't read them again.
+   * @type {{ p: Player, v: View, refresh: boolean, moved: boolean, keep: boolean, heading: number | undefined, at: Vector3 }[]}
+   */
   const due = [];
   const n = views.size;
   const checks = Math.min(n, TURN_CHECKS);
@@ -1301,8 +1385,11 @@ system.runInterval(() => {
   for (const v of views.values()) {
     k++;
     const p = v.player;
-    // A new pass or a radar waiting for its terrain is always due; the others are looked at in turns.
-    if (!v.dirty && !v.lag && (k - turnFirst + n) % n >= checks) continue;
+    const sent = lastSent.get(p.id);
+    const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
+    // A new pass, a radar waiting for its terrain or a title about to fade (the refresh: with many players their turn
+    // could come after HOLD ran out, O5) is always due; the others are looked at in turns.
+    if (!v.dirty && !v.lag && !refresh && (k - turnFirst + n) % n >= checks) continue;
     try {
       if (!p.isValid) continue;
       // Another dimension (a portal) or far from where the pass looked (a teleport): wait for the next pass.
@@ -1312,15 +1399,14 @@ system.runInterval(() => {
       }
       const at = p.location;
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
-      const sent = lastSent.get(p.id);
-      const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
-      /** @type {number | undefined} read only when the checks before it didn't already settle `moved` (as before); render() reads it otherwise, inside the draw budget */
+      /** @type {number | undefined} read only when a new pass didn't already settle it; render() reads it otherwise, inside the draw budget */
       let heading;
-      const moved = refresh || !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      const changed = !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      const moved = refresh || changed;
       if (!moved && !v.lag) continue;
       // Moving fast (flying, riding): the scanner plans ahead for them often.
       if (Math.abs(at.x - v.x) + Math.abs(at.z - v.z) > 0.6 * Math.max(1, now - (v.drawn ?? now))) planNow.add(p.id);
-      due.push({ p, v, refresh, moved, heading, at });
+      due.push({ p, v, refresh, moved, keep: refresh && !changed && !v.lag, heading, at });
     } catch (e) {
       console.warn(`[map] turn: ${e}`);
     }
@@ -1333,12 +1419,22 @@ system.runInterval(() => {
   let sends = 0;
   let built = 0;
   const refreshBefore = refreshSends;
-  for (const { p, v, refresh, moved, heading, at } of due) {
+  for (const { p, v, refresh, moved, keep, heading, at } of due) {
     if (sends >= TURN_BUDGET || built >= RENDER_BUDGET || !drawBudget.ok) break;
     // A radar waiting for its terrain, with nothing else new, waits for a rebuild in the budget.
     if (!moved && !rebuildBudget.ok) continue;
     const tr = Date.now();
     try {
+      if (keep) {
+        // Nothing they see changed: the same title again, so it doesn't fade (no strip or radar is built).
+        if (keepAlive(p, v, now)) {
+          sends++;
+          refreshSends++;
+          keepSends++;
+        }
+        drawBudget.spend(Date.now() - tr);
+        continue;
+      }
       turnDraws++;
       built++;
       if (render(p, v, now, refresh, heading, at)) {
@@ -1809,7 +1905,7 @@ function onEvent(id, m, source) {
             data: terrain.get(storeFor(player.id, player.dimension.id), s.x, s.z, s.resolution === 1 ? 1 : 4) ?? null,
           })) : [],
         } : undefined,
-        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, rebuilds: radarRebuilds, turnCheckMs, radarMs, readCost },
+        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, keepSends, rebuilds: radarRebuilds, turnCheckMs, radarMs, readCost },
         budgets: { draw: drawBudget.left, rebuild: rebuildBudget.left, pass: passBudget.left, scan: scanBudget.left },
         budgetLevel,
         perTick: BUDGETS.reduce((n, [b]) => n + b.perTick, 0),
@@ -1832,6 +1928,7 @@ function onEvent(id, m, source) {
         scanPlanMs = 0;
         planTurn.made = 0;
         refreshSends = 0;
+        keepSends = 0;
         radarRebuilds = 0;
         turnCheckMs = 0;
         radarMs = 0;

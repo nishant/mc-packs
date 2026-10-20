@@ -260,3 +260,41 @@ test("elytra: a player who isn't gliding costs no setting reads, and a gliding o
   sim.step(6);
   assert.equal(barsOf("Glider")[0], hud("15.0"), `turning it off forgot the old speed readings: ${JSON.stringify(bars)}`);
 });
+
+test("elytra: the slipstream looks only at players seen gliding, not at everyone every 2 ticks, and a fast glider still gets it (W1/O2)", async () => {
+  const sim = createSim();
+  const walkers = Array.from({ length: 10 }, (_, i) => sim.join(`Walker${i}`));
+  const glider = sim.join("Glider");
+  await loadReal(sim, "elytra_bp");
+  const reads = { walkers: 0 };
+  let sparks = 0;
+  for (const p of [...walkers, glider]) {
+    let gliding = false;
+    Object.defineProperty(p, "isGliding", { get: () => (p !== glider && reads.walkers++, gliding), set: (v) => (gliding = v), configurable: true });
+    p.isOnGround = true;
+    p.location = { x: 0, y: 64, z: 0 };
+    p.dimension = { id: "minecraft:overworld", spawnParticle: () => sparks++ };
+    p.getVelocity = () => ({ x: p === glider ? 1.5 : 0, y: 0, z: 0 });
+    p.getViewDirection = () => ({ x: 1, y: 0, z: 0 });
+    p.getHeadLocation = () => ({ x: 0, y: 65, z: 0 });
+    p.getComponent = () => undefined;
+    p.onScreenDisplay = { setTitle() {}, setActionBar() {} };
+  }
+  sim.boot();
+  sim.step(10);
+  reads.walkers = 0;
+  sim.step(100);
+  // The HUD round reads it every 5 ticks: 20 rounds x 10 walkers. The slipstream used to add 50 x 10 more.
+  assert.ok(reads.walkers <= 200, `${reads.walkers} isGliding reads for 10 walkers in 100 ticks`);
+  assert.equal(sparks, 0, "nobody gliding: no slipstream");
+  glider.isGliding = true;
+  glider.isOnGround = false;
+  sim.step(12);
+  assert.ok(sparks > 0, "a fast glider gets the slipstream within a HUD round");
+  glider.isGliding = false;
+  glider.isOnGround = true;
+  sim.step(2);
+  const after = sparks;
+  sim.step(20);
+  assert.equal(sparks, after, "landing ends it");
+});

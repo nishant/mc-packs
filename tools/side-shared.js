@@ -31,6 +31,17 @@
 // ("my title is on this player's screen for ticks", at most MAX_HOLD; ticks 0 ends the sender's hold early).
 // While a hold lasts every copy keeps its picture but doesn't draw; when the last hold ends, each pack with a
 // readout for that player draws the title again, so the boxes come back.
+//
+// The compositor claim: the minimap redraws a player's title many times a second and its radar is 1.3 KB, so
+// broadcasting its parts would wake every pack's listener on every draw. A pack made with sideBoxes(from,
+// { compositor: true }) (only map_bp) never sends its own readouts. Instead it claims the players it draws for:
+//   realm:side_comp {from, ticks, players: [ids], part, parts}   ticks 0 = the claim ends; renewed every CLAIM_EVERY
+// While a live claim from another pack covers a player, a copy still sends its own small slot changes
+// (realm:side as above) but doesn't draw that player's title: the compositor, which keeps every pack's slots in
+// its picture, draws them with its own. When the compositor has nothing left to show, it draws once and ends the
+// claim; if a claim runs out without being renewed (CLAIM_TICKS), the packs with a readout draw again. So every
+// pack still works alone, and the others only pay for their own changes, not for the minimap's.
+// Another pack's message is kept as it came and read (JSON.parse) only when this copy draws that player.
 import { Player, system, world } from "@minecraft/server";
 import { onScriptEvent } from "./script-events.js";
 
@@ -63,6 +74,11 @@ const MAX_HOLD = 600;
 const SWEEP_TICKS = 4;
 /** A title drawn this close before another pack's write may have crossed it on the way. */
 const CROSS_TICKS = 2;
+/** A compositor claim lasts this long unless renewed (ticks); the compositor renews its claims every CLAIM_EVERY. */
+const CLAIM_TICKS = 100;
+const CLAIM_EVERY = 40;
+/** Player ids per realm:side_comp message (an id is about 20 characters: well under 2048 in all). */
+const CLAIM_IDS = 60;
 
 /** A slot players may pick. @param {unknown} where @returns {where is string} */
 export const isSlot = (where) => typeof where === "string" && SLOTS.includes(where);
@@ -148,14 +164,30 @@ export function compose(texts) {
   return out;
 }
 
-/** `raw`: another pack's text as it arrived, cleaned only when this copy draws it. @typedef {{ from: string, text: string, until: number, raw?: boolean }} Entry */
+/**
+ * What shows in one slot. `src`: the text as it was written or arrived (to tell a resend from a change); `text`: the
+ * same, cleaned once this copy draws it (`raw` until then); `body`: its segment without the separator, made once.
+ * @typedef {{ from: string, text: string, src: string, until: number, raw?: boolean, body?: string }} Entry
+ */
 /** player id -> slot -> what shows there. @type {Map<string, Map<string, Entry>>} */
 const picture = new Map();
+/** player id -> pack -> its last realm:side message, not read yet, and the tick it came. @type {Map<string, Map<string, { msg: string, at: number }>>} */
+const inbox = new Map();
+/** player id -> a number that changes whenever a slot's text or place changes (the compositor's cache key). @type {Map<string, number>} */
+const versions = new Map();
+/** player id -> the subtitle this copy last made and the picture's version then. @type {Map<string, { ver: number, sub: string }>} */
+const composed = new Map();
 /** player id -> tick this pack last drew the title. @type {Map<string, number>} */
 const drewAt = new Map();
 /** player id -> whether the last title this pack drew had something in it. @type {Map<string, boolean>} */
 const drewSome = new Map();
 let me = "";
+let compositor = false;
+/** Players whose title this pack (a compositor) draws for everyone. @type {Set<string>} */
+const composing = new Set();
+let claimsSentAt = -Infinity;
+/** player id -> another pack -> tick its compositor claim runs out. @type {Map<string, Map<string, number>>} */
+const claims = new Map();
 /** Is this readout this pack's (itself or one of its parts)? @param {string} from */
 const mine = (from) => !!me && (from === me || from.startsWith(`${me}/`));
 /** player id -> pack -> tick its real title ends (the title protocol). @type {Map<string, Map<string, number>>} */
@@ -171,6 +203,7 @@ function hold(playerId, from, ticks) {
   if (!byPack.size) holds.delete(playerId);
   // The real title replaced whatever we drew.
   drewSome.set(playerId, false);
+  composed.delete(playerId);
 }
 
 /** Is a real title on this player's screen? @param {string} playerId @param {number} now */
@@ -179,6 +212,56 @@ function held(playerId, now) {
   if (!byPack) return false;
   for (const until of byPack.values()) if (until > now) return true;
   return false;
+}
+
+/**
+ * Does this copy draw the player's title? Not while another pack's live compositor claim covers them, unless this
+ * pack composes them too and its name comes first (only one pack composes).
+ * @param {string} playerId @param {number} now
+ */
+function drawsFor(playerId, now) {
+  const by = claims.get(playerId);
+  if (!by) return true;
+  const ours = compositor && composing.has(playerId);
+  for (const [from, until] of by) if (until > now && !(ours && me < from)) return false;
+  return true;
+}
+
+/** Does this pack have a readout of its own for the player? @param {string} playerId */
+function hasOwn(playerId) {
+  const slots = picture.get(playerId);
+  if (!slots) return false;
+  for (const e of slots.values()) if (mine(e.from)) return true;
+  return false;
+}
+
+/** realm:side_comp for these players (in parts of CLAIM_IDS). @param {string[]} ids @param {number} ticks 0 = the claims end */
+function sendClaims(ids, ticks) {
+  const parts = Math.ceil(ids.length / CLAIM_IDS);
+  for (let i = 0; i < parts; i++) {
+    system.sendScriptEvent("realm:side_comp", JSON.stringify({ from: me, ticks, part: i + 1, parts, players: ids.slice(i * CLAIM_IDS, (i + 1) * CLAIM_IDS) }));
+  }
+}
+
+/** A compositor starts drawing a player's title. @param {string} playerId */
+function claim(playerId) {
+  if (composing.has(playerId)) return;
+  composing.add(playerId);
+  sendClaims([playerId], CLAIM_TICKS);
+}
+
+/** A compositor with nothing of its own left for a player gives their title back. @param {string} playerId */
+function release(playerId) {
+  if (!compositor || !composing.has(playerId) || hasOwn(playerId)) return;
+  composing.delete(playerId);
+  sendClaims([playerId], 0);
+}
+
+/** Does this compositor's own readout stay off realm:side for the player (it draws their title itself)? @param {string} playerId */
+function local(playerId) {
+  if (!compositor) return false;
+  claim(playerId);
+  return drawsFor(playerId, system.currentTick);
 }
 
 /**
@@ -192,13 +275,54 @@ export function holdTitle(player, ticks) {
   system.sendScriptEvent("realm:title", JSON.stringify({ player: player.id, ticks: t, from: me || "?" }));
 }
 
-/** @param {string} playerId @param {string} from @param {string} slot @param {string} text @param {number} until @param {boolean} [raw] not cleaned yet */
+/**
+ * Puts a readout in the picture (or takes `from`'s out, with text ""). A resend of the same text in the same slot
+ * only moves its end. @returns {boolean} whether what shows changed
+ * @param {string} playerId @param {string} from @param {string} slot @param {string} text @param {number} until @param {boolean} [raw] not cleaned yet
+ */
 function apply(playerId, from, slot, text, until, raw = false) {
   let slots = picture.get(playerId);
   if (!slots) picture.set(playerId, (slots = new Map()));
-  for (const [s, e] of slots) if (e.from === from) slots.delete(s);
-  if (text && isAnySlot(slot)) slots.set(slot, raw ? { from, text, until, raw } : { from, text, until });
+  const keep = !!text && isAnySlot(slot);
+  const same = keep ? slots.get(slot) : undefined;
+  if (same && same.from === from && same.src === text) {
+    same.until = until;
+    return false;
+  }
+  let changed = false;
+  for (const [s, e] of slots) {
+    if (e.from !== from) continue;
+    slots.delete(s);
+    changed = true;
+  }
+  if (keep) {
+    slots.set(slot, raw ? { from, text, src: text, until, raw } : { from, text, src: text, until });
+    changed = true;
+  }
   if (!slots.size) picture.delete(playerId);
+  if (changed) versions.set(playerId, (versions.get(playerId) ?? 0) + 1);
+  return changed;
+}
+
+/** One realm:side message into the picture. @param {string} playerId @param {any} m @param {number} at the tick it came @returns {boolean} whether what shows changed */
+function applyMessage(playerId, m, at) {
+  if (!m || typeof m.from !== "string" || mine(m.from) || typeof m.slot !== "string") return false;
+  const ticks = Math.min(Math.max(Number(m.ticks) || 0, 0), MAX_TICKS);
+  return apply(playerId, m.from, m.slot, typeof m.text === "string" ? m.text : "", at + ticks, true);
+}
+
+/** Reads the messages kept for a player (only when this copy needs their picture). @param {string} playerId */
+function materialize(playerId) {
+  const box = inbox.get(playerId);
+  if (!box) return;
+  inbox.delete(playerId);
+  for (const { msg, at } of box.values()) {
+    try {
+      applyMessage(playerId, JSON.parse(msg), at);
+    } catch {
+      // not ours
+    }
+  }
 }
 
 /** An entry's text, cleaned the first time this copy needs it. @param {string} slot @param {Entry} e */
@@ -210,45 +334,76 @@ function textOf(slot, e) {
   return e.text;
 }
 
-/** Drops readouts that ran out. @param {string} playerId @param {number} now @returns {boolean} whether one of ours ran out */
+/** The subtitle for a player's picture, each slot's segment made once per text. @param {Map<string, Entry>} slots */
+function composeSlots(slots) {
+  let out = MARK;
+  let first = true;
+  for (const slot of ALL_SLOTS) {
+    const e = slots.get(slot);
+    const text = e ? textOf(slot, e) : "";
+    if (!e || !text) out += slot === "radar" ? EMPTY_RADAR_SEG : slot === "quest" ? EMPTY_QUEST_SEG : EMPTY_SEG;
+    else {
+      if (e.body === undefined) e.body = segment(text, "", segBytesOf(slot));
+      out += (first ? " " : "\n") + e.body;
+      first = false;
+    }
+  }
+  return out;
+}
+
+/**
+ * Drops readouts that ran out (of the messages read so far). @param {string} playerId @param {number} now
+ * @returns {number} 0: none ran out; 1: another pack's did; 3: one of ours did
+ */
 function prune(playerId, now) {
   const slots = picture.get(playerId);
-  if (!slots) return false;
-  let ours = false;
+  if (!slots) return 0;
+  let out = 0;
   for (const [s, e] of slots) {
     if (e.until > now) continue;
     slots.delete(s);
-    if (mine(e.from)) ours = true;
+    out |= mine(e.from) ? 3 : 1;
   }
   if (!slots.size) picture.delete(playerId);
-  return ours;
+  if (out) versions.set(playerId, (versions.get(playerId) ?? 0) + 1);
+  return out;
 }
 
 /** Writes the whole title for a player from this pack's picture. @param {Player} player */
 function draw(player) {
   const now = system.currentTick;
-  prune(player.id, now);
+  const id = player.id;
+  // Another pack composes this player's title (and has our readouts): it draws them.
+  if (!drawsFor(id, now)) return;
+  materialize(id);
+  prune(id, now);
   // A real title is showing: keep the picture, draw once the hold ends (the sweep below).
-  if (held(player.id, now)) return;
-  const slots = picture.get(player.id);
-  drewAt.set(player.id, now);
+  const wait = held(id, now);
+  const slots = picture.get(id);
   try {
+    if (wait) return;
+    drewAt.set(id, now);
     if (!slots) {
-      if (drewSome.get(player.id)) player.onScreenDisplay.setTitle(CLEAR, { subtitle: " ", fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
-      drewSome.set(player.id, false);
+      if (drewSome.get(id)) player.onScreenDisplay.setTitle(CLEAR, { subtitle: " ", fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
+      drewSome.set(id, false);
+      composed.delete(id);
       return;
     }
-    /** @type {Record<string, string>} */
-    const texts = {};
     let last = now;
-    for (const [s, e] of slots) {
-      texts[s] = textOf(s, e);
-      last = Math.max(last, e.until);
+    for (const e of slots.values()) if (e.until > last) last = e.until;
+    const ver = versions.get(id) ?? 0;
+    let made = composed.get(id);
+    if (!made || made.ver !== ver) {
+      made = { ver, sub: composeSlots(slots) };
+      composed.set(id, made);
     }
-    player.onScreenDisplay.setTitle(MARK, { subtitle: compose(texts), fadeInDuration: 0, stayDuration: last - now + 2, fadeOutDuration: 0 });
-    drewSome.set(player.id, true);
+    player.onScreenDisplay.setTitle(MARK, { subtitle: made.sub, fadeInDuration: 0, stayDuration: last - now + 2, fadeOutDuration: 0 });
+    drewSome.set(id, true);
   } catch {
     // left meanwhile
+  } finally {
+    // A compositor with nothing of its own left gives the title back (after drawing the others' readouts).
+    release(id);
   }
 }
 
@@ -258,9 +413,12 @@ const playerById = (playerId) => world.getAllPlayers().find((p) => p.id === play
 /**
  * The side boxes for one pack.
  * @param {string} from this pack's name in realm:side (its dynamic property prefix)
+ * @param {{ compositor?: boolean }} [options] compositor: this pack redraws often and big (the minimap): it draws the
+ *   titles of the players it shows something to with every pack's slots and never sends its own (see the top)
  */
-export function sideBoxes(from) {
+export function sideBoxes(from, options = {}) {
   me = from;
+  compositor = options.compositor === true;
   return {
     /**
      * Shows `text` in `slot` for `ticks`; write again to keep it. Plain text with § codes, "\n" for a second line.
@@ -274,7 +432,7 @@ export function sideBoxes(from) {
       const span = Math.min(Math.max(Math.round(ticks), 1), MAX_TICKS);
       const tick = system.currentTick;
       apply(player.id, from, slot, t, tick + span);
-      system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from, slot, text: t, ticks: span, tick }));
+      if (!local(player.id)) system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from, slot, text: t, ticks: span, tick }));
       if (now) draw(player);
     },
     /** Takes this pack's readout (or one part's) off the player's screen. @param {Player} player @param {string} [part] @param {boolean} [now] false: don't draw yet */
@@ -283,8 +441,38 @@ export function sideBoxes(from) {
       const had = [...(picture.get(player.id)?.values() ?? [])].some((e) => e.from === from);
       if (!had) return;
       apply(player.id, from, "", "", 0);
-      system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from, slot: "", text: "", ticks: 0, tick: system.currentTick }));
+      if (!(compositor && composing.has(player.id) && drawsFor(player.id, system.currentTick))) {
+        system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from, slot: "", text: "", ticks: 0, tick: system.currentTick }));
+      }
       if (now) draw(player);
+    },
+    /**
+     * Keeps this pack's readouts up `ticks` longer without changing them, and draws. A compositor sends nothing and
+     * reuses the subtitle it made (nothing changed); another pack sends its readout again.
+     * `parts`: the parts ("" for the readout itself) that must all still be up; if one ran out, nothing is kept and
+     * the caller shows them again (keeping only the rest would leave the missing one off for good).
+     * @param {Player} player @param {number} ticks @param {string[]} [parts]
+     * @returns {boolean} false: none of this pack's readouts is up, or one of `parts` isn't (show them)
+     */
+    keep(player, ticks, parts) {
+      const tick = system.currentTick;
+      prune(player.id, tick);
+      const slots = picture.get(player.id);
+      if (!slots || !hasOwn(player.id)) return false;
+      if (parts) {
+        const up = new Set();
+        for (const e of slots.values()) if (mine(e.from)) up.add(e.from);
+        for (const part of parts) if (!up.has(part ? `${me}/${part}` : me)) return false;
+      }
+      const span = Math.min(Math.max(Math.round(ticks), 1), MAX_TICKS);
+      const quiet = compositor && composing.has(player.id) && drawsFor(player.id, tick);
+      for (const [slot, e] of slots) {
+        if (!mine(e.from)) continue;
+        e.until = tick + span;
+        if (!quiet) system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from: e.from, slot, text: e.text, ticks: span, tick }));
+      }
+      draw(player);
+      return true;
     },
     /** Draws the title now, after show or clear with `now` false. @param {Player} player */
     redraw(player) {
@@ -292,6 +480,7 @@ export function sideBoxes(from) {
     },
     /** Is another pack's readout in this slot for the player right now? @param {Player} player @param {string} slot */
     taken(player, slot) {
+      materialize(player.id);
       const e = picture.get(player.id)?.get(slot);
       return !!e && !mine(e.from) && e.until > system.currentTick;
     },
@@ -301,22 +490,34 @@ export function sideBoxes(from) {
     },
     /** What this pack's copy would put in the subtitle now (for tests). @param {Player} player */
     payload(player) {
+      materialize(player.id);
       prune(player.id, system.currentTick);
-      /** @type {Record<string, string>} */
-      const texts = {};
-      for (const [s, e] of picture.get(player.id) ?? []) texts[s] = textOf(s, e);
-      return compose(texts);
+      const slots = picture.get(player.id);
+      return slots ? composeSlots(slots) : compose({});
     },
   };
 }
 
-// Every pack with side boxes reads every readout (the minimap sends two a draw): only the id is looked at before
-// parsing, and another pack's text is kept as it came (cleaned when this copy draws it, which most never do).
+/** The string value of `"key":"` in a JSON message, read without parsing; undefined when it isn't plain. @param {string} message @param {string} key */
+function field(message, key) {
+  const f = message.indexOf(key);
+  if (f < 0) return undefined;
+  const start = f + key.length;
+  const end = message.indexOf('"', start);
+  if (end < 0) return undefined;
+  const v = message.slice(start, end);
+  return v.includes("\\") ? undefined : v;
+}
+
+// Every pack with side boxes hears every readout: only the player and the sender are looked at before parsing (a
+// JSON string value can't hold `"from":"` unescaped, so the first one is the key), and another pack's message is
+// kept as it came, read only when this copy draws that player (most never do: the minimap draws theirs).
 onScriptEvent(
-  ["realm:side", "realm:title"],
+  ["realm:side", "realm:title", "realm:side_comp"],
   ({ id, message }) => {
-    if (id !== "realm:side" && id !== "realm:title") return;
-    if (id === "realm:title" && me) {
+    if (id !== "realm:side" && id !== "realm:title" && id !== "realm:side_comp") return;
+    if (id === "realm:title") {
+      if (!me) return;
       try {
         const m = JSON.parse(message);
         // Our own holdTitle already applied it (and the clock moved since).
@@ -327,33 +528,88 @@ onScriptEvent(
       return;
     }
     if (!me) return;
-    // Our own readouts come back to us too: skip them without parsing (a JSON string value can't hold `"from":"`
-    // unescaped, so the first one is the key).
-    const f = message.indexOf('"from":"');
-    if (f >= 0) {
-      const end = message.indexOf('"', f + 8);
-      if (end > 0 && mine(message.slice(f + 8, end))) return;
+    if (id === "realm:side_comp") {
+      try {
+        const m = JSON.parse(message);
+        if (!m || typeof m.from !== "string" || mine(m.from) || !Array.isArray(m.players)) return;
+        const ticks = Math.min(Math.max(Number(m.ticks) || 0, 0), MAX_TICKS);
+        const now = system.currentTick;
+        for (const pid of m.players) {
+          if (typeof pid !== "string") continue;
+          let by = claims.get(pid);
+          if (ticks > 0) {
+            if (!by) claims.set(pid, (by = new Map()));
+            by.set(m.from, now + ticks);
+          } else if (by) {
+            by.delete(m.from);
+            if (!by.size) claims.delete(pid);
+          }
+        }
+      } catch {
+        // not ours
+      }
+      return;
+    }
+    // Our own readouts come back to us too: skip them without parsing.
+    const from = field(message, '"from":"');
+    if (from !== undefined && mine(from)) return;
+    const pid = field(message, '"player":"');
+    const now = system.currentTick;
+    if (from === undefined || pid === undefined) {
+      // Not the usual shape: read it now.
+      try {
+        const m = JSON.parse(message);
+        if (!m || typeof m.player !== "string" || typeof m.from !== "string" || mine(m.from)) return;
+        const who = /** @type {string} */ (m.player);
+        materialize(who);
+        if (!applyMessage(who, m, now)) return;
+        const ours = compositor && composing.has(who);
+        const crossed = (drewAt.get(who) ?? -Infinity) >= (typeof m.tick === "number" ? m.tick : now) - CROSS_TICKS;
+        const p = drawsFor(who, now) && (ours || crossed) ? playerById(who) : undefined;
+        if (p) draw(p);
+        else drewSome.set(who, true);
+      } catch {
+        // not ours
+      }
+      return;
+    }
+    const ours = compositor && composing.has(pid) && drawsFor(pid, now);
+    const drew = drewAt.get(pid);
+    // Neither the compositor of this player nor a pack that drew them a moment ago: keep it unread.
+    if (!ours && !(drew !== undefined && drew >= now - CROSS_TICKS - 2)) {
+      let box = inbox.get(pid);
+      if (!box) inbox.set(pid, (box = new Map()));
+      box.set(from, { msg: message, at: now });
+      // Whatever they drew is on screen now (or they cleared it): a later draw of an empty picture clears it.
+      drewSome.set(pid, true);
+      return;
     }
     try {
+      const before = versions.get(pid);
+      materialize(pid);
       const m = JSON.parse(message);
-      if (!m || typeof m.player !== "string" || typeof m.from !== "string" || mine(m.from) || typeof m.slot !== "string") return;
-      const ticks = Math.min(Math.max(Number(m.ticks) || 0, 0), MAX_TICKS);
-      const sent = typeof m.tick === "number" ? m.tick : system.currentTick;
-      apply(m.player, m.from, m.slot, typeof m.text === "string" ? m.text : "", system.currentTick + ticks, true);
+      applyMessage(pid, m, now);
+      const changed = versions.get(pid) !== before;
+      if (ours) {
+        // The compositor draws every pack's readouts with its own; a resend that changes nothing draws nothing.
+        if (!changed) return;
+      } else if (!drawsFor(pid, now) || /** @type {number} */ (drew) < (typeof m.tick === "number" ? m.tick : now) - CROSS_TICKS) {
+        drewSome.set(pid, true);
+        return;
+      }
       // Our last title may have crossed theirs (events arrive a little later): draw again with both.
-      if ((drewAt.get(m.player) ?? -Infinity) >= sent - CROSS_TICKS) {
-        const p = playerById(m.player);
-        if (p) draw(p);
-      } else if (!picture.has(m.player)) drewSome.set(m.player, false); // they cleared the screen
-      else drewSome.set(m.player, true);
+      const p = playerById(pid);
+      if (p) draw(p);
     } catch {
       // not ours
     }
   },
 );
 
-// Readouts that run out: the pack that wrote one draws the title again without it. Real titles that end:
-// every pack with a readout for that player draws the boxes again (they all draw the same picture).
+// Readouts that run out: the pack that wrote one draws the title again without it (a compositor draws whenever any
+// of its players' readouts runs out). Real titles that end: every pack with a readout for that player draws the
+// boxes again (they all draw the same picture). A compositor claim that ran out without being renewed: the packs
+// with a readout draw again. A compositor renews its claims every CLAIM_EVERY ticks.
 system.runInterval(() => {
   const now = system.currentTick;
   for (const [playerId, byPack] of [...holds]) {
@@ -361,21 +617,44 @@ system.runInterval(() => {
     if (byPack.size) continue;
     holds.delete(playerId);
     prune(playerId, now);
-    if (![...(picture.get(playerId)?.values() ?? [])].some((e) => mine(e.from))) continue;
+    if (!hasOwn(playerId) || !drawsFor(playerId, now)) continue;
     const p = playerById(playerId);
     if (p) draw(p);
   }
-  if (!picture.size) return;
-  for (const playerId of [...picture.keys()]) {
-    if (!prune(playerId, now)) continue;
+  for (const [playerId, by] of [...claims]) {
+    let ran = false;
+    for (const [from, until] of [...by]) {
+      if (until > now) continue;
+      by.delete(from);
+      ran = true;
+    }
+    if (!by.size) claims.delete(playerId);
+    if (!ran || !hasOwn(playerId) || !drawsFor(playerId, now)) continue;
     const p = playerById(playerId);
     if (p) draw(p);
+  }
+  if (compositor && composing.size && now - claimsSentAt >= CLAIM_EVERY) {
+    claimsSentAt = now;
+    sendClaims([...composing], CLAIM_TICKS);
+  }
+  if (!picture.size) return;
+  for (const playerId of [...picture.keys()]) {
+    const ran = prune(playerId, now);
+    if (!(ran & 2) && !(ran && compositor && composing.has(playerId))) continue;
+    const p = playerById(playerId);
+    if (p) draw(p);
+    else if (compositor) release(playerId);
   }
 }, SWEEP_TICKS);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   picture.delete(playerId);
+  inbox.delete(playerId);
+  versions.delete(playerId);
+  composed.delete(playerId);
   drewAt.delete(playerId);
   drewSome.delete(playerId);
   holds.delete(playerId);
+  claims.delete(playerId);
+  composing.delete(playerId);
 });
