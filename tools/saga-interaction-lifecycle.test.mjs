@@ -619,6 +619,8 @@ function opToolsFor(f, target, calls) {
     show: f.util.show, ActionFormData: f.ActionFormData, ModalFormData: Modal, world: { getAllPlayers: () => [target] },
     placesMenu: async () => { calls.places++; }, entries: () => [entry], plain: (s) => s, stepLine: () => "step", sagaOf: () => ({}),
     isOp: () => true, completeStep: (_target, e) => { calls.complete.push(e); return true; }, resetPlayer: (t) => { calls.reset.push(t); },
+    // The menu finishes the step through finishStepFor (it logs the operator's change); it completes it the same way.
+    finishStepFor: (_target, e) => { calls.complete.push(e); return "step"; },
   });
 }
 
