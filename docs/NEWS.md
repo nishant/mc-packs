@@ -14,7 +14,7 @@ entries below as a changelog.
 - A wanderer struck by lightning no longer leaves a named witch behind.
 - Party quests at story places: your party now shares one scene per step, with one set of guards, one character to meet or escort, one defense and one group of monsters, instead of a copy for each of you. A mate helping out can hold a fight alone without the monsters vanishing.
 - The Gray Ring: the goal is now the inside of the stone circle, and the Cantor's song plays after you sneak in, not before.
-- Night fights at story places now start when the server keeps time stopped at night, and only monsters sent for your own fight count toward it.
+- Night fights at story places now start on a server that keeps the time stopped (even in the day), and only monsters sent for your own fight count toward it.
 - Blood Moon monsters no longer appear inside a shelter built during the night with Easy Building, /fill or a structure: every spawn spot is checked fresh.
 - Saga collect quests no longer lose progress when Expansive Inventory can't answer for a moment.
 
