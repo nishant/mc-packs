@@ -38,5 +38,5 @@ export default async function (t) {
   deaths.setScore("Ann", 9);
   const ma2 = await t.waitMessage(a, /Deaths 9/, { kind: "actionbar", timeout: 80 });
   t.log("Ann now:", ma2.plain);
-  t.check(/Deaths 9 #1 of 3/.test(ma2.plain), "a new score changes the rank within a second");
+  t.check(/Deaths 9 #1 of 3/.test(ma2.plain), "a new score changes the rank by the next refresh (within 2 seconds)");
 }

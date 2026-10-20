@@ -94,8 +94,8 @@ const server = {
     runTimeout(fn) {
       queue.push(fn);
     },
-    runInterval(fn) {
-      intervals.push(fn);
+    runInterval(fn, every = 1) {
+      intervals.push({ fn, every });
       return fn;
     },
     clearRun() {},
@@ -218,10 +218,13 @@ function ann() {
   players.splice(0, players.length, player);
   return player;
 }
+/** One second of game ticks: each interval runs as often as it asked (the ticker every 5 ticks, one player group each). */
 function tickers() {
-  tick += 20;
   const before = players[0].bars.length;
-  for (const fn of intervals) fn();
+  for (let i = 0; i < 20; i++) {
+    tick++;
+    for (const { fn, every } of intervals) if (tick % every === 0) fn();
+  }
   return players[0].bars.slice(before);
 }
 function pref(player) {
@@ -316,4 +319,105 @@ test("both menus toggle the same preference and the cache drops without a tick w
   assert.match(player.messages.at(-1) ?? "", /disabled on this realm/);
   assert.equal(pref(player).ticker, true, "the locked command preserves the existing explicit choice");
   settings.set("tickerEnabled", true);
+});
+
+// F45: the ticker's cost at 40 players. It writes the action bar at most every 2 seconds per player on one stat,
+// spreads players over the second, and ranks against a board read at most every 5 seconds per stat.
+function onlyStat(id, style = "full") {
+  settings.set("tickerEnabled", true);
+  settings.set("tickerDefaultOn", true);
+  settings.set("tickerMode", "cycle");
+  settings.set("tickerStyle", style);
+  for (const st of ["playtime", "deaths", "mobkills", "pvpkills", "mined", "placed", "travelled", "flown", "joins"]) settings.set(`tickerShows.${st}`, st === id);
+}
+const restoreTicker = () => settings.reset();
+const plain = (/** @type {string | undefined} */ s) => String(s ?? "").replace(/§./g, "");
+const board = (id) => objectives.get(`stats_${id}`) ?? server.world.scoreboard.addObjective(`stats_${id}`);
+
+test("F45: players are spread over the second, and every one is drawn within it", () => {
+  onlyStat("deaths");
+  const many = Array.from({ length: 40 }, (_, i) => new Player(`P${i}`));
+  players.splice(0, players.length, ...many);
+  /** @type {Map<number, number>} */
+  const perTick = new Map();
+  for (const p of many) {
+    p.onScreenDisplay.setActionBar = (text) => {
+      p.bars.push(String(text));
+      perTick.set(tick, (perTick.get(tick) ?? 0) + 1);
+    };
+  }
+  tickers();
+  assert.equal(many.filter((p) => p.bars.length === 1).length, 40, "each of the 40 players is drawn once in the first second");
+  assert.ok(perTick.size >= 3, `the writes are spread over several ticks (${[...perTick.values()].join(", ")})`);
+  assert.ok(Math.max(...perTick.values()) <= 20, `no tick draws more than half of them (${[...perTick.values()].join(", ")})`);
+  restoreTicker();
+});
+
+test("F45: a number that changes every second on the same stat is redrawn every 2 seconds, not every second", () => {
+  onlyStat("travelled", "compact");
+  const player = ann();
+  const walked = board("travelled");
+  let draws = 0;
+  for (let second = 0; second < 10; second++) {
+    walked.addScore("Ann", 3);
+    draws += tickers().length;
+  }
+  assert.ok(draws <= 6, `at most one write per 2 seconds while only the number moves (${draws} in 10 s)`);
+  assert.ok(draws >= 5, `still refreshed so the bar never fades (${draws} in 10 s)`);
+  assert.match(player.bars.at(-1) ?? "", /Walked/);
+  restoreTicker();
+});
+
+test("F45: the ranking reads each board at most once every 5 seconds, and a player's own new score ranks at once", () => {
+  onlyStat("mined");
+  const mined = board("mined");
+  mined.scores.clear();
+  mined.scores.set("Ann", 3);
+  mined.scores.set("Bob", 7);
+  mined.scores.set("Offline Carl", 5);
+  let reads = 0;
+  const getScores = mined.getScores.bind(mined);
+  mined.getScores = () => {
+    reads++;
+    return getScores();
+  };
+  const many = [new Player("Ann"), new Player("Bob"), ...Array.from({ length: 38 }, (_, i) => new Player(`Q${i}`))];
+  players.splice(0, players.length, ...many);
+  for (let second = 0; second < 10; second++) tickers();
+  assert.ok(reads <= 3, `one board read per 5 seconds for 40 players (${reads} in 10 s)`);
+  assert.match(plain(many[0].bars.at(-1)), /Blocks mined 3 #3 of 3/);
+  assert.match(plain(many[1].bars.at(-1)), /Blocks mined 7 #1 of 3/);
+  mined.scores.set("Ann", 9);
+  let line = "";
+  for (let second = 0; second < 3 && !/Blocks mined 9/.test(line); second++) {
+    tickers();
+    line = plain(many[0].bars.at(-1));
+  }
+  assert.match(line, /Blocks mined 9 #1 of 3/, "Ann's own new score ranks first right away, before the board is read again");
+  mined.getScores = getScores;
+  restoreTicker();
+});
+
+test("F45: while another pack's note holds the bar the ticker reads and writes nothing, then redraws at once", () => {
+  onlyStat("deaths");
+  const player = ann();
+  tickers();
+  const deaths = board("deaths");
+  let reads = 0;
+  const getScore = deaths.getScore.bind(deaths);
+  deaths.getScore = (name) => {
+    reads++;
+    return getScore(name);
+  };
+  player.bars.length = 0;
+  fire("realm:actionbar", JSON.stringify({ player: player.id, ticks: 50, from: "mobhp_bp" }));
+  tickers();
+  tickers();
+  assert.equal(player.bars.length, 0, "the note is left alone");
+  assert.equal(reads, 0, "no scores are read for a bar the ticker can't draw on");
+  tickers();
+  tickers(); // its next turn after the note's 50 ticks (each player has one turn a second)
+  assert.match(plain(player.bars.at(-1)), /Deaths/, "the ticker comes back on its first turn after the note's time is up");
+  deaths.getScore = getScore;
+  restoreTicker();
 });
