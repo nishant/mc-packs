@@ -104,3 +104,65 @@ test("F9: a destroy preview reads each block once, and states only for beds", ()
   assert.ok(worst.states <= 2, `states read only for the bed (${worst.states})`);
   assert.ok(drawnBeds > 0, "the bed's other half is outlined too");
 });
+
+const gateMod = await import("../packs/build_bp/scripts/utils/tool-gate.js");
+const Items = await import("../packs/build_bp/scripts/utils/Items.js");
+const { startModifierVisualizerLoop } = await import("../packs/build_bp/scripts/core/ModifierVisualizer.js");
+const { setMirrorState } = await import("../packs/build_bp/scripts/core/PlayerState.js");
+startModifierVisualizerLoop();
+
+/** Counts inventory reads (getComponent) on these players while fn runs. */
+function inventoryReads(players, fn) {
+  let reads = 0;
+  const saved = players.map((p) => p.getComponent);
+  players.forEach((p, i) => { p.getComponent = (...a) => { reads++; return saved[i](...a); }; });
+  try { fn(); } finally { players.forEach((p, i) => { p.getComponent = saved[i]; }); }
+  return reads;
+}
+/** What the hotbar event does: the hand is read again at the next look. */
+function switchTo(p, typeId) {
+  if (typeId) p.slots.set(0, new mc.ItemStack(typeId, 1)); else p.slots.delete(0);
+  Items.markHandDirty?.(p);
+  gateMod.markHolderDirty(p.id);
+}
+
+test("F7: survival players holding blocks with building off keep the preview asleep", () => {
+  const crowd = [];
+  for (let i = 0; i < 20; i++) {
+    const p = builder(1000 + i * 3, i % 2 ? "minecraft:dirt" : "minecraft:cobblestone");
+    gateMod.markHolderDirty(p.id);
+    crowd.push(p);
+  }
+  mc.flushIntervals(2);
+  for (const p of crowd) assert.equal(gateMod.isVisualizationHolder(p.id), false, "a block with building off is no tool");
+  const reads = inventoryReads(crowd, () => mc.flushIntervals(40));
+  assert.equal(reads, 0, "no hand is read while nobody builds");
+  // The same block with a build mode on, or with a mirror on, is a tool.
+  setMode(crowd[0], "wall");
+  setMirrorState(crowd[1], { enabled: true, x: 1003, y: 64, z: 0 });
+  mc.flushIntervals(2);
+  assert.equal(gateMod.isVisualizationHolder(crowd[0].id), true, "a block with a mode on is a tool");
+  assert.equal(gateMod.isVisualizationHolder(crowd[1].id), true, "a block with a mirror on is a tool");
+  setMode(crowd[0], "disable");
+  setMirrorState(crowd[1], { enabled: false });
+  mc.flushIntervals(2);
+  assert.equal(gateMod.isVisualizationHolder(crowd[0].id), false);
+  assert.equal(gateMod.isVisualizationHolder(crowd[1].id), false);
+  for (const p of crowd) p.isValid = false;
+});
+
+test("F48: every loop that asks in the same tick sees the same released players", () => {
+  const gate = gateMod.createToolGate();
+  const a = { id: "a" }, b = { id: "b" };
+  assert.equal(gate.begin([a, b], (p) => p.id === "b", 10), true);
+  gate.mark("b");
+  // The mirror loop asks first this tick and b let go of the tool...
+  assert.equal(gate.begin([a, b], () => false, 11), false);
+  assert.deepEqual(gate.released().map((p) => p.id), ["b"]);
+  // ...the preview asks second in the same tick and still sees b released.
+  assert.equal(gate.begin([a, b], () => false, 11), false);
+  assert.deepEqual(gate.released().map((p) => p.id), ["b"]);
+  // The next tick starts fresh.
+  gate.begin([a, b], () => false, 12);
+  assert.deepEqual(gate.released(), []);
+});

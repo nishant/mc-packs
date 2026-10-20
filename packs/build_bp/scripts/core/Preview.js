@@ -9,7 +9,7 @@ import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReac
 import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "../utils/Items.js";
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
-import { beginVisualizationTick, forgetHolder, isVisualizationHolder, visualizationIdle, visualizationReleased } from "../utils/tool-gate.js";
+import { beginVisualizationTick, markHolderDirty, visualizationHolders, visualizationIdle, visualizationReleased } from "../utils/tool-gate.js";
 import { getFlippedStates } from "../modifiers/MirrorModifier.js";
 import { expandBeds, isBedType, directionFromYaw, directionFromStates, bedPartnerPos } from "./beds.js";
 
@@ -350,39 +350,43 @@ function previewBedPositions(positions, typeId, player, blockStates) {
     return expanded.map((p) => ({ x: p.x, y: p.y, z: p.z, states: p._resolvedStates }));
 }
 
+/** A player stopped holding a tool: forget what was drawn for them and clear their anchor. */
+function releasePreview(player) {
+    try {
+        lastPreviewTarget.delete(player.id);
+        previewCache.delete(player.id);
+        previewBusy.delete(player);
+        const state = getState(player);
+        if (state.anchor) clearAnchor(player);
+    } catch {}
+}
+
 const previewClock = createIdleClock();
 export function startPreviewLoop() {
     system.runInterval(() => {
         recordTick();
-        tpsPart.text = `  §8-  ${tpsText()}`;
 
         if (visualizationIdle()) return;
-        const all = allPlayers();
-        if (!beginVisualizationTick(all, holdsBuildTool)) {
-            for (const id of visualizationReleased()) {
-                const player = all.find((p) => p.id === id);
-                try { if (player && getState(player).anchor) clearAnchor(player); } catch {}
-            }
-            return;
-        }
+        const open = beginVisualizationTick(allPlayers(), holdsBuildTool, system.currentTick);
+        // Put away what this preview drew for players who just stopped holding a tool, and their anchor.
+        for (const player of visualizationReleased()) releasePreview(player);
+        if (!open) return;
+        tpsPart.text = `  §8-  ${tpsText()}`;
         const phase = previewClock.tick();
-        for (let i = 0; i < all.length; i++) {
-            const player = all[i];
-            if (!isVisualizationHolder(player.id)) {
-                try { if (getState(player).anchor) clearAnchor(player); } catch {}
-                continue;
-            }
-            const anchored = !!getState(player).anchor;
+        const holders = visualizationHolders();
+        for (let i = 0; i < holders.length; i++) {
+            const player = holders[i];
+            let anchored = false;
+            try { anchored = !!getState(player).anchor; } catch { continue; }
             if (!anchored && idleSkip(player, i, previewBusy, phase, 1)) continue;
             if (!holdsBuildTool(player)) {
-                forgetHolder(player.id);
-                if (anchored) clearAnchor(player);
+                markHolderDirty(player.id);
                 previewBusy.delete(player);
                 continue;
             }
             try {
                 const idle   = getState(player).mode === "disable";
-                const inHand = heldItemCached(player, idle ? IDLE_EVERY : 0);
+                const inHand = heldItemCached(player, IDLE_EVERY);
                 const book   = inHand?.typeId === BOOK_ID || inHand?.typeId === TUTORIAL_BOOK_ID;
                 if (idle && !book) previewBusy.delete(player);
                 else previewBusy.add(player);
@@ -641,8 +645,7 @@ export function startPreviewLoop() {
                     }
                     const previewMode = infiniteReach ? "outline" : getPreviewMode(player);
                     if (!infiniteReach && previewMode === "disable") continue;
-                    const inv  = player.getComponent("minecraft:inventory");
-                    const held = inv?.container?.getItem(player.selectedSlotIndex);
+                    const held = heldItemCached(player, IDLE_EVERY);
                     if (!held) {
                         lastPreviewTarget.delete(player.id);
                         continue;
@@ -664,22 +667,13 @@ export function startPreviewLoop() {
                 const isDestroy  = state.blockTypeId === "eb:destroy";
                 const previewMode = isDestroy ? getDestroyPreviewMode(player) : getPreviewMode(player);
                 if (previewMode === "disable" && !isDestroy) continue;
-                const inv  = player.getComponent("minecraft:inventory");
-                const held = inv?.container?.getItem(player.selectedSlotIndex);
-                if (isDestroy) {
-                    if (!held || !isDiggingTool(held.typeId)) {
-                        lastPreviewTarget.delete(player.id);
-                        previewCache.delete(player.id);
-                        clearAnchor(player);
-                        continue;
-                    }
-                } else {
-                    if (!held || held.typeId !== state.blockTypeId) {
-                        lastPreviewTarget.delete(player.id);
-                        previewCache.delete(player.id);
-                        clearAnchor(player);
-                        continue;
-                    }
+                // The hand cache is dropped on every hotbar or selected-slot change, so a few ticks old is still current.
+                const held = heldItemCached(player, IDLE_EVERY);
+                if (isDestroy ? (!held || !isDiggingTool(held.typeId)) : (!held || held.typeId !== state.blockTypeId)) {
+                    lastPreviewTarget.delete(player.id);
+                    previewCache.delete(player.id);
+                    clearAnchor(player);
+                    continue;
                 }
                 if (player.dimension.id !== state.anchor.dimensionId) {
                     lastPreviewTarget.delete(player.id);

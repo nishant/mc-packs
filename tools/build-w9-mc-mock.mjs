@@ -2,6 +2,8 @@
 const props = new Map();
 const players = [];
 const intervals = new Map();
+const periods = new Map();
+let respectPeriods = false;
 let nextId = 1;
 
 function events() {
@@ -116,9 +118,10 @@ export const world = {
 };
 export const system = {
   currentTick: 1,
-  runInterval(fn) {
+  runInterval(fn, every = 1) {
     const id = nextId++;
     intervals.set(id, fn);
+    periods.set(id, Math.max(1, Number(every) || 1));
     return id;
   },
   runTimeout(fn) { return nextId++; },
@@ -128,10 +131,15 @@ export const system = {
   afterEvents: events(),
   beforeEvents: events(),
 };
+/** Off by default (every interval runs every tick, as the older tests expect); on: each runs every `every` ticks. */
+export function setRespectPeriods(on) { respectPeriods = !!on; }
 export function flushIntervals(max = 30) {
   for (let n = 0; n < max && intervals.size; n++) {
     system.currentTick++;
-    for (const fn of [...intervals.values()]) fn();
+    for (const [id, fn] of [...intervals]) {
+      if (respectPeriods && system.currentTick % (periods.get(id) ?? 1) !== 0) continue;
+      fn();
+    }
   }
 }
 export function addPlayer(player) { players.push(player); }

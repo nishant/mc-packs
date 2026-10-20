@@ -22,7 +22,7 @@ import { startHoldWheel, bookPressed, cleanupHoldWheel } from "./core/HoldWheel.
 import { startPanelLightCleanup } from "./core/PanelLight.js";
 import { startGuideBook, onTutorialBookUse, cleanupGuideBook, changeBookLanguage } from "./core/GuideBook.js";
 import { loadSlot, loadSlotMeta, AUTO_SLOT } from "./utils/ClipboardStore.js";
-import { getState, setMode, setAnchor, setSecondAnchor, clearAnchor, clearClipboard, removeState, addWaypoint, getWaypoints } from "./core/PlayerState.js";
+import { getState, setMode, setAnchor, setSecondAnchor, clearAnchor, clearClipboard, removeState, addWaypoint, getWaypoints, anchoredPlayers } from "./core/PlayerState.js";
 import { executePaste } from "./core/Clipboard.js";
 import { getModeHandler, MODE_LIST } from "./modes/ModeRegistry.js";
 import { placeBlocks, ALWAYS_REPLACEABLE, UNPLACEABLE } from "./core/BlockPlacer.js";
@@ -41,8 +41,8 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "./utils/Items.js";
-import { createIdleClock } from "./utils/idle-cadence.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, allPlayers, buildingBookHands, handKnown, markHandDirty, refreshHand } from "./utils/Items.js";
+import { createIdleClock, idleDue } from "./utils/idle-cadence.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 import { bedPartnerPos, dropIncompleteBeds, expandDestroyForClaims, expandForClaims, isBedType } from "./core/beds.js";
 import { onScriptEvent } from "./script-events.js";
@@ -799,6 +799,7 @@ world.afterEvents.playerLeave.subscribe(ev => {
     lastSneakPressMs.delete(ev.playerId);
     savedModeBeforeToggle.delete(ev.playerId);
     selectionFovMap.delete(ev.playerId);
+    zoomedPlayers.delete(ev.playerId);
     cleanupActionBar(ev.playerId);
     cleanupGuideBook(ev.playerId);
     cleanupCoach(ev.playerId);
@@ -826,13 +827,21 @@ system.run(() => {
     }
 });
 
+/** player id -> player whose camera is zoomed for a selection (so it can be cleared when the anchor goes) */
+const zoomedPlayers = new Map();
 system.runInterval(() => {
-    for (const player of allPlayers()) {
+    // Only players with an anchor can be selecting, plus those still zoomed from one.
+    const anchored = anchoredPlayers();
+    if (anchored.size === 0 && zoomedPlayers.size === 0) return;
+    const looked = anchored.size && zoomedPlayers.size ? new Map([...zoomedPlayers, ...anchored]) : anchored.size ? anchored : zoomedPlayers;
+    for (const player of [...looked.values()]) {
         try {
+            if (player.isValid === false) { zoomedPlayers.delete(player.id); continue; }
             const state = getState(player);
             const selecting = state.mode !== "disable" && state.mode !== "copy_paste" && !!state.anchor && getFovZoomEnabled(player);
 
             if (!selecting) {
+                zoomedPlayers.delete(player.id);
                 if (selectionFovMap.has(player.id)) {
                     selectionFovMap.delete(player.id);
                     player.runCommand("camera @s clear");
@@ -857,13 +866,15 @@ system.runInterval(() => {
             if (selectionFovMap.get(player.id) === fov) continue;
             const wasZooming = selectionFovMap.has(player.id);
             selectionFovMap.set(player.id, fov);
+            zoomedPlayers.set(player.id, player);
             if (!wasZooming) try { player.addTag("eb:zooming"); } catch {}
             player.runCommand(`camera @s fov_set ${fov} 0.15 linear`);
         } catch { }
     }
 }, 2);
 system.runInterval(() => {
-    for (const player of allPlayers()) {
+    // Only Building Book holders (kept from the hand events): nobody else's inventory is read.
+    for (const player of [...buildingBookHands().values()]) {
         try {
             const inv = player.getComponent("minecraft:inventory")?.container;
             if (!inv) continue;
@@ -877,19 +888,13 @@ system.runInterval(() => {
         } catch { }
     }
 }, 20);
-/** Players holding the Building Book: their sneaks are watched every tick, everyone else's hand every few ticks. */
-const sneakBusy = new WeakSet();
-const sneakClock = createIdleClock();
+/** Players holding the Building Book (kept from the hand events): their sneaks are watched every tick, nobody else's. */
 system.runInterval(() => {
-    const all = allPlayers();
-    const phase = sneakClock.tick();
-    for (let i = 0; i < all.length; i++) {
-        const player = all[i];
-        if (idleSkip(player, i, sneakBusy, phase)) continue;
+    const holders = buildingBookHands();
+    if (prevSneakState.size) for (const id of [...prevSneakState.keys()]) if (!holders.has(id)) prevSneakState.delete(id);
+    if (holders.size === 0) return;
+    for (const player of [...holders.values()]) {
         try {
-            const item = heldItemCached(player, IDLE_EVERY);
-            if (!isBook(item)) { sneakBusy.delete(player); prevSneakState.delete(player.id); continue; }
-            sneakBusy.add(player);
             const isSneaking  = player.isSneaking;
             const wasSneaking = prevSneakState.get(player.id) ?? false;
             prevSneakState.set(player.id, isSneaking);
@@ -921,6 +926,23 @@ system.runInterval(() => {
         } catch { }
     }
 }, 1);
+
+// A missed hand event (none is known) would leave a hand stale: every HAND_SWEEP_TICKS the hands of a fifth of the
+// players are read again, spread over the runs, so each is checked about every 5 seconds. Players that came without a
+// spawn event are picked up here too.
+const HAND_SWEEP_TICKS = 20;
+const handClock = createIdleClock();
+system.runInterval(() => {
+    const all = allPlayers();
+    const phase = handClock.tick();
+    for (let i = 0; i < all.length; i++) {
+        const player = all[i];
+        try {
+            if (!handKnown(player.id)) markHandDirty(player);
+            else if (idleDue(i, phase, false, false)) refreshHand(player);
+        } catch {}
+    }
+}, HAND_SWEEP_TICKS);
 
 // /realm:prefs changes apply right away: the build speed's queue limit (otherwise set at spawn and in the book's
 // settings), and the menu style's old switch (eb:customUI), which would otherwise outrank the new one.

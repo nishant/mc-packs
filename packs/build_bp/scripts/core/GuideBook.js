@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { world, system, Player } from "@minecraft/server";
-import { heldItemCached, idleSkip, IDLE_EVERY, isTutorialBook, allPlayers } from "../utils/Items.js";
+import { idleSkip, allPlayers, tutorialBookHands } from "../utils/Items.js";
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { GUIDE_SPREADS, GUIDE_CHAPTER_SPREADS, GUIDE_LANGUAGES } from "./GuideBookData.js";
 import { getBookLanguage, hasBookLanguage } from "./Settings.js";
@@ -27,6 +27,8 @@ const shutting   = new Map();
 const heldChecks = new Map();
 const awayChecks = new Map();
 const lastTurn   = new Map();
+/** Players the guide looks at: Tutorial Book holders, and those whose book or language picker is still open. */
+const watch      = new Map();
 
 function languageIndex(player) {
     return Math.max(0, GUIDE_LANGUAGES.findIndex(language => language.id === getBookLanguage(player)));
@@ -200,6 +202,7 @@ export function cleanupGuideBook(playerId) {
     heldChecks.delete(playerId);
     awayChecks.delete(playerId);
     lastTurn.delete(playerId);
+    watch.delete(playerId);
 }
 
 export function startGuideBook() {
@@ -221,19 +224,23 @@ export function startGuideBook() {
     const guideBusy = new WeakSet();
     const guideClock = createIdleClock();
     system.runInterval(() => {
-        const online = new Set();
-        const all = allPlayers();
+        // Nobody else is looked at: who holds the Tutorial Book comes from the hand events, without a read.
+        const holders = tutorialBookHands();
+        for (const [id, player] of holders) watch.set(id, player);
+        const list = watch.size ? [...watch.values()] : [];
         const phase = guideClock.tick();
-        for (let i = 0; i < all.length; i++) {
-            const player = all[i];
-            online.add(player.id);
-            // No tutorial book in hand, open or picking a language: looked at every few checks only.
+        for (let i = 0; i < list.length; i++) {
+            const player = list[i];
+            // A watched player with nothing open is looked at every few checks only.
             if (idleSkip(player, i, guideBusy, phase, CHECK_TICKS)) continue;
             try {
-                const holding = isTutorialBook(heldItemCached(player, IDLE_EVERY));
+                const holding = holders.has(player.id);
                 const book    = books.get(player.id);
                 if (holding || book || hasPicker(player.id)) guideBusy.add(player);
-                else guideBusy.delete(player);
+                else {
+                    guideBusy.delete(player);
+                    watch.delete(player.id);
+                }
 
                 if (!holding) {
                     heldChecks.delete(player.id);
@@ -279,8 +286,11 @@ export function startGuideBook() {
             } catch {}
         }
 
-        for (const playerId of [...books.keys(), ...shutting.keys()]) {
-            if (!online.has(playerId)) cleanupGuideBook(playerId);
+        if (books.size || shutting.size) {
+            const online = new Set(allPlayers().map((player) => player.id));
+            for (const playerId of [...books.keys(), ...shutting.keys()]) {
+                if (!online.has(playerId)) cleanupGuideBook(playerId);
+            }
         }
         finishShutting();
 
