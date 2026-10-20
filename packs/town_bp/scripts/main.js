@@ -910,10 +910,12 @@ function placeDesign(dim, s, p) {
  * placeDesign a block at a time: yields after each block it changes (the build job spreads them over ticks), returns
  * false (changing nothing) when a block isn't loaded. `auto` (a spot picked automatically): "ground" places may also
  * replace the natural ground they sit in (sand, gravel, stone), which the spot's snapshot keeps.
+ * `mine(x, y, z)`: a block a player may have placed (applyBuild's), never replaced.
  * @param {Dimension} dim @param {Spot} s @param {Project} p @param {boolean} auto @param {{ placed: number, skipped: number }} out
+ * @param {(x: number, y: number, z: number) => boolean} [mine]
  * @returns {Generator<void, boolean, void>}
  */
-function* placeDesignSteps(dim, s, p, auto, out) {
+function* placeDesignSteps(dim, s, p, auto, out, mine = () => false) {
   const fwd = FORWARD[s.f] ?? FORWARD[0];
   const { min, max } = dim.heightRange;
   /** @type {{ pl: Place, loc: Vector3, block: import("@minecraft/server").Block }[]} */
@@ -934,8 +936,8 @@ function* placeDesignSteps(dim, s, p, auto, out) {
     items.push({ pl, loc, block });
     yield; // reads only: nothing has changed yet
   }
-  /** @param {string} type @param {Mode} mode */
-  const replaceable = (type, mode) => canReplace(type, mode) || (auto && mode === "ground" && NATURAL.has(type));
+  /** @param {string} type @param {Mode} mode @param {Vector3} loc */
+  const replaceable = (type, mode, loc) => !mine(loc.x, loc.y, loc.z) && (canReplace(type, mode) || (auto && mode === "ground" && NATURAL.has(type)));
   /** @param {Place} pl */
   const optional = (pl) => isOptional(p, pl);
   /** @param {Place} pl */
@@ -955,7 +957,7 @@ function* placeDesignSteps(dim, s, p, auto, out) {
     const mate = items[i + 1]?.pl.pair ? items[i + 1] : undefined;
     const group = mate ? [it, mate] : [it];
     if (group.every((g) => g.block.typeId === g.pl.block)) continue;
-    if (!group.every((g) => g.block.typeId === g.pl.block || replaceable(g.block.typeId, g.pl.mode))) {
+    if (!group.every((g) => g.block.typeId === g.pl.block || replaceable(g.block.typeId, g.pl.mode, g.loc))) {
       // A cobblestone floor under a well, or posts under a dock, are only needed where it's open.
       if (!optional(it.pl)) out.skipped += group.length;
       continue;
@@ -965,7 +967,7 @@ function* placeDesignSteps(dim, s, p, auto, out) {
   // 2. Water, only where it can't spill.
   const water = items.filter((it) => it.pl.block === "minecraft:water" && it.block.typeId !== "minecraft:water");
   const wetAlready = new Set(items.filter((it) => it.pl.block === "minecraft:water" && it.block.typeId === "minecraft:water").map((it) => keyOf(it.loc)));
-  const want = new Map(water.filter((it) => replaceable(it.block.typeId, it.pl.mode)).map((it) => [keyOf(it.loc), it]));
+  const want = new Map(water.filter((it) => replaceable(it.block.typeId, it.pl.mode, it.loc)).map((it) => [keyOf(it.loc), it]));
   /** @param {Vector3} at */
   const holds = (at) => {
     if (want.has(keyOf(at))) return true;
@@ -995,7 +997,7 @@ function* placeDesignSteps(dim, s, p, auto, out) {
   for (const it of items) {
     if (it.pl.block !== "minecraft:waterlily" || it.block.typeId === it.pl.block) continue;
     const below = keyOf({ x: it.loc.x, y: it.loc.y - 1, z: it.loc.z });
-    if ((want.has(below) || wetAlready.has(below)) && replaceable(it.block.typeId, it.pl.mode)) {
+    if ((want.has(below) || wetAlready.has(below)) && replaceable(it.block.typeId, it.pl.mode, it.loc)) {
       put(it);
       yield;
     } else out.skipped++;
@@ -2236,9 +2238,14 @@ function autoGeometry(p, s) {
 
 /**
  * The build in progress (one at a time) and the queue of others, "town:project".
- * @type {{ key: string, town: string, project: string, phase: "outline" | "check" | "standing" | "claims" | "apply", start: number, until?: number, said?: number, gen?: Generator<any, any, any>, ask?: { id: string, until: number }, claims?: number, out?: { placed: number, skipped: number }, changes?: number } | undefined}
+ * `resume`: a half-done build (bs) picked up again, maybe long after its check: the outline and the region check are
+ * not done again (its ground is half leveled), but players are still waited off the spot, claims checked again, and the
+ * blocks players placed since are left alone (applyBuild's `mine`).
+ * @type {{ key: string, town: string, project: string, phase: "outline" | "check" | "standing" | "claims" | "apply", resume?: boolean, start: number, until?: number, said?: number, gen?: Generator<any, any, any>, ask?: { id: string, until: number }, claims?: number, out?: { placed: number, skipped: number }, changes?: number } | undefined}
  */
 let buildJob;
+/** Half-done builds that wait for an operator this session (key -> why): a claim or a player's blocks in a structure's box. @type {Map<string, string>} */
+const heldBuilds = new Map();
 /** @type {string[]} */
 const buildQueue = [];
 /** realm:town_test "build_pause" (scenarios): a build stops after this many block changes, as if the server stopped. */
@@ -2249,6 +2256,7 @@ let testPaused = false;
 function queueAutoBuild(t, p) {
   if (testPaused) return false;
   const key = `${t.id}:${p.id}`;
+  if (heldBuilds.has(key)) return false;
   if (buildJob?.key !== key && !buildQueue.includes(key)) buildQueue.push(key);
   ensureJobs();
   return true;
@@ -2256,6 +2264,7 @@ function queueAutoBuild(t, p) {
 
 /** @param {string} key */
 function cancelAutoBuild(key) {
+  heldBuilds.delete(key);
   if (buildJob?.key === key) buildJob = undefined;
   const i = buildQueue.indexOf(key);
   if (i >= 0) buildQueue.splice(i, 1);
@@ -2302,11 +2311,14 @@ function* checkRegion(dim, t, geo) {
 /**
  * Levels the ground the plan says (cuts top down, fills bottom up, only natural blocks and wild plants change), then
  * places the build; yields after each block it reads or changes. Applying it again changes nothing. Returns false when a
- * block isn't loaded (nothing was changed by that step).
+ * block isn't loaded (nothing was changed by that step), or why it can't go on (a saved structure's box holds something
+ * it would replace). `mine(x, y, z)`: a block in a cell a player placed blocks in since the check (it may be resumed
+ * long after): never cut, filled or built over.
  * @param {Dimension} dim @param {Project} p @param {Spot} s @param {Geometry} geo @param {{ placed: number, skipped: number }} out
- * @returns {Generator<void, boolean, void>}
+ * @param {(x: number, y: number, z: number) => boolean} [mine]
+ * @returns {Generator<void, boolean | string, void>}
  */
-function* applyBuild(dim, p, s, geo, out) {
+function* applyBuild(dim, p, s, geo, out, mine = () => false) {
   const air = perm("minecraft:air");
   const dirt = perm("minecraft:dirt");
   const topId = fillTop(s);
@@ -2322,7 +2334,7 @@ function* applyBuild(dim, p, s, geo, out) {
       // Down to the new top: natural ground and wild plants above it go, top down.
       for (let y = c.t + 5; y > c.t; y--) {
         const b = at(c.x, y, c.z);
-        if (NATURAL.has(b.typeId) || WILD.has(b.typeId)) b.setPermutation(air);
+        if ((NATURAL.has(b.typeId) || WILD.has(b.typeId)) && !mine(c.x, y, c.z)) b.setPermutation(air);
         yield;
       }
       // Up to it: the open blocks right under the new top become dirt, bottom up (never into a cave below).
@@ -2331,7 +2343,7 @@ function* applyBuild(dim, p, s, geo, out) {
       for (let y = c.t - 1; y >= c.t - 3; y--) {
         const b = at(c.x, y, c.z);
         yield;
-        if (!(b.isAir || WILD.has(b.typeId))) break;
+        if (!(b.isAir || WILD.has(b.typeId)) || mine(c.x, y, c.z)) break;
         open.unshift(b);
       }
       for (const b of open) {
@@ -2340,7 +2352,7 @@ function* applyBuild(dim, p, s, geo, out) {
       }
       // The new top: the surrounding top block on a fill, grass again on dirt a cut laid bare.
       const b = at(c.x, c.t, c.z);
-      if (b.isAir || WILD.has(b.typeId) || (b.typeId === "minecraft:dirt" && topId === "minecraft:grass_block")) b.setPermutation(top);
+      if (!mine(c.x, c.t, c.z) && (b.isAir || WILD.has(b.typeId) || (b.typeId === "minecraft:dirt" && topId === "minecraft:grass_block"))) b.setPermutation(top);
       yield;
     }
   } catch {
@@ -2348,12 +2360,24 @@ function* applyBuild(dim, p, s, geo, out) {
   }
   const structure = p.structure ? savedStructure(p.structure) : undefined;
   if (structure) {
+    // It replaces everything in its box: only air, natural ground and wild plants nobody placed may be there now.
+    const { fpBox } = geo;
+    const { min, max } = dim.heightRange;
+    for (let x = fpBox.min.x; x <= fpBox.max.x; x++)
+      for (let z = fpBox.min.z; z <= fpBox.max.z; z++)
+        for (let y = Math.max(min, fpBox.min.y); y <= Math.min(max - 1, fpBox.max.y); y++) {
+          const b = blockInfo(dim, x, y, z);
+          if (!b) return false;
+          if (mine(x, y, z)) return `a player placed blocks at ${x}, ${y}, ${z}`;
+          if (b.id !== "minecraft:air" && !allowedInRegion(b, geo.dock)) return `${itemName(b.id)} at ${x}, ${y}, ${z}`;
+          yield;
+        }
     const rotation = [StructureRotation.None, StructureRotation.Rotate90, StructureRotation.Rotate180, StructureRotation.Rotate270][s.f] ?? StructureRotation.None;
     world.structureManager.place(structure, dim, { x: s.x, y: s.y, z: s.z }, { rotation, includeEntities: false });
     out.placed++;
     return true;
   }
-  return yield* placeDesignSteps(dim, s, p, true, out);
+  return yield* placeDesignSteps(dim, s, p, true, out, mine);
 }
 
 /** Players inside the region (the build and the ground leveled around it), who could be walled in by a fill. @param {Town} t @param {Geometry} geo */
@@ -2386,6 +2410,24 @@ function respot(t, p, why) {
   saveTown(t);
 }
 
+/**
+ * A half-done build that can't go on (a claim now covers it, or a structure's box holds a player's blocks): it stops
+ * where it is, nothing more changes, and operators are told once; Remove spot puts the ground back. It tries again
+ * after a restart. @param {Town} t @param {Project} p @param {string} why
+ */
+function holdBuild(t, p, why) {
+  const key = `${t.id}:${p.id}`;
+  buildJob = undefined;
+  heldBuilds.set(key, why);
+  tellOps(`§e[Town Projects] ${t.n}'s ${p.name} is half built and stopped (${why}). An operator can Remove spot in /realm:town to put the ground back, or clear the way: it goes on after a restart.`);
+}
+
+/** Is (x, y, z) in a cell a player placed blocks in? Unknown cells count as placed. @param {Town} t */
+const placedBy = (t) => {
+  const c = cellsOf(t);
+  return (/** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ z) => !c || c.set.has(cellOf(t, x, y, z));
+};
+
 /** A tick of the build in progress. */
 function stepBuild() {
   if (!buildJob) {
@@ -2399,7 +2441,7 @@ function stepBuild() {
     const pr = progressOf(t, p);
     if (!pr.done || pr.built) return;
     const outline = Math.max(0, Math.min(15, Math.floor(Number(get("outlineSeconds")) || 0)));
-    buildJob = { key, town, project, phase: s.bs ? "apply" : outline > 0 ? "outline" : "check", start: system.currentTick, until: system.currentTick + outline * 20 };
+    buildJob = { key, town, project, phase: s.bs ? "standing" : outline > 0 ? "outline" : "check", resume: !!s.bs, start: system.currentTick, until: system.currentTick + outline * 20 };
   }
   const job = buildJob;
   const t = allTowns().get(job.town);
@@ -2456,7 +2498,7 @@ function stepBuild() {
     case "claims": {
       if (job.claims === undefined && now <= (job.ask?.until ?? 0)) return;
       if (job.ask) claimAsks.delete(job.ask.id);
-      if ((job.claims ?? 0) > 0) return respot(t, p, "a land claim");
+      if ((job.claims ?? 0) > 0) return s.bs ? holdBuild(t, p, "a land claim covers it now") : respot(t, p, "a land claim");
       // Saved first: the region and its depth, so Remove spot puts the terrain back; then bs, so a restart resumes.
       if (!s.snap && !s.old) {
         const box = clampBox({ min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, dim);
@@ -2468,8 +2510,18 @@ function stepBuild() {
       return;
     }
     case "apply": {
+      // Someone walked onto the spot meanwhile: wait, so no fill or wall goes up around them.
+      const on = playersOn(t, geo);
+      if (on.length) {
+        if (now - (job.said ?? -1000) >= 200) {
+          job.said = now;
+          for (const pl of on) pl.sendMessage(`§eStep off the spot: ${t.n}'s ${p.name} goes up here.`);
+        }
+        return;
+      }
+      if (!cellsOf(t)) return; // the placed cells aren't readable yet
       job.out ??= { placed: 0, skipped: 0 };
-      job.gen ??= applyBuild(dim, p, s, geo, job.out);
+      job.gen ??= applyBuild(dim, p, s, geo, job.out, placedBy(t));
       try {
         for (let i = 0; i < APPLY_TICK; i++) {
           if (testPauseAfter > 0 && (job.changes = (job.changes ?? 0) + 1) > testPauseAfter) {
@@ -2481,6 +2533,7 @@ function stepBuild() {
           const r = job.gen.next();
           if (!r.done) continue;
           buildJob = undefined;
+          if (typeof r.value === "string") return holdBuild(t, p, r.value);
           if (!r.value) return; // unloaded: resumes from bs when a player is near
           const pr = progressOf(t, p);
           pr.built = 1;

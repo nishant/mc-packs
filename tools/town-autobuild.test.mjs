@@ -315,3 +315,64 @@ test("taking a build away breaks a container that holds items (and a lectern) so
   fns.spill(dim, block("minecraft:oak_planks", undefined));
   assert.deepEqual(commands, ["setblock 1 65 2 air destroy", "setblock 1 65 2 air destroy"], "the full barrel and the lectern; not the empty barrel or planks");
 });
+
+test("a resumed build leaves alone the blocks players placed since its check (mine), cut, fill and design alike", () => {
+  const a = fakeWorld(hill);
+  const fa = load(a);
+  const s = pick(a, fa);
+  const geo = fa.autoGeometry(well, s);
+  const half = drain(fa.applyBuild(a.dim, well, s, geo, { placed: 0, skipped: 0 }), 40);
+  assert.equal(half.done, false, "stopped half way");
+  // A player's blocks since: dirt above a cut column's new top, dirt over a fill's opening, and a block on the pad.
+  const cut = geo.plan.find((c) => c.t < hill(c.x, c.z));
+  const fill = geo.plan.find((c) => c.t > hill(c.x, c.z));
+  const theirs = [
+    [cut.x, cut.t + 1, cut.z],
+    [fill.x, fill.t, fill.z],
+    [s.x, s.y, s.z],
+  ];
+  const fill2 = `${fill.x},${fill.t},${fill.z}`;
+  for (const [x, y, z] of theirs) a.set.set(`${x},${y},${z}`, { id: "minecraft:dirt" });
+  const keys = new Set(theirs.map((v) => v.join(",")));
+  const out = { placed: 0, skipped: 0 };
+  const r = drain(fa.applyBuild(a.dim, well, s, geo, out, (x, y, z) => keys.has(`${x},${y},${z}`)));
+  assert.equal(r.value, true);
+  for (const [x, y, z] of theirs) assert.equal(a.read(x, y, z).id, "minecraft:dirt", `their block at ${x},${y},${z} stays`);
+  assert.ok(keys.has(fill2));
+  // Without mine (as before the fix) the cut takes their dirt away.
+  const b = fakeWorld(hill);
+  const fb = load(b);
+  b.set.set(`${cut.x},${cut.t + 1},${cut.z}`, { id: "minecraft:dirt" });
+  drain(fb.applyBuild(b.dim, well, s, geo, { placed: 0, skipped: 0 }));
+  assert.notEqual(b.read(cut.x, cut.t + 1, cut.z).id, "minecraft:dirt", "the unguarded build removes it");
+});
+
+test("a saved structure is placed only over air, natural ground and wild plants nobody placed: a chest in its box stops it", () => {
+  const w = fakeWorld(() => 64);
+  const fns = load(w);
+  const places = [];
+  fns.ctx.savedStructure = () => ({ size: { x: 3, y: 3, z: 3 } });
+  fns.ctx.world = { structureManager: { place: (...a) => places.push(a), get: () => undefined } };
+  const statue = { id: "statue", name: "Statue", structure: "town:statue" };
+  const s = { x: 0, y: 65, z: 0, f: 0, a: 1 };
+  const geo = fns.autoGeometry(statue, s);
+  w.set.set("1,65,1", { id: "minecraft:chest" });
+  const r = drain(fns.applyBuild(w.dim, statue, s, geo, { placed: 0, skipped: 0 }));
+  assert.match(String(r.value), /Chest at 1, 65, 1/);
+  assert.equal(places.length, 0, "nothing placed over the chest");
+  w.set.delete("1,65,1");
+  const mineAt = drain(fns.applyBuild(w.dim, statue, s, geo, { placed: 0, skipped: 0 }, (x, y, z) => x === 2 && y === 66 && z === 2));
+  assert.match(String(mineAt.value), /placed/);
+  assert.equal(places.length, 0);
+  assert.equal(drain(fns.applyBuild(w.dim, statue, s, geo, { placed: 0, skipped: 0 })).value, true);
+  assert.equal(places.length, 1, "placed once the box is clear");
+});
+
+test("stepBuild: a resumed build still waits players off the spot (also while applying), checks claims, and holds instead of losing a half-done spot", () => {
+  const body = main.slice(main.indexOf("function stepBuild()"), main.indexOf("/** Runs the scan and the build"));
+  assert.match(body, /phase: s\.bs \? "standing"/, "resume starts at standing, not apply");
+  assert.match(body, /case "apply": \{\s*\/\/[^\n]*\n\s*const on = playersOn\(t, geo\);/, "apply waits while someone is on the spot");
+  assert.match(body, /s\.bs \? holdBuild\(t, p, "a land claim covers it now"\) : respot/, "a claim over a half-done build holds it");
+  assert.match(body, /applyBuild\(dim, p, s, geo, job\.out, placedBy\(t\)\)/, "the placed cells guard the build");
+  assert.match(body, /typeof r\.value === "string"\) return holdBuild/);
+});
