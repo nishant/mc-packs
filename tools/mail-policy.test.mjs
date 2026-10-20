@@ -110,3 +110,17 @@ test("mail_send reads the live settings and has no general eviction loop that ca
   const set = readFileSync("packs/mail_bp/scripts/settings.js", "utf8");
   for (const k of ["systemInboxLimit", "systemLetterDays", "systemReserve"]) assert.match(set, new RegExp(`key: "${k}"`));
 });
+test("when the realm's mail is full, a refused pack letter deletes only expired letters (F30)", () => {
+  // 4000 letters from players fill the pack ceiling (5000 - 1000); the recipient holds 25 pack letters, unread and
+  // read, over their systemInboxLimit of 20, plus one expired pack letter of someone else's.
+  const all = [];
+  let id = 1;
+  for (let i = 0; i < 4000; i++) all.push({ id: id++, f: "x", t: `p${i % 300}`, at: NOW - i, r: 1, di: 0 });
+  for (let i = 0; i < 25; i++) all.push({ id: id++, f: "", t: "a", at: NOW - 1000 + i, r: i % 2, di: 0 });
+  const expired = id++;
+  all.push({ id: expired, f: "", t: "b", at: NOW - 40 * DAY, r: 0, di: 0 });
+  const plan = planSystemLetter(all, "a", NOW, P);
+  assert.equal(plan.ok, false);
+  assert.match(plan.reason, /realm's mail is full/);
+  assert.deepEqual(plan.drop, [expired], "only the expired letter goes; the recipient's letters stay");
+});

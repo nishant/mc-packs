@@ -128,6 +128,7 @@ tree as their last argument (`git archive <commit> packs | tar -x -C <dir>`), so
 before a fix: `hooks/owed-probe.mjs` (seeds and reads a pack's own world or player properties and replays its
 playerSpawn listeners; owed-legacy-restart, owed-legacy-consumers, party-moderation, crowns-limit),
 `hooks/milestones-rejoin.mjs` (the same player joining again after a restart; w10-milestones-flag),
+`hooks/expedition-queue-rejoin.mjs` (reads the saved expedition line and hands a restored place to the leader's new id; expedition-queue-restart),
 `hooks/stash-loads.mjs` (counts the saved pages Quick Stack & Sort loads; refill-pages) and `hooks/elite-remove.mjs` (removes chosen spawns in elite_bp's own flush, after its spawn handler; elite-invalid). `probe-hooks.test.mjs` checks
 them offline. A header whose
 command runs another scenario file fails (and `npm run check` catches it too). A few have no plain command and are listed in

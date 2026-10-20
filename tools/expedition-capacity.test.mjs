@@ -14,7 +14,7 @@ const mainSource = readFileSync(srcDir ? `${srcDir}main.js` : new URL("main.js",
 // EXPEDITION_SRC may be a copy from before queue.js and forget.js existed: those fall back to the shipped modules, so a
 // fail-before run fails on the main.js wiring assertions instead of crashing on import.
 const moduleUrl = (f) => (srcDir && existsSync(`${srcDir}${f}`) ? pathToFileURL(`${srcDir}${f}`).href : new URL(f, scripts).href);
-const { createQueue, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY } = await import(moduleUrl("queue.js"));
+const { createQueue, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY, QUEUE_GONE, QUEUE_REJOIN } = await import(moduleUrl("queue.js"));
 const { createForget } = await import(moduleUrl("forget.js"));
 const fnSrc = (name) => {
   const m = new RegExp(`^(async )?function ${name}\\(`, "m").exec(mainSource);
@@ -104,8 +104,9 @@ function realParts(w, ctx, players, runs) {
   ctx.__realmDiagForgetHooks = { expedition_bp: ctx.forget.onForget };
 }
 
-function world({ slots = 3, site = true, real = false } = {}) {
-  const w = { tick: 0, interval: undefined, jobs: [], warns: [], resets: 0, started: [], cfg: { enabled: true, gauntletEnabled: true }, slots, site: site ? { x: 0, z: 0 } : undefined };
+// `store`: the world's saved properties (shared by two worlds to play a script reload or a restart).
+function world({ slots = 3, site = true, real = false, store = new Map() } = {}) {
+  const w = { store, tick: 0, interval: undefined, jobs: [], warns: [], resets: 0, started: [], cfg: { enabled: true, gauntletEnabled: true }, slots, site: site ? { x: 0, z: 0 } : undefined };
   const players = new Map();
   const runs = new Map();
   const system = {
@@ -158,10 +159,13 @@ function world({ slots = 3, site = true, real = false } = {}) {
     resetPending: () => ctx.resetPending(),
     cantStart: (p) => ctx.cantStart(p),
     forgotten: () => (ctx.forget ? ctx.forget.forgotten() : false),
+    readJson: (k) => (w.store.has(k) ? JSON.parse(w.store.get(k)) : undefined),
+    writeJson: (k, v) => (v === undefined ? w.store.delete(k) : w.store.set(k, JSON.stringify(v))),
+    dungeonById: (id) => [crypt].find((d) => d.id === id),
   });
   system.runInterval(q.pumpQueue, 100);
   Object.assign(ctx, q);
-  ctx.q = { ...q, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY };
+  ctx.q = { ...q, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY, QUEUE_GONE, QUEUE_REJOIN };
   if (real) realParts(w, ctx, players, runs);
   w.q = ctx.q;
   w.ctx = ctx;
@@ -349,7 +353,8 @@ test("wiring: the line is the only wait; slots stay 1-3, the release is the queu
   const startAt = mainSource.indexOf("async function start(");
   const startBody = mainSource.slice(startAt, mainSource.indexOf("async function", startAt + 10));
   assert.ok(startBody.indexOf("slotBusy(fromQueue)") > 0 && startBody.indexOf("slotBusy(fromQueue)") < startBody.indexOf("useSigil("), "the line is checked before a sigil is taken");
-  assert.match(mainSource, /playerLeave\.subscribe\(\(\{ playerId \}\) => \{\n {2}dequeue\(playerId\);/);
+  // F28: a leave marks the leader (queueLeft) and the pump drops them after QUEUE_GONE; see the leave tests below.
+  assert.match(mainSource, /playerLeave\.subscribe\(\(\{ playerId \}\) => \{\n {2}queueLeft\(playerId\);/);
   assert.match(mainSource, /freeRun\(run\.slot, true\);[\s\S]{0,60}refundSigil\(run\);[\s\S]{0,40}return;\n {2}\}\n {2}run\.checked = true;/, "a site that can't be built on holds the line");
   assert.match(mainSource, /system\.run\(pumpQueue\);/, "a finished reset starts the next party");
   assert.match(mainSource, /if \(!Array\.isArray\(kept\) \|\| \(kept\.length === affixes\.length[\s\S]{0,160}delete rolls\[levelKey\(L\)\]/, "a newer roll isn't deleted by a start that used older affixes");
@@ -358,8 +363,8 @@ test("wiring: the line is the only wait; slots stay 1-3, the release is the queu
   assert.match(mainSource, /^import \{ createQueue \} from "\.\/queue\.js";$/m);
   // Every dependency by name and in order, so a dep left out (cantStart: forgotten()'s refusal) or swapped is caught.
   const wiring = [
-    "const { queue, queuePlace, dequeue, clearQueue, slotBusy, enqueue, pumpQueue, freeRun } = createQueue({",
-    ...["system", "get", "site", "online", "runs", "runOf", "statusLine", "sigilsOf", "freeSlot", "start", "resetPending", "cantStart", "forgotten: forget.forgotten"].map((d) => `  ${d},`),
+    "const { queue, queuePlace, dequeue, clearQueue, slotBusy, enqueue, pumpQueue, freeRun, loadQueue, queueLeft, queueRejoined } = createQueue({",
+    ...["system", "get", "site", "online", "runs", "runOf", "statusLine", "sigilsOf", "freeSlot", "start", "resetPending", "cantStart", "forgotten: forget.forgotten", "readJson", "writeJson", "dungeonById"].map((d) => `  ${d},`),
     "});",
     "system.runInterval(pumpQueue, 100);",
   ].join("\n");
@@ -552,4 +557,119 @@ test("forget: the hook closes and empties the line and blocks every automatic an
   assert.match(a.msgs.at(-1), /wait until the realm reloads/);
   w.q.enqueue(b, crypt, 1, [], undefined, undefined);
   assert.equal(w.q.queue.length, 0, "no new waiting either");
+});
+
+// F28: the line is saved, so a script reload or a restart doesn't drop it without a word.
+test("a script reload keeps the line in order, with the time waited, and tells each leader", async () => {
+  const w = world();
+  w.fill(3);
+  const a = w.player("a", { sigils: ["sig-a"] });
+  const b = w.player("b");
+  w.tick = 100;
+  await w.ctx.start(a, crypt, 2, ["fresh"], "sig-a", { loadout: true });
+  w.tick = 400;
+  await w.ctx.start(b, crypt, 1, [], undefined, undefined);
+  w.tick = 1000;
+  w.q.pumpQueue();
+  // The reload: memory starts over, the saved properties and the players stay.
+  const r = world({ store: w.store });
+  r.fill(3);
+  const [a2, b2] = ["a", "b"].map((id) => r.player(id));
+  r.tick = 50;
+  assert.equal(r.q.loadQueue(), 2);
+  assert.deepEqual(Array.from(r.q.queue, (q) => [q.id, q.L, q.sigilLine ?? null, q.g?.loadout ?? null, q.affixes.join()]), [["a", 2, "sig-a", true, "fresh"], ["b", 1, null, null, ""]]);
+  assert.equal(r.q.queue[0].at, 50 - 900, "a has waited 900 ticks already");
+  assert.match(a2.msgs.at(-1), /still number 1 of 2 in line/);
+  assert.match(b2.msgs.at(-1), /still number 2 of 2 in line/);
+  r.runs.delete(0);
+  r.free(0);
+  r.flush();
+  assert.deepEqual(r.started.map((s) => [s.id, s.L, s.sigilLine, s.fromQueue]), [["a", 2, "sig-a", true]]);
+  assert.equal(JSON.parse(r.store.get("expedition:queue")).length, 1, "the save follows the line");
+});
+
+test("after a restart a leader who rejoins in time keeps the place; one who doesn't is dropped", async () => {
+  const w = world();
+  w.fill(3);
+  for (const id of ["a", "b", "c"]) await w.ctx.start(w.player(id), crypt, 1, [], undefined, undefined);
+  const r = world({ store: w.store });
+  r.fill(3);
+  r.tick = 0;
+  r.q.loadQueue();
+  assert.equal(r.q.queue.length, 3, "nobody is online yet: the places are kept");
+  r.tickTo(100);
+  assert.equal(r.q.queue.length, 3, "the line waits for its leaders");
+  // b comes back first; a slot frees: b starts, a and c keep their places.
+  const b = r.player("b");
+  r.q.queueRejoined(b);
+  assert.match(b.msgs.at(-1), /still number 2 of 3 in line/);
+  r.runs.delete(1);
+  r.free(1);
+  r.flush();
+  assert.deepEqual(r.started.map((s) => s.id), ["b"]);
+  assert.deepEqual(Array.from(r.q.queue, (q) => q.id), ["a", "c"]);
+  const a = r.player("a");
+  r.q.queueRejoined(a);
+  r.tickTo(r.q.QUEUE_REJOIN + 100);
+  assert.deepEqual(Array.from(r.q.queue, (q) => q.id), ["a"], "c never came back and is dropped");
+});
+
+test("a leader who leaves the game is dropped from the line once QUEUE_GONE has passed, not on the leave itself", async () => {
+  const w = world();
+  w.fill(3);
+  for (const id of ["a", "b"]) await w.ctx.start(w.player(id), crypt, 1, [], undefined, undefined);
+  w.tick = 1000;
+  w.q.queueLeft("a");
+  w.leave("a");
+  assert.deepEqual(JSON.parse(w.store.get("expedition:queue")).map((e) => e.i), ["a", "b"], "the leave saves nothing");
+  w.tickTo(1100);
+  assert.deepEqual(Array.from(w.q.queue, (q) => q.id), ["a", "b"], "a pump within QUEUE_GONE keeps the place");
+  assert.deepEqual(JSON.parse(w.store.get("expedition:queue")).map((e) => e.i), ["a", "b"], "and saves it");
+  w.runs.delete(0);
+  w.free(0);
+  w.flush();
+  assert.deepEqual(w.started.map((s) => s.id), ["b"], "the next leader who is here starts; the one who left doesn't");
+  w.tickTo(1000 + w.q.QUEUE_GONE);
+  assert.equal(w.q.queue.length, 0, "dropped once QUEUE_GONE passed");
+  assert.equal(w.store.has("expedition:queue"), false, "and the saved line is removed");
+});
+
+test("a leader who leaves and comes back within QUEUE_GONE keeps the place without a word", async () => {
+  const w = world();
+  w.fill(3);
+  await w.ctx.start(w.player("a"), crypt, 1, [], undefined, undefined);
+  w.tick = 500;
+  w.q.queueLeft("a");
+  w.leave("a");
+  w.tick = 550;
+  const a = w.player("a");
+  const told = a.msgs.length;
+  w.q.queueRejoined(a);
+  w.tickTo(500 + w.q.QUEUE_GONE + 100);
+  assert.deepEqual(Array.from(w.q.queue, (q) => q.id), ["a"]);
+  assert.equal(a.msgs.length, told, "no restart message for a quick reconnect");
+});
+
+test("a server stop: every leader leaves, the world restarts, and the line comes back from the save (F28)", async () => {
+  const w = world();
+  w.fill(3);
+  for (const id of ["a", "b"]) await w.ctx.start(w.player(id), crypt, 1, [], undefined, undefined);
+  w.tick = 300;
+  // Stopping disconnects everyone before the world closes; a pump may still run in between.
+  for (const id of ["a", "b"]) {
+    w.q.queueLeft(id);
+    w.leave(id);
+  }
+  w.tickTo(400);
+  const r = world({ store: w.store });
+  r.fill(3);
+  assert.equal(r.q.loadQueue(), 2, "the saved line survived the leaves");
+  assert.deepEqual(Array.from(r.q.queue, (q) => q.id), ["a", "b"]);
+});
+
+test("a saved line with an unknown dungeon or a bad entry loads what it can", () => {
+  const store = new Map([["expedition:queue", JSON.stringify([{ i: "x", n: "X", d: "gone", L: 1, a: [], w: 0 }, null, { i: "y", n: "Y", d: "crypt", L: 3, a: ["fresh", 7], w: 10 }])]]);
+  const r = world({ store });
+  r.q.loadQueue();
+  assert.deepEqual(Array.from(r.q.queue, (q) => [q.id, q.L, q.affixes.join()]), [["y", 3, "fresh"]]);
 });

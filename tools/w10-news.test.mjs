@@ -629,10 +629,21 @@ test("guard: playerless champion news is stored, not dropped, and the 24/4 caps 
   assert.ok(all.length <= 24);
 });
 
-function milestoneSession(record, milestones, valueOf = () => 0) {
+// `titles`: whether a Titles pack answers each `ack` request with realm:title_ack (as titles_bp does), or nothing listens.
+function milestoneSession(record, milestones, valueOf = () => 0, titles = true) {
   const box = recorder();
-  const api = evalPack(pack("milestones_bp"), ["check", "topTier", "recheck"], ["gossip"], {
+  const send = box.system.sendScriptEvent;
+  /** @type {any} */
+  let api;
+  box.system.sendScriptEvent = (id, payload) => {
+    send(id, payload);
+    const m = id === "realm:title_unlock" ? JSON.parse(payload) : undefined;
+    if (titles && m?.ack) api.confirmTitle({ player: m.player, title: m.title, ack: m.ack });
+  };
+  api = evalPack(pack("milestones_bp"), ["check", "topTier", "recheck", "sendTop", "confirmTitle", "markConfirmed"], ["gossip"], {
     ...box,
+    unconfirmed: new Map(),
+    records: () => new Map([["ada", record]]),
     recordOf: () => record,
     milestones,
     backfilled: new Set(),
@@ -663,6 +674,75 @@ test("old top-tier titles are not sent again on the next join", () => {
   assert.equal(record.g.m0, 3);
 });
 
+test("without Titles confirming, old top tiers go out again on the next join until it does (F32)", () => {
+  const milestones = Array.from({ length: 3 }, (_, i) => ({ id: "m" + i, stat: "mined", name: "Mile" + i, tiers: [1, 2, 3] }));
+  const record = { n: "Ada", c: { mined: 1 }, g: Object.fromEntries(milestones.map((m) => [m.id, 3])), legacy: 9 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const first = milestoneSession(record, milestones, () => 0, false);
+  first.check(player);
+  assert.equal(count(first.events, "realm:title_unlock"), 3);
+  assert.equal(record.tf, undefined, "no Titles pack confirmed: the backfill is not marked done");
+  const second = milestoneSession(record, milestones, () => 0, false);
+  second.check(player);
+  assert.equal(count(second.events, "realm:title_unlock"), 3, "the next join tries again");
+  const third = milestoneSession(record, milestones, () => 0, true);
+  third.check(player);
+  assert.equal(count(third.events, "realm:title_unlock"), 3);
+  assert.equal(record.tf, 1, "marked done once Titles confirmed every title");
+  const fourth = milestoneSession(record, milestones, () => 0, true);
+  fourth.check(player);
+  assert.equal(count(fourth.events, "realm:title_unlock"), 0);
+  assert.equal(record.legacy, 9);
+});
+
+test("a new top tier sent while Titles is missing clears the flag, so the next join sends it again (F32)", () => {
+  const milestones = [
+    { id: "old", stat: "mined", name: "Old", tiers: [1, 2, 3] },
+    { id: "neu", stat: "mined", name: "Neu", tiers: [1, 2, 3] },
+  ];
+  const record = { n: "Ada", c: { mined: 100 }, g: { old: 3 }, tf: 1, tc: 1 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const session = milestoneSession(record, milestones, () => 100, false);
+  session.check(player);
+  assert.equal(record.tf, undefined);
+  assert.equal(record.tc, undefined);
+  const next = milestoneSession(record, milestones, () => 100, true);
+  next.check(player);
+  const titles = next.events.filter((e) => e.id === "realm:title_unlock").map((e) => JSON.parse(e.payload).title);
+  assert.deepEqual(titles.sort(), ["Neu 3", "Old 3"]);
+  assert.equal(record.tf, 1);
+});
+
+test("a legacy tf saved without confirmation gets one more backfill, then is confirmed (F32)", () => {
+  const milestones = [{ id: "m0", stat: "mined", name: "Mile0", tiers: [1, 2, 3] }];
+  const record = { n: "Ada", c: { mined: 1 }, g: { m0: 3 }, tf: 1 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const first = milestoneSession(record, milestones, () => 0, true);
+  first.check(player);
+  const titles = first.events.filter((e) => e.id === "realm:title_unlock").map((e) => JSON.parse(e.payload).title);
+  assert.deepEqual(titles, ["Mile0 3"], "the old code's unconfirmed tf does not skip the backfill");
+  assert.equal(record.tc, 1, "confirmed once Titles answered");
+  assert.equal(record.tf, 1, "tf kept beside tc for older pack versions");
+  const second = milestoneSession(record, milestones, () => 0, true);
+  second.check(player);
+  assert.equal(count(second.events, "realm:title_unlock"), 0, "sent once more, not on every join");
+});
+
+test("a legacy tf with no Titles to confirm is not marked confirmed (F32)", () => {
+  const milestones = [{ id: "m0", stat: "mined", name: "Mile0", tiers: [1, 2, 3] }];
+  const record = { n: "Ada", c: { mined: 1 }, g: { m0: 3 }, tf: 1 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const session = milestoneSession(record, milestones, () => 0, false);
+  session.check(player);
+  assert.equal(count(session.events, "realm:title_unlock"), 1);
+  assert.equal(record.tc, undefined);
+});
+
+test("titles_bp answers a title_unlock that asks for it with realm:title_ack", () => {
+  const main = fs.readFileSync(pack("titles_bp"), "utf8");
+  assert.match(main, /sendScriptEvent\("realm:title_ack", JSON\.stringify\(\{ player: req\.player\.slice\(0, 40\), title: req\.title, ack: req\.ack \}\)\)/);
+});
+
 test("a recheck after the join flag sends no extra title", () => {
   const milestones = Array.from({ length: 9 }, (_, i) => ({ id: "m" + i, stat: "mined", name: "Mile" + i, tiers: [1, 2, 3] }));
   const record = { n: "Ada", c: { mined: 1 }, g: Object.fromEntries(milestones.map((m) => [m.id, 3])), legacy: 9 };
@@ -677,7 +757,7 @@ test("a recheck after the join flag sends no extra title", () => {
 });
 
 test("the owning report reads the saved flag, not another add-on's store", () => {
-  const store = new Map([["milestones:p:ada", JSON.stringify({ n: "Ann", c: { joins: 400 }, g: { joins: 3 }, tf: 1, legacy: 9 })]]);
+  const store = new Map([["milestones:p:ada", JSON.stringify({ n: "Ann", c: { joins: 400 }, g: { joins: 3 }, tf: 1, tc: 1, legacy: 9 })]]);
   /** @type {{ id: string, payload: string }[]} */
   const sent = [];
   const api = evalPack(pack("milestones_bp"), ["reportSaved", "flush", "records", "recordReport", "boundedReport"], [], {
@@ -710,7 +790,7 @@ test("a new top tier still unlocks after the join flag is set", () => {
     { id: "old", stat: "mined", name: "Old", tiers: [1, 2, 3] },
     { id: "neu", stat: "mined", name: "Neu", tiers: [1, 2, 3] },
   ];
-  const record = { n: "Ada", c: { mined: 100 }, g: { old: 3 }, tf: 1, legacy: 4 };
+  const record = { n: "Ada", c: { mined: 100 }, g: { old: 3 }, tf: 1, tc: 1, legacy: 4 };
   const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
   const session = milestoneSession(record, milestones, () => 100);
   session.check(player);

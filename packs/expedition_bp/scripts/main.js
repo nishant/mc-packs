@@ -1288,7 +1288,7 @@ function slotFits(at, slot) {
 }
 
 // The line for a dungeon (queue.js): a fourth party waits and starts by itself when a dungeon is free.
-const { queue, queuePlace, dequeue, clearQueue, slotBusy, enqueue, pumpQueue, freeRun } = createQueue({
+const { queue, queuePlace, dequeue, clearQueue, slotBusy, enqueue, pumpQueue, freeRun, loadQueue, queueLeft, queueRejoined } = createQueue({
   system,
   get,
   site,
@@ -1302,6 +1302,9 @@ const { queue, queuePlace, dequeue, clearQueue, slotBusy, enqueue, pumpQueue, fr
   resetPending,
   cantStart,
   forgotten: forget.forgotten,
+  readJson,
+  writeJson,
+  dungeonById,
 });
 system.runInterval(pumpQueue, 100); // a slot opened by the operators' settings, a hold that ended, an expired party
 
@@ -3684,7 +3687,8 @@ world.afterEvents.playerInteractWithBlock.subscribe(({ player, block }) => {
   }
 });
 
-world.afterEvents.playerSpawn.subscribe(({ player }) => {
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (initialSpawn) queueRejoined(player);
   try {
     if (!runOf(player.id) && player.hasTag(IN_RUN_TAG)) player.removeTag(IN_RUN_TAG); // the run ended (or the world restarted) meanwhile
     const raw = player.getDynamicProperty(PROP_RETURN);
@@ -3719,7 +3723,7 @@ world.afterEvents.entityLoad.subscribe(({ entity }) => {
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  dequeue(playerId);
+  queueLeft(playerId); // dropped by the pump after QUEUE_GONE, so a server stopping doesn't empty the saved line
   const run = runOf(playerId);
   if (!run) return;
   const m = run.members.get(playerId);
@@ -3843,6 +3847,11 @@ world.afterEvents.worldLoad.subscribe(() => {
       continue;
     }
     pending.set(slot, { ...rec, slot });
+  }
+  try {
+    loadQueue();
+  } catch (e) {
+    console.warn(`[expedition] line: ${e}`);
   }
   try {
     migrateBest();

@@ -16,7 +16,7 @@ const RECORD_PREFIX = "milestones:p:";
 
 /** @typedef {typeof CONFIG.milestones[number]} Milestone */
 /** @typedef {Milestone["stat"]} Stat */
-/** @typedef {{ n: string, c: Record<string, number>, g?: Record<string, number>, tf?: 1 }} Rec */
+/** @typedef {{ n: string, c: Record<string, number>, g?: Record<string, number>, tf?: 1, tc?: 1 }} Rec */
 
 /** How each stat reads. playtime is counted in minutes and shown in hours. */
 /** @type {Record<Stat, { scale: number, goal: (n: string) => string, have: (n: string) => string }>} */
@@ -157,6 +157,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   pending.delete(playerId);
   backfilled.delete(playerId);
+  unconfirmed.delete(playerId);
   try {
     flush([playerId]);
   } catch (e) {
@@ -218,10 +219,50 @@ function tally(player) {
 /** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
 const gossip = createGossip((msg) => system.sendScriptEvent("realm:gossip", JSON.stringify(msg)), () => system.currentTick);
 
+/**
+ * Top-tier titles sent to the Titles pack this session that it has not confirmed yet (`realm:title_ack`), per player
+ * id. The record's `tc` (with `tf`) is set only once every one is confirmed, so a title sent while Titles was missing
+ * or turned off goes out again on the player's next join. A `tf` without `tc` was written by the old code, which set it
+ * without any confirmation: such a record counts as unconfirmed and gets one more confirmed backfill. @type {Map<string, Set<string>>}
+ */
+const unconfirmed = new Map();
+
+/** Sends one top-tier title and asks Titles to confirm it. @param {string} id @param {string} name */
+function sendTop(id, name) {
+  let set = unconfirmed.get(id);
+  if (!set) unconfirmed.set(id, (set = new Set()));
+  set.add(name);
+  system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: id, title: name, from: "milestones_bp", ack: "milestones_bp" }));
+}
+
+/** Titles' confirmation of one title: `tc` and `tf` once nothing is left to confirm. @param {{ player?: unknown, title?: unknown, ack?: unknown }} m */
+function confirmTitle(m) {
+  if (!m || m.ack !== "milestones_bp" || typeof m.player !== "string" || typeof m.title !== "string") return;
+  const set = unconfirmed.get(m.player);
+  if (!set || !set.delete(m.title) || set.size) return;
+  unconfirmed.delete(m.player);
+  const r = records().get(m.player);
+  if (r && r.tc !== 1) markConfirmed(r, m.player);
+}
+
+/** Every top-tier title is confirmed. `tf` stays beside `tc` so an older pack version still skips the backfill. @param {Rec} r @param {string} id */
+function markConfirmed(r, id) {
+  r.tf = 1;
+  r.tc = 1;
+  dirty.add(id);
+}
+
 /** @param {Player} player @param {Milestone} m @param {boolean} quiet already had it when the pack was added: no gossip */
 function topTier(player, m, quiet) {
   const name = title(m, m.tiers.length);
-  system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: name, from: "milestones_bp" }));
+  // A new top tier needs Titles' confirmation too: until then the next join sends every top tier again.
+  const r = recordOf(player);
+  if (r.tf || r.tc) {
+    delete r.tf;
+    delete r.tc;
+    dirty.add(player.id);
+  }
+  sendTop(player.id, name);
   if (!quiet) gossip(`${player.id}:${m.id}`, { kind: "milestone", player: player.id, name: player.name, place: name });
 }
 
@@ -235,12 +276,18 @@ function check(player, objectives) {
   const got = (r.g ??= {});
   if (!backfilled.has(player.id)) {
     backfilled.add(player.id);
-    // Saved on the record (tf), not just this session: old top tiers are sent once, then a later join
-    // does not send them again. A new top tier still goes through topTier below. Unknown fields stay.
-    if (!r.tf) {
-      for (const m of milestones) if ((got[m.id] ?? 0) >= m.tiers.length) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: title(m, m.tiers.length), from: "milestones_bp" }));
-      r.tf = 1;
-      dirty.add(player.id);
+    // Saved on the record (tc, with tf), not just this session: once Titles has confirmed every old top tier, a later
+    // join does not send them again. Until it confirms (Titles not installed or turned off), every join sends
+    // them again, which Titles ignores for titles a player has. A new top tier still goes through topTier below.
+    // A legacy `tf` without `tc` was set without confirmation, so it is sent once more. Unknown fields stay.
+    if (r.tc !== 1) {
+      let tops = 0;
+      for (const m of milestones) {
+        if ((got[m.id] ?? 0) < m.tiers.length) continue;
+        sendTop(player.id, title(m, m.tiers.length));
+        tops++;
+      }
+      if (!tops) markConfirmed(r, player.id);
     }
   }
   /** @type {string[]} */
@@ -412,6 +459,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 /**
  * The saved fields a server test may see. Not the whole record: unknown fields stay in the save and are not copied out.
+ * `tf` here is 1 only once Titles confirmed (`tc`); a legacy `tf` alone reports 0.
  * @param {Rec | undefined} r @param {string} id @param {string} name @param {string} [error]
  * @returns {{ player: string, name: string, tf: 0 | 1, joins: number, error?: string }}
  */
@@ -419,7 +467,7 @@ function recordReport(r, id, name, error) {
   return {
     player: String(id).slice(0, 40),
     name: String(r?.n ?? name).replace(/§./g, "").slice(0, 32),
-    tf: r?.tf === 1 ? 1 : 0,
+    tf: r?.tc === 1 ? 1 : 0,
     joins: Math.max(0, Math.min(999999, Math.floor(Number(r?.g?.joins) || 0))),
     ...(error ? { error } : {}),
   };
@@ -495,6 +543,19 @@ onScriptEvent(
       flush();
     } catch (e) {
       console.warn(`[milestones] test: ${e}`);
+    }
+  },
+);
+
+// Titles & Trails confirms each title sent with `ack` (see sendTop).
+onScriptEvent(
+  "realm:title_ack",
+  ({ id, message }) => {
+    if (id !== "realm:title_ack") return;
+    try {
+      confirmTitle(JSON.parse(message));
+    } catch {
+      // not JSON: ignore
     }
   },
 );

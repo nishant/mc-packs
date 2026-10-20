@@ -13,6 +13,7 @@ import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { allZones, provideZones } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { createTamerWatch, tamerOf } from "./tamer.js";
 
 // One world property per claim: "claims:c:<id>" → JSON Claim. A claim is a square, top to bottom of
 // its dimension, centered on x, z and reaching r blocks each way.
@@ -230,7 +231,11 @@ function isStory(target) {
   }
 }
 
-/** A tamed pet of anyone, by the stable `minecraft:is_tamed` component (the stable `tamedToPlayerId` is on `minecraft:tameable`, which a mob loses once tamed, so the tamer cannot be read here). @param {import("@minecraft/server").Entity} target */
+/**
+ * A tamed pet of anyone, by the stable `minecraft:is_tamed` component. Who tamed it can't be read from a vanilla pet
+ * (`tamedToPlayerId` is on `minecraft:tameable` / `minecraft:tamemount`, which a pet loses when it is tamed), so
+ * tamer.js records the tamer when it happens. @param {import("@minecraft/server").Entity} target
+ */
 function isTamed(target) {
   try {
     return target.getComponent("minecraft:is_tamed") !== undefined;
@@ -239,13 +244,30 @@ function isTamed(target) {
   }
 }
 
+const tamers = createTamerWatch();
+/** @type {number | undefined} */
+let tamerRun;
+/** A tap that may tame a wild animal: watch it, every 5 ticks while anything is watched. @param {import("@minecraft/server").Entity} target @param {Player} player */
+function watchTaming(target, player) {
+  if (!tamers.tap(target, player.id, system.currentTick) || tamerRun !== undefined) return;
+  tamerRun = system.runInterval(() => {
+    tamers.step(system.currentTick);
+    if (tamers.size || tamerRun === undefined) return;
+    system.clearRun(tamerRun);
+    tamerRun = undefined;
+  }, 5);
+}
+
 world.beforeEvents.playerInteractWithEntity.subscribe((event) => {
   const { player, target } = event;
   if (isStory(target)) return;
-  const animal = get("protectAnimals") === true && (protectedAnimals.has(target.typeId) || isTamed(target));
-  if (!protectedEntities.has(target.typeId) && !animal) return;
+  const tamed = isTamed(target);
+  const animal = get("protectAnimals") === true && (protectedAnimals.has(target.typeId) || tamed);
+  if (!protectedEntities.has(target.typeId) && !animal) return watchTaming(target, player);
+  // A visitor's own pet goes where they go: its tamer may always use it, even in someone else's claim.
+  if (tamed && tamerOf(target) === player.id) return;
   const c = closedTo(player, target.dimension.id, target.location);
-  if (!c) return;
+  if (!c) return watchTaming(target, player);
   event.cancel = true;
   sayClaimed(player, c);
 });
