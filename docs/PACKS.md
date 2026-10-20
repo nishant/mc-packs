@@ -1560,7 +1560,7 @@ A compass strip across the top of your screen shows which way you're facing, the
 | `/realm:compass` | Everyone | Shows or hides your compass strip at the top of the screen |
 | `/realm:map_mark [name]` | Everyone | Marks where you stand (default name `Spot 1`, `Spot 2`...); you keep 5 (`maxMarks`), the oldest goes first. Pick it later in `/realm:map` |
 | `/realm:map_clear` | Everyone | Clears your destination: the star follows your story again |
-| `/realm:map_reset [confirm]` | Operators | With no argument, explains what will be cleared. With `confirm`, clears online players' destinations and marked spots now and offline players' once on their next join. New marks saved after the reset stay; preferences, known waystones and native map items are untouched |
+| `/realm:map_reset [confirm]` | Operators | With no argument, explains what will be cleared. With `confirm`, clears online players' destinations and marked spots now and offline players' once on their next join. Only a player who had a destination or spots to clear gets the chat line saying so; a player who joins later with nothing saved is not told. New marks saved after the reset stay; preferences, known waystones and native map items are untouched |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
