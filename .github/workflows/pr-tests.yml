@@ -1,0 +1,117 @@
+# The fast pre-merge game tests (docs/WORKING.md "Testing in CI"): only the BDS scenarios a PR touches, split over up
+# to 4 runners, and a short perf check that runs the PR's base and the PR back to back on the same runner, failing
+# only on a clear slowdown (tools/test-bds/perf-compare.mjs). The full suite, the long soaks, the Realm Bundle soak and
+# the memory soak run after release in validate.yml. check.yml (check, build, bundle smoke) is unchanged.
+name: pr-tests
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: pr-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+      perf: ${{ steps.plan.outputs.perf }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Scenario seconds from the latest post-release suite (validate.yml saves them), to balance the shards.
+      - uses: actions/cache/restore@v4
+        with:
+          path: suite-times.json
+          key: suite-times-${{ github.sha }}
+          restore-keys: suite-times-
+      - id: plan
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          node tools/test-bds/affected.mjs --base "$base" --shards 4 --per-shard 8 --times suite-times.json > plan.json
+          node -e 'const p=require("./plan.json");console.log(`${p.reason}: ${p.scenarios.length} scenario(s) in ${p.shards.length} shard(s)`)'
+          {
+            echo "shards=$(node -e 'console.log(JSON.stringify(require("./plan.json").shards.map(s=>({index:s.index,of:require("./plan.json").shards.length,filter:s.filter}))))')"
+            echo "count=$(node -e 'console.log(require("./plan.json").scenarios.length)')"
+            echo "perf=$(node tools/test-bds/affected.mjs --base "$base" --packs-changed)"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Scenarios this PR needs"
+            node -e 'const p=require("./plan.json");console.log(`${p.reason}: **${p.scenarios.length}** scenario(s) in ${p.shards.length} shard(s)${p.packs.length?` (packs: ${p.packs.join(", ")})`:""}`)'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  scenarios:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    name: scenarios ${{ matrix.shard.index }}/${{ matrix.shard.of }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/bds
+      - name: Scenarios (2 at a time, failures retried alone)
+        env:
+          FILTER: ${{ matrix.shard.filter }}
+        run: node tools/test-bds/suite.mjs --jobs 2 --retry --filter "$FILTER" --json "$RUNNER_TEMP/suite.json"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenarios-${{ matrix.shard.index }}
+          path: |
+            ${{ runner.temp }}/suite.json
+            ${{ runner.temp }}/bds-harness-logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  perf:
+    needs: plan
+    if: needs.plan.outputs.perf == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/bds
+      - name: Base tree next to the PR
+        run: |
+          git worktree add "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/base/node_modules"
+      # One 10-player, 60 s soak per side, then a second pair in the other order only when the first pair is not
+      # clean; perf-compare takes each side's lowest figures, so one noisy run can't fail the PR.
+      - name: Soak base and PR back to back
+        run: |
+          soak() { (cd "$1" && node tools/test-bds/suite.mjs --perf 10 --perf-seconds 60 --json "$2" > "$2.out" 2>&1) || true; tail -4 "$2.out"; }
+          T="$RUNNER_TEMP"
+          soak "$T/base" "$T/base-1.json"; soak "$GITHUB_WORKSPACE" "$T/head-1.json"
+          set +e
+          node tools/test-bds/perf-compare.mjs --base "$T/base-1.json" --head "$T/head-1.json" > /dev/null
+          first=$?
+          set -e
+          if [ "$first" != 0 ]; then
+            echo "first pair: exit $first, running a second pair in the other order"
+            soak "$GITHUB_WORKSPACE" "$T/head-2.json"; soak "$T/base" "$T/base-2.json"
+          fi
+          node tools/test-bds/perf-compare.mjs --base "$T/base-1.json" --base "$T/base-2.json" --head "$T/head-1.json" --head "$T/head-2.json"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-check
+          path: |
+            ${{ runner.temp }}/*.json
+            ${{ runner.temp }}/*.json.out
+          if-no-files-found: ignore
+          retention-days: 14
