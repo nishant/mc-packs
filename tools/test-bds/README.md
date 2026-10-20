@@ -121,7 +121,15 @@ Test hooks that a scenario needs inside a pack (packs can't read each other's dy
 `hooks/` and are appended to the test copy by the recipe (`hooks/maps-rvtest.js` for maps-cleanup and
 maps-leave, `hooks/rainbow-rvtest.js` for rainbow-race, the `hooks/limit_bp` probe pack for
 harness-event-limit, Node stagers such as `hooks/saga-starfall-stage.mjs` and `hooks/stage-saga-softlock.mjs`); a `--packs`
-header without a recipe is skipped ("needs hook copy"). A header whose
+header without a recipe is skipped ("needs hook copy").
+**Fail before for the right reason.** A probe that a scenario's assertions depend on must not depend on the fix it
+checks, or the scenario fails on the old code only because the probe is missing there. The probe hooks take the source
+tree as their last argument (`git archive <commit> packs | tar -x -C <dir>`), so the same recipe runs the code from
+before a fix: `hooks/owed-probe.mjs` (seeds and reads a pack's own world or player properties and replays its
+playerSpawn listeners; owed-legacy-restart, owed-legacy-consumers, party-moderation, crowns-limit),
+`hooks/milestones-rejoin.mjs` (the same player joining again after a restart; w10-milestones-flag),
+`hooks/stash-loads.mjs` (counts the saved pages Quick Stack & Sort loads; refill-pages) and `hooks/elite-remove.mjs` (removes chosen spawns in elite_bp's own flush, after its spawn handler; elite-invalid). `probe-hooks.test.mjs` checks
+them offline. A header whose
 command runs another scenario file fails (and `npm run check` catches it too). A few have no plain command and are listed in
 `SPECIAL` in `suite.mjs` (smoke and restart with every pack, forms, domt-champion, the
 npc-name-capability probe, saga-lighthouse, bundle-smoke (builds `dist/realm_bundle.mcpack` first and runs it as one

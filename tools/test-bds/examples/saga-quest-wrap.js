@@ -7,7 +7,10 @@
 // party", which used to be cut to "Party quest: you finished it, so you're helping. Your party...".
 // The tracker preference lifecycle is kept: moving the box to another place rewrites it with that place's code, the
 // tracker off takes it down, and back on brings it back.
-// This checks the text the server sends; what a client draws still needs a real-client look at Right 1-3 and Middle.
+// Every write is checked twice for its rows: with the saga's own 32-column estimate, and as a client wraps it, with the
+// default font's glyph widths in the label's 200 pixels (a copy of tools/lib/client-font.mjs below, which
+// tools/saga-quest-box.test.mjs keeps in step), so the estimate is not checked against itself. A look on a real client
+// at Right 1-3 and Middle is still owed for the drawing itself.
 //   node tools/test-bds/run.mjs --quiet --flat --only saga_bp,party_bp --scenario tools/test-bds/examples/saga-quest-wrap.js --timeout 600
 function utf8Length(s) {
   let n = 0;
@@ -37,6 +40,50 @@ function rowsOf(text) {
       used = rest;
     }
     rows += r;
+  }
+  return rows;
+}
+
+// CLIENT-FONT-TABLE-START
+const NARROW = { " ": 4, "!": 2, '"': 4, "'": 2, "(": 4, ")": 4, "*": 4, ",": 2, ".": 2, ":": 2, ";": 2, "<": 5, ">": 5, "@": 7, I: 4, "[": 4, "]": 4, "`": 3, f: 5, i: 2, k: 5, l: 3, t: 4, "{": 4, "|": 2, "}": 4, "~": 7 };
+const DEFAULT_ADVANCE = 6;
+// CLIENT-FONT-TABLE-END
+/** Rows a client draws a box text in, 200 pixels wide (tools/lib/client-font.mjs clientRows). */
+function clientRows(text, width = 200) {
+  const advance = (ch, bold) => (NARROW[ch] ?? DEFAULT_ADVANCE) + (bold && ch !== " " ? 1 : 0);
+  let rows = 0;
+  let bold = false;
+  for (const line of text.split("\n")) {
+    rows++;
+    let used = 0;
+    for (const word of line.split(" ")) {
+      const glyphs = [];
+      for (let i = 0; i < word.length; i++) {
+        if (word[i] === "§" && i + 1 < word.length) {
+          const code = word[i + 1].toLowerCase();
+          if (code === "l") bold = true;
+          else if (code === "r") bold = false;
+          i++;
+          continue;
+        }
+        glyphs.push(advance(word[i], bold));
+      }
+      const wordWidth = glyphs.reduce((a, b) => a + b, 0);
+      const space = advance(" ", bold);
+      if (used > 0 && used + space + wordWidth <= width) {
+        used += space + wordWidth;
+        continue;
+      }
+      if (used > 0) rows++;
+      used = 0;
+      for (const g of glyphs) {
+        if (used + g > width) {
+          rows++;
+          used = 0;
+        }
+        used += g;
+      }
+    }
   }
   return rows;
 }
@@ -107,6 +154,7 @@ export default async function (t) {
       const lines = plain(body(raw)).split("\n");
       t.check(utf8Length(raw) <= 511, `${p.name} write ${i}: ${utf8Length(raw)} bytes with its code (511 at most)`);
       t.check(rowsOf(body(raw)) <= 10, `${p.name} write ${i}: ${rowsOf(body(raw))} rows (10 at most):\n${plain(body(raw))}`);
+      t.check(clientRows(body(raw)) <= 10, `${p.name} write ${i}: a client wraps it to ${clientRows(body(raw))} rows (10 at most):\n${plain(body(raw))}`);
       t.check(!lines.some((l) => l.endsWith("...")), `${p.name} write ${i}: no line is cut with "...":\n${plain(body(raw))}`);
     }
   }
