@@ -81,21 +81,30 @@ test("durability: warns once per level as a held tool wears down, and again afte
   const p = geared(sim, "Alex", equipment, calls);
   await sim.load("durability_bp");
   sim.boot();
+  // A tool wears down by mining: the game fires playerBreakBlock with each wear.
+  const mine = () => sim.game.emit("world.after.playerBreakBlock", { player: p });
   sim.step(10);
   assert.deepEqual(p.bars, []);
   dmg.damage = 920; // 8% left
+  mine();
   sim.step(30);
   assert.equal(p.bars.length, 1, p.bars.join(" | "));
   assert.match(p.bars[0], /low: 80\/1000/);
   dmg.damage = 980; // 2% left
+  mine();
   sim.step(30);
   assert.equal(p.bars.length, 2);
   assert.match(p.bars[1], /about to break/);
-  sim.step(60);
+  for (let i = 0; i < 6; i++) {
+    mine();
+    sim.step(10);
+  }
   assert.equal(p.bars.length, 2, "no repeat while it stays that low");
   dmg.damage = 0; // repaired: the levels start over
+  mine();
   sim.step(20);
   dmg.damage = 925;
+  mine();
   sim.step(20);
   assert.equal(p.bars.length, 3);
 });
@@ -107,16 +116,42 @@ test("durability: an item type's max durability is read once and a type without 
     Mainhand: tool(calls, "minecraft:diamond_pickaxe", 1000, { damage: 10 }),
     Offhand: tool(calls, "minecraft:dirt", 0),
   };
-  geared(sim, "Alex", equipment, calls);
-  geared(sim, "Bea", equipment, calls);
+  const players = [geared(sim, "Alex", equipment, calls), geared(sim, "Bea", equipment, calls)];
   await sim.load("durability_bp");
   sim.boot();
-  sim.step(10 * 20);
+  // Both players mine all the time: every check reads their held items.
+  for (let i = 0; i < 20; i++) {
+    for (const player of players) sim.game.emit("world.after.playerBreakBlock", { player });
+    sim.step(10);
+  }
   const checks = 20 * 2; // two players, 20 checks, held slots only (armor slots are empty)
   assert.ok(calls.equip >= checks * 2, `${calls.equip} equipment reads`);
   assert.equal(calls.max, 1, `maxDurability read ${calls.max} times`);
   // one component read per durable item per check, one for the dirt the very first time only
   assert.ok(calls.comp <= checks + 1, `${calls.comp} component reads for ${checks} durable checks`);
+});
+
+test("durability: a player who uses nothing is read only by the 5 s sweep, and a worn tool or a hit still warns at the next check", async () => {
+  const sim = createSim();
+  const calls = { equip: 0, comp: 0, max: 0, typeId: 0 };
+  const dmg = { damage: 0 };
+  const armor = { damage: 0 };
+  const equipment = { Mainhand: tool(calls, "minecraft:iron_sword", 250, dmg), Chest: tool(calls, "minecraft:iron_chestplate", 240, armor) };
+  const p = geared(sim, "Idle", equipment, calls);
+  await sim.load("durability_bp");
+  sim.boot();
+  sim.step(20 * 30);
+  // 30 s idle: six sweeps of six slots. Checking every 10 ticks (held) and every 40 (armor) read 60 * 2 + 15 * 4 = 180.
+  assert.ok(calls.equip <= 6 * 6 + 6, `${calls.equip} equipment reads in 30 s for a player doing nothing`);
+  dmg.damage = 230; // 8% left
+  sim.game.emit("world.after.entityHitEntity", { damagingEntity: p, hitEntity: { typeId: "minecraft:zombie" } });
+  sim.step(10);
+  assert.equal(p.bars.length, 1, `a hit is checked at the next check: ${p.bars.join(" | ")}`);
+  armor.damage = 235; // 2% left
+  sim.game.emit("world.after.entityHurt", { hurtEntity: p, damage: 1 });
+  sim.step(10);
+  assert.equal(p.bars.length, 2, `getting hurt checks the armor at the next check: ${p.bars.join(" | ")}`);
+  assert.match(p.bars[1], /Iron Chestplate is about to break/);
 });
 
 // ---------------------------------------------------------------------------------------------------------------

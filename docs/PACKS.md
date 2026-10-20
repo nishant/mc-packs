@@ -487,7 +487,7 @@ Warns players before a tool, weapon or armor piece breaks.
 | **Warning** | ≤ `warnPercent` (10%) left | Yellow message above the hotbar: `! Diamond Pickaxe is low: 141/1561 (9.0%)` + soft "pling" |
 | **Critical** | ≤ `criticalPercent` (3%) left | Red message `! Diamond Pickaxe is about to break! 31/1561 (2.0%)` above the hotbar **and in chat** (`chatOnCritical`) + anvil sound |
 
-- Checks the **main hand and offhand** every `checkIntervalTicks`, and the **helmet, chestplate (including elytra), leggings and boots** every fourth check (every 2 seconds by default).
+- Checks the **main hand and offhand** at the next check (every `checkIntervalTicks`, half a second by default) after you mine, hit, use an item (a bow, a hoe, flint and steel...), switch hotbar slots or your inventory changes, and the **helmet, chestplate, leggings and boots** after you get hurt or put armor on from your inventory. A worn **elytra** is checked every fourth check (every 2 seconds), since gliding wears it with no event. Every slot of every player is also checked once every 10 checks (5 seconds), for armor put on by a dispenser or a command.
 - Warns **once per level**. It only warns again when the item drops to the next level.
 - A different kind of item in that slot, emptying the slot, or a repair (Mending, an anvil, grindstone) that lifts it at least 2% of its durability above the level resets it, so a Mending tool hovering right at the line doesn't warn again and again. Another item of the same kind that's just as worn doesn't warn again.
 - Each **hotbar slot** is tracked separately, so switching to another worn tool warns for that one too.
@@ -509,7 +509,7 @@ Warns players before a tool, weapon or armor piece breaks.
 | `criticalPercent` | `3` | Critical level, in % left |
 | `maxUsesForWarning` | `0` | If > 0, never warn while more than this many uses are left, even under the % (useful for netherite). `0` = off |
 | `chatOnCritical` | `true` | Also post critical warnings in chat |
-| `checkIntervalTicks` | `10` | How often to check (20 = 1 s). Read when the world starts, so `/realm:config` only shows it |
+| `checkIntervalTicks` | `10` | How often to check (20 = 1 s) the items players used, hit with or wore down since the last check; every slot of every player is checked once every 10 checks. Read when the world starts, so `/realm:config` only shows it |
 
 Operators can change `warnPercent`, `criticalPercent`, `maxUsesForWarning` and `chatOnCritical` in game with `/realm:config`; they apply at the next check.
 
