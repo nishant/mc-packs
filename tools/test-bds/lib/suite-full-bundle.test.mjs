@@ -41,7 +41,7 @@ test("special persistence cases keep their own scenario instead of silently runn
   }
 });
 
-test("the bed adapter accepts and forwards the suite's allocated port without starting a server", () => {
+test("the bed adapter turns the suite's port into options the official run.mjs accepts, without starting a server", () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "build-beds-port-"));
   try {
     const tools = path.join(temp, "tools", "test-bds");
@@ -50,13 +50,23 @@ test("the bed adapter accepts and forwards the suite's allocated port without st
     fs.writeFileSync(path.join(temp, "packs", "build_bp", "scripts", "main.js"), "");
     fs.copyFileSync(path.join(root, "tools", "test-bds", "build-beds.mjs"), path.join(tools, "build-beds.mjs"));
     fs.writeFileSync(path.join(tools, "hooks", "build-bed-pipeline.js"), "// fixture\n");
-    fs.writeFileSync(path.join(tools, "run.mjs"), "console.log(JSON.stringify(process.argv.slice(2)));\n");
+    // The official parser answers --help right after reading the options: it rejects any option it does not know.
+    const official = JSON.stringify(path.join(root, "tools", "test-bds", "run.mjs"));
+    fs.writeFileSync(path.join(tools, "run.mjs"), [
+      'import { spawnSync } from "node:child_process";',
+      `const r = spawnSync(process.execPath, [${official}, ...process.argv.slice(2), "--help"], { encoding: "utf8" });`,
+      "console.log(JSON.stringify({ status: r.status, args: process.argv.slice(2), out: r.stdout.slice(0, 80), err: r.stderr.slice(0, 200) }));",
+      "",
+    ].join("\n"));
     const result = spawnSync(process.execPath, [path.join(tools, "build-beds.mjs"), "--port", "19642"], {
       cwd: temp, encoding: "utf8", env: { ...process.env, BDS_HARNESS_CACHE: path.join(temp, "cache") },
     });
     assert.equal(result.status, 0, result.stderr);
-    const args = JSON.parse(result.stdout.trim());
-    assert.equal(args[args.indexOf("--port") + 1], "19642");
+    const seen = JSON.parse(result.stdout.trim());
+    assert.equal(seen.status, 0, `official run.mjs rejected the forwarded options: ${seen.out} ${seen.err}`);
+    assert.ok(!seen.args.includes("--port"), "run.mjs has no --port");
+    assert.equal(seen.args[seen.args.indexOf("server-port=19642") - 1], "--prop");
+    assert.ok(seen.args.includes("server-portv6=19643"));
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }

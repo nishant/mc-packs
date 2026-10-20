@@ -5,7 +5,7 @@
 //   mkdir -p /tmp/diagb && node tools/test-bds/hooks/diag-bundle.mjs /tmp/diagb admin_bp,nick_bp
 //   node tools/test-bds/run.mjs --quiet --packs /tmp/diagb --scenario tools/test-bds/examples/admin-diag-bundle.js
 export default async function (t) {
-  const op = await t.player("Tester", { op: true });
+  // Nicknames saves 2 entries per player it has seen: the gamertag (nick:g:) and when it was last seen (nick:t:).\n  const perPlayer = 2;\n  const op = await t.player("Tester", { op: true });
   await t.player("Member");
   await t.wait(40);
 
@@ -30,7 +30,7 @@ export default async function (t) {
   t.log(JSON.stringify(b1));
   t.assert(b1.admin_bp && b1.nick_bp && b1.probe_bp, `all three packs answered (${Object.keys(b1).join(", ")})`);
   t.check(b1.nick_bp.shared === 3 && b1.probe_bp.shared === 3, "each knows it shares the add-on with 2 more");
-  t.check(b1.nick_bp.props === 2 && /^nick:/.test(b1.nick_bp.bigKey), `Nicknames owns its 2 gamertag entries (${b1.nick_bp.props})`);
+  t.check(b1.nick_bp.props === 2 * perPlayer && /^nick:/.test(b1.nick_bp.bigKey), `Nicknames owns its ${2 * perPlayer} entries, gamertag and last seen for 2 players (${b1.nick_bp.props})`);
   t.check(b1.probe_bp.props === 1 && b1.probe_bp.bigKey === "probe:big" && b1.probe_bp.big >= 25000, "the probe owns its 25 KB entry");
   t.check(b1.nick_bp.total >= b1.nick_bp.bytes + b1.probe_bp.bytes, `the total (${b1.nick_bp.total}) covers every pack's bytes`);
   t.check(b1.nick_bp.unownedProps === 0, `no entry is left without an owner (${b1.nick_bp.unownedProps})`);
@@ -84,5 +84,5 @@ export default async function (t) {
   send("realm:diag_ping", { id: "b3" });
   const b3 = await answers("b3");
   t.check(b3.probe_bp.props === 0 && b3.probe_bp.forgotten === true, `the probe's data is gone and stays gone (${b3.probe_bp.props})`);
-  t.check(b3.nick_bp.props === 3 && !b3.nick_bp.forgotten, `Nicknames kept its entries and still saves (${b3.nick_bp.props})`);
+  t.check(b3.nick_bp.props === 3 * perPlayer && !b3.nick_bp.forgotten, `Nicknames kept its entries and still saves the 3rd player (${b3.nick_bp.props})`);
 }

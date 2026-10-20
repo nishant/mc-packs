@@ -227,8 +227,12 @@ export default async function (t) {
   t.check(crowns(p) - cr === 60, `60 Crowns for holding (${crowns(p) - cr})`);
   t.check(of("realm:quest_done", (m) => m.kind === "siege" && m.guild === "wardens" && m.player === p.id, since).length === 1, "quest_done kind siege for the Wardens");
   t.check(of("realm:town_state", (m) => m.town === town.id && m.mood === "heartened" && m.until > Date.now(), since).length === 1, "realm:town_state Heartened");
+  // Calendar town news is one line an hour. The regatta winner's line comes first, so the held siege tells its news only when 1000 ticks have passed since then.
+  const lastNews = (/** @type {number} */ before) => ev.filter((e) => e.id === "realm:gossip" && e.tick < before).map((e) => e.tick).at(-1);
   const heldNews = of("realm:gossip", (m) => m.kind === "siege", since);
-  t.assert(heldNews.length === 1, "the held siege tells one piece of town news");
+  const heldEnd = ev.find((e) => e.id === "realm:siege" && e.m.state === "end" && e.tick >= since)?.tick ?? sys.currentTick;
+  const gapOpen = lastNews(since) === undefined || heldEnd - lastNews(since) >= 1000;
+  t.check(heldNews.length === (gapOpen ? 1 : 0), `the held siege tells one piece of town news only when the calendar news gap is open (gap open ${gapOpen}, lines ${heldNews.length})`);
   t.check(of("realm:gossip", (m) => m.kind === "siege" && m.player === sam.id, since).length === 0, "Sam (no hit, not 3 minutes near) isn't a participant");
   await t.wait(10);
   st = await state();
@@ -247,8 +251,9 @@ export default async function (t) {
   await t.waitUntil(() => of("realm:siege", (m) => m.state === "end", since).length > 0, { timeout: 100, message: "second siege end" });
   t.check(of("realm:siege", (m) => m.state === "end", since)[0].result === "failed", "the second siege failed");
   t.check(of("realm:town_state", (m) => m.town === town.id && m.mood === "shaken", since).length === 1, "realm:town_state Shaken");
-  t.check(sys.currentTick - heldNews[0].tick < 1000, "the second siege ends inside the calendar news gap");
-  t.check(of("realm:gossip", (m) => m.kind === "siege_lost" && m.player === p.id, since).length === 0, "the news gap drops the second cosmetic line without changing its result or town mood");
+  const secondNews = of("realm:gossip", (m) => m.kind === "siege_lost" && m.player === p.id, since);
+  const gapOpen2 = lastNews(since) === undefined || sys.currentTick - lastNews(since) >= 1000;
+  t.check(secondNews.length === (gapOpen2 ? 1 : 0), `the second siege tells its cosmetic line only when the calendar news gap is open (gap open ${gapOpen2}, lines ${secondNews.length}); its result and town mood do not depend on it`);
 
   // --- A third siege, left running for the restart.
   since = sys.currentTick;
