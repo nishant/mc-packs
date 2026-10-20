@@ -433,6 +433,7 @@ These file defaults apply to every world. They are not extra Realm Settings swit
 | `lines.quests_bp` | `Daily quests (§b/realm:quests§r)` | Shown only with Daily Quests |
 | `lines.expedition_bp` | `Expeditions (§b/realm:expedition§r)` | Shown only with Expeditions |
 | `lines.bounty_bp` | `A bounty board (§b/realm:bounty§r)` | Shown only with Bounty Board |
+| `lines.town_bp` | `Towns that grow as you help, each with its mayor (§b/realm:town§r)` | Shown only with Town Projects |
 | `lines.skills_bp` | `Skills that grow as you play (§b/realm:skills§r)` | Shown only with Skills |
 | `lines.crowns_bp` | `Crowns to earn and spend (§b/realm:crowns§r)` | Shown only with Crowns |
 | `lines.claims_bp` | `Land claims to keep your builds safe (§b/realm:claim§r)` | Shown only with Land Claims |
