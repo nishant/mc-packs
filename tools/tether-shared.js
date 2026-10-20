@@ -48,7 +48,7 @@
 
 /** Blocks a mob stands in, not on (plants, torches, signs, carpets, rails...). */
 const PASSABLE =
-  /(^|:|_)(air|short_grass|tall_grass|grass|fern|large_fern|dead_bush|deadbush|bush|vine|vines|sapling|propagule|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|rose|lilac|peony|sunflower|petals|leaf_litter|torchflower|crimson_roots|warped_roots|hanging_roots|sprouts|fungus|mushroom|wheat|carrots|potatoes|beetroot|torch|candle|sign|banner|carpet|rail|button|lever|pressure_plate|tripwire|redstone_wire|string|snow_layer|light_block(_\d+)?|structure_void)$/;
+  /(^|:|_)(air|short_grass|tall_grass|grass|fern|large_fern|deadbush|bush|vine|vines|sapling|propagule|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|rose|lilac|peony|sunflower|petals|leaf_litter|torchflower|crimson_roots|warped_roots|hanging_roots|sprouts|fungus|mushroom|wheat|carrots|potatoes|beetroot|torch|candle|sign|banner|carpet|rail|button|lever|pressure_plate|tripwire|redstone_wire|string|snow_layer|light_block(_\d+)?|structure_void)$/;
 /** Floors nobody should be put on. */
 const BAD_FLOOR = /lava|fire|magma|cactus|campfire|powder_snow|sweet_berry|leaves|scaffolding/;
 
@@ -124,8 +124,29 @@ export function settledBelow(ent, anchor) {
 }
 
 /**
+ * @typedef {object} SnapGuard
+ * @property {number} snaps put-backs so far
+ * @property {(id: string, now: number) => boolean} allow may this entity be put back now?
+ * @property {(id: string, now: number) => void} snapped records a put-back
+ * @property {(id: string) => number} count put-backs of one entity
+ * @property {(id: string) => void} forget drops what is kept for an entity
+ */
+
+/**
+ * @typedef {object} Tether
+ * @property {number} snaps last-resort teleports so far
+ * @property {number} steers times a mob started being steered home
+ * @property {number} soft
+ * @property {number} hard
+ * @property {(ent: any, home: Vec, now: number) => "in" | "steer" | "snap" | "held" | "skip"} check
+ * @property {(ent: any) => void} release
+ * @property {(id: string) => void} forget
+ * @property {(id?: string) => { snaps: number, steers: number, steering: number }} stats
+ */
+
+/**
  * Backoff for put-backs: the first is allowed, then each one that comes within `window` ticks after the previous
- * wait ended waits `cooldown` ticks, doubling up to `maxCooldown`. @param {{ cooldown?: number, maxCooldown?: number, window?: number }} [o]
+ * wait ended waits `cooldown` ticks, doubling up to `maxCooldown`. @param {{ cooldown?: number, maxCooldown?: number, window?: number }} [o] @returns {SnapGuard}
  */
 export function createSnapGuard(o = {}) {
   const cooldown = o.cooldown ?? 20;
@@ -133,6 +154,7 @@ export function createSnapGuard(o = {}) {
   const window = o.window ?? 400;
   /** id -> { last snap tick, current wait, snaps } @type {Map<string, { at: number, wait: number, n: number }>} */
   const byId = new Map();
+  /** @type {SnapGuard} */
   const guard = {
     snaps: 0,
     /** May this entity be put back now? @param {string} id @param {number} now */
@@ -165,7 +187,7 @@ export function createSnapGuard(o = {}) {
  * @property {number} [cooldown] @property {number} [maxCooldown] @property {number} [window] @property {number} [spot]
  */
 
-/** @param {TetherOptions} [o] */
+/** @param {TetherOptions} [o] @returns {Tether} */
 export function createTether(o = {}) {
   const soft = o.soft ?? 4;
   const hard = Math.max(soft + 1, o.hard ?? 12);
@@ -201,6 +223,7 @@ export function createTether(o = {}) {
   /** @param {string} id */
   const idOf = (id) => String(id);
 
+  /** @type {Tether} */
   const tether = {
     snaps: 0,
     steers: 0,

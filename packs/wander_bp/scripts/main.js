@@ -854,7 +854,7 @@ const roadTether = createTether({ soft: ROAD_SOFT, hard: TETHER_MAX, holeDrop: H
 /** Walkers someone is talking to (they stand still, slowed, while the form is open): not steered meanwhile. @type {Set<string>} */
 const talking = new Set();
 
-/** One walker's check: its look, its tether, its protection. @param {Entity} ent @param {{ x: number, y: number, z: number }} home @param {ReturnType<typeof createTether>} t */
+/** One walker's check: its look, its tether, its protection. @param {Entity} ent @param {{ x: number, y: number, z: number }} home @param {import("./tether.js").Tether} t */
 function tether(ent, home, t) {
   try {
     const look = dressing.get(ent.id);
