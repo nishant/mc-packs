@@ -146,6 +146,16 @@ export function markHandDirty(player) {
     handDirty.set(player.id, player);
 }
 
+/**
+ * Backstop for a hotbar slot change that sent no event (a script that sets the slot, for one): a slot that differs
+ * from the one the hand was read in is treated as a change. One property read, no inventory read.
+ */
+export function checkSlot(player) {
+    const c = heldCache.get(player.id);
+    if (!c) { if (!handDirty.has(player.id)) markHandDirty(player); return; }
+    if (c.slot !== player.selectedSlotIndex) touch(player);
+}
+
 /** Whether this player's hand was ever read or reported (the sweep adds the others). */
 export function handKnown(id) {
     return handTypes.has(id) || handDirty.has(id);
@@ -174,7 +184,7 @@ export function nextIdlePhase() {
     return idleClock.tick();
 }
 export function idleSkip(player, index, busy, phase = playersTick, window = 1) {
-    const now = playersTick; // the loops call allPlayers() first, this tick
+    const now = system.currentTick;
     const span = Math.max(1, Number(window) || 1);
     const handFresh = (handTouched.get(player) ?? -Infinity) >= now - span;
     return !idleDue(index, phase, busy.has(player), handFresh);
@@ -185,10 +195,13 @@ const touch = (player) => {
     markHandDirty(player);
 };
 try {
-    world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player, itemStack }) => {
+    world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player, itemStack, newSlotSelected }) => {
         touch(player);
         // The event names the new held item: no read needed.
-        try { setHand(player, itemStack?.typeId); } catch {}
+        try {
+            heldCache.set(player.id, { tick: system.currentTick, slot: newSlotSelected, item: itemStack });
+            setHand(player, itemStack?.typeId);
+        } catch {}
     });
     // Only a change in the selected slot can change what is in hand (picking up items elsewhere costs nothing).
     world.afterEvents.playerInventoryItemChange.subscribe(({ player, slot }) => {

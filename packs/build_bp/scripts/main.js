@@ -22,7 +22,7 @@ import { startHoldWheel, bookPressed, cleanupHoldWheel } from "./core/HoldWheel.
 import { startPanelLightCleanup } from "./core/PanelLight.js";
 import { startGuideBook, onTutorialBookUse, cleanupGuideBook, changeBookLanguage } from "./core/GuideBook.js";
 import { loadSlot, loadSlotMeta, AUTO_SLOT } from "./utils/ClipboardStore.js";
-import { getState, setMode, setAnchor, setSecondAnchor, clearAnchor, clearClipboard, removeState, addWaypoint, getWaypoints, anchoredPlayers } from "./core/PlayerState.js";
+import { getState, setMode, setAnchor, setSecondAnchor, clearAnchor, clearClipboard, removeState, addWaypoint, getWaypoints, anchoredPlayers, buildingPlayers } from "./core/PlayerState.js";
 import { executePaste } from "./core/Clipboard.js";
 import { getModeHandler, MODE_LIST } from "./modes/ModeRegistry.js";
 import { placeBlocks, ALWAYS_REPLACEABLE, UNPLACEABLE } from "./core/BlockPlacer.js";
@@ -41,8 +41,9 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, allPlayers, buildingBookHands, handKnown, handTypeId, markHandDirty, refreshHand } from "./utils/Items.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, allPlayers, buildingBookHands, tutorialBookHands, checkSlot, handKnown, handTypeId, markHandDirty, refreshHand } from "./utils/Items.js";
 import { createIdleClock, idleDue } from "./utils/idle-cadence.js";
+import { visualizationHolders } from "./utils/tool-gate.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 import { bedPartnerPos, dropIncompleteBeds, expandDestroyForClaims, expandForClaims, isBedType } from "./core/beds.js";
 import { onScriptEvent } from "./script-events.js";
@@ -949,22 +950,35 @@ system.runInterval(() => {
     }
 }, 1);
 
-// A missed hand event (none is known) would leave a hand stale: every HAND_SWEEP_TICKS the hands of a fifth of the
-// players are read again, spread over the runs, so each is checked about every 5 seconds. Players that came without a
-// spawn event are picked up here too.
+// Backstops for a missed hand event. Every tick, players who are building (a mode on, a tool or a book in hand) have
+// their hotbar slot compared with the one their hand was read in; everyone else every SLOT_WATCH_TICKS. Every
+// HAND_SWEEP_TICKS the hands of a fifth of the players are read again (spread over the runs, so each about every 5
+// seconds) for an item change in the slot that sent no event. Players that came without a spawn event are picked up too.
+const SLOT_WATCH_TICKS = 10;
 const HAND_SWEEP_TICKS = 20;
 const handClock = createIdleClock();
+let handTicks = 0;
 system.runInterval(() => {
+    handTicks++;
+    if (handTicks % SLOT_WATCH_TICKS !== 0) {
+        for (const group of [buildingPlayers(), buildingBookHands(), tutorialBookHands()]) {
+            if (group.size) for (const player of [...group.values()]) { try { checkSlot(player); } catch {} }
+        }
+        for (const player of visualizationHolders()) { try { checkSlot(player); } catch {} }
+        return;
+    }
     const all = allPlayers();
-    const phase = handClock.tick();
+    const sweep = handTicks % HAND_SWEEP_TICKS === 0;
+    const phase = sweep ? handClock.tick() : 0;
     for (let i = 0; i < all.length; i++) {
         const player = all[i];
         try {
             if (!handKnown(player.id)) markHandDirty(player);
-            else if (idleDue(i, phase, false, false)) refreshHand(player);
+            else if (sweep && idleDue(i, phase, false, false)) refreshHand(player);
+            else checkSlot(player);
         } catch {}
     }
-}, HAND_SWEEP_TICKS);
+}, 1);
 
 // /realm:prefs changes apply right away: the build speed's queue limit (otherwise set at spawn and in the book's
 // settings), and the menu style's old switch (eb:customUI), which would otherwise outrank the new one.

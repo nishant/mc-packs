@@ -59,3 +59,22 @@ test("O48: 40 survival players with building off cost almost no native calls per
   assert.ok(perTick.inventoryReads <= 0.5, `inventory reads per tick ${perTick.inventoryReads}`);
   assert.ok(perTick.playerLists <= 0.1, `player list fetches per tick ${perTick.playerLists}`);
 });
+
+test("a hotbar slot set without an event is still noticed: at once while building, within half a second otherwise", async () => {
+  const { buildingBookHands, tutorialBookHands } = await import("../packs/build_bp/scripts/utils/Items.js");
+  const { setMode } = await import("../packs/build_bp/scripts/core/PlayerState.js");
+  const builder = idlePlayer(100);
+  const idle = idlePlayer(101);
+  const put = (p, slot, id) => { p.getComponent().container.setItem(slot, new mc.ItemStack(id, 1)); };
+  put(builder, 4, "eb:building_book");
+  put(idle, 5, "eb:tutorial_book");
+  setMode(builder, "line");
+  mc.flushIntervals(30);
+  builder.selectedSlotIndex = 4;
+  mc.flushIntervals(2);
+  assert.ok(buildingBookHands().has(builder.id), "a builder's slot is watched every tick");
+  idle.selectedSlotIndex = 5;
+  let ticks = 0;
+  while (!tutorialBookHands().has(idle.id) && ticks < 40) { mc.flushIntervals(1); ticks++; }
+  assert.ok(ticks <= 11, `an idle player's slot within ${ticks} ticks`);
+});

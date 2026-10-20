@@ -3,6 +3,8 @@ import { markHolderDirty } from "../utils/tool-gate.js";
 const states = new Map();
 /** player id -> player, for those with a build anchor (the FOV zoom loop walks only these) */
 const anchored = new Map();
+/** player id -> player, for those with a build mode on (their hotbar slot is watched every tick) */
+const building = new Map();
 
 const MODIFIER_KEY = "eb:modifiers";
 
@@ -66,6 +68,7 @@ export function setMode(player, mode) {
         anchored.delete(player.id);
 
     }
+    if (mode && mode !== "disable") building.set(player.id, player); else building.delete(player.id);
     markHolderDirty(player.id);
 }
 export function clearClipboard(player) {
@@ -103,6 +106,11 @@ export function getWaypoints(player) {
 export function removeState(playerId) {
     states.delete(playerId);
     anchored.delete(playerId);
+    building.delete(playerId);
+}
+/** Players with a build mode on (id -> player). */
+export function buildingPlayers() {
+    return building;
 }
 /** Players with a build anchor right now (id -> player). */
 export function anchoredPlayers() {
