@@ -999,6 +999,9 @@ function reconcileItems(player, tellFailure = false) {
     toldFailed.delete(player.id);
   }
 
+  // A real item left in the off hand or on the cursor can move between them with no inventory event: watch the cursor
+  // on the next unrelated change, as after one left a slot.
+  if (isRealItem(offItem) || isRealItem(cItem)) cursorWatch.add(player.id);
   if (keptReal || hasAnvilConfig) missing.delete(player.id);
   else missing.add(player.id);
   return { hasItem: keptReal || hasAnvilConfig, hasReal: keptReal, removedExtras, failedRemovals };
@@ -1191,6 +1194,7 @@ world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
 });
 
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
+  cursorWatch.add(player.id); // whatever the cursor held before is unknown: read it on the next unrelated change
   system.run(() => {
     try {
       if (player.isValid) reconcileItems(player);

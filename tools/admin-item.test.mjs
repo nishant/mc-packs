@@ -833,6 +833,25 @@ test("an inventory change that involves no Realm Configuration item reads the cu
   }
 });
 
+test("a real item a reconcile found on the cursor is watched, so a copy that turns up with no event is removed on the next unrelated change", async () => {
+  const { world, system, cleanup } = await createAdminHarness();
+  try {
+    const p = new MockPlayer("cw2", "Carrier", false);
+    p.cursor.item = makeRealTool(1); // came onto the cursor with no inventory event (from the off hand, say)
+    world.players.push(p);
+    for (let i = 0; i < 30; i++) system.stepInterval(); // the round reconciles the new player: it carries one
+    system.flushRuns();
+    assert.equal(countRealTools(p).count, 1);
+    p.container.slots[7] = makeRealTool(1); // a copy that arrived with no event
+    p.container.emitEvents = true;
+    p.container.setItem(5, new MockItemStack("minecraft:cobblestone", 3));
+    system.flushRuns();
+    assert.equal(countRealTools(p).count, 1, "the copy was removed at the cobblestone pickup, not at a safety round minutes later");
+  } finally {
+    cleanup();
+  }
+});
+
 test("giving the item back in a round reads the inventory twice (before and after), not three times", async () => {
   const { world, system, cleanup } = await createAdminHarness();
   try {
