@@ -568,6 +568,7 @@ function championHurt(champ, attacker) {
   } catch {
     // a sound that doesn't play is fine
   }
+  if (!champ.isValid) return; // removed by the hit's effects (another pack's cleanup in the same tick)
   const name = nameOf(champ);
   champ.nameTag = tagFor(champ, "shielded", name); // the badge turns gray
   for (const p of champ.dimension.getPlayers({ location: champ.location, maxDistance: 24 })) p.sendMessage(`§bThe shield of ${name} breaks!`);
@@ -1467,6 +1468,7 @@ const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel
 
 /** `/realm:champions`: the menu. @param {Player} player */
 async function menu(player) {
+  if (!player.isValid) return; // also reached from a page's Back, after its form
   const op = isOp(player);
   const kills = Number(player.getDynamicProperty(PROP_KILLS) ?? 0);
   const form = new ActionFormData()
@@ -1495,7 +1497,7 @@ const NOT_OP = "§cOnly operators can do that.";
 /** A page with a Back button to the menu. @param {Player} player @param {string} title @param {string} body */
 async function page(player, title, body) {
   const res = await show(player, new ActionFormData().title(title).body(body).button("Back"));
-  if (res && !res.canceled && res.selection === 0) await menu(player);
+  if (res && !res.canceled && res.selection === 0 && player.isValid) await menu(player);
 }
 
 /** @param {Player} player */
@@ -1542,6 +1544,7 @@ async function spawnForm(player) {
 
 /** @param {Player} player */
 async function removeForm(player) {
+  if (!player.isValid) return;
   const list = player.dimension.getEntities({ tags: [CHAMP], location: player.location, maxDistance: 64 });
   if (!list.length) return page(player, "Remove champions", "No champions within 64 blocks.");
   const res = await show(
@@ -1604,6 +1607,7 @@ function forPlayer(origin, fn) {
   if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
   system.run(async () => {
     try {
+      if (!player.isValid) return; // left before the next tick
       await fn(player);
     } catch (e) {
       console.warn(`[elite] ${e}`);
