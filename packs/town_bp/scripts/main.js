@@ -1112,7 +1112,7 @@ async function mainMenu(player) {
     else {
       actions.push({ text: "§4Set a project spot\n§8Operators: with a preview", run: () => pickProject(player, here.id, "spot") });
       if (Object.keys(here.spots).length) actions.push({ text: "§4Manage spots\n§8Operators: remove, rebuild, relocate", run: () => pickProject(player, here.id, "manage") });
-      actions.push({ text: `§4Mayor\n§8Operators: ${here.m ? `${mayorName(here)}, move or rename` : "none yet"}`, run: () => mayorMenu(player, here.id) });
+      actions.push({ text: `§4Mayor\n§8Operators: ${here.m === BRAM ? "Mayor Bram, move" : here.m ? `${mayorName(here)}, move or rename` : "none yet"}`, run: () => mayorMenu(player, here.id) });
       actions.push({ text: `§4Protect from world events\n§8Operators: ${isProtected(here) ? "Enabled" : "Disabled"}`, run: () => protectForm(player, here.id) });
       actions.push({ text: "§4Remove town\n§8Operators", run: () => removeTown(player) });
     }
