@@ -2148,6 +2148,9 @@ const nearStealth = (p, sp, r) => p.dimension.id === sp.loc.dim && across(p.loca
 const patrols = new Set();
 /** Blocks a guard walks per tick (0.35 per 5 ticks, as before, but in even steps). */
 const PATROL_STEP = 0.07;
+/** A guard this close to someone in the scene is moved every tick; farther ones (nobody there to see them or to draw their AI) every PATROL_FAR ticks. */
+const PATROL_NEAR = 32;
+const PATROL_FAR = 4;
 /** Ticks a guard stops to look out over the area before walking back. */
 const PATROL_PAUSE = 40;
 
@@ -2175,7 +2178,8 @@ function stealthScene(player, s, obj) {
   s.data.sp = sp;
   const r = radiusOf(obj);
   const here = nearStealth(player, sp, r);
-  if (here && guidesOn(player)) drawStandingPad(player, player.dimension, sp.goal.x, sp.goal.y ?? sp.center.y, sp.goal.z, COLOR_GOLD, sp.reach > 2.5 ? sp.reach : 0);
+  // The goal's outline, within 40 blocks of it like every quest spot outline (a goal area's ring is many particles).
+  if (here && across(player.location, sp.goal) <= 40 + sp.reach && guidesOn(player)) drawStandingPad(player, player.dimension, sp.goal.x, sp.goal.y ?? sp.center.y, sp.goal.z, COLOR_GOLD, sp.reach > 2.5 ? sp.reach : 0);
   if (here && s.data.guards?.length) tellGuards(s, player, obj);
   // The rest once a second per scene, however many are in it.
   if (s.data.checked === run) return;
@@ -2231,7 +2235,9 @@ function tellGuards(s, p, obj) {
  * Guards walk their rounds, a short even step every tick. They are frozen (they can't walk by themselves) and every
  * tick puts them where their round says, facing the way they walk: the vanilla AI never gets a tick to turn or nudge
  * one, so none jumps back to its round (they used to be moved 0.35 blocks every 5 ticks, and drifted in between).
- * The ground under a guard is looked up only when it steps onto a new block.
+ * Only guards within 32 blocks of someone in the scene (who could see them, and whom their AI would turn to) are moved
+ * every tick; the others every 4 ticks, a longer step (a teleport costs about 80 us on BDS). The ground under a guard
+ * is looked up only when it steps onto a new block.
  */
 function patrol() {
   if (!patrols.size) return;
@@ -2245,15 +2251,19 @@ function patrol() {
     const deep = SWIMMERS.has(s.e.chapter.objectives[s.i]?.guards?.mob ?? "");
     /** @type {Dimension | undefined} */
     let dim;
+    /** @type {Vector3[]} */
+    const seers = s.data.seers ?? [];
     for (const gd of s.data.guards) {
       try {
-        if (!gd.ent.isValid) continue;
+        if (now < (gd.next ?? 0) || !gd.ent.isValid) continue;
+        const ticks = Math.max(1, Math.min(PATROL_FAR, now - (gd.last ?? now - 1)));
+        gd.last = now;
         let yaw = gd.yaw;
         if (gd.pause > 0) {
-          gd.pause--;
+          gd.pause = Math.max(0, gd.pause - ticks);
           if (gd.pause === 0) gd.dir = -gd.dir;
         } else {
-          gd.ang += (PATROL_STEP / gd.r) * gd.dir;
+          gd.ang += ((PATROL_STEP * ticks) / gd.r) * gd.dir;
           const tx = -Math.sin(gd.ang) * gd.dir;
           const tz = Math.cos(gd.ang) * gd.dir;
           yaw = (Math.atan2(-tx, tz) * 180) / Math.PI;
@@ -2273,6 +2283,7 @@ function patrol() {
           gd.y = groundAt(dim, x, z, gd.y, false, deep) ?? gd.y;
         }
         gd.yaw = yaw;
+        gd.next = now + (seers.some((l) => Math.abs(l.x - x) <= PATROL_NEAR && Math.abs(l.z - z) <= PATROL_NEAR) ? 1 : PATROL_FAR);
         gd.ent.teleport({ x, y: gd.y, z }, { rotation: { x: 0, y: yaw } });
       } catch {
         // unloaded
@@ -2296,7 +2307,10 @@ function stealthFast(s) {
   const guards = s.data.guards ?? [];
   /** @type {Map<string, number>} */
   const grace = (s.data.graceOf ??= new Map());
-  for (const { p, m } of membersOf(s)) {
+  const members = membersOf(s);
+  // Where everyone in the scene stands, for patrol(): guards near them walk every tick.
+  s.data.seers = members.map(({ p }) => p.location);
+  for (const { p, m } of members) {
     if (!nearStealth(p, sp, r) || !counting(p)) continue;
     const at = p.location;
     if (m.need && atGoal(at, sp)) {
