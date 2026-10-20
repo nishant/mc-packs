@@ -1796,10 +1796,10 @@ function sceneFor(player, e, i, kind) {
   }
   const need = !e.pq;
   s.members.set(player.id, { need, e, seen: run });
-  if (need) {
-    s.e = e;
-    s.seen = run;
-  }
+  // Anyone in it keeps it going: a helper alone at a fight keeps its mobs (and who was warned) while a mate who needs
+  // the step is elsewhere, as their own scene did before scenes were shared.
+  s.seen = run;
+  if (need) s.e = e;
   return s;
 }
 
