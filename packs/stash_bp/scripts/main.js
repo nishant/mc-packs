@@ -1232,6 +1232,11 @@ function refillNeed(message) {
   }
 }
 
+/** Characters one realm:stash_count message may use (script events must stay under 2048). */
+const ROW_MAX = 1900;
+/** How much of a custom name a row too long for one message keeps. */
+const ROW_NAME = 200;
+
 /**
  * Saga's collect steps ask what the saved pages hold, because page routing moves pickups off the active page:
  *   realm:stash_count_ask { player, item?, name? }
@@ -1239,8 +1244,11 @@ function refillNeed(message) {
  * One row per name and lore on saved pages (never the active page, which the asker counts itself); a step with only a
  * name gets every named stack and matches the name itself. rev is the committed revision of the saved pages. Rows are
  * split over as many messages as they need (each under 2048 characters, part 1..parts): no row is ever dropped, and the
- * asker uses the rows only when all parts of one revision arrived. A page that can't be read sends no answer, so the
- * asker keeps waiting rather than counting zero.
+ * asker uses the rows only when all parts of one revision arrived. A row too long for one message on its own (a very
+ * long custom name) goes without its lore, then with its name cut to ROW_NAME characters (no story name is that long,
+ * so it still counts for a step by item and never matches a step by name). A page that can't be read answers
+ * { player, item?, name?, unknown: true } with no rows, so the asker counts without the pages but never as zero (it
+ * keeps the progress it has).
  * @param {string} message
  */
 function stashCountAsk(message) {
@@ -1252,15 +1260,24 @@ function stashCountAsk(message) {
     const item = typeof m.item === "string" ? m.item : undefined;
     const name = typeof m.name === "string" ? m.name : undefined;
     const rows = item !== undefined || name !== undefined ? storedCount(player, item, name) : [];
-    if (!rows) return;
+    if (!rows) {
+      system.sendScriptEvent("realm:stash_count", JSON.stringify({ player: m.player, item, name, unknown: true }));
+      return;
+    }
     const rev = revisionOf(player);
-    const row = (/** @type {import("./pages.js").CountRow} */ r) => ({ id: r.id, name: r.name, lore: r.lore, n: r.n });
     const wire = (/** @type {unknown[]} */ list, part = 1, parts = 1) => JSON.stringify({ player: m.player, item, name, rev, part, parts, rows: list });
+    const row = (/** @type {import("./pages.js").CountRow} */ r) => {
+      /** @type {{ id: string, name?: string, lore?: string[], n: number }} */
+      let out = { id: r.id, name: r.name, lore: r.lore, n: r.n };
+      if (wire([out], 99, 99).length >= ROW_MAX) out = { ...out, lore: undefined };
+      if (wire([out], 99, 99).length >= ROW_MAX && out.name) out = { ...out, name: out.name.slice(0, ROW_NAME) };
+      return out;
+    };
     /** @type {unknown[][]} */
     const chunks = [[]];
     for (const r of rows.map(row)) {
       const cur = /** @type {unknown[]} */ (chunks[chunks.length - 1]);
-      if (cur.length && wire([...cur, r], 99, 99).length >= 1900) chunks.push([r]);
+      if (cur.length && wire([...cur, r], 99, 99).length >= ROW_MAX) chunks.push([r]);
       else cur.push(r);
     }
     chunks.forEach((c, i) => system.sendScriptEvent("realm:stash_count", wire(c, i + 1, chunks.length)));

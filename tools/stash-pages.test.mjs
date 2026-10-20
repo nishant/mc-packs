@@ -372,7 +372,7 @@ Object.assign(mc.defaults, Object.fromEntries(["sneakTap", "sortHotbar", "locks"
 const mainServerUrl = dataUrl(`const m = globalThis.__mc.server; export const { Block, BlockTypes, BlockVolume, CommandPermissionLevel, Container, CustomCommandParamType, CustomCommandStatus, Dimension, Direction, ItemStack, Player, system, world } = m;`);
 // The router keeps its handlers in module state: each copy of main.js gets its own copy of script-events.js (a pack loads once in the game).
 const eventsSource = readFileSync(new URL("../packs/stash_bp/scripts/script-events.js", import.meta.url), "utf8").replace('"@minecraft/server"', JSON.stringify(mainServerUrl));
-const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const recoverInventory = async () => ""; export const refillFromPages = () => undefined; export const storedCount = () => []; export const revisionOf = () => "r"; export const setOpPages = () => ({ ok: true, message: "" });`);
+const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const recoverInventory = async () => ""; export const refillFromPages = () => undefined; export const storedCount = (...a) => (globalThis.__mc.storedCount ? globalThis.__mc.storedCount(...a) : []); export const revisionOf = () => "r"; export const setOpPages = () => ({ ok: true, message: "" });`);
 const mainSource = readFileSync(new URL("../packs/stash_bp/scripts/main.js", import.meta.url), "utf8")
   .replace('import "./diag.js";', "")
   .replace('"@minecraft/server-ui"', JSON.stringify(uiUrl))
@@ -3066,3 +3066,51 @@ test("with no Land Claims installed the sort still happens within a few ticks of
     }
     assert.deepEqual(contentsOf(box), SORTED, "sorted by the third tick: one tick to ask, one to be answered");
   }));
+
+// ---------------------------------------------------------------------------
+// F6: saga's count asks (main.js stashCountAsk)
+// ---------------------------------------------------------------------------
+
+test("F6 count: a page that can't be read answers unknown instead of staying silent", async () => {
+  const unload = await loadMain();
+  const p = makePlayer();
+  try {
+    mc.storedCount = () => undefined;
+    const from = mc.events.length;
+    for (const fn of mc.after["system:scriptEventReceive"] ?? []) fn({ id: "realm:stash_count_ask", message: JSON.stringify({ player: p.id, item: "minecraft:emerald" }) });
+    const answers = mc.events.slice(from).filter((e) => e.id === "realm:stash_count").map((e) => JSON.parse(e.message));
+    assert.deepEqual(answers, [{ player: p.id, item: "minecraft:emerald", unknown: true }]);
+  } finally {
+    delete mc.storedCount;
+    mc.players = mc.players.filter((x) => x !== p);
+    unload();
+  }
+});
+
+test("F6 count: a row too long for one message still goes out, every message under 2048 characters", async () => {
+  const unload = await loadMain();
+  const p = makePlayer();
+  try {
+    const long = "N".repeat(3000);
+    mc.storedCount = () => [
+      { id: "minecraft:emerald", name: long, lore: ["a".repeat(150)], n: 2 },
+      { id: "minecraft:emerald", n: 5 },
+      { id: "minecraft:emerald", name: "Lily's Marble", lore: ["x"], n: 1 },
+    ];
+    const from = mc.events.length;
+    for (const fn of mc.after["system:scriptEventReceive"] ?? []) fn({ id: "realm:stash_count_ask", message: JSON.stringify({ player: p.id, item: "minecraft:emerald" }) });
+    const sent = mc.events.slice(from).filter((e) => e.id === "realm:stash_count");
+    assert.ok(sent.length >= 1, "an answer was sent");
+    for (const e of sent) assert.ok(e.message.length < 2048, `message of ${e.message.length} characters`);
+    const parts = sent.map((e) => JSON.parse(e.message));
+    const rows = parts.flatMap((m) => m.rows);
+    assert.equal(rows.reduce((n, r) => n + r.n, 0), 8, "no row dropped");
+    assert.equal(parts[0].parts, sent.length);
+    assert.ok(rows.some((r) => r.name === "Lily's Marble" && r.lore?.[0] === "x"), "a short row keeps its name and lore");
+    assert.ok(rows.some((r) => r.n === 2 && r.name.length <= 200), "the long row keeps a cut name");
+  } finally {
+    delete mc.storedCount;
+    mc.players = mc.players.filter((x) => x !== p);
+    unload();
+  }
+});
