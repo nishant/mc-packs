@@ -92,3 +92,18 @@ test("atlas: the 2-second player loop reads at most a tenth of 40 players on any
   for (const p of w.players) assert.ok([...w.perTick.values()].some((s) => s.has(p.id)), `${p.name} was visited`);
   assert.ok(w.maxPerTick() <= 4, `at most 4 players a tick, got ${w.maxPerTick()}`);
 });
+
+test("quests: travel counts the same with a tenth of 40 players read each run", async () => {
+  const sim = createSim();
+  const w = walkers(sim, 40);
+  const d = Math.floor(Date.now() / 86400000);
+  for (const p of w.players) p.setDynamicProperty("quests:day", JSON.stringify({ d, q: [{ id: "travel_1k", p: 0, done: 0 }] }));
+  await loadReal(sim, "quests_bp");
+  sim.step(400);
+  for (const p of w.players) {
+    const day = JSON.parse(p.getDynamicProperty("quests:day"));
+    // 4 blocks a second for 20 seconds, less the first second (a start point) and up to 5 seconds not yet added
+    assert.ok(day.q[0].p >= 56 && day.q[0].p <= 80, `${p.name} traveled ${day.q[0].p}`);
+  }
+  assert.ok(w.maxPerTick() <= 4, `at most 4 players a tick, got ${w.maxPerTick()}`);
+});
