@@ -271,12 +271,15 @@ test("scan rejections: trees, leaves near a tree, water, lava, overlaps, posts, 
   assert.notDeepEqual(placed.picks[0].spot, s0, "a placed-block cell moves it");
   const more = one({ claimsMore: true }, flat, { claims: (q) => (q[1] <= s0.x && s0.x <= q[3] && q[2] <= s0.z + 3 && s0.z + 3 <= q[4] ? 1 : 0) });
   assert.notDeepEqual(more.picks[0].spot, s0, "with more than 10 claims, each finalist is asked");
-  for (const kind of [{ k: "T", g: 64 }, { k: "W", g: 60, w: 64 }, { k: "L", g: 64 }, { k: "M", g: 64 }]) {
-    const res = one({}, worldOf(() => 64, new Map([[`${s0.x},${s0.z + 6}`, kind]])));
-    assert.ok(!near(res.picks[0].spot, s0.x, s0.z + 6), `a ${kind.k} column is avoided`);
+  // One odd column in the 2-block margin (the region's corner, not the footprint) moves the spot.
+  const region0 = regionOf(rectOf(PROJECTS[0].box(s0)));
+  const corner = [region0.x1, region0.z1];
+  assert.ok(near(s0, ...corner), "the corner is in the first spot's region");
+  for (const kind of [{ k: "T", g: 64 }, { k: "W", g: 60, w: 64 }, { k: "L", g: 64 }, { k: "M", g: 64 }, UNKNOWN]) {
+    const res = one({ final: true }, worldOf(() => 64, new Map([[corner.join(","), kind]])));
+    assert.ok(res.picks[0] && !near(res.picks[0].spot, ...corner), `a ${kind.k} column in the margin is avoided`);
   }
   // Natural leaves next to a tree just outside the region.
-  const region0 = regionOf(rectOf(PROJECTS[0].box(s0)));
   const leafy = new Map([[`${region0.x2 + 1},${region0.z1 + 2}`, { k: "T", g: 64 }], [`${region0.x2},${region0.z1 + 2}`, { k: "N", g: 64, lf: 1 }]]);
   assert.notDeepEqual(one({}, worldOf(() => 64, leafy)).picks[0].spot, s0, "leaves of a tree are not cleared");
   // A cut over a cave: the finalist's block check fails.
