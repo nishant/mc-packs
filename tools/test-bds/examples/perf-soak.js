@@ -83,7 +83,15 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   if (NETHER) {
     const x = Math.floor(SX / 8), z = Math.floor(SZ / 8);
     try { nether.runCommand(`tickingarea add circle ${x} 0 ${z} 2 soak_nether true`); } catch (e) { t.log(`nether ticking area: ${e}`); }
-    const ok = await t.waitUntil(() => nether.getBlock({ x, y: 64, z }), { timeout: 600, message: "nether chunk did not load" }).catch(() => false);
+    // Every chunk of the area, not only the middle: clearAreas removes it, and an area removed while some of its
+    // chunks are still loading leaves them unloadable for the whole run (F73).
+    const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+    const allLoaded = () => {
+      for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) if (!nether.getBlock({ x: (cx + dx) * 16 + 8, y: 64, z: (cz + dz) * 16 + 8 })) return false;
+      return true;
+    };
+    const ok = await t.waitUntil(allLoaded, { timeout: 600, message: "nether chunk did not load" }).catch(() => false);
+    if (ok) await t.wait(20); // a chunk that can be read is not quite done (the harness's t.loadArea waits the same)
     if (ok) {
       nether.runCommand(`fill ${x - 4} 64 ${z - 4} ${x + 4} 69 ${z + 4} air`);
       nether.runCommand(`fill ${x - 4} 63 ${z - 4} ${x + 4} 63 ${z + 4} netherrack`);
