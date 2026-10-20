@@ -75,3 +75,72 @@ test("main.js writes the story and shows it on the mayor's page", () => {
   assert.match(main, /send\("realm:calendar_ping"/, "asks for it at load");
   assert.match(body("readSites"), /readLog\(t\.log\)/, "a saved log is cleaned on read");
 });
+
+// --- Houses (F40): town works house_1 .. house_N from level 2 ---
+
+import { HOUSE_MAX, houseCount, isWorkId, makeWorks } from "../packs/town_bp/scripts/growth.js";
+import { BUILDS, designFootprint } from "../packs/town_bp/scripts/designs.js";
+
+test("houses per level: none at level 1, then the level's families, capped by residentCapTown and 10", () => {
+  const per = CONFIG.residentsPerLevel;
+  assert.deepEqual(per, [2, 4, 6, 8, 10]);
+  assert.deepEqual([1, 2, 3, 4, 5].map((l) => houseCount(l, per, CONFIG.residentCapTown)), [0, 4, 6, 8, 10]);
+  assert.deepEqual([2, 3, 5].map((l) => houseCount(l, per, 5)), [4, 5, 5], "the town cap");
+  assert.equal(houseCount(5, [2, 4, 6, 8, 99], 40), HOUSE_MAX, "never more than 10");
+  assert.equal(houseCount(6, per, 10), 10, "past the list: its last entry");
+  assert.equal(houseCount(3, "bad", 10), 0);
+  assert.equal(houseCount(3, per, "bad"), 6, "a bad cap: 10");
+  assert.equal(houseCount(2, [2, -3], 10), 0);
+});
+
+test("the works: house_1 .. house_10, each a house with the next job site in turn, ids no config project may take", () => {
+  const works = makeWorks(CONFIG.houseJobs);
+  assert.deepEqual(works.map((w) => w.id), Array.from({ length: 10 }, (_, i) => `house_${i + 1}`));
+  assert.deepEqual(works.map((w) => w.job), CONFIG.houseJobs);
+  assert.ok(works.every((w) => w.build === "house" && w.work === 1 && Object.keys(w.needs).length === 0 && w.level === 2));
+  assert.equal(makeWorks(["minecraft:loom"])[3].job, "minecraft:loom");
+  assert.equal(makeWorks([])[0].job, "minecraft:composter");
+  assert.ok(isWorkId("house_1") && isWorkId("house_10") && !isWorkId("house_11") && !isWorkId("house_0") && !isWorkId("well"));
+  for (const p of CONFIG.projects) assert.ok(!isWorkId(p.id), `${p.id} is not a house id`);
+});
+
+test("a town with every spot (7 projects, 10 houses, a pen to come), full plans, lists and story stays under 30,000 characters", () => {
+  const spot = (kind) => {
+    const fp = designFootprint(kind, { x: -12345, y: 100, z: -12345, f: 0 });
+    const n = (fp.max.x - fp.min.x + 5) * (fp.max.z - fp.min.z + 5); // the footprint plus a 2-block apron, one char a column
+    return { x: -12345, y: 100, z: -12345, f: 3, snap: 1, b: [-123456, -64, -123456, -123456, 320, -123456], a: 1, lv: "6".repeat(n), lt: "coarse_dirt", bs: 1 };
+  };
+  const ids = [...CONFIG.projects.map((p) => p.id), ...makeWorks(CONFIG.houseJobs).map((w) => w.id), "pen"];
+  const spots = Object.fromEntries(ids.map((id) => [id, spot(byBuild(id))]));
+  function byBuild(id) {
+    const p = CONFIG.projects.find((x) => x.id === id);
+    return p ? p.build : id === "pen" ? "garden" : "house";
+  }
+  assert.ok(BUILDS.includes("house"));
+  const t = { id: "x".repeat(24), n: "y".repeat(24), dim: "minecraft:overworld", x: -12345, y: 100, z: -12345, lvl: 5, spots, by: "z".repeat(16), at: Date.now(), prot: 0, v: 2, m: `mayor:${"x".repeat(24)}`, mn: "m".repeat(24), plf: 1, scan: ids, nos: ids, rt: ids, as: 1, log: Array.from({ length: 12 }, () => [99999, "w".repeat(60)]) };
+  const json = townJson(t, 30000);
+  assert.equal(t.log.length, 12, "nothing had to be dropped");
+  assert.ok(json.length < 30000, `${json.length} characters`);
+  assert.ok(json.length < 12000, `well under it (${json.length})`);
+});
+
+test("main.js builds houses as town works: due from level 2, scanned and built like projects, no rewards", () => {
+  const body = (name) => {
+    const i = main.indexOf(`function ${name}(`);
+    assert.ok(i >= 0, name);
+    return main.slice(i, main.indexOf("\n}\n", i));
+  };
+  assert.match(main, /const WORKS = .*makeWorks\(CONFIG\.houseJobs\)/);
+  assert.match(main, /const ALL = \[\.\.\.PROJECTS, \.\.\.WORKS\]/);
+  assert.match(main, /const byId = new Map\(ALL\.map/);
+  assert.match(main, /const projectsAt = \(lvl\) => PROJECTS\.filter/, "leveling stays on the projects");
+  assert.match(body("levelUp"), /queueWorks\(t\)/);
+  assert.match(body("autoTick"), /queueWorks\(t\)/, "towns already past level 2 get their houses");
+  assert.match(body("queueWorks"), /pr\.done = 1/);
+  assert.match(body("queueWorks"), /queueScan\(t, due\)/);
+  assert.match(body("deleteTown"), /for \(const p of ALL\)/);
+  assert.match(body("build"), /isWork\(p\) && get\("houses"\) !== true/);
+  assert.match(body("announceBuilt"), /isWork\(p\)/);
+  assert.doesNotMatch(body("finishProject"), /WORKS|ALL/, "rewards stay on projects");
+  assert.match(main, /for \(const p of ALL\) \{\n\s+const s = t\.spots\[p\.id\];/, "the build check covers houses");
+});

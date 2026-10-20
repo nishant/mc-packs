@@ -22,7 +22,7 @@ import { applyParts, createOwedStore } from "./owed.js";
 import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, placeStates, toWorld } from "./designs.js";
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
-import { addLog, cleanText, logLine, nextLevelText, readLog, townJson } from "./growth.js";
+import { addLog, cleanText, houseCount, isWorkId, logLine, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
@@ -67,12 +67,22 @@ const NEAR_SPOT = 64; // a waiting build goes up when a player is this close to 
 /** Projects from config.js that make sense; the rest are skipped with a warning. */
 const PROJECTS = CONFIG.projects
   .filter((p) => {
-    const okay = /^[a-z0-9_]{1,32}$/.test(p.id) && p.level >= 1 && p.level < MAX_LEVEL && Object.keys(p.needs ?? {}).length > 0 && BUILDS.includes(p.build);
-    if (!okay) console.warn(`[town] project "${p.id}" in config.js is skipped: check its id, level (1 to 4), needs and build`);
+    const okay = /^[a-z0-9_]{1,32}$/.test(p.id) && !isWorkId(p.id) && p.level >= 1 && p.level < MAX_LEVEL && Object.keys(p.needs ?? {}).length > 0 && BUILDS.includes(p.build);
+    if (!okay) console.warn(`[town] project "${p.id}" in config.js is skipped: check its id (house_1 to house_10 are the towns' houses), level (1 to 4), needs and build`);
     return okay;
   })
   .map((p) => ({ ...p, why: cleanText(p.why) || undefined })); // what the mayor says it's for: plain ASCII, 60 characters
-const byId = new Map(PROJECTS.map((p) => [p.id, p]));
+/**
+ * Town works (D8): the houses a town builds by itself from level 2 (house_1 .. house_10, growth.js), at automatic
+ * spots, with no deliveries, rewards or quests and not counted for leveling. Their progress record is { done, built }.
+ * ALL (projects and works) is what spots, builds, removing and deleting loop over; leveling, deliveries, rewards, the
+ * board and the contributors stay on PROJECTS.
+ */
+const WORKS = /** @type {Project[]} */ (makeWorks(CONFIG.houseJobs));
+const ALL = [...PROJECTS, ...WORKS];
+const byId = new Map(ALL.map((p) => [p.id, p]));
+/** @param {Project} p */
+const isWork = (p) => isWorkId(p.id);
 
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
@@ -185,7 +195,7 @@ function progressOf(t, p) {
 /** @param {Town} t @param {Project} p @param {Progress} pr */
 function saveProgress(t, p, pr) {
   const key = `${PROG_PREFIX}${t.id}:${p.id}`;
-  let json = JSON.stringify(pr);
+  let json = JSON.stringify(isWork(p) ? { done: pr.done, built: pr.built } : pr);
   // Hundreds of contributors: keep the biggest ones so the property stays under the limit.
   while (json.length > PROP_LIMIT && Object.keys(pr.c).length > 10) {
     const smallest = Object.entries(pr.c).sort((a, b) => a[1][1] - b[1][1])[0][0];
@@ -467,6 +477,7 @@ function levelUp(t) {
   }
   if (!raised) return;
   queueScan(t, projectsAt(t.lvl).map((p) => p.id));
+  queueWorks(t);
   storyAdd(t, `It became a ${levelName(t.lvl)}`);
   saveTown(t);
   const title = `${t.n} is now a ${levelName(t.lvl)} (level ${t.lvl})`;
@@ -543,6 +554,7 @@ function build(t, p, fresh) {
   const pr = progressOf(t, p);
   if (!pr.done || pr.built) return false;
   const s = t.spots[p.id];
+  if (isWork(p) && get("houses") !== true && !s?.bs) return false; // houses Disabled: none goes up (one half built finishes)
   if (!s) {
     if (fresh) {
       if (get("autoSpots") === true && t.scan?.includes(p.id)) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} is finished: its spot is picked automatically when a player is in the town.`);
@@ -596,6 +608,15 @@ function build(t, p, fresh) {
 /** @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim @param {number} placed @param {number} skipped */
 function announceBuilt(t, p, s, dim, placed, skipped) {
   const where = `${s.x}, ${s.y}, ${s.z}`;
+  if (isWork(p)) {
+    // A house: news for the town (players in it, and its story), not the whole realm; no fireworks.
+    const msg = `§a${t.n} has a new house (${p.name}) at ${where}.`;
+    for (const pl of world.getAllPlayers()) if (isOp(pl) || (pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= get("townRadius"))) pl.sendMessage(msg);
+    storyAdd(t, `A new house went up (${p.name})`);
+    saveTown(t);
+    if (skipped) tellOps(`§7[Town Projects] ${skipped} block${skipped === 1 ? " was" : "s were"} left out of ${t.n}'s ${p.name} because something else was in the way.`);
+    return;
+  }
   const msg = `§a${t.n}'s new ${p.name} is built at ${where}.`;
   if (get("announce") === true) world.sendMessage(msg);
   else tellOps(msg);
@@ -1022,7 +1043,7 @@ system.runInterval(() => {
     mayorCheck(players);
     autoTick(players);
     for (const t of allTowns().values()) {
-      for (const p of PROJECTS) {
+      for (const p of ALL) {
         const s = t.spots[p.id];
         if (!s) continue;
         const pr = progressOf(t, p);
@@ -1088,9 +1109,17 @@ function projectLine(t, p) {
 /** The town's story so far, oldest first; empty for a town from before the story was kept. @param {Town} t */
 const storyLines = (t) => (t.log?.length ? [`§lThe story so far§r\n${t.log.map((e) => `§7${logLine(e)}§r`).join("\n")}`] : []);
 
+/** The town's houses: how many are built, of those its level brings. @param {Town} t */
+function houseLines(t) {
+  const n = housesAt(t);
+  if (!n) return [];
+  const built = WORKS.slice(0, n).filter((w) => progressOf(t, w).built).length;
+  return [`§lHouses§r: ${built} of ${n} built${built < n ? " §7(the town builds them by itself, at spots it picks)" : ""}§r`];
+}
+
 /** What the town's next level brings, or nothing at the top. @param {Town} t */
 function nextLines(t) {
-  const text = nextLevelText({ lvl: t.lvl, max: MAX_LEVEL, name: levelName(t.lvl + 1), projects: projectsAt(t.lvl + 1).map((p) => p.name), housesNow: 0, housesNext: 0 });
+  const text = nextLevelText({ lvl: t.lvl, max: MAX_LEVEL, name: levelName(t.lvl + 1), projects: projectsAt(t.lvl + 1).map((p) => p.name), housesNow: housesAt(t), housesNext: housesAt(t, t.lvl + 1) });
   return text ? [`§7${text}§r`] : [];
 }
 
@@ -1111,6 +1140,7 @@ async function townMenu(player, townId, canDeliver) {
     t.lvl >= MAX_LEVEL || !open.length
       ? "Every project is done. Thank you, everyone!"
       : `Finish these to make ${t.n} a ${levelName(t.lvl + 1)}:\n\n${open.map((p) => projectLine(t, p)).join("\n\n")}`,
+    ...houseLines(t),
     ...nextLines(t),
     ...(t.nos ?? []).flatMap((id) => (byId.has(id) ? [`§eNo good spot was found for the ${byId.get(id)?.name}: an operator can set one (Set a project spot).§r`] : [])),
     canDeliver ? "Pick a project to see what it needs and deliver from your inventory." : `Deliver materials through ${mayorName(t)}.`,
@@ -1369,7 +1399,8 @@ function setSpot(player, projectId) {
 async function pickProject(player, townId, mode) {
   const t = allTowns().get(townId);
   if (!t) return;
-  const list = mode === "manage" ? PROJECTS.filter((p) => t.spots[p.id]) : PROJECTS;
+  // Houses are listed once they're due (their spot can be set or moved like a project's).
+  const list = mode === "manage" ? ALL.filter((p) => t.spots[p.id]) : ALL.filter((p) => !isWork(p) || progressOf(t, p).done || t.spots[p.id]);
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = list.map((p) => {
     const s = t.spots[p.id];
@@ -1735,7 +1766,7 @@ async function removeTown(player) {
 
 /** @param {Town} t */
 function deleteTown(t) {
-  for (const p of PROJECTS) {
+  for (const p of ALL) {
     const key = `${PROG_PREFIX}${t.id}:${p.id}`;
     progCache.delete(key);
     world.setDynamicProperty(key, undefined);
@@ -1750,7 +1781,7 @@ function deleteTown(t) {
   world.setDynamicProperty(TOWN_PREFIX + t.id, undefined);
   placedCells.delete(t.id);
   if (scanJob?.town === t.id) scanJob = undefined;
-  for (const p of PROJECTS) cancelAutoBuild(`${t.id}:${p.id}`);
+  for (const p of ALL) cancelAutoBuild(`${t.id}:${p.id}`);
   for (let k = 0; k < 2; k++) world.setDynamicProperty(`${PLACED_PREFIX}${t.id}:${k}`, undefined);
   // Its own mayor goes with it (Mayor Bram stays where he lives).
   if (isTownMayorId(t.m)) send("realm:npc_mayor", { op: "remove", id: t.m });
@@ -1900,6 +1931,32 @@ function dropFrom(t, id) {
   }
 }
 
+/** The projects (and houses, while houses is Enabled) a town's scan picks spots for now. @param {Town} t */
+const scanIds = (t) => (t.scan ?? []).filter((id) => !t.spots[id] && (!isWorkId(id) || get("houses") === true));
+
+/** Houses a town has at its level, while houses is Enabled. @param {Town} t @param {number} [lvl] */
+const housesAt = (t, lvl = t.lvl) => (get("houses") === true ? houseCount(lvl, CONFIG.residentsPerLevel, CONFIG.residentCapTown) : 0);
+
+/**
+ * The houses due at the town's level (houses Enabled): each is marked done (a town work takes no deliveries) and
+ * queued for an automatic spot. Returns true when the town changed (the caller saves it).
+ * @param {Town} t
+ */
+function queueWorks(t) {
+  /** @type {string[]} */
+  const due = [];
+  for (const w of WORKS.slice(0, housesAt(t))) {
+    const pr = progressOf(t, w);
+    if (pr.done) continue;
+    pr.done = 1;
+    saveProgress(t, w, pr);
+    due.push(w.id);
+  }
+  if (!due.length) return false;
+  queueScan(t, due);
+  return true;
+}
+
 /** The block a fill gets on top at a spot: its saved `lt` when it is natural ground, else grass. @param {Spot} s */
 function fillTop(s) {
   const id = typeof s.lt === "string" && /^[a-z_]{1,40}$/.test(s.lt) ? `minecraft:${s.lt}` : "";
@@ -1980,7 +2037,7 @@ function startScan(t) {
 
 /** What the scan needs to know about the town and what's around it. @param {Town} t @param {{ x1: number, z1: number, x2: number, z2: number }[]} claims @returns {import("./sites.js").ScanInput} */
 function scanInput(t, claims) {
-  const ids = (t.scan ?? []).filter((id) => !t.spots[id]);
+  const ids = scanIds(t);
   /** @type {import("./sites.js").Rect[]} */
   const taken = [];
   for (const o of allTowns().values()) {
@@ -2110,7 +2167,8 @@ function finishScan(t0, res) {
 function findSpotsAgain(t, tell) {
   delete t.nos;
   delete t.rt;
-  queueScan(t, PROJECTS.filter((p) => p.level <= t.lvl && !progressOf(t, p).built).map((p) => p.id));
+  queueWorks(t);
+  queueScan(t, ALL.filter((p) => (isWork(p) ? progressOf(t, p).done === 1 : p.level <= t.lvl) && !progressOf(t, p).built).map((p) => p.id));
   scanWaits.delete(t.id);
   saveTown(t);
   if (get("autoSpots") !== true) return tell("§ePick project spots automatically (autoSpots) is Disabled in /realm:config.");
@@ -2433,13 +2491,15 @@ function ensureJobs() {
 function autoTick(players) {
   if (!towns) return;
   for (const t of allTowns().values()) {
+    // Houses due at the town's level (a town that leveled before this version, or houses just Enabled).
+    if (queueWorks(t)) saveTown(t);
     if (t.as === 1) continue;
     queueScan(t, [...projectsAt(t.lvl), ...PROJECTS.filter((p) => progressOf(t, p).done && !progressOf(t, p).built)].map((p) => p.id));
     t.as = 1;
     saveTown(t);
   }
   if (get("autoSpots") !== true || scanJob) return;
-  const t = [...allTowns().values()].find((x) => x.scan?.length && playerIn(players, x));
+  const t = [...allTowns().values()].find((x) => scanIds(x).length && playerIn(players, x));
   if (t) startScan(t);
 }
 
@@ -2595,7 +2655,7 @@ onScriptEvent(
       if (m.action === "zones") return broadcastZones();
       if (!t) return tell("no town");
       if (m.action === "dump")
-        return tell(JSON.stringify({ town: t, progress: PROJECTS.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
+        return tell(JSON.stringify({ town: t, progress: ALL.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
       if (m.action === "scan") {
         findSpotsAgain(t, tell);
         if (!scanJob && get("autoSpots") === true && t.scan?.length) startScan(t);
@@ -2637,6 +2697,7 @@ onScriptEvent(
         tell(`footprint ${JSON.stringify(footprint(p, s))}, in the way ${inTheWay(t, p, s)}`);
         applySpot(t, p, s, tell);
       } else if (m.action === "finish") {
+        if (isWork(p)) return tell("a house is built by the town itself, from level 2");
         const pr = progressOf(t, p);
         if (pr.done) return tell("already finished");
         // "donors": that many offline contributors (5 items each, as on a big server); "give": the player's own items.

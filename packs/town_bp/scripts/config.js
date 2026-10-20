@@ -37,6 +37,18 @@ export const CONFIG = {
   /** Seconds the outline of a build at an automatically picked spot is shown to players within 32 blocks before it goes up (0 to 15). */
   outlineSeconds: 5,
 
+  /**
+   * Towns build houses from level 2, at automatically picked spots, as town works (no deliveries, no rewards): one per
+   * family the level brings (`residentsPerLevel`), each a 7 x 7 cottage with a bed and a job-site block.
+   */
+  houses: true,
+
+  /** Families a town has room for at each level, 1 to 5. From level 2 the town builds a house for each (at most `residentCapTown`). */
+  residentsPerLevel: [2, 4, 6, 8, 10],
+
+  /** Most families (and houses) one town has, 0 to 10. */
+  residentCapTown: 10,
+
   /** The job-site block of each house, in turn (house 1 the first, house 11 the first again), so residents get different jobs. */
   houseJobs: ["minecraft:composter", "minecraft:lectern", "minecraft:barrel", "minecraft:smoker", "minecraft:cartography_table", "minecraft:brewing_stand", "minecraft:fletching_table", "minecraft:loom", "minecraft:stonecutter_block", "minecraft:grindstone"],
 
@@ -65,7 +77,7 @@ export const CONFIG = {
    * to 4), the items it `needs` (item id: amount), what gets `build`t (`well`, `lamps`, `stall`,
    * `bell_tower`, `dock`, `garden`, `notice_board` or `house`), `why` the town wants it (the mayor says so,
    * at most 60 characters), and optionally a `structure`: the id of a structure an operator saved (with a
-   * structure block or `/structure save`) to place instead.
+   * structure block or `/structure save`) to place instead. Ids `house_1` to `house_10` are the town's own houses.
    * @type {{ id: string, name: string, level: number, needs: Record<string, number>,
    *   build: "well" | "lamps" | "stall" | "bell_tower" | "dock" | "garden" | "notice_board" | "house", why?: string, structure?: string }[]}
    */

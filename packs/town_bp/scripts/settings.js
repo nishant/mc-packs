@@ -20,6 +20,7 @@ const OPTIONS = [
   { key: "autoSpots", type: "bool", scope: "world", label: "Pick project spots automatically", help: "Spots operators set are kept and never leveled" },
   { key: "levelDepth", type: "int", scope: "world", label: "Most blocks a picked spot's ground is leveled", help: "Natural ground only, cut or filled; 0 never levels", min: 0, max: 3, step: 1 },
   { key: "outlineSeconds", type: "int", scope: "world", label: "Outline shown before a build (seconds)", help: "To players within 32 blocks; 0 shows none", min: 0, max: 15, step: 1 },
+  { key: "houses", type: "bool", scope: "world", label: "Towns build houses from level 2", help: "One for each family the level brings, at picked spots" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
