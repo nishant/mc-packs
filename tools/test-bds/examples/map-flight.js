@@ -96,7 +96,15 @@ export default async function (t) {
   t.check(last[a.id].terrain.misses === 0 && last[b.id].terrain.misses === 0, "stationary cost excludes legitimate unloaded-chunk retries");
   // The 2200-tick flight plus setup crosses the other viewer's intentional 2400-tick freshness boundary.
   // Observe that age refresh explicitly before measuring idle eviction churn; keep both viewers scanning.
-  const expiring = last[b.id].terrain.samples.filter((s) => s.data && sys.currentTick - s.data.tick >= 2300);
+  // How long the flight takes in ticks depends on t.loadArea (since F73 it waits for the whole area and 20 ticks
+  // more, 220 times here), so a flight that ran past the boundary has seen one refresh already: wait for the
+  // next cohort to come of age (at most one more 2400-tick period) instead of assuming where the flight ended.
+  const aged = () => last[b.id].terrain.samples.filter((s) => s.data && sys.currentTick - s.data.tick >= 2300);
+  for (let i = 0; i < 520 && !aged().length; i++) {
+    await t.wait(5);
+    await radarOf(b);
+  }
+  const expiring = aged();
   t.log(`Caver coarse sample ages before idle: ${last[b.id].terrain.samples.map((s) => s.data ? sys.currentTick - s.data.tick : "missing").join(",")}`);
   t.check(expiring.length > 0, "long flight reaches the stationary caver's existing age-refresh cohort");
   const refreshed = () => expiring.every((old) => last[b.id].terrain.samples.some((s) => s.x === old.x && s.z === old.z && s.data?.tick > old.data.tick));
