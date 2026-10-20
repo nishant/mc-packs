@@ -15,6 +15,7 @@ const check = process.argv.includes("--check");
 const CONSUMERS = {
   wander_bp: ["main.js"],
   caravan_bp: ["main.js"],
+  npc_bp: ["main.js"],
 };
 
 const problems = [];

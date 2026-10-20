@@ -19,6 +19,7 @@ import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
 import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
+import { createSnapGuard, settledBelow } from "./tether.js";
 import { onScriptEvent } from "./script-events.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
@@ -604,6 +605,9 @@ function say(entity, t, line) {
   }, ticks);
 }
 
+/** Put-backs per townsfolk: the first at once, then a wait that doubles while they keep coming (tether.js). */
+const postGuard = createSnapGuard({ cooldown: 40, maxCooldown: 600 });
+
 /** @param {string} line @param {string} name */
 const fill = (line, name) => line.split("{player}").join(name);
 
@@ -617,10 +621,22 @@ function behave(rec, t, entity, lively) {
   const dim = world.getDimension(rec.dim);
   const at = anchorOf(rec);
   if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
-    // Pushed or moved by someone: back home, but only into a loaded spot nobody stands on.
-    if (loaded(dim, at) && !occupied(entity, at)) {
+    // The floor under its post is gone (broken, or the post was a block or more above the ground): it dropped straight
+    // down and stands there. Putting it back up would only let it fall again, every check: its post moves down instead.
+    if (entity.dimension.id === rec.dim && entity.location.y < at.y && Math.hypot(entity.location.x - at.x, entity.location.z - at.z) <= 1 && !entity.isOnGround) return; // still falling: wait until it lands
+    if (entity.dimension.id === rec.dim && settledBelow(entity, at)) {
+      const y = Math.round(entity.location.y * 1000) / 1000;
+      console.warn(`[npc] ${rec.id}: the floor under its post at ${Math.floor(rec.x)}, ${rec.y}, ${Math.floor(rec.z)} is gone: the post moves down to y ${y}`);
+      rec.y = y;
+      save();
+      return;
+    }
+    // Pushed or moved by someone: back home, but only into a loaded spot nobody stands on, and with a growing wait if
+    // it keeps being pushed off (a mob leaning on it would otherwise bounce it back and forth every check).
+    if (loaded(dim, at) && !occupied(entity, at) && postGuard.allow(rec.id, system.currentTick)) {
       const up = liftSaved(rec) ? anchorOf(rec) : at;
       entity.teleport(up, { dimension: dim, rotation: { x: 0, y: rec.yaw } });
+      postGuard.snapped(rec.id, system.currentTick);
       st.yaw = rec.yaw;
     }
     return;
