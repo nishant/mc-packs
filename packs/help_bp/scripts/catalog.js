@@ -150,10 +150,10 @@ export const PACKS = [
     "folder": "welcome_bp",
     "topic": "welcome",
     "name": "Welcome Message",
-    "summary": "Shows a popup when a player joins the Realm: by default a short introduction to the realm (the story, what there is to do, handy commands and the rules) under gold headings. A brand-new world with no other saved data gets a generic welcome instead (below). Operators can edit the popup in-game.",
+    "summary": "Shows the same short, spoiler-free default welcome on every world, including this Realm. One scrolling popup introduces the story and the main features that are actually installed, then points to help, personal settings and the story journal. Operators can save their own text in-game.",
     "steps": [
       {
-        "text": "Join the realm. The welcome popup appears after about 2 seconds; tap its button (§eLet's go!§r by default) to close it.",
+        "text": "Join the realm. The welcome popup appears after about 2 seconds; scroll through it and tap §eClose§r.",
         "ops": false
       },
       {
@@ -161,7 +161,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:welcome§r opens the §lWelcome Message§r menu instead: §eShow the welcome message§r, §eEdit the welcome message§r, §eReset to the defaults§r and §eSettings§r (which points to §e/realm:config§r -> Welcome Message). The edit and reset buttons do the same as the commands below. Run §e/realm:welcome_edit§r, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type §e\\n§r for a new line. Players see the new text on their next join (with \"show once\" on, each player sees it one more time, unless you turn off \"Show it again to players who've seen it\" for a typo fix). §e/realm:welcome_reset§r asks first, then goes back to the pack's default text. On a §lnew world§r (see §ewelcome:profile§r under Saved data) the default is a generic welcome: the title §eWelcome!§r, a greeting, one line for each installed pack that has one (stories, daily quests, expeditions, bounty board, skills, crowns, land claims, calendar, parties, mail, minimap, stats, journal, prefs; installed packs are asked at most once a minute), and a closing line pointing to §e/realm:help§r and §e/realm:welcome_edit§r. It names no town, character or rule. §e/realm:welcome_edit§r and §e/realm:welcome_reset§r use these defaults there. A world that already ran, and any text an operator saved, keep their text. Full native verification of the new-world path in the full bundle is UNVERIFIED.",
+        "text": "§lOperators:§r §e/realm:welcome§r opens the §lWelcome Message§r menu instead: §eShow the welcome message§r, §eEdit the welcome message§r, §eReset to the defaults§r and §eSettings§r (which points to §e/realm:config§r -> Welcome Message). The edit and reset buttons do the same as the commands below. Run §e/realm:welcome_edit§r, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type §e\\n§r for a new line. Players see the new text on their next join (with \"show once\" on, each player sees it one more time, unless you turn off \"Show it again to players who've seen it\" for a typo fix). §e/realm:welcome_reset§r asks first, then goes back to the pack's default text. The default has three normal-size bold gold headings: §eThe World§r, §eWhat You Can Do§r (omitted when there are no listed features) and §eWhere To Go Next§r. With Story Questlines installed, it introduces the harbor bell and the strange stars without revealing later events; with Townsfolk too, it names Old Tobin and Mara as the starting point. Without Story Questlines it simply welcomes players to explore and build together. Feature and help lines name only installed packs. Installed packs are asked at most once a minute; concurrent joins wait for the same discovery, rather than seeing an incomplete list. The old saved Realm welcome containing §eTap Old Tobin or Mara in town to begin§r is migrated once to this default. Its old built-in title and button are removed only if they still match; other settings and unknown fields stay. Unrelated saved text is not changed. After that migration, later operator edits always win, even if they reuse the old words. §e/realm:welcome_reset§r returns to the new default, not the retired Realm-specific text.",
         "ops": true
       }
     ],
@@ -505,7 +505,7 @@ export const PACKS = [
     "folder": "stash_bp",
     "topic": "stash",
     "name": "Quick Stack & Sort",
-    "summary": "Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; holding a tool, weapon or armor opens its menu to sort, lock or quick stack into storage that already holds each item (like Terraria). The §l5 native-persistent inventory pages§r share your hotbar, have previous/menu/next controls together at the top right, and let you move a stack or whole row to a page you choose. New pickups fill earlier pages first; §lFill earlier pages§r tidies all later pages without sorting them.",
+    "summary": "Sneak-tap a chest, barrel or shulker box with an empty hand to sort it at once; holding a tool, weapon or armor opens its menu to sort, lock or quick stack into storage that already holds each item (like Terraria). The §l5 native-persistent inventory pages§r share your hotbar, have previous/menu/next controls together at the top right, and let you move a stack or whole row to a page you choose. When the viewed page has at most one free slot, auto-store routes new pickups through the other pages; §lFill earlier pages§r tidies all later pages on demand without sorting them.",
     "steps": [
       {
         "text": "§lSort storage:§r sneak and tap a chest, trapped chest, copper chest, barrel or shulker box with an empty hand. It sorts at once and the bar says §eSorted 31 stacks§r. §lOpen the menu:§r sneak-tap holding a tool, weapon or armor. An ender chest gets the menu with an empty hand too. A §lQuick Stack & Sort§r menu opens instead of the container, with these buttons:\n  - §lSort this chest§r (or barrel, shulker box): the same as the empty-hand sort.\n  - §lLock this chest:§r only you can open, sort or break it. Once it's yours, the button reads §lShare or unlock§r: share it with players who are online, stop sharing, or unlock it.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
@@ -536,7 +536,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lAuto-store:§r genuinely new pickups fill the earliest earlier page with room, even while the page you are viewing has free slots. Each earlier page's compatible stacks fill first, then its empty slots, before the next page is tried. Overflow goes to later pages only when the viewed page is full or down to its last free slot. Your hotbar stays as it is. §lFill earlier pages§r in §e/realm:inv§r pulls items from every later page toward page 1, in page and slot order without sorting; it also works with auto-store disabled.",
+        "text": "§lAuto-store:§r when the viewed page has at most one free slot, genuinely new pickup amounts try the other pages in order, each page's compatible stacks before its empty slots. Routing stops once the viewed page has two free slots; while it has more room, pickups stay there. Your hotbar stays as it is. §lFill earlier pages§r in §e/realm:inv§r pulls items from every later page toward page 1, in page and slot order without sorting; it also works with auto-store disabled.",
         "ops": false
       },
       {

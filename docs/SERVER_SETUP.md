@@ -150,6 +150,21 @@ Measured with 40 simulated players, Large server took the whole bundle from 9.5 
 
 ## Performance
 
+### Current matched audit (2026-10-19)
+
+On Windows BDS 1.26.52.3, the same harness and declared workload ran master `27f26f6e` and candidate `a1b2a32c` with every declared player retained for the full 900-second steady windows. These figures sum **67 separate behavior-pack script contexts**, not the still-required genuine one-context Realm Bundle run. They are script callback time, not client FPS or all server CPU time.
+
+| Players | Master, ms/tick | Candidate, ms/tick | Steady window |
+|---|---:|---:|---|
+| 10 | 6.648 | 4.941 | 900 seconds / 18,000 ticks |
+| 40 | 9.429222222222222 | 7.972722222222222 | 900 seconds / 18,000 ticks |
+
+**Owner answer (2026-10-19): ACCEPTED_EXCEPTION.** The owner accepts the known 40-player whole-total target miss for this release, with documentation and pending the other gates. The result is about **15.45% lower**, but **does not meet the unchanged under 5 ms/tick target**; the budget evaluator still fails. This is not a blanket waiver of individual budgets. Minimap measured **3.738** against 1 ms/tick. Against the typical-pack limit of 0.15, Easy Building measured **0.574222**, Quick Stack & Sort **0.313889**, Silly Enchants **0.276**, Elytra HUD **0.227944**, Story Questlines **0.227**, Stats **0.212111**, Realm Configuration **0.183667**, and Realm Calendar **0.150444**. See [the complete per-pack table and measurement limits](audits/2026-10-deep-audit/perf-tables.md).
+
+This Realm keeps **Small Realm defaults**: capacity 10, usually 1-4 online. It is not being switched to Large, and those player counts are not evidence that a 40-player budget passed. A further reduction of over 37% from the current result would be needed to get under 5 in this workload. Hardware, workload, context count and synchronous native API work all matter; this does not prove the target impossible or rule out future optimization.
+
+### Historical earlier audit (not the current matched comparator)
+
 Measured on a 4-core Linux machine running BDS 1.26.52 with every behavior pack (the Realm Bundle's contents),
 simulated players walking, looking and running a command now and then (`tools/test-bds/examples/perf-soak.js`),
 October 2026. "ms a tick" is script time in the packs' callbacks; a server has 50 ms per tick for everything at
@@ -198,7 +213,8 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
   stored inventory pages and saved ground of town projects as structures inside it.
 - **Versions:** every pack's version is in its `manifest.json`. The bundles' versions are their build time in UTC
   (`YYYY.MMDD.HHMM`), so every build is higher than the last; a single pack counts up (`1.4.2`).
-- **Updating:** on a Realm, open the new `.mcpack` files and check that the Realm's active pack shows the new version
+- **Updating:** It is assumed the Realm Bundle and Realm Resources get uploaded to the Realm after each release; the owner does it.
+  On a Realm, the owner then checks that the Realm's active pack shows the new version
   (if not, deactivate and activate it again). On BDS, stop the server, replace the folders and the `version` in the
   two world JSON files, start it. Settings and progress stay: they are in the world, and the bundles keep their uuid.
 - **Update both bundles together.** Realm Resources draws what the Realm Bundle's scripts send: the Minimap's icon
@@ -210,19 +226,13 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 
 - **Measured with simulated players**, not real clients: no chunk sending, simple movement, no client packets. A
   real server spends more time per player outside the scripts, and a Realm's CPU differs from the test machine.
-- **100+ players is untested.** Measurements stop at 40. Above 100 players, the Coordinates HUD's state message lists
-  only the first 100, so the stats ticker and party HUD can draw over it; the Minimap's keep-alive redraws may fill its
-  drawing budget.
-- **The whole bundle is over its own 5 ms budget at 40 players** (6 to 9.5 ms measured), mostly the Minimap (2.9 to
-  3.8 ms against 1 ms). It runs at 18 to 19 TPS there, but leaves less room for everything else your server does.
+- **Current 100-player load acceptance is incomplete.** The current master attempt failed population admission and its only identical retry also could not produce a valid full window; no partial population is a 100-player comparator. Coordinates HUD updates now arrive in bounded parts rather than truncating at 100, but that code change is not a completed current 100-player load or client-rendering test. Minimap keep-alive demand and the separate Saga quest workload still need their actual load evidence.
+- **The measured 40-player separate-pack total is over its under 5 ms target:** **7.972722222222222**, including Minimap **3.738 > 1**. The owner accepted that whole-total miss for this release, not a budget PASS or every individual overrun. It leaves less room for other server work; see the precise scope and exception above.
 - **Ticking areas:** Bedrock allows 10 per world. Farm Loader's farms, Expeditions' dungeon resets (up to `slots`),
   Death Point's `/realm:death_back` and some story and town builds share them, as do any you add with `/tickingarea`.
 - **One cast:** there is one set of twelve townsfolk for the whole world; several towns share them.
-- **Stories:** about 15 story steps assume the town is near world spawn, and steps that wait for night need the
-  daylight cycle.
-- **Moderation is basic:** Realm Mail has a send cooldown and caps, Land Claims (off until an operator enables it in `/realm:config`)
-  protects blocks, containers and listed entities from other players (not from fire, liquids or pistons), and Chest Finder's index covers every unlocked container in the
-  world. There is no block list for mail or party chat yet.
+- **Stories:** operators can set the town anchor with `/realm:saga_place town`. Stopped daylight cycles no longer block the night/time windows, and wait steps use the documented real-time fallback. Targeted native cases do not certify every story path or real client interaction.
+- **Moderation is basic:** Realm Mail has a send cooldown, block lists and unread-sender caps; party mute covers the pack's own command and form, not vanilla chat. Land Claims (off until enabled in `/realm:config`) protects blocks, containers and supported animal interactions, not animal damage, fire, external fluid flow, pistons or endermen. Chest Finder's private index uses opened, owned or shared containers; older worlds retain their previous world-wide choice until changed.
 - Bedrock limits apply: achievements are off with add-ons, and an operator's plain `/title` gets drawn over by the
   HUD within a second or two (use `/realm:admin_title`).
 

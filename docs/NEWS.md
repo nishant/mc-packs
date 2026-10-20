@@ -9,14 +9,14 @@ entries below as a changelog.
 
 ## Earlier pages and bounded offline rewards
 
-- New pickups fill earlier inventory pages first. Fill earlier pages in /realm:inv tidies every later page without sorting; your hotbar stays put. Story collect steps count your saved pages too, without giving free hand-in credit.
+- When your inventory page is down to its last free slot, new pickups can move to other pages until two slots are free. Fill earlier pages in /realm:inv tidies every later page without sorting; slot-locked stacks and your hotbar stay put. Story collect steps count your saved pages too, without giving free hand-in credit.
 - Operators can export a retained failed inventory save with /realm:inv_recover. Back up and inspect the player's live inventory and recovery chests: it is a backup export, not automatic duplicate removal.
 - Pack letters have separate retention and inbox limits, leaving room for player mail. Old offline rewards use bounded per-player saves instead of one growing property.
 - Inactive gamertag protection and earned title records expire after a year by default; solo parties after 180 days. Operators can set each retention to 0 to keep them indefinitely. Untimestamped old records start counting now.
 - /realm:map_reset confirm clears destinations and marks for online players now and offline players once on return. New marks survive stale menus.
 - Building beds keeps paired halves and one-item accounting. The normal default stays 50000 blocks; the operator Large server profile uses 2000, operator-only tools and no Infinite Reach.
 - Story quests: operators can set where the town is with /realm:saga_place town. With the daylight cycle stopped, night and time-of-day windows no longer block quest progress, a bed tap counts as sleep, and wait steps count 20 real minutes a day. A story says when it needs a pack that was removed, and Gristle's fight still counts without Champions. Kitchen dishes carry their own name, so a renamed dish can't pass for another.
-- Operators can take titles away with /realm:titles_take or the give-or-take form. The nickname list has pages and search. New worlds greet players with a generic welcome; older Realms keep their text. Slow pack-data deletions now report when they finish, and setup pages stop when you leave, die or respawn.
+- Operators can take titles away with /realm:titles_take or the give-or-take form. The nickname list has pages and search. Every world gets one short, spoiler-free welcome naming installed features; the old Realm welcome is replaced once, and later operator edits win. Slow pack-data deletions now report when they finish, and setup pages stop when you leave, die or respawn.
 - Land claims can protect tamed and farm animals from leashing, riding, feeding, milking, shearing, naming, sitting and taming. Animal damage, fire, flowing liquids, pistons and endermen are not stopped by a claim.
 - Chest Finder indexes only the containers you opened, own or share. New worlds get this private index; old worlds keep the world-wide index (`privateIndex` false) until an operator changes it.
 - Realm Mail limits how many unread letters one sender can leave you (senderUnreadCap, default 5). Party chat can be muted; it covers /realm:party_chat and the party form only.
@@ -48,6 +48,12 @@ entries below as a changelog.
 - Rain, storm, tornado, aurora and moon effects can learn about a storm already under way when they are added to a world.
 - Story hints explain how to replace required bells, candles and other blocks if someone mined them out. Building steps accept poplar wood and the missing sapling types too.
 - Townsfolk no longer open conversations or start NPC-editor work after another protection handler has already canceled the tap.
+
+## Story fights that never started
+
+- The Gray Choir now shows up for its fights: the ambush at the Haddock farm, the Smugglers' Cove, the Gray Ring and the Hollow Gate. Before, nothing came and the quest could not be finished.
+- The same fix for the vexes and phantoms at the Sky Seal and the waking reeds in Vesna's Bargain.
+- Go to the place on your tracker and they come a few at a time until the step is done. Kills count even if the fight drifts a bit away.
 
 ## Clues without interruptions
 

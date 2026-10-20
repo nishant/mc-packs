@@ -563,7 +563,7 @@ blocks.
 | `reach` | location, `radius`, or `dim` ("minecraft:nether" / "minecraft:the_end"), `belowY`, `aboveY` | Go somewhere, to a dimension, deep or high |
 | `deliver` | `npc`, `item` and/or `name` (an item's custom name, for quest items), `count` | Bring items to an NPC (taken on talk) |
 | `collect` | `item` and/or `name`, `count` | Have items in your inventory |
-| `defeat` | `mobs?`, `count`, location?, `night?`, `within?` (seconds, timed: progress resets if not done in time), `champion?`, or `bounty: true` (Bounty Board champion targets; with `race`, below) | Defeat mobs, or a champion at a place |
+| `defeat` | `mobs?`, `count`, location?, `night?`, `within?` (seconds, timed: progress resets if not done in time), `champion?`, or `bounty: true` (Bounty Board champion targets; with `race`, below), `spawn?: { count, every, mobs?, warn? }` (at a place: the pack brings the mobs; required when they don't come there by themselves, like illagers, vexes or bogged) | Defeat mobs, or a champion at a place |
 | `interact` | location, `blocks`, `count`, `radius` | Tap or hit blocks near a place |
 | `survive` | location?, `seconds`, `weather?` ("thunder" default, "rain", "any"), `radius` | Stay outdoors in weather |
 | `vigil` | location, `seconds`, `timeOfDay?: [from, to]` (ticks; 18000 = midnight), `outdoors?`, `sneaking?`, `weather?` (no default), `radius` | Stay at a place at a time of day |
@@ -618,6 +618,11 @@ story log): use it for every revelation so players can reread the story they've 
 **Scale:** a side chapter pays 2-5 levels and 20-60 Crowns; a main chapter 3-8 levels and 40-120;
 an act finale 10 levels, 150-300 Crowns and a title or relic. Hints cost 25% of a chapter's levels
 and Crowns (`hintPenalty`).
+
+**Approved exception (owner decision, 2026-10-19, O64):** the Act 5 Lantern Night rewards (`herald`, `choice`,
+`dawn_relight`) and the deep side chapter's `last_listen` stay as written, above this scale on purpose, because the
+owner wants them intentionally generous. They are the only approved exceptions; no other reward moves to them.
+`tools/check-stories.allow.json` lists these four findings.
 
 ### Story relics (added to the Relics pack)
 

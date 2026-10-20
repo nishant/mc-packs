@@ -101,6 +101,7 @@ export const STORIES = [
             offset: FARM_3,
             mark: "Haddock farm",
             radius: 32,
+            spawn: { count: 3, every: 20, warn: "Gray hoods rise out of the wheat, singing low. The Choir was waiting for you." },
           },
         ],
         outro: [
@@ -350,6 +351,7 @@ export const STORIES = [
             count: 20,
             place: "sea_cave",
             radius: 48,
+            spawn: { count: 4, every: 20, warn: "Gray hoods scramble off the boats with crossbows. The smugglers fight for their cove." },
           },
         ],
         outro: [
@@ -746,6 +748,7 @@ export const STORIES = [
             count: 20,
             place: "choir_ring",
             radius: 40,
+            spawn: { count: 4, every: 20, warn: "The singing breaks into a shout. The Choir pours out of the Gray Ring." },
           },
           {
             type: "defeat",
@@ -755,6 +758,7 @@ export const STORIES = [
             count: 14,
             place: "choir_ring",
             radius: 40,
+            spawn: { count: 3, every: 20, warn: "The singing breaks into a shout. The Choir pours out of the Gray Ring." },
           },
           {
             type: "defeat",
