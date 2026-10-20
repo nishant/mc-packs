@@ -27,6 +27,7 @@ export default async function (t) {
   await t.loadArea(0, 0, { radius: 4 });
   const town = (action, extra = {}) => sys.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
   const dump = async (id) => {
+    await t.wait(1); // a dump just before answered in this tick: never take its message for this one
     const since = t.tick;
     town("dump", { town: id });
     const m = await t.waitMessage(p, (x) => x.startsWith('{"town"'), { since, timeout: 60 });
@@ -55,7 +56,7 @@ export default async function (t) {
 
   // Hill first (far away): it takes Mayor Bram, so Elm gets its own mayor.
   const { top: hillTop } = await t.loadArea(400, 0);
-  p.teleport({ x: 400.5, y: hillTop + 1, z: 0.5 });
+  p.teleport({ x: 400.5, y: hillTop.y + 1, z: 0.5 });
   await t.wait(20);
   let since = t.tick;
   town("add", { name: "Hill" });
