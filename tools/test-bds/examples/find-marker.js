@@ -5,6 +5,15 @@
 // Before 7dac598caa6dd6ee526506ebbcf4821a677ed64f: no find_bp realm:actionbar, and the action bar
 // never says "blocks".
 // Run with: node tools/test-bds/run.mjs --quiet --flat --only find_bp --scenario tools/test-bds/examples/find-marker.js --timeout 300
+// The private index lists only containers the searcher placed or opened, and a simulated player's open fires no
+// interact event, so the fixture's searchers place their containers (native playerPlaceBlock, as saga-content-replacements).
+async function place(t, p, loc, type) {
+  const inv = p.getComponent("minecraft:inventory").container;
+  inv.setItem(p.selectedSlotIndex, new t.mc.ItemStack(type, 1));
+  p.useItemInSlotOnBlock(p.selectedSlotIndex, { x: loc.x, y: loc.y - 1, z: loc.z }, t.mc.Direction.Up);
+  await t.waitUntil(() => t.dimension.getBlock(loc).typeId === type, { timeout: 40, message: `${p.name} placed ${type}` });
+}
+
 export default async function (t) {
   const sys = t.system;
   /** @type {{ tick: number, m: any }[]} */
@@ -28,8 +37,11 @@ export default async function (t) {
   const dim = t.dimension;
   const chest = { x: Math.floor(seeker.location.x) + 2, y: Math.floor(seeker.location.y), z: Math.floor(seeker.location.z) + 2 };
   const barrel = { x: chest.x + 3, y: chest.y, z: chest.z };
-  dim.getBlock(chest).setType("minecraft:chest");
-  dim.getBlock(barrel).setType("minecraft:barrel");
+  const theirs = { x: Math.floor(bystander.location.x), y: Math.floor(bystander.location.y), z: Math.floor(bystander.location.z) + 4 };
+  await place(t, seeker, chest, "minecraft:chest");
+  await place(t, seeker, barrel, "minecraft:barrel");
+  await place(t, bystander, theirs, "minecraft:chest");
+  dim.getBlock(theirs).getComponent("minecraft:inventory").container.setItem(0, new t.mc.ItemStack("minecraft:diamond", 1));
   dim.getBlock(chest).getComponent("minecraft:inventory").container.setItem(0, new t.mc.ItemStack("minecraft:diamond", 4));
   dim.getBlock(barrel).getComponent("minecraft:inventory").container.setItem(0, new t.mc.ItemStack("minecraft:emerald", 2));
 
@@ -42,7 +54,7 @@ export default async function (t) {
   t.assert(t.cmd(seeker, "/realm:find diamond").ok, "find diamond");
   const form = await menu;
   t.log("results", form.buttons);
-  t.check(form.buttons.length >= 1, "a result to mark");
+  t.check(form.buttons.length === 1, "only the searcher's own chest is listed, not the bystander's");
   form.answer(0);
   const marked = await t.waitMessage(seeker, /marked for/, { timeout: 80, pack: "find_bp" });
   t.check(/Chest/.test(marked.plain), "chat names the container for the searcher only");
