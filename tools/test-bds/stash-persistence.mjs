@@ -81,7 +81,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
       TestContainer.prototype.setItem = function (slot, item) {
         if (this.size === 27 && ++writes === failAt) {
           fired = true;
-          throw new Error("injected chest write failure");
+          // A plain string: the pack's expected "export incomplete" warning then has no "Error" in it for --strict.
+          throw "injected chest write failure";
         }
         return original.call(this, slot, item);
       };

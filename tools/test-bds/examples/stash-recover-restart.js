@@ -51,7 +51,7 @@ export default async function (t) {
     sword.getComponent("minecraft:durability").damage = 19;
     inv.setItem(10, sword);
     inv.setItem(11, new t.mc.ItemStack("minecraft:emerald", 7));
-    p.runCommand(`replaceitem entity @s slot.inventory 3 potion 1 14`);
+    p.runCommand(`replaceitem entity @s slot.hotbar 3 potion 1 14`);
     await t.wait(2);
     await identity("force_pending");
     // The player loses everything but the gold in slot 0 and 3 of the 7 emeralds.
