@@ -9,11 +9,11 @@ export default async function (t) {
   const failed = [];
   const fill = (cmd) => t.server(cmd).ok || failed.push(cmd);
   const slope = (ox) => {
-    for (let x = -50; x <= 50; x += 3) {
-      const h = Math.max(-2, Math.floor((x + 50) / 3) - 16); // flat 2 below the plain on the west side (bedrock is at -64)
-      if (h > 0) fill(`/fill ${ox + x} ${G + 1} -50 ${ox + x + 2} ${G + h} 50 dirt`);
-      else if (h < 0) fill(`/fill ${ox + x} ${G + h + 1} -50 ${ox + x + 2} ${G} 50 air`);
-      fill(`/fill ${ox + x} ${G + h} -50 ${ox + x + 2} ${G + h} 50 grass_block`);
+    for (let x = -45; x <= 45; x += 3) {
+      const h = Math.max(-2, Math.floor((x + 45) / 3) - 15); // flat 2 below the plain on the west side (bedrock is at -64)
+      if (h > 0) fill(`/fill ${ox + x} ${G + 1} -32 ${ox + x + 2} ${G + h} 31 dirt`);
+      else if (h < 0) fill(`/fill ${ox + x} ${G + h + 1} -32 ${ox + x + 2} ${G} 31 air`);
+      fill(`/fill ${ox + x} ${G + h} -32 ${ox + x + 2} ${G + h} 31 grass_block`);
     }
   };
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });

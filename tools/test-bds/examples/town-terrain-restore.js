@@ -6,13 +6,17 @@ export default async function (t) {
   const G = -61;
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
   await t.loadArea(0, 0, { radius: 4 });
-  // A gentle slope: one block every 3 blocks to the east, so every spot needs some leveling.
-  for (let x = -60; x <= 60; x += 3) {
-    const h = Math.floor((x + 60) / 3) - 20;
-    if (h > 0) t.server(`/fill ${x} ${G + 1} -60 ${x + 2} ${G + h} 60 dirt`);
-    else if (h < 0) t.server(`/fill ${x} ${G + h + 1} -60 ${x + 2} ${G} 60 air`);
-    t.server(`/fill ${x} ${G + h} -60 ${x + 2} ${G + h} 60 grass_block`);
+  // A gentle slope: one block every 3 blocks to the east, so every spot needs some leveling. It stays inside the
+  // loaded circle (z -32 .. 31) and above bedrock (flat 2 below the plain on the west side).
+  const failed = [];
+  const fill = (cmd) => t.server(cmd).ok || failed.push(cmd);
+  for (let x = -45; x <= 45; x += 3) {
+    const h = Math.max(-2, Math.floor((x + 45) / 3) - 15);
+    if (h > 0) fill(`/fill ${x} ${G + 1} -32 ${x + 2} ${G + h} 31 dirt`);
+    else if (h < 0) fill(`/fill ${x} ${G + h + 1} -32 ${x + 2} ${G} 31 air`);
+    fill(`/fill ${x} ${G + h} -32 ${x + 2} ${G + h} 31 grass_block`);
   }
+  t.assert(!failed.length, `the slope is built (${failed.length} fills failed: ${failed[0]})`);
   await t.wait(20);
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", town: "slope", ...extra }));
   const dump = async () => {
@@ -31,7 +35,7 @@ export default async function (t) {
   t.log("well:", JSON.stringify(s));
   t.check(typeof s.lv === "string" && /[0-6]/.test(s.lv), "a leveled spot");
   const [x1, z1, x2, z2] = d.regions.well;
-  const y1 = s.y - 12;
+  const y1 = Math.max(-64, s.y - 12);
   const y2 = s.y + 12;
   const snap = () => {
     const out = [];
