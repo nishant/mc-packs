@@ -231,6 +231,13 @@ test("night: champions far from every player take no aura or approach turn, so t
   assert.ok(ctx.puffs.length > 0 && ctx.puffs.every((e) => Number(e.id.slice(1)) < 10), "the aura puffs only for champions near a player");
 });
 
+test("night: with nobody online the aura puffs for no champion, not even unsorted ones after a reload", () => {
+  // 40 champions loaded, no player: the first run sorts 12 of them; the other 28 have not been sorted yet.
+  const ctx = eliteContext({ champions: 40, players: [] });
+  for (let r = 0; r < 3; r++) ctx.api.aura();
+  assert.equal(ctx.puffs.length, 0, `${ctx.puffs.length} puffs with no player online`);
+});
+
 test("night: sorting is bounded per run and a champion that a player walks up to is picked up again", () => {
   const spots = Array.from({ length: 40 }, (_, i) => vec(5000 + i, 64, 0));
   const ctx = eliteContext({ champions: 40, players: [vec(0)], at: (i) => spots[i] });

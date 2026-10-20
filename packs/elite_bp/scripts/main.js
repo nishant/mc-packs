@@ -372,7 +372,8 @@ function aura() {
   const started = Date.now();
   sortNear();
   let n = 0;
-  const turn = turnOf(nearIds("aura"), auraCursor, AURA_PER_RUN);
+  // Nobody online at the last read of the players' places: no puffs, not even from champions not sorted yet (a reload).
+  const turn = playersAt.list.length ? turnOf(nearIds("aura"), auraCursor, AURA_PER_RUN) : { batch: [], last: auraCursor };
   auraCursor = turn.last;
   for (const id of turn.batch) {
     const e = live.get(id);
