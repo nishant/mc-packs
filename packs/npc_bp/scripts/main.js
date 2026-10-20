@@ -21,6 +21,7 @@ import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } fro
 import { get } from "./settings.js";
 import { createFallWatch, createSnapGuard, floorGone, freeSpotNear, settledBelow, standable } from "./tether.js";
 import { onScriptEvent } from "./script-events.js";
+import { MAX_MAYORS, createIdsAssembler, folkFor, isMayorId, keepPlaced, mayorsJson, normalizeMayors, parseMayorRequest, skinKey, unlisted } from "./mayors.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
 // the game's skins in its NPC editor). Each one lives inside its own house and stays there: its one spot (its
@@ -37,9 +38,12 @@ import { onScriptEvent } from "./script-events.js";
 //   realm:calendar { day, season, festival?, ends?, doy, year, from }   at dawn, on join, on realm:calendar_ping
 //   realm:mail_send { to, from, subject, body }                                                     -> mail_bp
 // For the Minimap: realm:npc_places { part, parts, folk: [{ id, n, dim, x, z }] } on a change and on realm:npc_places_ping.
+// Town mayors (Town Projects asks for one per town; mayors.js): realm:npc_mayor { op: set|rename|remove, ... } ->
+// realm:npc_mayor_ack { id, op, ok, error? }, and the full list realm:npc_mayors { part, parts, ids }.
 
 const PROP_LIST = "npc:list"; // world: JSON Placed[], where each townsfolk lives
 const PROP_WEATHER = "npc:weather"; // world: overworld weather from the last change; scripts can't read the current weather
+const PROP_MAYORS = "npc:mayors"; // world: JSON { "mayor:<town>": { n, t, tn } }, the town mayors Town Projects asked for
 
 const NPC_TYPE = "minecraft:npc";
 const OWNER_TAG = "realm:npc_owner:npc_bp";
@@ -88,7 +92,27 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
 /** @typedef {{ missing: number, nextIdle: number, speech: number, speechLine?: string, yaw?: number }} State */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
 
+/** The cast (config.js): affinity, gifts, letters and the stories are theirs only. */
 const folk = new Map(CONFIG.townsfolk.map((t) => [t.id, t]));
+
+/** Town mayors from npc:mayors, by id ("mayor:<town>"). @type {Map<string, import("./mayors.js").MayorRec>} */
+let mayors = new Map();
+let mayorsCorrupt = false; // npc:mayors unreadable: mayor entities are left alone rather than removed
+/** @type {Map<string, Townsfolk>} built from CONFIG.mayorTemplate */
+const mayorFolk = new Map();
+
+/** A placed townsfolk: the cast member, or a town mayor built from the template. @param {string} id @returns {Townsfolk | undefined} */
+function folkOf(id) {
+  const t = folk.get(id);
+  if (t) return t;
+  let m = mayorFolk.get(id);
+  if (m) return m;
+  const rec = mayors.get(id);
+  if (!rec) return undefined;
+  m = /** @type {Townsfolk} */ (folkFor(id, rec, CONFIG.mayorTemplate));
+  mayorFolk.set(id, m);
+  return m;
+}
 
 /** @type {Placed[]} */
 let list = [];
@@ -153,6 +177,31 @@ function upgrade(r) {
   return { rec, old: "home" in r || "posts" in r };
 }
 
+/** @param {string} id */
+const inCast = (id) => folk.has(id);
+/** A saved post kept at load: the cast's, a listed mayor's, and every mayor's while npc:mayors can't be read (Town Projects sets them again). @param {string} id */
+const keepAtLoad = (id) => keepPlaced(id, inCast, mayors) || (mayorsCorrupt && isMayorId(id));
+
+function loadMayors() {
+  try {
+    const raw = world.getDynamicProperty(PROP_MAYORS);
+    mayors = normalizeMayors(typeof raw === "string" ? JSON.parse(raw) : {});
+  } catch (e) {
+    console.warn(`[npc] ${PROP_MAYORS} is corrupt: ${e}`);
+    mayors = new Map();
+    mayorsCorrupt = true;
+  }
+  mayorFolk.clear();
+}
+
+function saveMayors() {
+  try {
+    world.setDynamicProperty(PROP_MAYORS, mayors.size ? JSON.stringify(mayorsJson(mayors)) : undefined);
+  } catch (e) {
+    console.warn(`[npc] save mayors: ${e}`);
+  }
+}
+
 function load() {
   try {
     const raw = world.getDynamicProperty(PROP_LIST);
@@ -163,11 +212,11 @@ function load() {
     for (const r of Array.isArray(parsed) ? parsed : []) {
       const u = upgrade(r);
       if (!u || out.some((o) => o.id === u.rec.id)) continue;
-      if (!folk.has(u.rec.id)) console.warn(`[npc] "${u.rec.id}" is no longer in config.js: its NPC is removed when its chunk loads`);
+      if (!keepAtLoad(u.rec.id)) console.warn(`[npc] "${u.rec.id}" is no longer in config.js${isMayorId(u.rec.id) ? " or npc:mayors" : ""}: its NPC is removed when its chunk loads`);
       old ||= u.old;
       out.push(u.rec);
     }
-    list = out.filter((r) => folk.has(r.id));
+    list = out.filter((r) => keepAtLoad(r.id));
     if (old) {
       console.warn("[npc] townsfolk with a home now live there: their homes became their posts, lunch and evening spots are gone");
       save();
@@ -202,7 +251,10 @@ function placesSoon() {
 let lastPlaces = "";
 /** @param {boolean} [always] send even if nothing changed */
 function sendPlaces(always = false) {
-  const items = list.filter((r) => folk.has(r.id)).map((r) => ({ id: r.id, n: /** @type {Townsfolk} */ (folk.get(r.id)).name.slice(0, 32), dim: r.dim, x: Math.floor(r.x), z: Math.floor(r.z) }));
+  const items = list.flatMap((r) => {
+    const t = folkOf(r.id);
+    return t ? [{ id: r.id, n: t.name.slice(0, 32), dim: r.dim, x: Math.floor(r.x), z: Math.floor(r.z) }] : [];
+  });
   const key = JSON.stringify(items);
   if (!always && key === lastPlaces) return;
   lastPlaces = key;
@@ -435,7 +487,7 @@ function updateLabels() {
     });
   const targets = [];
   for (const rec of list) {
-    const t = folk.get(rec.id);
+    const t = folkOf(rec.id);
     const entity = entityOf(rec);
     if (!t || !entity) continue;
     targets.push({ id: rec.id, entity, name: labelTextFor(t) });
@@ -468,9 +520,9 @@ function audit(entity) {
   if (!ready || !entity.isValid || entity.typeId !== NPC_TYPE || !entity.hasTag(OWNER_TAG)) return;
   const id = idOf(entity);
   const rec = id ? placedOf(id) : undefined;
-  const t = id ? folk.get(id) : undefined;
+  const t = id ? folkOf(id) : undefined;
   if (!rec || !t) {
-    if (!loadFailed) entity.remove();
+    if (!loadFailed && !(mayorsCorrupt && isMayorId(id))) entity.remove();
     return;
   }
   if (rec.eid !== entity.id) {
@@ -705,7 +757,7 @@ function loop() {
   const activeRange = Math.max(NAME_RANGE, CONFIG.respawnRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
   const players = world.getAllPlayers();
   for (const rec of list) {
-    const t = folk.get(rec.id);
+    const t = folkOf(rec.id);
     if (!t) continue;
     try {
       if (!players.some((p) => p.dimension.id === rec.dim && dist(p.location, rec) <= activeRange)) {
@@ -733,6 +785,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   } catch {
     // keep Clear
   }
+  loadMayors();
   load();
   loadGossip();
   loadDay();
@@ -836,8 +889,10 @@ async function tapped(player, entity, id, gift = false) {
   const now = system.currentTick;
   if (busy.has(player.id) || now - (lastTap.get(player.id) ?? -TAP_COOLDOWN) < TAP_COOLDOWN) return;
   lastTap.set(player.id, now);
-  const t = folk.get(id);
+  const t = folkOf(id);
   if (!t) return;
+  // Affinity, gifts, keepsakes and "Ask about..." are the cast's only: a town mayor has none (npc:aff stays bounded).
+  const cast = folk.has(id);
   busy.add(player.id);
   try {
     // Look at whoever is talking.
@@ -846,19 +901,21 @@ async function tapped(player, entity, id, gift = false) {
       if (rec) turn(entity, stateOf(id), anchorOf(rec), yawTo(entity.location, player.location), true);
     }
     // A sneak-tap holding something is a gift; with an empty hand it's an ordinary tap.
-    if (gift && get("affinity") === true && giftInHand(player)) {
+    if (gift && cast && get("affinity") === true && giftInHand(player)) {
       giveGift(player, t, entity);
       return;
     }
     const req = `npc:${id}:${player.id}:${now}:${++requests}`;
     rounds.set(req, []);
     system.sendScriptEvent("realm:npc_talk", JSON.stringify({ req, player: player.id, npc: id, roles: t.roles, name: plainName(t) }));
-    talkedTo(player, t);
-    keepsake(player, t);
+    if (cast) {
+      talkedTo(player, t);
+      keepsake(player, t);
+    }
     await wait(OFFER_TICKS);
     const offers = rounds.get(req) ?? [];
     rounds.delete(req);
-    const hearth = get("affinity") === true;
+    const hearth = cast && get("affinity") === true;
     const held = hearth ? giftInHand(player) : undefined;
     if (held && !held.keep) offers.push({ pack: "npc_bp", key: "give", label: `Give ${itemName(held.item.typeId)}\n§8a gift, takes 1`, order: 0 });
     if (hearth && levelWith(player, id) >= 1 && HEARTH[id]?.topics.length) offers.push({ pack: "npc_bp", key: "ask", label: "Ask about...", order: 90 });
@@ -1484,15 +1541,15 @@ function dayTick() {
 function whereabouts(player) {
   const here = player.location;
   return list
-    .filter((r) => folk.has(r.id))
+    .filter((r) => !!folkOf(r.id))
     .map((r) => {
-      const t = /** @type {Townsfolk} */ (folk.get(r.id));
+      const t = /** @type {Townsfolk} */ (folkOf(r.id));
       const entity = entityOf(r);
       const at = entity && entity.dimension.id === r.dim ? entity.location : anchorOf(r);
       const roles = t.roles.length ? ` §8(${t.roles.join(", ")})` : "";
       // At home (they always are), and how well you know them.
       const doing = " §7at home";
-      const heart = get("affinity") === true ? ` §d${LEVEL_NAMES[levelWith(player, t.id)]}` : "";
+      const heart = get("affinity") === true && folk.has(t.id) ? ` §d${LEVEL_NAMES[levelWith(player, t.id)]}` : "";
       if (r.dim !== player.dimension.id) return { d: Infinity, text: `${displayName(t)}§f - in ${dimName(r.dim)}${doing}${heart}${roles}` };
       const d = Math.round(Math.hypot(at.x - here.x, at.z - here.z));
       const where = d < 4 ? "right here" : `${d}m ${compass(at.x - here.x, at.z - here.z)}`;
@@ -1606,26 +1663,38 @@ async function removeNpc(player) {
   const [entity] = player.dimension.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG], location: player.location, maxDistance: CONFIG.removeRange, closest: 1 });
   if (!entity) return player.sendMessage(`§cNo townsfolk within ${CONFIG.removeRange} blocks.`);
   const id = idOf(entity);
-  const t = id ? folk.get(id) : undefined;
+  const t = id ? folkOf(id) : undefined;
   const who = t ? plainName(t) : "that NPC";
+  const mayor = isMayorId(id);
   const res = await show(
     player,
     new ActionFormData()
       .title("Remove townsfolk?")
-      .body(`Remove ${who}, ${Math.round(dist(entity.location, player.location))} blocks from you? Where they live is forgotten, and the skin picked for them is lost: /realm:npc_add ${id ?? "<id>"} places them again with the default skin.`)
+      .body(
+        mayor
+          ? `Remove ${who}, ${Math.round(dist(entity.location, player.location))} blocks from you? Where they live is forgotten, and the skin picked for them is lost. With Town Projects, the town gets its mayor back (default skin) when a player comes near, unless Town mayors is Disabled there; move a mayor with /realm:town instead.`
+          : `Remove ${who}, ${Math.round(dist(entity.location, player.location))} blocks from you? Where they live is forgotten, and the skin picked for them is lost: /realm:npc_add ${id ?? "<id>"} places them again with the default skin.`,
+      )
       .button("Remove")
       .button("Cancel"),
   );
   if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
   if (!entity.isValid) return player.sendMessage(`§c${who} isn't loaded any more: nothing was removed.`);
+  if (id) forget(id);
+  entity.remove();
+  player.sendMessage(mayor ? `§aRemoved ${who}.` : `§aRemoved ${t ? plainName(t) : "that NPC"}. §7Place them again with /realm:npc_add ${id ?? "<id>"}.`);
+}
+
+/** Forgets a placed townsfolk (a mayor also leaves npc:mayors): its post, state, label and skin. @param {string} id */
+function forget(id) {
   const before = list.length;
   list = list.filter((r) => r.id !== id);
   if (list.length !== before) save();
-  if (id) states.delete(id);
-  if (id) nameLabels.removeFor(id);
-  if (id) dropSkin(id);
-  entity.remove();
-  player.sendMessage(`§aRemoved ${t ? plainName(t) : "that NPC"}. §7Place them again with /realm:npc_add ${id ?? "<id>"}.`);
+  if (mayors.delete(id)) saveMayors();
+  mayorFolk.delete(id);
+  states.delete(id);
+  nameLabels.removeFor(id);
+  dropSkin(id);
 }
 
 /**
@@ -1634,7 +1703,7 @@ async function removeNpc(player) {
  */
 function sharedSpots(rec) {
   return list.filter((r) => r.id !== rec.id && r.dim === rec.dim && dist(r, rec) < SPOT_SHARED).map((r) => {
-    const t = folk.get(r.id);
+    const t = folkOf(r.id);
     return t ? plainName(t) : r.id;
   });
 }
@@ -1661,7 +1730,7 @@ const skins = new Set();
 function hasSkin(id) {
   if (skins.has(id)) return true;
   try {
-    if (world.structureManager.get(SKIN_PREFIX + id)) skins.add(id);
+    if (world.structureManager.get(SKIN_PREFIX + skinKey(id))) skins.add(id);
   } catch {
     // no structure manager access right now
   }
@@ -1685,8 +1754,9 @@ function saveSkin(entity, id) {
     if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player" && e.typeId !== LABEL_TYPE)) return false; // players aren't saved
     const from = { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) };
     const sm = world.structureManager;
-    if (sm.get(SKIN_PREFIX + id)) sm.delete(SKIN_PREFIX + id);
-    sm.createFromWorld(SKIN_PREFIX + id, dim, from, { ...from, y: from.y + 1 }, { includeBlocks: false, includeEntities: true, saveMode: StructureSaveMode.World });
+    const key = SKIN_PREFIX + skinKey(id);
+    if (sm.get(key)) sm.delete(key);
+    sm.createFromWorld(key, dim, from, { ...from, y: from.y + 1 }, { includeBlocks: false, includeEntities: true, saveMode: StructureSaveMode.World });
     skins.add(id);
     return true;
   } catch (e) {
@@ -1708,7 +1778,7 @@ function skinAfterEdit(entity, id) {
 function dropSkin(id) {
   skins.delete(id);
   try {
-    world.structureManager.delete(SKIN_PREFIX + id);
+    world.structureManager.delete(SKIN_PREFIX + skinKey(id));
   } catch {
     // none saved
   }
@@ -1725,7 +1795,7 @@ function fromSkin(rec, dim, at) {
     const before = new Set(dim.getEntities({ type: NPC_TYPE, tags }).map((e) => e.id));
     // The structure command, not world.structureManager.place(): that can put the entity into the Overworld at the
     // same coordinates while a player is in the Nether or the End (BDS 1.26).
-    dim.runCommand(`structure load "${SKIN_PREFIX + rec.id}" ${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)} 0_degrees none true false`);
+    dim.runCommand(`structure load "${SKIN_PREFIX + skinKey(rec.id)}" ${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)} 0_degrees none true false`);
     const fresh = dim.getEntities({ type: NPC_TYPE, tags, location: at, maxDistance: 4 }).filter((e) => !before.has(e.id));
     if (!fresh.length) return undefined;
     for (const e of fresh.slice(1)) e.remove();
@@ -1986,7 +2056,7 @@ async function moveTo(dim, plan) {
 /** /realm:npc_houses [radius]: find the houses, preview, then move. @param {Player} player @param {number} [radius] */
 async function houseNpcs(player, radius) {
   const R = Math.max(16, Math.min(64, Math.round(Number(radius) || CONFIG.housesRadius)));
-  const ids = list.map((r) => r.id);
+  const ids = list.map((r) => r.id).filter(inCast); // town mayors stay at their own towns
   if (!ids.length) return player.sendMessage("§cNo townsfolk are placed yet: /realm:npc_add <id> first.");
   if (moving) return player.sendMessage("§eThe townsfolk are already moving. Wait for it to finish.");
   moving = true;
@@ -2076,7 +2146,7 @@ async function undoMove(player) {
 /** @param {Player} player */
 function listForOps(player) {
   const lines = list.map((r) => {
-    const t = folk.get(r.id);
+    const t = folkOf(r.id);
     const state = entityOf(r) ? "§a(loaded)" : "§8(not loaded)";
     const shared = sharedSpots(r);
     return `§e${r.id}§f ${t ? plainName(t) : ""}: ${coords(r)} in ${dimName(r.dim)} ${state}${shared.length ? ` §c(same spot as ${shared.join("; ")})` : ""}`;
@@ -2343,6 +2413,133 @@ onScriptEvent(
     } catch (e) {
       console.warn(`[npc] summon: ${e}`);
       reply(false, String(e));
+    }
+  },
+);
+
+// Town mayors (mayors.js): Town Projects asks for one per town. A mayor is placed on the nearest standable spot within
+// 3 blocks of where it asks, spawned like any townsfolk (tags, label, skin snapshot), kept at its post and put back
+// when missing, and "one of each" holds as for the cast. Every request is answered with realm:npc_mayor_ack.
+
+/**
+ * realm:npc_mayor set: creates the mayor, or moves it. Returns an error, or undefined.
+ * @param {{ id: string, name: string, tn: string, town: string, dim: string, x: number, y: number, z: number, yaw: number }} m
+ */
+function mayorSet(m) {
+  if (!mayors.has(m.id) && mayors.size >= MAX_MAYORS) return `too many mayors (at most ${MAX_MAYORS})`;
+  /** @type {Dimension} */
+  let dim;
+  try {
+    dim = world.getDimension(m.dim);
+  } catch {
+    return `no dimension ${m.dim}`;
+  }
+  let at = centered({ x: m.x, y: m.y, z: m.z });
+  const here = loaded(dim, at);
+  if (here) {
+    at = standUp(dim, at);
+    if (!standable(dim, at)) at = freeSpotNear(dim, at, 3) ?? at;
+  }
+  const yaw = wrap(m.yaw);
+  mayors.set(m.id, { n: m.name, t: m.town, tn: m.tn });
+  mayorFolk.delete(m.id);
+  saveMayors();
+  const t = /** @type {Townsfolk} */ (folkOf(m.id));
+  let rec = placedOf(m.id);
+  if (rec) {
+    Object.assign(rec, { dim: dim.id, x: at.x, y: at.y, z: at.z, yaw });
+    delete rec.orig;
+  } else {
+    rec = { id: m.id, dim: dim.id, x: at.x, y: at.y, z: at.z, yaw };
+    list.push(rec);
+  }
+  save();
+  const st = stateOf(m.id);
+  st.missing = 0;
+  const entity = entityOf(rec);
+  let moved = false;
+  if (entity && here) {
+    try {
+      entity.teleport(at, { dimension: dim, rotation: { x: 0, y: yaw } });
+      dress(entity, t);
+      st.yaw = yaw;
+      moved = true;
+    } catch (e) {
+      console.warn(`[npc] move ${m.id}: ${e}`);
+    }
+  }
+  // Not loaded here yet: the missing check spawns it once a player is near its post.
+  if (!moved && here) spawn(rec, t, at);
+  updateLabels();
+  return undefined;
+}
+
+/** realm:npc_mayor rename. @param {{ id: string, name: string, tn: string }} m */
+function mayorRename(m) {
+  const rec = mayors.get(m.id);
+  if (!rec) return "no such mayor";
+  mayors.set(m.id, { ...rec, n: m.name, tn: m.tn });
+  mayorFolk.delete(m.id);
+  saveMayors();
+  const placed = placedOf(m.id);
+  const entity = placed ? entityOf(placed) : undefined;
+  const t = folkOf(m.id);
+  if (entity && t) dress(entity, t);
+  updateLabels();
+  placesSoon();
+  return undefined;
+}
+
+/** realm:npc_mayor remove (and a mayor a complete list no longer has): entity, label, skin and records go. @param {string} id */
+function mayorRemove(id) {
+  const rec = placedOf(id);
+  const entity = rec ? entityOf(rec) : undefined;
+  forget(id);
+  try {
+    entity?.remove();
+  } catch {
+    // gone already; a leftover is removed by the audit when it loads
+  }
+}
+
+const mayorLists = createIdsAssembler();
+
+onScriptEvent(
+  ["realm:npc_mayor", "realm:npc_mayors"],
+  ({ id, message }) => {
+    if (id !== "realm:npc_mayor" && id !== "realm:npc_mayors") return;
+    /** @type {any} */
+    let msg;
+    try {
+      msg = JSON.parse(message);
+    } catch {
+      return;
+    }
+    if (id === "realm:npc_mayors") {
+      if (!ready) return; // the list comes again at the next load: nothing is removed on a partial view
+      const ids = mayorLists.add(msg);
+      if (!ids) return;
+      for (const gone of unlisted(mayors, ids)) {
+        console.warn(`[npc] ${gone}: its town is gone from Town Projects: the mayor is removed`);
+        mayorRemove(gone);
+      }
+      return;
+    }
+    const req = parseMayorRequest(msg);
+    /** @param {boolean} ok @param {string} [error] */
+    const ack = (ok, error) =>
+      system.sendScriptEvent("realm:npc_mayor_ack", JSON.stringify({ id: typeof msg?.id === "string" ? msg.id.slice(0, 48) : "", op: typeof msg?.op === "string" ? msg.op.slice(0, 8) : "", ok, ...(error ? { error } : {}) }));
+    if ("error" in req) return ack(false, req.error);
+    if (!ready) return ack(false, "world still loading");
+    try {
+      let err;
+      if (req.op === "set") err = mayorSet(/** @type {any} */ (req));
+      else if (req.op === "rename") err = mayorRename(/** @type {any} */ (req));
+      else mayorRemove(req.id);
+      ack(!err, err);
+    } catch (e) {
+      console.warn(`[npc] mayor ${req.op} ${req.id}: ${e}`);
+      ack(false, String(e).slice(0, 120));
     }
   },
 );
