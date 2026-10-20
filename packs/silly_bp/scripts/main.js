@@ -314,8 +314,13 @@ world.afterEvents.entityDie.subscribe(
   { entityTypes: ["minecraft:player"] },
 );
 
-/** The sweep: every player's gear read again, one player a tick, each at most every SWEEP_MIN ticks. */
+/**
+ * The sweep: every player's gear read again, one player every SWEEP_STEP ticks, each at most every SWEEP_MIN ticks.
+ * Only gear that changes with no event needs it (armor put on by a dispenser, a command or another pack's script),
+ * so on a busy server it slows down: one full read every tick was a quarter of a millisecond a tick with 40 on.
+ */
 const SWEEP_MIN = 20;
+const SWEEP_STEP = 4;
 /** @type {Player[]} */
 let sweepList = [];
 let sweepAt = 0;
@@ -328,6 +333,7 @@ system.runInterval(() => {
       else dropGear(p.id);
     }
   }
+  if (system.currentTick % SWEEP_STEP !== 0) return;
   if (sweepAt >= sweepList.length) {
     if (system.currentTick % SWEEP_MIN !== 0) return;
     sweepList = world.getAllPlayers();
