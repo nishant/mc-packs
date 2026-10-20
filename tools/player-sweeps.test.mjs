@@ -342,3 +342,17 @@ test("journal: a look reads the player's dimension id once and the world spawn o
   assert.ok(spawns <= 11, `world spawn read ${spawns} times in 10 rounds`);
   assert.ok(w.maxPerTick() <= 4, `at most 4 players a tick, got ${w.maxPerTick()}`);
 });
+
+test("guilds: placed blocks save within 30 seconds while share 0 is empty", async () => {
+  const sim = createSim();
+  const ps = [0, 1, 2].map((i) => sim.join(`P${i}`, { id: `-${2000 + i}` }));
+  await loadReal(sim, "guilds_bp");
+  sim.step(60); // P0, P1, P2 hold shares 0, 1 and 2
+  sim.leave(ps[0]); // share 0 stays empty: P1 and P2 keep theirs
+  sim.step(40);
+  const block = { typeId: "minecraft:iron_ore", dimension: { id: "minecraft:overworld" }, location: { x: 5, y: 12, z: -7 } };
+  sim.game.emit("world.after.playerPlaceBlock", { player: ps[1], block, dimension: block.dimension });
+  sim.step(31 * 20);
+  const saved = String(sim.server.world.getDynamicProperty("guilds:placed0") ?? "");
+  assert.ok(saved.split(";").some((k) => k.endsWith("5,12,-7")), `placed block saved: ${JSON.stringify(saved)}`);
+});

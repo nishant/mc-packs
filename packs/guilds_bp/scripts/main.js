@@ -592,17 +592,20 @@ function saveProgress(p) {
 }
 
 // Each player once a second as before, a tenth of them every 2 ticks (scripts/spread.js), so a full server doesn't
-// do (or save) everyone on one tick. Each tenth saves on a different second of the 30.
+// do (or save) everyone on one tick. Each tenth saves on a different second of the 30. The placed blocks save every
+// 30 seconds from `start`, which runs each round whoever is online (a share, even share 0, can stay empty).
 spreadPlayers(system, world, {
   every: 20,
   parts: 10,
+  start: (_, round) => {
+    if (round % 30 === 0) savePlaced();
+  },
   visit: (share, { round, part }) => {
     const saving = (round + part) % 30 === 0;
     for (const p of share) {
       travel(p);
       if (saving) saveProgress(p);
     }
-    if (part === 0 && round % 30 === 0) savePlaced();
   },
 });
 
