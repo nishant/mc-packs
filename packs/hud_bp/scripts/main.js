@@ -92,17 +92,29 @@ const utf8Length = (s) => {
   return n;
 };
 
-/** The realm:hud_state messages for a full list. @param {string[]} players @param {number} seq */
+/**
+ * The realm:hud_state messages for a full list. Each part's size is counted as it grows (the envelope with the widest
+ * part numbers, plus each id's JSON form and a comma), so every id is encoded once instead of the whole chunk again.
+ * @param {string[]} players @param {number} seq
+ */
 function statePartMessages(players, seq) {
   const envelope = (/** @type {string[]} */ list, /** @type {number} */ part, /** @type {number} */ parts) =>
     JSON.stringify({ part, parts, seq, players: list });
+  const base = utf8Length(envelope([], 9999, 9999));
   /** @type {string[][]} */
   const chunks = [[]];
+  let size = base;
   for (const id of players) {
     const last = /** @type {string[]} */ (chunks.at(-1));
-    if (utf8Length(envelope([id], 9999, 9999)) > STATE_MESSAGE_LIMIT) continue; // can't fit alone: never happens with real ids
-    if (last.length && utf8Length(envelope([...last, id], 9999, 9999)) > STATE_MESSAGE_LIMIT) chunks.push([id]);
-    else last.push(id);
+    const add = utf8Length(JSON.stringify(id));
+    if (base + add > STATE_MESSAGE_LIMIT) continue; // can't fit alone: never happens with real ids
+    if (last.length && size + 1 + add > STATE_MESSAGE_LIMIT) {
+      chunks.push([id]);
+      size = base + add;
+    } else {
+      size += (last.length ? 1 : 0) + add;
+      last.push(id);
+    }
   }
   return chunks.map((list, i) => envelope(list, i + 1, chunks.length));
 }
