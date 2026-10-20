@@ -4,6 +4,7 @@ import { EquipmentSlot, GameMode, ItemStack, MolangVariableMap, Player, system, 
 import { ModalFormData } from "@minecraft/server-ui";
 import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, updateActorLabels } from "./actors.js";
 import { spawnFresh } from "./spawn.js";
+import { forgetChampion, sessionChampion, trackChampion } from "./champions-session.js";
 import {
   active,
   applyChoice,
@@ -1217,7 +1218,7 @@ function championNear(player, obj) {
       const mob = spawnFresh(dim, champ.mob, spawnAt);
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
-      trackChampion(mob);
+      trackChampion(mob.id);
       mob.addTag(champ.tag);
       if (CHOIR.has(champ.tag) || champ.tag.startsWith("realm:saga:whc_")) mob.addTag("saga:choir");
       noBanner(mob);
@@ -1417,6 +1418,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     }
     const killer = damageSource.damagingEntity;
     if (tags.includes(CHAMPION_TAG)) {
+      forgetChampion(deadEntity.id);
       const tag = tags.find((t) => isChampionTag(t));
       if (tag) championSlain(tag, killer instanceof Player ? [killer.id] : [], at, dim);
       return;
@@ -3942,14 +3944,9 @@ export function playerGone(pid) {
   for (const k of [...weatherAsked.keys()]) if (k.startsWith(`${pid}|`)) weatherAsked.delete(k);
 }
 
-const sessionChampions = new Set();
-/** @param {Entity} ent */
-function trackChampion(ent) {
-  sessionChampions.add(ent.id);
-}
 /** A tagged champion that this session did not spawn: a leftover from a chunk that was unloaded at world load. @param {Entity} ent */
 function staleChampion(ent) {
-  return ent.hasTag(CHAMPION_TAG) && !sessionChampions.has(ent.id);
+  return ent.hasTag(CHAMPION_TAG) && !sessionChampion(ent.id);
 }
 /** Removes a leftover champion when its chunk loads. @param {Entity} ent */
 export function sweepLoadedChampion(ent) {
