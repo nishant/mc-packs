@@ -1317,6 +1317,46 @@ export function spawnGroup(player, dim, at, group, key, min = 4, max = 8, owner 
 // Events that count
 // ---------------------------------------------------------------------------
 
+/**
+ * @typedef {object} Kill
+ * @property {string} type
+ * @property {boolean} night
+ * @property {Vector3} at
+ * @property {string} dim
+ * @property {{ owner: string, key: string } | undefined} add the story mob's actor record, when it was one of ours (role "add")
+ * @property {() => Set<string>} owners the scene owners whose story mobs count for the killer
+ */
+
+/**
+ * Scene owners whose story mobs count for a killer: themselves, their party's shared scenes and their party mates'
+ * own scenes. @param {Player} killer @returns {Set<string>}
+ */
+function killerOwners(killer) {
+  const out = new Set([killer.id]);
+  const tag = partyOf(killer);
+  if (tag) {
+    out.add(`party|${tag}`);
+    for (const p of world.getAllPlayers()) if (p.hasTag(tag)) out.add(p.id);
+  }
+  return out;
+}
+
+/**
+ * What a kill adds to a `defeat` objective: 1 or 0. Champion and bounty steps count elsewhere. A story mob that came for
+ * a `defeat` with `spawn` counts for that very step only (its scene's key) and only for the killer, their party or a
+ * party mate, wherever it falls (the fight may drift past the edge); before 1.16.12 any story mob of the right kind
+ * counted for every such step, wherever and whoever it was spawned for (champion adds, a stealth ambush, another
+ * player's fight). Any other mob counts inside the objective's area.
+ * @param {Objective} obj @param {Entry} e @param {number} i @param {Kill} kill
+ */
+function defeatCredit(obj, e, i, kill) {
+  if (obj.champion || obj.bounty) return 0;
+  if (obj.mobs?.length && !obj.mobs.includes(kill.type)) return 0;
+  if (obj.night && !kill.night) return 0;
+  if (kill.add && obj.spawn) return kill.add.key === objKey(e, i) && kill.owners().has(kill.add.owner) ? 1 : 0;
+  return inArea(obj, kill.at, kill.dim) ? 1 : 0;
+}
+
 world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   try {
     if (deadEntity instanceof Player) {
@@ -1349,14 +1389,12 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       return;
     }
     if (!(killer instanceof Player) || !at || !dim) return;
-    const type = deadEntity.typeId;
-    const night = nightMet();
-    const where = at;
-    const d = dim;
-    // A story mob that came for a `defeat` with `spawn` counts even if the fight drifted past the edge.
-    const spawned = actor?.role === "add";
-    /** @param {Objective} obj */
-    const amountFor = (obj) => (!obj.champion && !obj.bounty && (!obj.mobs?.length || obj.mobs.includes(type)) && (!obj.night || night) && (inArea(obj, where, d) || (spawned && !!obj.spawn)) ? 1 : 0);
+    /** @type {Set<string> | undefined} */
+    let owners;
+    /** @type {Kill} */
+    const kill = { type: deadEntity.typeId, night: nightMet(), at, dim, add: actor?.role === "add" ? actor : undefined, owners: () => (owners ??= killerOwners(killer)) };
+    /** @param {Objective} obj @param {Entry} e @param {number} i */
+    const amountFor = (obj, e, i) => defeatCredit(obj, e, i, kill);
     share(killer, advance(killer, "defeat", amountFor), "defeat", amountFor, new Set([killer.id]));
   } catch (e) {
     console.warn(`[saga] ${e}`);
