@@ -199,6 +199,8 @@ function dump(final) {
     calls, callsPerTick: calls / n, callbacks: list.length,
     ...counters,
     top: list.slice(0, 5).map((c) => ({ key: c.key.slice(0, 160), ms: c.ms, calls: c.calls, max: c.max })),
+    // The longest single calls (hitches: a runJob step, a big fill), whatever their total.
+    slowest: [...list].sort((a, b) => b.max - a.max || b.ms - a.ms).slice(0, 5).map((c) => ({ key: c.key.slice(0, 160), max: c.max, ms: c.ms, calls: c.calls })),
     scriptEventsSent: Object.fromEntries(sent),
     scriptEventsHandled: Object.fromEntries([...handled].map(([id, h]) => [id, { calls: h.calls, ms: h.ms }])),
   });

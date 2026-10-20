@@ -85,7 +85,7 @@ time and memory from `/proc`.
 
 The summary then lists, per pack sorted by cost: ms/tick (average), the p95 and max of a tick's ms,
 calls/tick, `setDynamicProperty`, `setActionBar`, `setTitle` and `runCommand` per tick and the top
-callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, and the
+callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, its 5 longest single calls (`slowest`: a hitch such as one `runJob` step, by `max` ms), and the
 whole-bundle per-tick total (packs summed tick by tick: p50, p95, p99, max).
 
 Limits: Bedrock scripting has no high-resolution clock, so times are `Date.now()` differences: a

@@ -58,6 +58,7 @@ test("sends and handled events are counted per id in the PROFILE line", () => {
   assert.equal(obj.scriptEventsHandled["realm:side"].calls, 3);
   assert.equal(obj.scriptEventsHandled["realm:actionbar"].calls, 1);
   assert.equal(obj.scriptEventsHandled["harness:profile_dump"], undefined); // the profiler dumps before the pack sees the dump
+  assert.ok(Array.isArray(obj.slowest), "the longest single calls are listed too (hitches)");
 });
 
 test("the report sums the packs per tick, with who sends each id", () => {
