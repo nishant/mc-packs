@@ -354,7 +354,14 @@ test("wiring: the line is the only wait; slots stay 1-3, the release is the queu
   assert.match(mainSource, /async function opReset[\s\S]{0,200}clearQueue\(/);
   // The line is queue.js as it ships (imported above), made once in main.js with the pack's own parts and pumped every 5 s.
   assert.match(mainSource, /^import \{ createQueue \} from "\.\/queue\.js";$/m);
-  assert.match(mainSource, /= createQueue\(\{\n(?: {2}\w+(?:: [\w.]+)?,\n)+\}\);\nsystem\.runInterval\(pumpQueue, 100\);/);
+  // Every dependency by name and in order, so a dep left out (cantStart: forgotten()'s refusal) or swapped is caught.
+  const wiring = [
+    "const { queue, queuePlace, dequeue, clearQueue, slotBusy, enqueue, pumpQueue, freeRun } = createQueue({",
+    ...["system", "get", "site", "online", "runs", "runOf", "statusLine", "sigilsOf", "freeSlot", "start", "resetPending", "cantStart", "forgotten: forget.forgotten"].map((d) => `  ${d},`),
+    "});",
+    "system.runInterval(pumpQueue, 100);",
+  ].join("\n");
+  assert.ok(mainSource.includes(`\n${wiring}`), "main.js wires createQueue with exactly the pack's own parts");
   assert.match(mainSource, /forgotten: forget\.forgotten,/);
   assert.doesNotMatch(mainSource, /^const QUEUE_|^let queueHold/m, "no second copy of the line in main.js");
 });
