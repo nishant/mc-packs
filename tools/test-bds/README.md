@@ -103,6 +103,9 @@ node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-b
 `examples/perf-soak.js` spreads `players` simulated players around spawn in groups (two near spawn,
 the others 240+ blocks apart, two in a pool, two in the Nether), makes them walk, look around, sneak
 and jump, and run a few common commands for `seconds` (see its header for the other arguments).
+For a memory soak (no `--profile`), `--arg probe=300` logs every 300 s what the world holds that could grow: entities
+by type, scoreboard participants, structures and every pack's saved world data (from `realm:diag_ping`), and ends
+with the change from the first probe to the last (`probe change ...`, also reported as `perf-probe`).
 
 ## Running every example (`suite.mjs`)
 

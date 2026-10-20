@@ -9,7 +9,10 @@
 // Arguments (--arg key=value): players (default 10), seconds (default 300), group (players per
 // group, default 5), spread (blocks between far groups, default 240), commands (seconds between one
 // player's commands, default 45; 0 = none), water (players put in a pool, default 2), nether
-// (players in the Nether, default 2).
+// (players in the Nether, default 2), probe (seconds between memory probes, default 0 = none: entity counts by
+// type, scoreboard participants, structures and every pack's saved world data (realm:diag_ping bytes; each pack's
+// storage is its own, so the scenario can't read it directly),
+// logged and reported as `perf-probe`, for memory soaks with rss-soak.mjs; leave it off when profiling).
 // Layout: group 0 at the world spawn and group 1 30 blocks from it; the other groups on a ring of
 // `spread`-block steps around spawn (so 200+ blocks apart). Water players stand in a 7x7 pool dug at
 // group 1; Nether players stand in a cleared pocket at the spawn's Nether coordinates.
@@ -22,6 +25,7 @@ export default async function (t) {
   const GROUP = Math.max(1, Number(a.group ?? 5));
   const SPREAD = Math.max(50, Number(a.spread ?? 240));
   const CMD_EVERY = Math.max(0, Number(a.commands ?? 45));
+  const PROBE_EVERY = Math.max(0, Number(a.probe ?? 0));
 // Hotbar Refill: every `refill` seconds a land player's hotbar slot 0 is emptied and refill_bp/stash_bp are asked to
 // refill it (rockets that sit on the first page, then a request nothing can answer, which the page index must refuse cheaply).
 const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
@@ -135,11 +139,48 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
     ["crowns_bp", "/realm:crowns_balance"], ["journal_bp", "/realm:journal"], ["goals_bp", "/realm:goals"], ["calendar_bp", "/realm:calendar"],
   ].filter(([pack]) => t.packs.includes(pack)).map(([, c]) => c);
 
+  // Memory probes (probe=N): what the world holds that could grow, every N seconds of the soak.
+  /** @type {any[]} */
+  const probes = [];
+  /** @type {Map<string, any>} */
+  const pongs = new Map();
+  if (PROBE_EVERY) {
+    t.system.afterEvents.scriptEventReceive.subscribe((/** @type {any} */ ev) => {
+      if (ev.id !== "realm:diag_pong") return;
+      try { const m = JSON.parse(ev.message); if (String(m.id).startsWith("probe")) pongs.set(`${m.id}|${m.pack}`, m); } catch (e) { /* not ours */ }
+    }, { namespaces: ["realm"] });
+  }
+  const probe = async (/** @type {number} */ sec) => {
+    const id = `probe${sec}`;
+    t.system.sendScriptEvent("realm:diag_ping", JSON.stringify({ id }));
+    /** @type {Record<string, number>} */
+    const types = {};
+    let entities = 0;
+    for (const d of ["overworld", "nether", "the_end"]) {
+      for (const e of t.world.getDimension(d).getEntities()) { entities++; types[e.typeId] = (types[e.typeId] ?? 0) + 1; }
+    }
+    const sb = t.world.scoreboard;
+    const objectives = sb.getObjectives();
+    let scores = 0;
+    for (const o of objectives) { try { scores += o.getScores().length; } catch (e) { /* removed */ } }
+    await t.wait(20);
+    /** @type {Record<string, number>} */
+    const packBytes = {};
+    for (const [k, m] of pongs) if (k.startsWith(`${id}|`)) { packBytes[m.pack] = m.bytes; pongs.delete(k); }
+    const row = {
+      sec, entities, types, objectives: objectives.length, participants: sb.getParticipants().length, scores,
+      structures: t.world.structureManager.getWorldStructureIds().length, packBytes,
+    };
+    probes.push(row);
+    const top = Object.entries(types).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, n]) => `${k.replace("minecraft:", "")} ${n}`).join(", ");
+    t.log(`probe ${sec} s: ${entities} entities (${top}); ${row.objectives} objectives, ${row.participants} participants, ${scores} scores; ${row.structures} structures; ${Object.keys(packBytes).length} packs answered`);
+  };
+
   // The soak itself: one decision per player per second; commands staggered across players.
   const start = t.tick;
   let refills = 0;
   if (REFILL_EVERY) for (const s of players) if (s.kind === "land") { try { t.cmd(s.p, "/give @s firework_rocket 64"); } catch (e) { /* left already */ } }
-  let commands = 0, moves = 0, lastLog = start, samples = 0, minValid = Infinity;
+  let commands = 0, moves = 0, lastLog = start, samples = 0, minValid = Infinity, lastProbe = -1;
   const valid = (p) => { try { return p.isValid; } catch (e) { return false; } };
   while (t.tick - start < SECONDS * 20) {
     await t.wait(20);
@@ -179,10 +220,23 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
     }
     samples++;
     minValid = Math.min(minValid, validNow);
+    if (PROBE_EVERY && sec % PROBE_EVERY === 0 && sec !== lastProbe) { lastProbe = sec; await probe(sec); }
     if (t.tick - lastLog >= 1200) {
       lastLog = t.tick;
       t.log(`soak ${sec} s: ${players.filter((x) => valid(x.p)).length} players in the world, ${moves} walks, ${commands} commands`);
     }
+  }
+  if (PROBE_EVERY) {
+    if (lastProbe !== SECONDS) await probe(SECONDS);
+    const a0 = probes[0], a1 = probes.at(-1);
+    /** @type {Record<string, number>} */
+    const grew = {};
+    for (const [k, n] of Object.entries(a1.packBytes)) if (n - (a0.packBytes[k] ?? 0) !== 0) grew[k] = n - (a0.packBytes[k] ?? 0);
+    /** @type {Record<string, number>} */
+    const typesGrew = {};
+    for (const k of new Set([...Object.keys(a0.types), ...Object.keys(a1.types)])) if ((a1.types[k] ?? 0) !== (a0.types[k] ?? 0)) typesGrew[k] = (a1.types[k] ?? 0) - (a0.types[k] ?? 0);
+    t.log(`probe change ${a0.sec} -> ${a1.sec} s: entities ${a1.entities - a0.entities} ${JSON.stringify(typesGrew)}; participants ${a1.participants - a0.participants}; structures ${a1.structures - a0.structures}; per pack ${JSON.stringify(grew)}`);
+    t.report("perf-probe", { first: a0, last: a1, typesGrew, packBytesGrew: grew });
   }
   const alive = players.filter((x) => valid(x.p)).length;
   t.log(`soak done: ${SECONDS} s, ${alive}/${N} players still in the world, ${moves} walks, ${commands} commands`);
