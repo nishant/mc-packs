@@ -2465,17 +2465,15 @@ function escortTick(player, e, i, obj) {
         dropScene(s.pid, s.key);
         return;
       }
-      // Arrived?
-      if (!s.data.arrived && to && typeof to !== "string" && !to.pending && ent.dimension.id === to.dim && across(ent.location, to) <= (obj.to?.radius ?? obj.radius ?? 6)) {
+      // Arrived? Done for everyone with them who needs it (a mate who comes later finds them there, safe).
+      if (to && typeof to !== "string" && !to.pending && ent.dimension.id === to.dim && across(ent.location, to) <= (obj.to?.radius ?? obj.radius ?? 6)) {
         const safe = near.filter(({ p }) => counting(p));
-        if (safe.length) {
-          s.data.arrived = true;
-          for (const { p, m } of safe) {
-            p.sendMessage(`§a[Story] ${obj.who.name} is safe.`);
-            bump(p, m.e, s.i, 1);
-          }
-          endLater(s, 100);
+        for (const { p, m } of safe) {
+          p.sendMessage(`§a[Story] ${obj.who.name} is safe.`);
+          bump(p, m.e, s.i, 1);
         }
+        if (safe.length) s.data.arrived = true;
+        if (s.data.arrived && !stillNeeded(s) && !(s.data.keepUntil > now)) endLater(s, 100);
         return;
       }
       if (s.state === "go") {
@@ -2752,6 +2750,12 @@ function defendTick(player, e, i, obj) {
   }
   // Running.
   const there = needers.filter(({ p }) => close(p));
+  if (s.data.wave >= waves.length) {
+    // Held: a mate who needs it and comes now finds it held.
+    for (const { p, m } of there) if (progressOf(m.e, i) < waves.length) bump(p, m.e, i, waves.length, true);
+    if (!stillNeeded(s) && !(s.data.keepUntil > now)) endLater(s, 100);
+    return;
+  }
   const fighter = (there.find(({ p }) => here(p)) ?? there[0])?.p;
   if (!fighter) {
     s.data.awaySince ??= now;
