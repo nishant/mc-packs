@@ -1,4 +1,5 @@
-// Test hook for the owed-store migration scenarios (owed-legacy-restart.js, owed-legacy-consumers.js): copies packs and
+// Test hook for scenarios that seed or read a pack's own saved properties (owed-legacy-restart.js, owed-legacy-consumers.js,
+// party-moderation.js, crowns-limit.js): copies packs and
 // adds a harness-only probe to each, so a scenario can seed and read the pack's own dynamic properties (they belong to
 // the add-on that wrote them, so the separate test add-on can't) and hand a player the pack's own join payment.
 // The probe uses no code of the pack, only raw dynamic properties and the pack's own playerSpawn listeners, so the same
@@ -14,6 +15,8 @@
 //   join:  playerName              runs the pack's playerSpawn listeners for that player with initialSpawn true,
 //                                  the way the game does when the player joins
 //   dump:  true                    reports { keys, index, values, legacy } of `<base>`
+// With `player: "<name>"` the seed and the dump use that player's own properties instead of the world's (a player
+// property such as crowns:paid); rekey works on world properties only.
 // and answers `harness:owed_report` { id, base, folder, ... } (always under 2048 characters; `values` is cut first).
 //   node tools/test-bds/hooks/owed-probe.mjs <out dir> <pack,pack,...> [source repository]
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -46,12 +49,12 @@ const parse = (raw) => {
   }
 };
 
-function dump(base) {
-  const keys = world.getDynamicPropertyIds().filter((k) => k === base || k.startsWith(base + ":") || k === base + "_idx").sort();
-  const index = parse(world.getDynamicProperty(base + "_idx"));
+function dump(store, base) {
+  const keys = store.getDynamicPropertyIds().filter((k) => k === base || k.startsWith(base + ":") || k === base + "_idx").sort();
+  const index = parse(store.getDynamicProperty(base + "_idx"));
   const values = {};
-  for (const k of keys) if (k.startsWith(base + ":")) values[k.slice(base.length + 1)] = parse(world.getDynamicProperty(k));
-  return { keys, index, values, legacy: parse(world.getDynamicProperty(base)) };
+  for (const k of keys) if (k.startsWith(base + ":")) values[k.slice(base.length + 1)] = parse(store.getDynamicProperty(k));
+  return { keys, index, values, legacy: parse(store.getDynamicProperty(base)) };
 }
 
 function reply(body) {
@@ -73,7 +76,9 @@ system.afterEvents.scriptEventReceive.subscribe(
     if (!q || typeof q.base !== "string" || q.folder !== FOLDER) return;
     const base = q.base;
     try {
-      if (q.seed && typeof q.seed === "object") world.setDynamicProperty(base, JSON.stringify(q.seed));
+      const store = typeof q.player === "string" ? world.getPlayers({ name: q.player })[0] : world;
+      if (!store) throw new Error("no player " + q.player);
+      if (q.seed !== undefined) store.setDynamicProperty(base, JSON.stringify(q.seed));
       if (Array.isArray(q.rekey)) {
         const [fromId, name] = q.rekey;
         const player = world.getPlayers({ name })[0];
@@ -91,7 +96,7 @@ system.afterEvents.scriptEventReceive.subscribe(
         if (!player) throw new Error("join: no player " + q.join);
         for (const listener of spawnListeners) listener({ player, initialSpawn: true });
       }
-      reply({ id: q.id, base, folder: FOLDER, listeners: spawnListeners.length, ...(q.dump ? dump(base) : {}) });
+      reply({ id: q.id, base, folder: FOLDER, listeners: spawnListeners.length, ...(q.dump ? dump(store, base) : {}) });
     } catch (e) {
       reply({ id: q.id, base, folder: FOLDER, error: String(e) });
     }
