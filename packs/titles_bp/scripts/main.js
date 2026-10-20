@@ -343,7 +343,8 @@ function* forgetOld() {
     },
     warn: (e) => console.warn(`[titles] ${e}`),
   });
-}system.runTimeout(() => system.runJob(forgetOld()), 1400);
+}
+system.runTimeout(() => system.runJob(forgetOld()), 1400);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {

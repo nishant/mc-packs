@@ -657,7 +657,8 @@ onScriptEvent(
         const old = letters().get(id);
         if (old) save({ ...old, di: 1, ds: 1 });
       }
-      if (!plan.ok) return console.warn(`[mail] mail_send: ${plan.reason} (${to.n}'s letters from players are kept)`);      const next = world.getDynamicProperty(PROP_NEXT);
+      if (!plan.ok) return console.warn(`[mail] mail_send: ${plan.reason} (${to.n}'s letters from players are kept)`);
+      const next = world.getDynamicProperty(PROP_NEXT);
       const lid = typeof next === "number" ? next : 1;
       world.setDynamicProperty(PROP_NEXT, lid + 1);
       save({ id: lid, f: "", fn: from, t: to.i, tn: to.n, s: subject, b: body, at: Date.now(), r: 0, di: 0, ds: 1 });

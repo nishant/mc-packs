@@ -29,7 +29,8 @@ const owedStore = createOwedStore(world, {
     return v;
   },
   summarize: (v) => `dishes ${JSON.stringify(v)}`,
-});const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
+});
+const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
 const PROP_STAR = "cooking:star"; // world: ms of the last aurora or meteor (realm:sky_event)
 const MINUTE = 60000;
 const MOON_MAX_MS = 20 * MINUTE; // a moon night lasts about 10 minutes; forget a moon that never set (saved before game ticks were)

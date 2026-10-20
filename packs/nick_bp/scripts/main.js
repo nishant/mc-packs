@@ -204,7 +204,8 @@ function* forgetOld() {
     },
     warn: (e) => console.warn(`[nick] ${e}`),
   });
-}system.runTimeout(() => system.runJob(forgetOld()), 1200);
+}
+system.runTimeout(() => system.runJob(forgetOld()), 1200);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {

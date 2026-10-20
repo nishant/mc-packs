@@ -13,7 +13,8 @@ export const isSystem = (l) => l.f === "";
 /**
  * What delivering one pack letter to `to` changes. A pack letter is not delivered once the realm holds
  * `maxLetters - systemReserve` letters, so players can always write. A letter with no usable sent time is never
- * counted as old. The recipient's whole inbox (`inboxLimit`) is kept too, but only by dropping their oldest read pack\n * letters: a letter from a player is never dropped here, and the pack letter isn't delivered when that isn't enough.
+ * counted as old. The recipient's whole inbox (`inboxLimit`) is kept too, but only by dropping their oldest read pack
+ * letters: a letter from a player is never dropped here, and the pack letter isn't delivered when that isn't enough.
  * @param {Iterable<Mail>} letters @param {string} to @param {number} now @param {Policy} policy
  * @returns {{ ok: boolean, drop: number[], reason?: string }} `drop`: ids to delete first (expired, and the recipient's oldest over the limit)
  */
