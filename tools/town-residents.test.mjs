@@ -172,7 +172,13 @@ test("villager_v2.json: vanilla plus one group, one event and one property", () 
   assert.equal(g["minecraft:dweller"].can_find_poi, false, "no bed, job site or bell is ever claimed");
   assert.equal(g["minecraft:dweller"].can_migrate, false);
   assert.ok(g["minecraft:home"].restriction_radius > 0);
-  assert.deepEqual(e.events["realm:become_resident"], { add: { component_groups: ["realm:town_resident"] }, set_property: { "realm:resident": true } });
+  // A resident never works (a farmer's work harvests any ripe crop nearby, a player's farm too) and never breeds: the
+  // work schedules, work goals and love groups go first, then the group and the jobless (nitwit's) schedule come.
+  const WORK = ["basic_schedule", "farmer_schedule", "fisher_schedule", "librarian_schedule", "work_schedule", "work_schedule_farmer", "work_schedule_fisher", "work_schedule_librarian", "work_schedule_villager", "job_specific_goals", "make_and_receive_love"];
+  assert.deepEqual(e.events["realm:become_resident"], { sequence: [{ remove: { component_groups: WORK } }, { add: { component_groups: ["realm:town_resident", "jobless_schedule"] }, set_property: { "realm:resident": true } }] });
+  for (const k of [...WORK, "jobless_schedule"]) assert.ok(e.component_groups[k], `${k} is a vanilla group`);
+  const jobless = new Set(e.component_groups.jobless_schedule["minecraft:scheduler"].scheduled_events.map((x) => x.event));
+  for (const ev of jobless) for (const k of e.events[ev].add?.component_groups ?? []) assert.ok(!/work|job_specific/.test(k), `${ev} brings no work back (${k})`);
   // Every other villager is unchanged: the base dweller and the professions' still find beds and job sites.
   assert.equal(e.components["minecraft:dweller"].can_find_poi, true);
   for (const [k, grp] of Object.entries(e.component_groups)) if (k !== "realm:town_resident" && grp["minecraft:dweller"]) assert.equal(grp["minecraft:dweller"].can_find_poi, true, k);

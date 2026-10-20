@@ -4340,14 +4340,36 @@
         ]
       },
       "realm:become_resident": {
-        "add": {
-          "component_groups": [
-            "realm:town_resident"
-          ]
-        },
-        "set_property": {
-          "realm:resident": true
-        }
+        "sequence": [
+          {
+            "remove": {
+              "component_groups": [
+                "basic_schedule",
+                "farmer_schedule",
+                "fisher_schedule",
+                "librarian_schedule",
+                "work_schedule",
+                "work_schedule_farmer",
+                "work_schedule_fisher",
+                "work_schedule_librarian",
+                "work_schedule_villager",
+                "job_specific_goals",
+                "make_and_receive_love"
+              ]
+            }
+          },
+          {
+            "add": {
+              "component_groups": [
+                "realm:town_resident",
+                "jobless_schedule"
+              ]
+            },
+            "set_property": {
+              "realm:resident": true
+            }
+          }
+        ]
       }
     }
   }
