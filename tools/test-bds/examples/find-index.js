@@ -61,16 +61,17 @@ export default async function (t) {
   // decided once and kept), so a stranger far from the barrels finds nothing and is told the index is private.
   const p = await t.player("Seeker", { x: a.x + 40, z: a.z });
   {
+    // No answer is queued (a queued answer that no form uses would close the world-wide search's form below); a new
+    // entry in t.forms(p) is what tells that a list opened.
     const since = t.tick;
-    /** @type {any} */
-    let form;
-    t.answerForm(p, (/** @type {any} */ f) => {
-      form = f;
-      return null;
-    });
+    const before = t.forms(p).length;
+    const opened = () => t.forms(p)[before];
     t.assert(t.cmd(p, "/realm:find diamond").ok, "find diamond (private)");
-    await t.waitUntil(() => form || t.messages(p, { since, kind: "chat" }).length, { timeout: 120, message: "a list or a chat answer" });
+    await t.waitUntil(() => opened() || t.messages(p, { since, kind: "chat" }).length, { timeout: 120, message: "a list or a chat answer" });
     await t.wait(5);
+    /** @type {any} */
+    const form = opened();
+    if (form && !form.answered) form.answer(null);
     const said = t.messages(p, { since, kind: "chat" }).map((m) => m.plain).join(" | ");
     t.log(`private after restart: form=${form ? JSON.stringify(form.buttons) : "none"} chat=${said}`);
     t.check(!form && /private/i.test(said), "after the restart the index is still private: a stranger finds nothing");
