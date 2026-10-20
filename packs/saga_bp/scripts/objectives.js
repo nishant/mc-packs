@@ -37,6 +37,7 @@ import { STORIES } from "./stories.js";
 import { FAVORS, WANDERERS } from "./stories/index.js";
 import { DIMENSIONS, OVERWORLD, PACK, across, alive, busy, cancelInteractions, claim, clock, dialog, dist3, exclusive, groundAt, itemName, lifecycle, npcName, online, open as openBlock, plain, release, send, show, wait, waterTop } from "./util.js";
 import { onScriptEvent } from "./script-events.js";
+import { together } from "./party.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -1750,15 +1751,13 @@ let run = 0;
 const SHARED = new Set(["stealth", "defeat", "meet", "escort", "lead", "defend", "follow"]);
 
 /**
- * Does a party play this entry's chapter together (its scenes shared)? The main story with the party story on, side and
- * festival stories with party sharing on, as party.js decides who takes chapters together. Daily favors, wanderer jobs
- * and heart stories stay each player's own. @param {Entry} e
+ * Does a party play this entry's chapter together (its scenes shared)? Exactly when party.js together() says the party
+ * takes the story's chapters on together (the main story with the party story on, once the installed packs are known;
+ * side and festival stories with party sharing on), so a scene is shared only while party sync shares its progress.
+ * Daily favors, wanderer jobs and heart stories stay each player's own. @param {Entry} e
  */
 function partyPlays(e) {
-  if (e.fav !== undefined || e.wv || get("enabled") !== true) return false;
-  const kind = e.story.kind;
-  if (kind === "main") return get("partyStory") === true;
-  return (kind === undefined || kind === "side" || kind === "festival") && get("partyShare") === true;
+  return e.fav === undefined && !e.wv && together(e.story);
 }
 
 /** The party tag a player carries (the Parties pack's `realm_party:<code>`), if any. @param {Player} player */
