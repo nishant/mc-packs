@@ -228,12 +228,15 @@ survive a restart; `lib/rain-seabed.test.mjs` runs Rain's real scripts, the scen
 
 `node tools/test-bds/rss-soak.mjs --every 5 --out <file.json> -- <run.mjs arguments>` runs one `run.mjs` command and
 samples the resident memory (VmRSS, and the peak VmHWM) of the `bedrock_server` it starts every 5 seconds, from
-`/proc` (Linux only), without the profiler. The JSON keeps every sample and a summary: 10-minute medians after a
-5-minute warm-up, the slope in MiB per minute over the first and second half, and a verdict: `growing` (the second
+`/proc` (Linux only), without the profiler. The JSON keeps every sample (with its pid) and a summary of one process:
+when `run.mjs` starts more than one server (a template server first, a restart), only the one sampled longest is
+judged, its warm-up counted from its own first sample, and every pid is listed in `summary.pids`. The summary has
+10-minute medians after a 5-minute warm-up, the slope in MiB per minute over the first and second half, and a verdict: `growing` (the second
 half still rises more than 0.5 MiB/min and ends at its highest), `leveled`, `falling or noisy`, or `too short` (under
 30 minutes after the warm-up). For O4: `-- --quiet --no-relay --flat --scenario tools/test-bds/examples/perf-soak.js
 --arg players=40 --arg seconds=3600 --timeout 4500`, then the same with `--only` halves of the pack list to find a
-growing pack. `rss-soak.test.mjs` checks the verdicts.
+growing pack. The file is rewritten every 60 samplings while it runs, so a run that dies keeps its samples.
+`rss-soak.test.mjs` checks the verdicts.
 
 ## Inventory persistence regression
 
