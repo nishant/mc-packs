@@ -1,7 +1,7 @@
 # Releases master on mc.nish.software by itself: CLAUDE.md's "Ship every change" steps 2-3 (publish-packs, pack-docs and
 # its check, check-site realm, the hosting PR merged = the deploy, then check-live), run by tools/ci-release.mjs once the
 # check workflow passed on a push to master (or by hand: Actions > release > Run workflow). The notes come from
-# release/notes.json, written in the same PR as the change (tools/check-release-notes.mjs, in npm run check).
+# release/notes.json, written in the same PR as the change (tools/release-notes.mjs, in npm run check).
 #
 # It needs the secret HOSTING_TOKEN (a fine-grained token with Contents and Pull requests read and write on
 # nishant/hosting; see "Releases from CI" in docs/WORKING.md). Without it the workflow only writes a summary saying

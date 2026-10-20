@@ -17,7 +17,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { NOTES_FILE, lines, versionOf } from "./check-release-notes.mjs";
+import { NOTES_FILE, lines, versionOf } from "./release-notes.mjs";
 
 const BUNDLE = "realm-bundle";
 const RESOURCES = "realm-resources";
@@ -38,7 +38,7 @@ export function publishArgs(notesFile, packsJson, current) {
   const resSeen = published((p) => p.slug === RESOURCES);
   for (const l of lines(notesFile?.resourceNotes)) if (!resSeen.has(l)) add("--resource-notes", l, "Realm Resources");
   for (const [folder, e] of Object.entries(notesFile?.packNotes ?? {})) {
-    if (!e || current.get(folder) !== e.version) continue; // stale: the pack moved on (check-release-notes refuses this on a PR)
+    if (!e || current.get(folder) !== e.version) continue; // stale: the pack moved on (release-notes refuses this on a PR)
     const entry = packsJson.packs.find((p) => p.folder === folder);
     if (entry?.versions.some((v) => v.version === e.version)) continue; // already published
     for (const l of lines(e.notes)) add("--pack-notes", `${folder}=${l}`, `${folder} ${e.version}`);

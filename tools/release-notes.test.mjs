@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkReleaseNotes, cmpVersion, kindOf, shapeProblems, versionOf } from "./check-release-notes.mjs";
+import { checkReleaseNotes, cmpVersion, kindOf, shapeProblems, versionOf } from "./release-notes.mjs";
 import { parseReport, publishArgs, summaryMarkdown } from "./ci-release.mjs";
 
 /** @param {Partial<{ folder: string, kind: "behavior" | "resources", before: string, now: string }>} p */

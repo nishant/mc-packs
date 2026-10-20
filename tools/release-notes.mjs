@@ -19,7 +19,7 @@
 // Lines stay in the file after a release; the release passes only lines no published version has yet, so a skipped
 // or manual release loses nothing. Prune old lines whenever you like. With no base it says so and passes.
 //
-//   node tools/check-release-notes.mjs [--base <ref>]
+//   node tools/release-notes.mjs [--base <ref>]
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -135,11 +135,11 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   };
   const base = args.base ?? tryGit("merge-base", "HEAD", "origin/master");
   if (!base) {
-    console.log("check-release-notes: no origin/master to compare with (no git, or not fetched): notes not checked.");
+    console.log("release-notes: no origin/master to compare with (no git, or not fetched): notes not checked.");
     process.exit(0);
   }
   if (tryGit("rev-parse", "--verify", "--quiet", `${base}^{commit}`) === undefined) {
-    console.error(`check-release-notes: no commit "${base}"`);
+    console.error(`release-notes: no commit "${base}"`);
     process.exit(1);
   }
   const short = tryGit("rev-parse", "--short", base) ?? base;
@@ -148,7 +148,7 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
     try {
       return JSON.parse(text);
     } catch (e) {
-      console.error(`check-release-notes: ${where} is not valid JSON: ${/** @type {Error} */ (e).message}`);
+      console.error(`release-notes: ${where} is not valid JSON: ${/** @type {Error} */ (e).message}`);
       process.exit(1);
     }
   };
