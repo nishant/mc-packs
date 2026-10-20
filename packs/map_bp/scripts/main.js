@@ -1250,6 +1250,25 @@ function render(player, v, now, refresh, heading = headingOf(player), at = playe
 }
 
 /**
+ * The refresh of a player who hasn't turned, moved or got new markers or land since their last draw: their strip and
+ * radar would come out the same, so the title they have is drawn again for HOLD more ticks (side.js keep: the
+ * compositor reuses the subtitle it made and sends no message).
+ * @param {Player} player @param {View} v @param {number} now @returns {boolean} whether it was drawn
+ */
+function keepAlive(player, v, now) {
+  const sent = lastSent.get(player.id);
+  if (!sent || side.held(player)) return false;
+  const t1 = Date.now();
+  // None of its parts is up any more (they ran out): build and send them again.
+  if (!side.keep(player, HOLD)) return render(player, v, now, true);
+  if (sent.compass) sent.cat = now;
+  if (sent.radar) sent.rat = now;
+  v.drawn = now;
+  drawMs += Date.now() - t1;
+  return true;
+}
+
+/**
  * Turning by less than this (degrees) or moving less than this (blocks) since the last draw doesn't redraw: a strip
  * cell is 5 degrees and a radar cell 2.4 blocks or more (a marker 20 blocks away moves a cell every ~6 degrees), so
  * smaller steps hardly ever change the text, and building it is the cost.
@@ -1281,6 +1300,8 @@ let turnDraws = 0;
 let turnSends = 0;
 /** Sends by the per-tick redraw that refreshed an unchanged part before it faded (not counted in turnSends). */
 let refreshSends = 0;
+/** Of refreshSends, those that drew the same title again without building the strip and radar (keepAlive). */
+let keepSends = 0;
 /** Of turnMs, the time spent finding who is due. */
 let turnCheckMs = 0;
 let radarMs = 0;
@@ -1294,7 +1315,12 @@ system.runInterval(() => {
   if (!views.size) return;
   const t0 = Date.now();
   const now = system.currentTick;
-  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. `heading` and `at` are what the check read, so render() doesn't read them again. @type {{ p: Player, v: View, refresh: boolean, moved: boolean, heading: number | undefined, at: Vector3 }[]} */
+  /**
+   * `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. `keep`:
+   * only the refresh is due (nothing they see changed), so the title is drawn again as it is (keepAlive). `heading` and
+   * `at` are what the check read, so render() doesn't read them again.
+   * @type {{ p: Player, v: View, refresh: boolean, moved: boolean, keep: boolean, heading: number | undefined, at: Vector3 }[]}
+   */
   const due = [];
   const n = views.size;
   const checks = Math.min(n, TURN_CHECKS);
@@ -1315,13 +1341,14 @@ system.runInterval(() => {
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
       const sent = lastSent.get(p.id);
       const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
-      /** @type {number | undefined} read only when the checks before it didn't already settle `moved` (as before); render() reads it otherwise, inside the draw budget */
+      /** @type {number | undefined} read only when a new pass didn't already settle it; render() reads it otherwise, inside the draw budget */
       let heading;
-      const moved = refresh || !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      const changed = !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      const moved = refresh || changed;
       if (!moved && !v.lag) continue;
       // Moving fast (flying, riding): the scanner plans ahead for them often.
       if (Math.abs(at.x - v.x) + Math.abs(at.z - v.z) > 0.6 * Math.max(1, now - (v.drawn ?? now))) planNow.add(p.id);
-      due.push({ p, v, refresh, moved, heading, at });
+      due.push({ p, v, refresh, moved, keep: refresh && !changed && !v.lag, heading, at });
     } catch (e) {
       console.warn(`[map] turn: ${e}`);
     }
@@ -1334,12 +1361,22 @@ system.runInterval(() => {
   let sends = 0;
   let built = 0;
   const refreshBefore = refreshSends;
-  for (const { p, v, refresh, moved, heading, at } of due) {
+  for (const { p, v, refresh, moved, keep, heading, at } of due) {
     if (sends >= TURN_BUDGET || built >= RENDER_BUDGET || !drawBudget.ok) break;
     // A radar waiting for its terrain, with nothing else new, waits for a rebuild in the budget.
     if (!moved && !rebuildBudget.ok) continue;
     const tr = Date.now();
     try {
+      if (keep) {
+        // Nothing they see changed: the same title again, so it doesn't fade (no strip or radar is built).
+        if (keepAlive(p, v, now)) {
+          sends++;
+          refreshSends++;
+          keepSends++;
+        }
+        drawBudget.spend(Date.now() - tr);
+        continue;
+      }
       turnDraws++;
       built++;
       if (render(p, v, now, refresh, heading, at)) {
@@ -1810,7 +1847,7 @@ function onEvent(id, m, source) {
             data: terrain.get(storeFor(player.id, player.dimension.id), s.x, s.z, s.resolution === 1 ? 1 : 4) ?? null,
           })) : [],
         } : undefined,
-        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, rebuilds: radarRebuilds, turnCheckMs, radarMs, readCost },
+        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, keepSends, rebuilds: radarRebuilds, turnCheckMs, radarMs, readCost },
         budgets: { draw: drawBudget.left, rebuild: rebuildBudget.left, pass: passBudget.left, scan: scanBudget.left },
         budgetLevel,
         perTick: BUDGETS.reduce((n, [b]) => n + b.perTick, 0),
@@ -1833,6 +1870,7 @@ function onEvent(id, m, source) {
         scanPlanMs = 0;
         planTurn.made = 0;
         refreshSends = 0;
+        keepSends = 0;
         radarRebuilds = 0;
         turnCheckMs = 0;
         radarMs = 0;

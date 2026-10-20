@@ -131,3 +131,26 @@ test("the real redraw callback reads the facing only when its checks need it, an
   assert.ok(renders.find((r) => r.id === "turned").at, "the position read by the check is passed along");
   assert.ok(!renders.some((r) => r.id === "still"), "a view that did not move is not drawn");
 });
+
+test("the real redraw callback refreshes a still player's title without building the strip and radar again (W1/O5)", () => {
+  const renders = [];
+  const kept = [];
+  const mkView = (id, extra) => ({ player: { id, isValid: true, dimension: { id: "d" }, location: { x: 0, y: 0, z: 0 } }, dim: "d", px: 0, pz: 0, heading: 0, x: 0, y: 0, z: 0, radar: true, terrain: false, drawn: 0, ...extra });
+  const views = new Map([["still", mkView("still", {})], ["turned", mkView("turned", {})], ["lagging", mkView("lagging", { lag: true })]]);
+  const facingOf = { still: 0, turned: 30, lagging: 0 };
+  // Every part was sent 40 ticks ago: all three are due a refresh.
+  const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: 10, rtext: "r", rat: 10, compass: true, radar: true }]));
+  const sandbox = {
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
+    wrap: (a) => a, headingOf: (p) => facingOf[p.id],
+    render: (p) => (renders.push(p.id), true),
+    keepAlive: (p) => (kept.push(p.id), true),
+  };
+  const run = vm.runInNewContext(`let turnFirst = 0, turnMs = 0, turnTicks = 0, turnDraws = 0, turnSends = 0, refreshSends = 0, keepSends = 0, turnCheckMs = 0;\n(${callbackSource(1)})`, sandbox);
+  run();
+  assert.deepEqual(kept, ["still"], "the still player's title is drawn again as it is");
+  assert.ok(!renders.includes("still"), "without building their strip and radar");
+  assert.ok(renders.includes("turned"), "a player who turned is built again");
+  assert.ok(renders.includes("lagging"), "a radar waiting for its terrain is built again");
+});
