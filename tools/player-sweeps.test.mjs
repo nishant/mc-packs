@@ -107,3 +107,27 @@ test("quests: travel counts the same with a tenth of 40 players read each run", 
   }
   assert.ok(w.maxPerTick() <= 4, `at most 4 players a tick, got ${w.maxPerTick()}`);
 });
+
+test("milestones: playtime and distance count the same spread over the second; AFK players aren't read; one objective lookup per stat a run", async () => {
+  const sim = createSim();
+  const w = walkers(sim, 40);
+  const idle = w.players[7];
+  idle.addTag("afk");
+  let lookups = 0;
+  await loadReal(sim, "milestones_bp");
+  sim.server.world.scoreboard = { getObjective: () => (lookups++, { getScore: () => 0 }) };
+  sim.step(400);
+  for (const p of w.players) {
+    const r = JSON.parse(sim.props.get(`milestones:p:${p.id}`) ?? "null");
+    if (p === idle) {
+      assert.equal(r?.c?.travelled ?? 0, 0, "nothing counts while AFK");
+      continue;
+    }
+    // 4 blocks a second for 20 seconds, less the first second; saved every 10 seconds
+    assert.ok(r && r.c.travelled >= 30 && r.c.travelled <= 80, `${p.name} traveled ${r?.c?.travelled}`);
+  }
+  assert.ok(![...w.perTick.values()].some((s) => s.has(idle.id)), "an AFK player's position isn't read");
+  assert.ok(w.maxPerTick() <= 4, `at most 4 players a tick, got ${w.maxPerTick()}`);
+  // 20 check runs of 4 players and 8 milestones: 640 lookups when each check asks again, at most 8 a run when shared
+  assert.ok(lookups <= 20 * 8, `objective lookups: ${lookups}`);
+});

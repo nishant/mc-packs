@@ -6726,7 +6726,7 @@ Delivery takes an entry before granting its reward so a restart cannot blindly p
 | Silly Enchants → Merchant Caravan | The caravan can sell Silly Books if an operator adds one to its `goods` (see [Silly Enchants](#silly-enchants--silly_bp)); the book is recognized by its lore |
 | Dolphin Friends ↔ other dolphin packs | Dolphin Friends replaces the vanilla dolphin's behavior file with a copy plus a seat. Another behavior pack that also changes the dolphin conflicts with it: only the higher pack's file is used |
 | Stats → Milestones | Milestones reads the `stats_<stat>` scoreboards when they exist and uses the larger of their number and its own, so history from Stats counts. Works without Stats |
-| AFK → Milestones | Playtime and distance pause for players with the `afk` tag. Keep AFK `tag` and Milestones `afkTag` the same |
+| AFK → Milestones | Playtime and distance pause for players with the `afk` tag (their position isn't even read; distance starts again from where they are when they come back). Keep AFK `tag` and Milestones `afkTag` the same |
 | Community Goals ↔ Quick Stack & Sort | Lock a goal's chest so nobody takes from it: donations still go in, because the pack moves them itself. `/realm:stash` can also fill a goal's chest that already holds the item, but that doesn't count toward the goal |
 | Community Goals ↔ Land Claims | Donations reach a goal's chest inside a claim, since the pack moves the items, not the player |
 | Bedrock Essentials+ → Fast Leaf Decay | A sneak-break that fells a whole tree is checked once, from the broken log up the empty trunk, so the felled tree's leaves fall too |
