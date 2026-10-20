@@ -1361,7 +1361,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   try {
     if (deadEntity instanceof Player) {
       cancelInteractions(deadEntity.id); // a form open when they died would hide the respawn screen
-      for (const s of scenes.values()) if (s.pid === deadEntity.id && s.kind === "defend" && s.state === "run") defendFail(s, "You fell.");
+      for (const s of [...scenes.values()]) if (s.kind === "defend" && s.state === "run" && (s.pid === deadEntity.id || s.members.get(deadEntity.id)?.need)) defenderFell(s, deadEntity);
       return;
     }
     const actor = actors.get(deadEntity.id);
@@ -1629,7 +1629,7 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
     const a = actors.get(target.id);
     if (a && a.role !== "lead") {
       ev.cancel = true; // no trading with a story villager, no handing items to a ghost
-      if (a.owner === player.id && a.role === "meet") system.run(() => meetTap(player, a.key));
+      if (a.role === "meet") system.run(() => meetTap(player, a.owner, a.key));
       return;
     }
     if (!a && target.hasTag(ACTOR)) {
@@ -1747,7 +1747,7 @@ let run = 0;
  * Scene kinds a party shares: one scene (one set of characters, guards, story mobs, one wisp) per place and step while
  * anyone in the party there still needs the step. The rest (clues, riddles, block scans) stay each player's own.
  */
-const SHARED = new Set(["defeat", "stealth"]);
+const SHARED = new Set(["stealth", "defeat", "meet", "escort", "lead", "defend", "follow"]);
 
 /**
  * Does a party play this entry's chapter together (its scenes shared)? The main story with the party story on, side and
@@ -1933,40 +1933,56 @@ function standSpot(obj, loc, id) {
 
 // ---- meet --------------------------------------------------------------
 
-/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+/**
+ * A story character to talk to at a place. In a party it's one character for everyone there (not one each standing in
+ * the same spot); each mate who needs the step has their own conversation and choice.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
 function meetTick(player, e, i, obj) {
   const s = sceneFor(player, e, i, "meet");
   const loc = locate(obj);
   if (!loc || typeof loc === "string" || loc.pending || !obj.who) return;
-  const near = player.dimension.id === loc.dim && across(player.location, loc) <= 48;
-  if (tooFar(s, near)) {
-    removeActors({ owner: player.id, key: s.key });
-    return;
+  const nearIt = (/** @type {Player} */ p) => p.dimension.id === loc.dim && across(p.location, loc) <= 48;
+  if (s.data.checked !== run) {
+    // Once a second per scene: the character goes after everyone who needs it has been away a while.
+    s.data.checked = run;
+    if (tooFar(s, membersOf(s, true).some(({ p }) => nearIt(p)))) {
+      removeActors({ owner: s.pid, key: s.key });
+      return;
+    }
   }
-  if (!near) return;
-  let [a] = actorsOf(player.id, s.key, "meet");
+  if (!nearIt(player)) return;
+  let [a] = actorsOf(s.pid, s.key, "meet");
   if (!a || !a.ent.isValid) {
     const at = standSpot(obj, loc, obj.who.id);
     if (!at) return;
-    const ent = spawnActor(world.getDimension(loc.dim), obj.who.entity, at, { owner: player.id, key: s.key, role: "meet", name: `§e${obj.who.name}`, invul: true, anchor: true, look: obj.who.look });
+    const ent = spawnActor(world.getDimension(loc.dim), obj.who.entity, at, { owner: s.pid, key: s.key, role: "meet", name: `§e${obj.who.name}`, invul: true, anchor: true, look: obj.who.look });
     if (!ent) return;
-    [a] = actorsOf(player.id, s.key, "meet");
-    player.sendMessage(`§e[Story] ${obj.who.name} is here. Walk up to them to talk.`);
+    [a] = actorsOf(s.pid, s.key, "meet");
   }
   if (!a) return;
-  if (busy.has(player.id) || system.currentTick < (s.data.cool ?? 0)) return;
-  if (dist3(player.location, a.ent.location) <= radiusOf(obj)) runMeet(player, s).catch((err) => console.warn(`[saga] meet: ${err}`));
+  /** @type {Set<string>} */
+  const told = (s.data.told ??= new Set());
+  if (!told.has(player.id)) {
+    told.add(player.id);
+    player.sendMessage(`§e[Story] ${obj.who.name} is here. Walk up to them to talk.`);
+  }
+  /** @type {Map<string, number>} */
+  const cool = (s.data.cool ??= new Map());
+  if (busy.has(player.id) || system.currentTick < (cool.get(player.id) ?? 0)) return;
+  if (dist3(player.location, a.ent.location) <= radiusOf(obj)) runMeet(player, s, e).catch((err) => console.warn(`[saga] meet: ${err}`));
 }
 
-/** A tap on a meet character. @param {Player} player @param {string} key */
-function meetTap(player, key) {
-  const s = scenes.get(sk(player.id, key));
-  if (s && s.kind === "meet") runMeet(player, s).catch((err) => console.warn(`[saga] meet: ${err}`));
+/** A tap on a meet character: a conversation for a player in its scene who still needs it. @param {Player} player @param {string} owner @param {string} key */
+function meetTap(player, owner, key) {
+  const s = scenes.get(sk(owner, key));
+  const m = s?.members.get(player.id);
+  if (s && s.kind === "meet" && m?.need) runMeet(player, s, m.e).catch((err) => console.warn(`[saga] meet: ${err}`));
 }
 
-/** The conversation with a story character, and its choice. @param {Player} player @param {SceneState} s */
-async function runMeet(player, s) {
-  const { e, i } = s;
+/** The conversation with a story character, and its choice. @param {Player} player @param {SceneState} s @param {Entry} e the player's own entry */
+async function runMeet(player, s, e) {
+  const i = s.i;
   const obj = e.chapter.objectives[i];
   if (!obj.who || !counting(player)) return;
   await exclusive(player, async () => {
@@ -1976,7 +1992,7 @@ async function runMeet(player, s) {
     const pages = pagesFor(obj.pages, saga, e.story.id, player.name);
     const pick = await dialog(player, obj.who?.name ?? "", "", pages, choices.length ? choices.map((c) => c.label) : ["Goodbye"]);
     if (pick < 0 || !player.isValid) {
-      s.data.cool = system.currentTick + 300; // walked away: ask again in 15 s (a tap works any time)
+      s.data.cool?.set(player.id, system.currentTick + 300); // walked away: ask again in 15 s (a tap works any time)
       return;
     }
     if (objDone(e, i, sagaOf(player))) return;
@@ -1988,10 +2004,8 @@ async function runMeet(player, s) {
       markDirty(player, true);
     }
     bump(player, e, i, 1);
-    const key = s.key;
-    const pid = player.id;
-    s.data.keepUntil = system.currentTick + 170;
-    system.runTimeout(() => removeActors({ owner: pid, key }, true), 160);
+    // They leave a moment later, unless a party mate there still has to talk to them.
+    endLater(s, 160);
     if (choice?.reply?.length) await dialog(player, obj.who?.name ?? "", "", pagesFor(choice.reply, saga, e.story.id, player.name), ["OK"]);
   });
 }
@@ -2417,61 +2431,101 @@ function defeatSpawnTick(player, e, i, obj) {
 
 // ---- escort ------------------------------------------------------------
 
-/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+/**
+ * Someone to lead to safety. In a party it's one character for everyone there (not one each): the first mate who
+ * needs the step and walks up to them leads, and if that mate leaves, another one near takes over. When they arrive,
+ * the step is done for every mate near them who needs it.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
 function escortTick(player, e, i, obj) {
   const s = sceneFor(player, e, i, "escort");
   if (!obj.who) return;
-  // A Recurring Wanderer escorted from their camp: the wanderer pack hides its own copy while ours walks.
-  if (WANDERER_IDS.has(obj.who.id) && actorsOf(player.id, s.key, "escort").length && system.currentTick >= (s.data.hideAt ?? 0)) {
-    s.data.hideAt = system.currentTick + 200;
-    send("realm:wander_hide", { wid: obj.who.id, player: player.id, seconds: 15 });
-  }
   const now = system.currentTick;
   const to = locate(obj.to, "the destination");
   if (to && typeof to !== "string" && !to.pending && to.dim === player.dimension.id && across(player.location, to) <= 48 && guidesOn(player)) {
     const ty = to.y ?? groundAt(player.dimension, to.x, to.z, player.location.y) ?? player.location.y;
     drawStandingPad(player, player.dimension, to.x, ty, to.z, COLOR_GOLD, obj.to?.radius ?? 6);
   }
-  const [a] = actorsOf(player.id, s.key, "escort");
+  const [a] = actorsOf(s.pid, s.key, "escort");
   if (a?.ent.isValid) {
-    const near = a.ent.dimension.id === player.dimension.id && dist3(a.ent.location, player.location) <= 96;
-    if (tooFar(s, near)) {
-      player.sendMessage(`§e[Story] ${obj.who.name} got tired of waiting and went back. Pick them up again.`);
-      endScene(player.id, s.key);
-      return;
-    }
-    // Arrived?
-    if (to && typeof to !== "string" && !to.pending && a.ent.dimension.id === to.dim && across(a.ent.location, to) <= (obj.to?.radius ?? obj.radius ?? 6)) {
-      if (counting(player)) {
-        player.sendMessage(`§a[Story] ${obj.who.name} is safe.`);
-        bump(player, e, i, 1);
-        const pid = player.id;
-        const key = s.key;
-        s.data.keepUntil = system.currentTick + 110;
-        system.runTimeout(() => endScene(pid, key, true), 100);
+    const ent = a.ent;
+    /** Everyone who needs the step and is with the character. */
+    const withIt = () => membersOf(s, true).filter(({ p }) => ent.dimension.id === p.dimension.id && dist3(ent.location, p.location) <= 96);
+    if (s.data.checked !== run) {
+      // Once a second per scene.
+      s.data.checked = run;
+      // A Recurring Wanderer escorted from their camp: the wanderer pack hides its own copy while ours walks.
+      if (WANDERER_IDS.has(obj.who.id) && now >= (s.data.hideAt ?? 0)) {
+        s.data.hideAt = now + 200;
+        send("realm:wander_hide", { wid: obj.who.id, player: player.id, seconds: 15 });
       }
-      return;
+      const near = withIt();
+      if (tooFar(s, near.length > 0)) {
+        for (const { p } of membersOf(s, true)) p.sendMessage(`§e[Story] ${obj.who.name} got tired of waiting and went back. Pick them up again.`);
+        dropScene(s.pid, s.key);
+        return;
+      }
+      // Arrived?
+      if (!s.data.arrived && to && typeof to !== "string" && !to.pending && ent.dimension.id === to.dim && across(ent.location, to) <= (obj.to?.radius ?? obj.radius ?? 6)) {
+        const safe = near.filter(({ p }) => counting(p));
+        if (safe.length) {
+          s.data.arrived = true;
+          for (const { p, m } of safe) {
+            p.sendMessage(`§a[Story] ${obj.who.name} is safe.`);
+            bump(p, m.e, s.i, 1);
+          }
+          endLater(s, 100);
+        }
+        return;
+      }
+      if (s.state === "go") {
+        // The one leading left (or went far ahead): another mate near the character takes over, else they wait.
+        const lead = near.find(({ p }) => p.id === s.data.leader);
+        s.data.leaderAway = !lead;
+        if (!lead || dist3(ent.location, lead.p.location) > 32) {
+          const next = near.find(({ p }) => p.id !== s.data.leader && dist3(ent.location, p.location) <= 8);
+          if (next) {
+            s.data.leader = next.p.id;
+            s.data.leaderAway = false;
+            s.data.crumbs = [];
+            s.data.ptr = 0;
+            next.p.sendMessage(`§e[Story] ${obj.who.name} follows you now.`);
+          }
+        }
+        // Ambushes on the way, around whoever leads.
+        const leader = near.find(({ p }) => p.id === s.data.leader)?.p;
+        if (leader && obj.ambush?.mobs?.length && now - (s.data.lastAmbush ?? now) >= (obj.ambush.every ?? 30) * 20) {
+          s.data.lastAmbush = now;
+          const alive = actorsOf(s.pid, s.key, "add").filter((x) => x.ent.isValid).length;
+          if (alive < (obj.ambush.count ?? 2) * 2) {
+            for (const { p } of near) p.sendMessage(`§c[Story] An ambush! Protect ${obj.who.name}!`);
+            spawnGroup(leader, leader.dimension, leader.location, { mobs: obj.ambush.mobs, count: obj.ambush.count ?? 2 }, s.key, 10, 14, s.pid);
+          }
+        }
+      }
     }
-    if (s.state === "wait" && dist3(a.ent.location, player.location) <= 4) {
+    // A mate who comes along while they wait is told too.
+    /** @type {Set<string>} */
+    const told = (s.data.told ??= new Set());
+    if (s.state === "wait" && !told.has(player.id) && ent.dimension.id === player.dimension.id && dist3(ent.location, player.location) <= 48) {
+      told.add(player.id);
+      player.sendMessage(`§e[Story] ${obj.who.name} is waiting for you. Walk up to them and they will follow.`);
+    }
+    // Walking up to them: they follow (also a mate taking over from one who went away).
+    const free = s.state === "wait" || (s.state === "go" && s.data.leaderAway && s.data.leader !== player.id);
+    if (free && !s.data.arrived && counting(player) && dist3(ent.location, player.location) <= 4) {
+      s.data.leaderAway = false;
       s.state = "go";
+      s.data.leader = player.id;
       s.data.crumbs = [];
       s.data.ptr = 0;
       s.data.lastAmbush = now;
       player.sendMessage(`§e[Story] ${obj.who.name} follows you. Lead them to ${to && typeof to !== "string" ? to.label : "safety"}, and keep them alive.`);
     }
-    // Ambushes on the way.
-    if (s.state === "go" && obj.ambush?.mobs?.length && now - (s.data.lastAmbush ?? now) >= (obj.ambush.every ?? 30) * 20) {
-      s.data.lastAmbush = now;
-      const alive = actorsOf(player.id, s.key, "add").filter((x) => x.ent.isValid).length;
-      if (alive < (obj.ambush.count ?? 2) * 2) {
-        player.sendMessage(`§c[Story] An ambush! Protect ${obj.who.name}!`);
-        spawnGroup(player, player.dimension, player.location, { mobs: obj.ambush.mobs, count: obj.ambush.count ?? 2 }, s.key, 10, 14);
-      }
-    }
     return;
   }
   // Not spawned (or gone): they wait where the escort starts, or beside the player.
-  if (now < (s.data.cool ?? 0)) return;
+  if (now < (s.data.cool ?? 0) || s.data.arrived) return;
   const from = locate(obj.from, "the start");
   /** @type {Vector3 | undefined} */
   let at;
@@ -2485,9 +2539,11 @@ function escortTick(player, e, i, obj) {
     at = y === undefined ? undefined : { x: p.x + 2, y, z: p.z };
   }
   if (!at) return;
-  const ent = spawnActor(dim, obj.who.entity, at, { owner: player.id, key: s.key, role: "escort", name: `§e${obj.who.name}`, frozen: true, invul: !!obj.who.invul, look: obj.who.look });
+  const ent = spawnActor(dim, obj.who.entity, at, { owner: s.pid, key: s.key, role: "escort", name: `§e${obj.who.name}`, frozen: true, invul: !!obj.who.invul, look: obj.who.look });
   if (!ent) return;
   s.state = "wait";
+  delete s.data.leader;
+  s.data.told = new Set([player.id]);
   player.sendMessage(`§e[Story] ${obj.who.name} is waiting for you. Walk up to them and they will follow.`);
 }
 
@@ -2548,22 +2604,26 @@ function escortFast(s, player) {
   }
 }
 
-/** The escorted character died: start over. @param {SceneState} s */
+/** The escorted character died: start over (everyone in the scene who needs it is told). @param {SceneState} s */
 function escortFail(s) {
   const obj = s.e.chapter.objectives[s.i];
-  const player = online(s.pid);
   removeActors({ owner: s.pid, key: s.key });
   s.state = undefined;
   s.data = { cool: system.currentTick + 100 };
-  if (player) {
-    player.sendMessage(`§c[Story] ${obj.who?.name ?? "The one you were escorting"} was hurt and ran back${obj.from ? " to where you found them" : ""}. Try again, and keep the monsters off them.`);
-    player.playSound("note.bass", { pitch: 0.6 });
+  for (const { p } of membersOf(s, true)) {
+    p.sendMessage(`§c[Story] ${obj.who?.name ?? "The one you were escorting"} was hurt and ran back${obj.from ? " to where you found them" : ""}. Try again, and keep the monsters off them.`);
+    p.playSound("note.bass", { pitch: 0.6 });
   }
 }
 
 // ---- lead --------------------------------------------------------------
 
-/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+/**
+ * Lost animals to lead home. In a party it's one herd for everyone there (as many as the mate furthest from done still
+ * needs, not a herd each); an animal brought home counts for the mate who led it (when they need it), else for the one
+ * who saw it arrive.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
 function leadTick(player, e, i, obj) {
   if (!obj.mob) return;
   const s = sceneFor(player, e, i, "lead");
@@ -2573,20 +2633,30 @@ function leadTick(player, e, i, obj) {
   if (obj.spawnAt) {
     const at = locate(obj.spawnAt, "the lost animal");
     if (at && typeof at !== "string" && !at.pending && at.dim === dim.id) {
-      // Leading one home far from where it was lost is not "away": only a player far from both waits it out.
-      const leading = actorsOf(player.id, s.key, "lead").some((a) => a.ent.isValid && a.ent.dimension.id === dim.id && dist3(a.ent.location, player.location) <= 48);
-      const near = across(player.location, at) <= 40;
-      if (tooFar(s, near || leading)) removeActors({ owner: player.id, key: s.key, role: "lead" });
-      else if (near) {
-        const want = target(obj) - progressOf(e, i);
-        const have = actorsOf(player.id, s.key, "lead").filter((a) => a.ent.isValid).length;
+      /** Near where they're lost, or leading one home (far from it isn't "away": only someone far from both waits it out). */
+      const busyWith = (/** @type {Player} */ p) =>
+        p.dimension.id === at.dim &&
+        (across(p.location, at) <= 40 || actorsOf(s.pid, s.key, "lead").some((a) => a.ent.isValid && a.ent.dimension.id === p.dimension.id && dist3(a.ent.location, p.location) <= 48));
+      if (s.data.checked !== run) {
+        s.data.checked = run;
+        if (tooFar(s, membersOf(s, true).some(({ p }) => busyWith(p)))) removeActors({ owner: s.pid, key: s.key, role: "lead" });
+      }
+      if (across(player.location, at) <= 40) {
+        let want = target(obj) - progressOf(e, i);
+        for (const { m } of membersOf(s, true)) want = Math.max(want, target(obj) - progressOf(m.e, i));
+        const have = actorsOf(s.pid, s.key, "lead").filter((a) => a.ent.isValid).length;
         const base = withY(at);
         for (let k = have; k < want && base; k++) {
           const x = base.x + (Math.random() * 4 - 2);
           const z = base.z + (Math.random() * 4 - 2);
           const y = groundAt(dim, x, z, base.y, false, SWIMMERS.has(obj.mob ?? "")) ?? base.y;
-          spawnActor(dim, obj.mob, { x, y, z }, { owner: player.id, key: s.key, role: "lead", name: obj.name ? `§e${obj.name}` : undefined, fireproof: false });
-          if (k === have) player.sendMessage(`§e[Story] There it is. Put a lead on it (use a lead on the animal) and bring it to ${to && typeof to !== "string" ? to.label : "the pen"}.`);
+          spawnActor(dim, obj.mob, { x, y, z }, { owner: s.pid, key: s.key, role: "lead", name: obj.name ? `§e${obj.name}` : undefined, fireproof: false });
+        }
+        /** @type {Set<string>} */
+        const told = (s.data.told ??= new Set());
+        if (!told.has(player.id) && actorsOf(s.pid, s.key, "lead").some((a) => a.ent.isValid)) {
+          told.add(player.id);
+          player.sendMessage(`§e[Story] There it is. Put a lead on it (use a lead on the animal) and bring it to ${to && typeof to !== "string" ? to.label : "the pen"}.`);
         }
       }
     }
@@ -2611,8 +2681,11 @@ function leadTick(player, e, i, obj) {
         actors.delete(ent.id);
         ent.removeTag(ACTOR);
       }
-      bump(player, e, i, 1);
-      player.sendMessage(`§a[Story] ${obj.name ? plain(obj.name) : itemName(obj.mob)} is home (${progressOf(e, i)}/${target(obj)}).`);
+      // It counts for whoever led it, when the step is theirs to finish; else for the one here who needs it.
+      const m = holder.id === player.id ? undefined : s.members.get(holder.id);
+      const led = m?.need && holder.isValid && !objDone(m.e, i, m.e.sg ?? sagaOf(holder)) && counting(holder) ? { p: holder, e: m.e } : { p: player, e };
+      bump(led.p, led.e, i, 1);
+      led.p.sendMessage(`§a[Story] ${obj.name ? plain(obj.name) : itemName(obj.mob)} is home (${progressOf(led.e, i)}/${target(obj)}).`);
     }
   } catch {
     // unloaded
@@ -2626,37 +2699,63 @@ const HOSTILE_WARDS = new Set(["minecraft:witch", "minecraft:evocation_illager",
 /** A wave none of whose monsters fell for this long (stuck in a hole or a wall, out of reach) regroups in sight of the middle. */
 const WAVE_STALL_TICKS = 6000;
 
-/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+/** Where a defense is held, and who counts as there (in the area) or close (near enough that it goes on). @param {Objective} obj */
+function defendSpot(obj) {
+  const loc = locate(obj);
+  if (!loc || typeof loc === "string" || loc.pending) return undefined;
+  const center = withY(loc);
+  if (!center) return undefined;
+  const r = radiusOf(obj);
+  return {
+    loc,
+    center,
+    r,
+    here: (/** @type {Player} */ p) => p.dimension.id === loc.dim && across(p.location, loc) <= r,
+    close: (/** @type {Player} */ p) => p.dimension.id === loc.dim && across(p.location, loc) <= r * 2 + 16,
+  };
+}
+
+/**
+ * Holding a place through waves of monsters. In a party it's one defense for everyone there (one ward, one set of
+ * waves, not one each): it starts when someone who needs it arrives, every wave beaten counts for every mate there who
+ * needs it, and it fails only when they have all left (or the ward falls).
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
 function defendTick(player, e, i, obj) {
   const s = sceneFor(player, e, i, "defend");
-  const loc = locate(obj);
-  if (!loc || typeof loc === "string" || loc.pending) return;
-  const center = withY(loc);
-  if (!center) return;
-  const r = radiusOf(obj);
+  const spot = defendSpot(obj);
+  if (!spot) return;
+  // Once a second per scene, for everyone in it.
+  if (s.data.checked === run) return;
+  s.data.checked = run;
+  const { loc, center, r, here, close } = spot;
   const dim = world.getDimension(loc.dim);
-  const here = player.dimension.id === loc.dim && across(player.location, loc) <= r;
   const now = system.currentTick;
   const waves = obj.waves ?? [];
+  const needers = membersOf(s, true);
   if (s.state !== "run") {
-    if (!here || now < (s.data.cool ?? 0) || !counting(player)) return;
+    const starter = needers.find(({ p }) => here(p) && counting(p));
+    if (!starter || now < (s.data.cool ?? 0)) return;
     s.state = "run";
-    s.data = { mobs: [], next: now + 40, wave: progressOf(e, i) };
+    let wave = 0;
+    for (const { m } of needers) wave = Math.max(wave, progressOf(m.e, i));
+    s.data = { mobs: [], next: now + 40, wave, checked: run };
     if (obj.ward) {
       const at = (obj.place && featureSpot(obj.place, obj.ward.id)) || center;
       // A ward that is a hostile mob (Vesna is a witch) would attack the player it needs, and no wave
       // mob goes for it anyway: it can't be hurt, and what it throws is removed.
       const hostile = HOSTILE_WARDS.has(obj.ward.entity);
-      spawnActor(dim, obj.ward.entity, at, { owner: player.id, key: s.key, role: "ward", name: `§e${obj.ward.name}`, frozen: true, anchor: true, invul: hostile, look: obj.ward.look });
+      spawnActor(dim, obj.ward.entity, at, { owner: s.pid, key: s.key, role: "ward", name: `§e${obj.ward.name}`, frozen: true, anchor: true, invul: hostile, look: obj.ward.look });
     }
-    player.sendMessage(`§c[Story] Hold ${loc.label}!${obj.ward ? ` Keep ${obj.ward.name} alive.` : ""} ${waves.length} wave${waves.length === 1 ? "" : "s"} are coming.`);
+    for (const { p } of needers) if (close(p)) p.sendMessage(`§c[Story] Hold ${loc.label}!${obj.ward ? ` Keep ${obj.ward.name} alive.` : ""} ${waves.length} wave${waves.length === 1 ? "" : "s"} are coming.`);
     return;
   }
   // Running.
-  const away = !here && !(player.dimension.id === loc.dim && across(player.location, loc) <= r * 2 + 16);
-  if (away) {
+  const there = needers.filter(({ p }) => close(p));
+  const fighter = (there.find(({ p }) => here(p)) ?? there[0])?.p;
+  if (!fighter) {
     s.data.awaySince ??= now;
-    if (now - s.data.awaySince > 600) return defendFail(s, "You left.");
+    if (now - s.data.awaySince > 600) return defendFail(s, needers.length > 1 ? "Everyone left." : "You left.");
     // The fight waits for the player: no wave comes or counts meanwhile, and mobs that unload with their chunk
     // (the player ran off) aren't beaten.
     s.data.left = true;
@@ -2681,14 +2780,17 @@ function defendTick(player, e, i, obj) {
       return false;
     }
   });
+  const tell = (/** @type {string} */ text) => {
+    for (const { p } of there) p.sendMessage(text);
+  };
   const cur = waves[s.data.wave];
   if (lost && s.data.spawned && cur) {
-    // Gone with their chunk while the player was away: they come back.
-    player.sendMessage(`§c[Story] The attackers regroup at ${loc.label}!`);
-    s.data.mobs.push(...spawnGroup(player, dim, center, { mobs: cur.mobs, count: lost }, s.key, Math.max(6, r * 0.7), Math.max(8, r)));
+    // Gone with their chunk while everyone was away: they come back.
+    tell(`§c[Story] The attackers regroup at ${loc.label}!`);
+    s.data.mobs.push(...spawnGroup(fighter, dim, center, { mobs: cur.mobs, count: lost }, s.key, Math.max(6, r * 0.7), Math.max(8, r), s.pid));
   }
   if (s.data.mobs.length) {
-    // The fight is on with the player here: the wave's monsters don't time out (expireAdds) and only count as
+    // The fight is on with someone here: the wave's monsters don't time out (expireAdds) and only count as
     // beaten when they fall. One none of whose monsters fell for 5 minutes comes again in sight of the middle.
     for (const m of s.data.mobs) {
       const a = actors.get(m.id);
@@ -2699,27 +2801,24 @@ function defendTick(player, e, i, obj) {
     if (cur && now - (s.data.stall ?? now) > WAVE_STALL_TICKS) {
       const n = s.data.mobs.length;
       for (const m of s.data.mobs) removeActor(m.id);
-      player.sendMessage(`§c[Story] The last attackers regroup at ${loc.label}!`);
-      s.data.mobs = spawnGroup(player, dim, center, { mobs: cur.mobs, count: n }, s.key, Math.max(6, r * 0.7), Math.max(8, r));
+      tell(`§c[Story] The last attackers regroup at ${loc.label}!`);
+      s.data.mobs = spawnGroup(fighter, dim, center, { mobs: cur.mobs, count: n }, s.key, Math.max(6, r * 0.7), Math.max(8, r), s.pid);
       s.data.stall = now;
       s.data.alive = s.data.mobs.length;
     }
     return;
   }
   if (s.data.spawned) {
-    // A wave is cleared.
+    // A wave is cleared: it counts for everyone there who needs it.
     s.data.spawned = false;
     s.data.wave++;
-    bump(player, e, i, 1);
+    for (const { p, m } of there) if (progressOf(m.e, i) < s.data.wave) bump(p, m.e, i, s.data.wave, true);
     if (s.data.wave >= waves.length) {
-      player.sendMessage(`§a[Story] ${loc.label} holds!`);
-      const pid = player.id;
-      const key = s.key;
-      s.data.keepUntil = system.currentTick + 110;
-      system.runTimeout(() => endScene(pid, key, true), 100);
+      tell(`§a[Story] ${loc.label} holds!`);
+      endLater(s, 100);
       return;
     }
-    player.sendMessage(`§e[Story] Wave ${s.data.wave} beaten. Get ready...`);
+    tell(`§e[Story] Wave ${s.data.wave} beaten. Get ready...`);
     s.data.next = now + 100;
     return;
   }
@@ -2727,32 +2826,49 @@ function defendTick(player, e, i, obj) {
   const w = waves[s.data.wave];
   if (!w) return;
   s.data.spawned = true;
-  note(player, `§c${e.story.short}: wave ${s.data.wave + 1} of ${waves.length}`, 60);
-  s.data.mobs = spawnGroup(player, dim, center, w, s.key, Math.max(6, r * 0.7), Math.max(8, r));
+  for (const { p, m } of there) note(p, `§c${m.e.story.short}: wave ${s.data.wave + 1} of ${waves.length}`, 60);
+  s.data.mobs = spawnGroup(fighter, dim, center, w, s.key, Math.max(6, r * 0.7), Math.max(8, r), s.pid);
   s.data.stall = now;
   s.data.alive = s.data.mobs.length;
 }
 
 /** Test hook (realm:saga_debug `age_adds`): the player's running defenses as if `ticks` passed with no monster falling. @param {string} pid @param {number} ticks */
 export function ageDefenses(pid, ticks) {
-  for (const s of scenes.values()) if (s.pid === pid && s.kind === "defend" && s.state === "run" && s.data.stall !== undefined) s.data.stall -= ticks;
+  for (const s of scenes.values()) if ((s.pid === pid || s.members.has(pid)) && s.kind === "defend" && s.state === "run" && s.data.stall !== undefined) s.data.stall -= ticks;
 }
 
-/** A defense failed: everything resets, and it starts again when the player comes back. @param {SceneState} s @param {string} why */
+/** A defense failed: everything resets, and it starts again when someone who needs it comes back. @param {SceneState} s @param {string} why */
 function defendFail(s, why) {
-  const player = online(s.pid);
   removeActors({ owner: s.pid, key: s.key });
   s.state = undefined;
   s.data = { cool: system.currentTick + 200 };
-  if (!player) return;
-  bump(player, s.e, s.i, 0, true);
-  player.sendMessage(`§c[Story] ${why} The defense failed: rest, then go back and try again from the first wave.`);
-  player.playSound("note.bass", { pitch: 0.5 });
+  for (const { p, m } of membersOf(s, true)) {
+    bump(p, m.e, s.i, 0, true);
+    p.sendMessage(`§c[Story] ${why} The defense failed: rest, then go back and try again from the first wave.`);
+    p.playSound("note.bass", { pitch: 0.5 });
+  }
+}
+
+/**
+ * A player in a running defense fell: alone, it fails; in a party it goes on while a mate who needs it is still there.
+ * @param {SceneState} s @param {Player} dead
+ */
+function defenderFell(s, dead) {
+  const obj = s.e.chapter.objectives[s.i];
+  const spot = defendSpot(obj);
+  const others = membersOf(s, true).filter(({ p }) => p.id !== dead.id && !!spot && spot.close(p) && alive(p));
+  if (!others.length) return defendFail(s, s.pid === dead.id ? "You fell." : `${dead.name} fell.`);
+  for (const { p } of others) p.sendMessage(`§c[Story] ${dead.name} fell! Hold ${spot?.loc.label ?? "on"}!`);
 }
 
 // ---- follow ------------------------------------------------------------
 
-/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+/**
+ * A wisp to follow. In a party it's one wisp for everyone there (not one each): it starts when a mate who needs the
+ * step comes to where the trail begins, waits for whoever of the party is nearest (helpers too), and at the end the step
+ * is done for every mate there who needs it.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
 function followTick(player, e, i, obj) {
   const s = sceneFor(player, e, i, "follow");
   if (s.data.pos) return;
@@ -2772,25 +2888,30 @@ function followTick(player, e, i, obj) {
     s.data.pos = { x: p.x + (dx / len) * 3, y: p.y, z: p.z + (dz / len) * 3 };
   }
   s.data.start = { ...s.data.pos };
-  player.sendMessage(`§e[Story] A ${obj.wisp ?? "faint light"} drifts ahead. Follow it; it waits if you fall behind.`);
+  for (const { p: m } of membersOf(s)) if (m.dimension.id === to.dim && dist3(m.location, s.data.pos) <= 48) m.sendMessage(`§e[Story] A ${obj.wisp ?? "faint light"} drifts ahead. Follow it; it waits if you fall behind.`);
 }
 
-/** The wisp drifts toward the destination along the ground, waiting for the player. @param {SceneState} s @param {Player} player */
-function followFast(s, player) {
+/**
+ * The wisp drifts toward the destination along the ground, waiting for the nearest one following it.
+ * @param {SceneState} s
+ */
+function followFast(s) {
   const pos = s.data.pos;
   if (!pos) return;
   const obj = s.e.chapter.objectives[s.i];
   const to = locate(obj.to);
-  if (!to || typeof to === "string" || to.pending || to.dim !== player.dimension.id) return;
-  const dim = player.dimension;
+  if (!to || typeof to === "string" || to.pending) return;
+  const dim = world.getDimension(to.dim);
+  const with_ = membersOf(s).filter(({ p }) => p.dimension.id === to.dim);
+  if (!with_.length) return;
   try {
     dim.spawnParticle("minecraft:endrod", { x: pos.x, y: pos.y + 0.8, z: pos.z });
     dim.spawnParticle("minecraft:endrod", { x: pos.x + 0.2, y: pos.y + 1.1, z: pos.z - 0.2 });
   } catch {
     // unloaded
   }
-  const p = player.location;
-  const dp = dist3(p, pos);
+  let dp = Infinity;
+  for (const { p } of with_) dp = Math.min(dp, dist3(p.location, pos));
   const stray = obj.stray ?? 12;
   const now = system.currentTick;
   if (dp > Math.max(48, stray * 4)) {
@@ -2799,17 +2920,16 @@ function followFast(s, player) {
       delete s.data.lost;
       if (s.data.start) s.data.pos = { ...s.data.start };
       else delete s.data.pos;
-      player.sendMessage(`§c[Story] You lost the ${obj.wisp ?? "light"}. It waits where the trail began.`);
+      for (const { p } of membersOf(s, true)) p.sendMessage(`§c[Story] You lost the ${obj.wisp ?? "light"}. It waits where the trail began.`);
     }
     return;
   }
   delete s.data.lost;
   const left = across(pos, to);
   if (left <= 2) {
-    if (across(p, to) <= (obj.to?.radius ?? 8) && counting(player)) {
-      bump(player, s.e, s.i, 1);
-      scenes.delete(sk(s.pid, s.key));
-    }
+    // At the end: done for everyone there who needs it; it waits there for the rest.
+    for (const { p, m } of with_) if (m.need && across(p.location, to) <= (obj.to?.radius ?? 8) && counting(p)) bump(p, m.e, s.i, 1);
+    if (!stillNeeded(s)) dropScene(s.pid, s.key);
     return;
   }
   if (dp > stray) return; // waits for the player
@@ -3459,6 +3579,7 @@ export function tickPlayer(player, list) {
       if (!helps(e, obj)) {
         // A party mate helping with a step about the mates themselves is still part of its scene (guards see them).
         if (obj.type === "stealth" && counts && active(e, i, saga)) stealthHelp(player, e, i, obj);
+        else if (obj.type === "follow" && counts && active(e, i, saga)) joinScene(player, e, i, "follow");
         return;
       }
       if (!active(e, i, saga)) return;
@@ -3640,12 +3761,8 @@ function fast() {
   for (const s of scenes.values()) {
     if (s.kind !== "stealth" && s.kind !== "follow") continue;
     try {
-      if (s.kind === "stealth") {
-        stealthFast(s);
-        continue;
-      }
-      const player = online(s.pid);
-      if (player) followFast(s, player);
+      if (s.kind === "stealth") stealthFast(s);
+      else followFast(s);
     } catch (err) {
       console.warn(`[saga] ${s.kind}: ${err}`);
     }
@@ -3658,7 +3775,7 @@ function escorts() {
   if (!scenes.size) return;
   for (const s of scenes.values()) {
     if (s.kind !== "escort" || s.state !== "go") continue;
-    const player = online(s.pid);
+    const player = online(s.data.leader ?? s.pid);
     if (!player) continue;
     try {
       escortFast(s, player);
