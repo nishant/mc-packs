@@ -231,13 +231,16 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - party: /realm:saga_step refuses party-quest entries and logs with console.warn.
 - party: Simulated players' runCommand skips the permission check, so the operator-only gate is not asserted in BDS.
 - party: Two existing unit tests had fixture updates for the new data shape, with the same assertions.
-integrator: merged ws/tether, ws/party, ws/stash-saga-moon and ws/atlas-docs with merge commits in that order; the only conflict was saga_bp's version (1.16.12 from party vs 1.16.11 from stash-saga-moon), resolved to the higher 1.16.12 (origin/master 1.16.10).
-integrator: admin_bp stays at 1.6.7 after admin-catalog added realm:saga_step: it is already above origin/master's 1.6.6 and unreleased, so no second bump.
-integrator: help-catalog was run once over all workstreams' PACKS.md edits (help_bp 1.1.76 -> 1.1.77); gen-news bumped news_bp 1.7.79 -> 1.7.80.
-integrator: the Realm News entry has player lines only; the two operator lines (inv_recover, saga_step) stay in PACKS.md and are left out of the news, like the O65 notes.
-integrator: F60's idea of showing every entry a player missed is not done; the missed player lines are folded into this entry under "In case you missed them last time".
-integrator: O7 stays OPEN for the native Blood Moon timing at scale (F57 soaks), though F5 is done.
-integrator: the wander-walk result listed commit fd3b0e2, which is not in ws/tether (a stale hash from a rewrite); it is left out of F69's shas.
+- integrator: merged ws/tether, ws/party, ws/stash-saga-moon and ws/atlas-docs with merge commits in that order; the only conflict was saga_bp's version (1.16.12 from party vs 1.16.11 from stash-saga-moon), resolved to the higher 1.16.12 (origin/master 1.16.10).
+- integrator: admin_bp stays at 1.6.7 after admin-catalog added realm:saga_step: it is already above origin/master's 1.6.6 and unreleased, so no second bump.
+- integrator: help-catalog was run once over all workstreams' PACKS.md edits (help_bp 1.1.76 -> 1.1.77); gen-news bumped news_bp 1.7.79 -> 1.7.80.
+- integrator: the Realm News entry has player lines only; the two operator lines (inv_recover, saga_step) stay in PACKS.md and are left out of the news, like the O65 notes.
+- integrator: F60's idea of showing every entry a player missed is not done; the missed player lines are folded into this entry under "In case you missed them last time".
+- integrator: O7 stays OPEN for the native Blood Moon timing at scale (F57 soaks), though F5 is done.
+- integrator: the wander-walk result listed commit fd3b0e2, which is not in ws/tether (a stale hash from a rewrite); it is left out of F69's shas.
+- integrator: Release review, PACKS.md Blood Moon (real): the section still described the removed 8-block clear-cell cache; it now says every spawn spot gets a fresh 9 x 9 x 9 check and an unloaded chunk counts as built. help-catalog regenerated, so help_bp went to 1.1.78 (still one release step from 1.1.76).
+- integrator: Release review, stash:native saved-data row (real): it now documents `pending.out` as `{ d, p, x?, f? }` and that a 1.8.7-or-older journal without `x` exports its whole before-image in the old layout.
+- integrator: Release review, NEWS night-fight line (real): F61 lets night fights start while the daylight cycle is stopped during the day (stopped at night already worked), so the line now says so; gen-news moved news_bp to 1.7.81. All three were doc fixes with no behavior change, so no new test.
 
 ## Blockers and highs
 
