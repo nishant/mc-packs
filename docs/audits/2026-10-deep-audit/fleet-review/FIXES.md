@@ -102,7 +102,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
 ### New items from the re-review
 
-- [ ] **F56 (high, owner decision, docs) An "owner-accepted 40-player shortfall" the owner never gave** (N1).
+- [ ] (Owner answer, October 20: "it is what it is, if we can improve it go for it". Replace ACCEPTED_EXCEPTION with that wording, keep the 5 ms budget as the goal, and keep improving per W1/F46 where measurements show a gain.) **F56 (high, owner decision, docs) An "owner-accepted 40-player shortfall" the owner never gave** (N1).
   - Where: PACKS.md about :6678, SERVER_SETUP.md :164 and :232, WORKING.md :116, OPEN.md :15, perf-tables.md :17.
   - They say "Owner answer (2026-10-19): ACCEPTED_EXCEPTION" for the 40-player whole-bundle miss (7.97 ms/tick
     against 5). None of the owner's recorded answers says this.
@@ -227,7 +227,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - [ ] **F9 (medium, perf) build_bp: the bed handling reads every block twice per destroy preview**
   (`Preview.js` :305-321 `previewDestroyBeds`). Confirming a destroy reads full block states for every block, not
   only beds (`main.js` :198-210 `readPlaced`). Fix: reuse the first read, and read states only for beds.
-- [ ] **F10 (medium, owner decision) elite_bp: champion limit changed from a fixed 8 to 0.8 per online player**
+- [x] (Owner answer, October 20: keep the per-player scaling as is. It is fine, because champions often don't push into town, so it doesn't feel like a lot. No code change. Pin admin-size-profile's exact change list to that, F66.) **F10 (medium, owner decision) elite_bp: champion limit changed from a fixed 8 to 0.8 per online player**
   (`config.js` :11-28, `main.js` :480-521), plus at most 3 near one place.
   - On the owner's Realm (1-4 online) that means 1-4 champions instead of 8.
   - Recommended: keep the old default of 8 and put per-player scaling in the Large server profile only. Ask the
