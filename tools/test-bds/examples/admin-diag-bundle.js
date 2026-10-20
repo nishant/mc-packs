@@ -5,7 +5,9 @@
 //   mkdir -p /tmp/diagb && node tools/test-bds/hooks/diag-bundle.mjs /tmp/diagb admin_bp,nick_bp
 //   node tools/test-bds/run.mjs --quiet --packs /tmp/diagb --scenario tools/test-bds/examples/admin-diag-bundle.js
 export default async function (t) {
-  // Nicknames saves 2 entries per player it has seen: the gamertag (nick:g:) and when it was last seen (nick:t:).\n  const perPlayer = 2;\n  const op = await t.player("Tester", { op: true });
+  // Nicknames saves 2 entries per player it has seen: the gamertag (nick:g:) and when it was last seen (nick:t:).
+  const perPlayer = 2;
+  const op = await t.player("Tester", { op: true });
   await t.player("Member");
   await t.wait(40);
 

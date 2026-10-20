@@ -227,7 +227,7 @@ export default async function (t) {
   t.check(crowns(p) - cr === 60, `60 Crowns for holding (${crowns(p) - cr})`);
   t.check(of("realm:quest_done", (m) => m.kind === "siege" && m.guild === "wardens" && m.player === p.id, since).length === 1, "quest_done kind siege for the Wardens");
   t.check(of("realm:town_state", (m) => m.town === town.id && m.mood === "heartened" && m.until > Date.now(), since).length === 1, "realm:town_state Heartened");
-  // Calendar town news is one line an hour. The regatta winner's line comes first, so the held siege tells its news only when 1000 ticks have passed since then.
+  // Calendar town news is one line per 1000 ticks (NEWS_GAP). The regatta winner's line comes first, so the held siege tells its news only when 1000 ticks have passed since then.
   const lastNews = (/** @type {number} */ before) => ev.filter((e) => e.id === "realm:gossip" && e.tick < before).map((e) => e.tick).at(-1);
   const heldNews = of("realm:gossip", (m) => m.kind === "siege", since);
   const heldEnd = ev.find((e) => e.id === "realm:siege" && e.m.state === "end" && e.tick >= since)?.tick ?? sys.currentTick;
