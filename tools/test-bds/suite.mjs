@@ -70,6 +70,7 @@ const SPECIAL = {
   "build-beds": { runner: "build-beds.mjs", note: "native main-pipeline proof, not simulated second-input or physical acceptance" },
   "bundle-smoke": { args: ["--flat", "--bundle", "dist/realm_bundle.mcpack", "--timeout", "300"], prepare: ["tools/bundle.mjs", "--all"], note: "builds the Realm Bundle first (dist/realm_bundle.mcpack), runs it as one script context" },
   "full-bundle-protocols": { fullBundle: true, note: "builds and stages the genuine 67-member cancellation bundle" },
+  "welcome-generic-bundle": { fullBundle: true, note: "checks the default welcome in the genuine 67-member bundle" },
   "stash-page-transfer-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-page-transfer-restart.js")], note: "moved native row across two physical restarts" },
 };
 // A --packs header's test copy is built by the plain shell lines just above its command (run first).
@@ -118,7 +119,7 @@ function plan(file, hookRoot) {
       p.args = ["--quiet", "--strict", "--flat", "--bundle", path.join(stage, "realm_bundle"), "--timeout", "1200", "--scenario", file];
       return p;
     }
-    if (sp.runner) { p.runner = sp.runner; return p; }
+    if (sp.runner) { p.runner = sp.runner; p.runnerArgs = sp.runnerArgs; return p; }
     if (sp.prepare) p.prepare = sp.prepare;
     p.args = ["--quiet", ...sp.args, "--scenario", file];
     return p;
@@ -310,7 +311,7 @@ const files = fs.readdirSync(EXAMPLES).filter((f) => f.endsWith(".js")).sort().m
 const plans = files.map((f) => plan(f, hookRoot)).filter((p) => !filter || filter.test(p.name));
 
 if (args.list) {
-  for (const p of plans) console.log(`${p.name}: ${p.skip ? p.skip : p.runner ? `node ${p.runner}` : `run.mjs ${p.args.map((a) => a === p.file ? path.relative(ROOT, a) : a).join(" ")}`}${p.recipe ? " (after header recipe)" : ""}${p.notes.length ? ` [${p.notes.join("; ")}]` : ""}`);
+  for (const p of plans) console.log(`${p.name}: ${p.skip ? p.skip : p.runner ? `node ${p.runner}${p.runnerArgs?.length ? " " + p.runnerArgs.map((a) => path.isAbsolute(a) ? path.relative(ROOT, a) : a).join(" ") : ""}` : `run.mjs ${p.args.map((a) => a === p.file ? path.relative(ROOT, a) : a).join(" ")}`}${p.recipe ? " (after header recipe)" : ""}${p.notes.length ? ` [${p.notes.join("; ")}]` : ""}`);
   process.exit(0);
 }
 
