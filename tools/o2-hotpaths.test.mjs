@@ -15,10 +15,11 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 /**
  * Loads a real pack's main.js from a temporary copy with the game modules stubbed by `sim` (the data-URL loader of
  * pack-sim.mjs nests every import in its importer, which a pack with many shared modules can't survive). The sim's own
- * `load` runs a small pack first, only to build the stubs.
+ * `load` runs a small pack first, only to build the stubs; `server` adds game exports the sim lacks.
  */
-async function loadReal(sim, folder) {
+async function loadReal(sim, folder, server = {}) {
   await sim.load("help_bp");
+  Object.assign(sim.server, server); // game classes the pack needs that the sim lacks
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "o2-"));
   const names = { "@minecraft/server": new Set(), "@minecraft/server-ui": new Set() };
   const copy = (from, to) => {
@@ -289,6 +290,69 @@ test("skills: travel reads a player's game mode and dimension once and after the
   walk(10);
   assert.ok(xp() > walked, "exploration XP again in survival");
   assert.equal(reads.dim, before, "the new dimension comes from the event");
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// silly_bp
+// ---------------------------------------------------------------------------------------------------------------
+
+/** An item with silly lore lines, as a Silly Book leaves them. */
+function sillyItem(typeId, ...names) {
+  return { typeId, amount: 1, getLore: () => names.map((n) => `§r§dSilly: ${n}`) };
+}
+
+function sillyPlayer(sim, name, equipment, calls, fx) {
+  const p = sim.join(name);
+  p.selectedSlotIndex = 0;
+  p.isSneaking = false;
+  p.isOnGround = true;
+  p.isInWater = false;
+  p.dimension = {
+    id: "minecraft:overworld",
+    spawnParticle: (id) => fx.push(id),
+    playSound: (id) => fx.push(id),
+  };
+  p.getComponent = (id) => (id === "minecraft:equippable" ? { getEquipment: (slot) => (calls.equip++, equipment[slot]) } : undefined);
+  return p;
+}
+
+test("silly: gear is read by a slow sweep and on events, not every half second, and effects still follow the hand and armor", async () => {
+  const sim = createSim();
+  const calls = { equip: 0 };
+  const fx = [];
+  const gearOf = { a: {}, b: {}, c: {} };
+  const [a] = ["a", "b", "c"].map((n) => sillyPlayer(sim, n, gearOf[n], calls, fx));
+  class MolangVariableMap {
+    setFloat() {}
+    setColorRGBA() {}
+  }
+  await loadReal(sim, "silly_bp", { MolangVariableMap, PlayerInventoryType: { Hotbar: "Hotbar", Inventory: "Inventory" } });
+  sim.boot();
+  sim.step(400);
+  // Three players with nothing silly, 20 s: reading every player's five slots twice a second was 600 reads.
+  assert.ok(calls.equip <= 320, `${calls.equip} equipment reads in 20 s for 3 players`);
+
+  // The hand follows the hotbar event, with no read: a hit throws confetti right away.
+  const sword = sillyItem("minecraft:diamond_sword", "Confetti Swing");
+  gearOf.a.Mainhand = sword;
+  const before = calls.equip;
+  sim.game.emit("world.after.playerHotbarSelectedSlotChange", { player: a, itemStack: sword, newSlotSelected: 0, previousSlotSelected: 1 });
+  sim.game.emit("world.after.entityHitEntity", { damagingEntity: a, hitEntity: { isValid: true, location: { x: 1, y: 64, z: 0 } } });
+  assert.ok(fx.includes("realm:silly_confetti"), `confetti on the hit: ${fx.join(", ")}`);
+  assert.equal(calls.equip, before, "the hand came from the event");
+
+  // Armor put on with no event at all: the sweep finds it within a second, and Disco lights the floor.
+  fx.length = 0;
+  gearOf.a.Chest = sillyItem("minecraft:iron_chestplate", "Disco");
+  sim.step(24);
+  assert.ok(fx.includes("realm:silly_floor"), `Disco after the sweep: ${fx.join(", ")}`);
+  // Taken off into the inventory: the inventory event reads the armor again and Disco stops.
+  delete gearOf.a.Chest;
+  sim.game.emit("world.after.playerInventoryItemChange", { player: a, inventoryType: "Inventory", slot: 12, itemStack: sillyItem("minecraft:iron_chestplate", "Disco") });
+  sim.step(2);
+  fx.length = 0;
+  sim.step(20);
+  assert.ok(!fx.includes("realm:silly_floor"), `no Disco once it is off: ${fx.join(", ")}`);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
