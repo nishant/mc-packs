@@ -2189,12 +2189,12 @@ function* applyBuild(dim, p, s, geo, out) {
   return yield* placeDesignSteps(dim, s, p, true, out);
 }
 
-/** Is a player inside the build's volume? @param {Town} t @param {Geometry} geo */
+/** Players inside the region (the build and the ground leveled around it), who could be walled in by a fill. @param {Town} t @param {Geometry} geo */
 const playersOn = (t, geo) =>
   world.getAllPlayers().filter((pl) => {
     if (pl.dimension.id !== t.dim) return false;
     const { x, y, z } = pl.location;
-    return x >= geo.fp.x1 && x < geo.fp.x2 + 1 && z >= geo.fp.z1 && z < geo.fp.z2 + 1 && y >= geo.pad - 1 && y <= geo.fpBox.max.y + 2;
+    return x >= geo.region.x1 && x < geo.region.x2 + 1 && z >= geo.region.z1 && z < geo.region.z2 + 1 && y >= geo.pad - 4 && y <= geo.fpBox.max.y + 2;
   });
 
 /**
@@ -2293,10 +2293,7 @@ function stepBuild() {
       // Saved first: the region and its depth, so Remove spot puts the terrain back; then bs, so a restart resumes.
       if (!s.snap && !s.old) {
         const box = clampBox({ min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, dim);
-        if (!snapshot(t, p, s, dim, box)) {
-          buildJob = undefined;
-          return;
-        }
+        if (!snapshot(t, p, s, dim, box)) return respot(t, p, "its ground couldn't be saved");
       }
       s.bs = 1;
       saveTown(t);

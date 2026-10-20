@@ -19,6 +19,8 @@ export default async function (t) {
   const of = (id, since = 0) => events.filter((e) => e.id === id && e.tick >= since).map((e) => e.m);
   const npcs = (id) => t.dimension.getEntities({ type: "minecraft:npc", tags: [`realm:npc_id:${id}`] });
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
+  // Automatic spots would pick spots for the towns while Ann is in them: this scenario is about mayors only.
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "nospots", pack: "town_bp", key: "autoSpots", value: false }));
   await t.wait(40);
   const town = (action, extra = {}) => sys.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
   const dump = async (id) => {
