@@ -3190,3 +3190,188 @@ test("F6 count: a row too long for one message still goes out, every message und
     unload();
   }
 });
+
+// ---------------------------------------------------------------------------
+// F3: the index records which kinds a page could top up, so a full page of full stacks is never loaded for nothing
+// ---------------------------------------------------------------------------
+
+const fullOf = (/** @type {string} */ id) => Object.fromEntries(STORAGE_SLOTS.map((s) => [s, stack(id, 64)]));
+
+test("F3: auto-store never loads a saved page full of full stacks of the mined item; the next page with room takes it", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: fullOf("minecraft:dirt"), 2: { 9: stack("minecraft:emerald", 3) } });
+  switchPage(p, 3);
+  nearlyFull(p, [20, 21]);
+  const page1 = pageRefIds(p).get(1);
+  const watch = recordPlaces();
+  try {
+    for (let i = 0; i < 5; i++) pickup(p, 20, stack("minecraft:dirt", 3));
+    assert.equal(watch.ids.filter((id) => id === page1).length, 0, "page 1 (24 x 64 dirt) was never restored");
+  } finally {
+    watch.stop();
+  }
+  assert.equal(p.container.getItem(20), undefined, "every pickup left the open page");
+  assert.equal(savedPage(p, 2).get(10)?.amount, 15, "page 2 took all 15 dirt in one stack");
+  assert.equal(pageRefIds(p).get(1), page1, "page 1 unchanged");
+  assert.deepEqual(nativeIndex(p).idx[1].p, [], "page 1's index says it can top up nothing");
+  assertIndexExact(p, "after F3 routing");
+});
+
+test("F3: a full page with one partial stack of the item still takes the pickup, and only that page is read", () => {
+  const p = joined();
+  mc.players = [p];
+  const layout = fullOf("minecraft:dirt");
+  layout[STORAGE_SLOTS[23]] = stack("minecraft:dirt", 60);
+  arrange(p, { 1: layout, 2: { 9: stack("minecraft:emerald", 3) } });
+  switchPage(p, 3);
+  nearlyFull(p, [20, 21]);
+  const [page1, page2] = [pageRefIds(p).get(1), pageRefIds(p).get(2)];
+  assert.deepEqual(nativeIndex(p).idx[1].p, ["dirt"]);
+  const watch = recordPlaces();
+  try {
+    pickup(p, 20, stack("minecraft:dirt", 3));
+    assert.equal(watch.ids.filter((id) => id === page1).length, 1, "page 1 has room for dirt, so it was read once");
+    assert.equal(watch.ids.filter((id) => id === page2).length, 0, "page 2 was not needed");
+  } finally {
+    watch.stop();
+  }
+  assert.equal(savedPage(p, 1).get(STORAGE_SLOTS[23])?.amount, 63);
+  assert.equal(p.container.getItem(20), undefined);
+  assertIndexExact(p, "after topping up");
+});
+
+test("F3: an index written before room was recorded (after a restart) costs one read of that page, then none", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: fullOf("minecraft:dirt"), 2: { 9: stack("minecraft:emerald", 3) } });
+  switchPage(p, 3);
+  nearlyFull(p, [20, 21]);
+  // Page 1 as stash_bp 1.8.8 left it, in a snapshot this script heap never saw: no `p` in its index entry.
+  const state = nativeIndex(p);
+  const old = "stash:page_88888";
+  mc.structures.set(old, mc.structures.get(state.pages[1].id));
+  state.pages[1] = { ...state.pages[1], id: old };
+  state.idx[1] = { r: old, k: state.idx[1].k };
+  p.setDynamicProperty("stash:native", JSON.stringify(state));
+  const watch = recordPlaces();
+  try {
+    for (let i = 0; i < 4; i++) pickup(p, 20, stack("minecraft:dirt", 2));
+    assert.equal(watch.ids.filter((id) => id === old).length, 1, "read once to learn it can't take dirt, then skipped");
+  } finally {
+    watch.stop();
+  }
+  assert.equal(savedPage(p, 2).get(10)?.amount, 8);
+  assert.equal(nativeIndex(p).pages[1].id, old, "page 1 itself was never rewritten");
+});
+
+// ---------------------------------------------------------------------------
+// F13: a look at a page with room doesn't total the hotbar, cursor and worn gear
+// ---------------------------------------------------------------------------
+
+/** Counts how often the player's worn gear is read (only the carried totals read it). */
+function countWornReads(/** @type {any} */ p) {
+  const real = p.getComponent;
+  const counter = { n: 0, stop: () => void (p.getComponent = real) };
+  p.getComponent = (/** @type {string} */ name) => {
+    if (name === "minecraft:equippable") counter.n++;
+    return real(name);
+  };
+  return counter;
+}
+
+test("F13: auto-store looks at a page with room without totaling everything carried", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  advance(30);
+  const reads = countWornReads(p);
+  try {
+    for (let i = 0; i < 6; i++) pickup(p, 20 + i, stack("minecraft:dirt", 1 + i));
+    assert.equal(reads.n, 0, `a page with ${STORAGE_SLOTS.length - 6} free slots needs no carried totals (${reads.n} reads)`);
+  } finally {
+    reads.stop();
+  }
+  for (let i = 0; i < 6; i++) assert.equal(p.container.getItem(20 + i)?.amount, 1 + i, "pickups with room stay on the page");
+});
+
+test("F13: near a full page the carried totals come back, so a pickup is still routed and a move still isn't", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  nearlyFull(p, [19, 20, 21, 22]);
+  p.container.setItem(19, stack("minecraft:emerald", 2));
+  advance(30);
+  p.container.setItem(21, stack("minecraft:redstone", 2));
+  advance(30);
+  const reads = countWornReads(p);
+  try {
+    pickup(p, 20, stack("minecraft:iron_ingot", 5));
+    assert.ok(reads.n > 0, "the totals are read near a full page");
+  } finally {
+    reads.stop();
+  }
+  assert.equal(p.container.getItem(20), undefined, "the pickup that left one free slot went to page 1");
+  assert.equal(savedPage(p, 1).get(10)?.typeId, "minecraft:iron_ingot");
+  p.container.setItem(3, stack("minecraft:gold_ingot", 4));
+  advance(30);
+  const gold = p.container.getItem(3);
+  p.container.setItem(3, undefined);
+  p.container.setItem(20, gold);
+  advance(30);
+  assert.equal(p.container.getItem(20)?.amount, 4, "a hotbar to page move is not a pickup");
+});
+
+test("F13: a burst that fills a roomy page at once is still routed, not left stuck on a full page", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  const burst = [20, 21, 22, 23, 24, 25];
+  nearlyFull(p, burst);
+  advance(30);
+  // A broken chest: six new stacks land within one look, taking the page from 6 free slots to none.
+  for (const s of burst) p.container.setItem(s, stack("minecraft:dirt", 64));
+  advance(30);
+  const free = burst.filter((s) => !p.container.getItem(s)).length;
+  assert.ok(free >= 2, `routing frees two slots on the viewed page (${free} free)`);
+  let onPage1 = 0;
+  for (const it of savedPage(p, 1).values()) if (it?.typeId === "minecraft:dirt") onPage1 += it.amount;
+  let left = 0;
+  for (const s of burst) left += p.container.getItem(s)?.amount ?? 0;
+  assert.equal(onPage1 + left, 6 * 64, "every dirt is kept exactly once");
+  assert.equal(onPage1, free * 64, "what left the page is on page 1");
+});
+
+// ---------------------------------------------------------------------------
+// F49: a count request doesn't read every old JSON page property
+// ---------------------------------------------------------------------------
+
+test("F49: storedCount reads an old JSON page property once, never one a snapshot shadows, and still counts it", () => {
+  const p = joined();
+  mc.players = [p];
+  // Page 2 was migrated (its old 30 KB property stays behind, shadowed by its snapshot); page 3 is still old JSON.
+  p.setDynamicProperty("stash:page:2", JSON.stringify([{ s: 10, id: "minecraft:stone", n: 1, pad: "x".repeat(30000) }]));
+  arrange(p, { 2: { 9: stack("minecraft:amethyst_shard", 4) } });
+  p.setDynamicProperty("stash:page:3", JSON.stringify([{ s: 10, id: "minecraft:amethyst_shard", n: 6 }]));
+  const real = p.getDynamicProperty;
+  /** @type {Map<string, number>} */
+  const reads = new Map();
+  p.getDynamicProperty = (/** @type {string} */ k) => {
+    const v = real(k);
+    if (k.startsWith("stash:page:") && v !== undefined) reads.set(k, (reads.get(k) ?? 0) + 1);
+    return v;
+  };
+  try {
+    const shard = "minecraft:amethyst_shard";
+    assert.equal(pages.storedCount(p, shard).reduce((a, r) => a + r.n, 0), 10, "the native page and the old JSON page");
+    for (let i = 0; i < 5; i++) pages.storedCount(p, shard);
+    pages.storedCount(p, "minecraft:diamond");
+    assert.equal(reads.get("stash:page:2") ?? 0, 0, "the shadowed property of a migrated page is never read");
+    assert.equal(reads.get("stash:page:3"), 3, "page 3: found once, then read only to answer the two different asks");
+  } finally {
+    p.getDynamicProperty = real;
+  }
+});
