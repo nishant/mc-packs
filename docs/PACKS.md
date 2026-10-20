@@ -6669,6 +6669,16 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 - **Coordinates HUD occupancy** (`realm:hud_state`, consumed by Stats and Parties): the producer sends `{ part, parts, seq, players }` in batches below 1900 UTF-8 bytes, without truncating the player list at 100. Consumers replace their occupied-player set only after every part arrives (at most 1000 parts). An incomplete assembly expires after 100 ticks; completed sequences and HUD state become stale after 200 ticks, which also bounds recovery after a producer restarts its sequence. Invalid parts do not discard a valid assembly. Legacy `{ players }` messages still work.
 <!-- on the site -->
 
+### Measured audit performance and release exception (2026-10-19)
+
+The matched Windows BDS test ran all 67 behavior packs in **67 separate script contexts**, with 40 simulated players walking, looking and issuing commands throughout a 900-second steady window (18,000 ticks). Summed script callback time fell from **9.429222222222222 ms/tick** on master `27f26f6e` to **7.972722222222222 ms/tick** on candidate `a1b2a32c`, about **15.45% lower**. Later harness-only commits leave that production payload unchanged. This is not the still-required test of the genuine Realm Bundle in one script context, a client-FPS measurement, or a guarantee for another host.
+
+**Owner answer (2026-10-19): ACCEPTED_EXCEPTION.** The owner accepts this known whole-total target miss for this release, with documentation and subject to the other release gates. The **under 5 ms/tick target was not met**. The unchanged budget evaluator still reports failure; this exception is not a budget PASS or a threshold increase.
+
+Associated individual overruns remain explicit: Minimap **3.738 ms/tick** against 1; Easy Building **0.574222**, Quick Stack & Sort **0.313889**, Silly Enchants **0.276**, Elytra HUD **0.227944**, Story Questlines **0.227**, Stats **0.212111**, Realm Configuration **0.183667** and Realm Calendar **0.150444**, each against 0.15. The owner's whole-total acceptance does not imply that every individual limit is waived.
+
+This Realm has capacity for 10 players and usually has 1-4 online; its **Small Realm defaults stay unchanged**. That context is not proof that it meets the 40-player target. Reaching under 5 from the current result would require over 37% further reduction in this workload. Results depend on workload, hardware, script contexts and synchronous native API costs; the measurements do not prove the target impossible or rule out future optimization. Full per-pack figures, invalid attempts and scope limits are in [the audit performance tables](audits/2026-10-deep-audit/perf-tables.md).
+
 ### Offline reward storage
 
 Kitchen, Relics, Bounty Board, Guilds & Reputation, Fishing and Town Projects keep owed rewards in one world property per player, not one ever-growing all-player JSON value. Each store has an oldest-first `_idx` with at most 1,000 player ids of at most 24 characters (at most 27,001 bytes), and each reward value is capped at 30,000 bytes. If a new entry exceeds the 1,000-player bound, the oldest is evicted with a warning naming the store and player; the limit is not unlimited reward retention.
