@@ -17,6 +17,8 @@ const PROP_SETTINGS = "welcome:settings"; // world: JSON overrides saved by /rea
 const PROP_REVISION = "welcome:revision"; // world: bumped on every save
 const PROP_SEEN = "welcome:seen"; // player: revision they last saw
 const PROP_MIGRATED = "welcome:migrated"; // world: 1 once the Realm's old saved welcome has been moved to the default
+const PROP_LEGACY = "welcome:legacy"; // world: JSON { body, title?, button?, noted? }, what the migration took out, until an operator restores or deletes it
+const PROP_PROFILE = "welcome:profile"; // world: retired (a branch build's default picker); deleted on load
 
 // The client rejects forms while it's still loading, or has chat/inventory open
 // (UserBusy). Keep retrying for ~30s before giving up.
@@ -33,9 +35,15 @@ const stripCodes = (/** @type {string} */ s) => s.replace(/§./g, "");
  * Once per world (welcome:migrated): the Realm's old saved welcome (the Old Tobin and Mara text with house rules)
  * is dropped so the default shows. Only a saved body with LEGACY_REALM.sentence goes, plus its title and button
  * when they are still the old built-in ones; every other saved field, and every other saved text, stays. A welcome
- * saved after this runs is never touched.
+ * saved after this runs is never touched. What it takes out is kept in welcome:legacy, so an operator who had
+ * edited the text around the old sentence (house rules, links) can bring it back from the /realm:welcome menu.
+ * Also deletes the retired welcome:profile key, once per load.
  */
 function migrate() {
+  if (!profileChecked) {
+    profileChecked = true;
+    if (world.getDynamicProperty(PROP_PROFILE) !== undefined) world.setDynamicProperty(PROP_PROFILE, undefined);
+  }
   if (world.getDynamicProperty(PROP_MIGRATED) === 1) return;
   const raw = world.getDynamicProperty(PROP_SETTINGS);
   if (typeof raw === "string") {
@@ -46,13 +54,39 @@ function migrate() {
       saved = undefined;
     }
     if (saved && typeof saved === "object" && !Array.isArray(saved) && typeof saved.body === "string" && stripCodes(saved.body).includes(LEGACY_REALM.sentence)) {
+      /** @type {Legacy} */
+      const kept = { body: saved.body };
       delete saved.body;
-      if (saved.title === LEGACY_REALM.title) delete saved.title;
-      if (saved.button === LEGACY_REALM.button) delete saved.button;
+      if (saved.title === LEGACY_REALM.title) {
+        kept.title = saved.title;
+        delete saved.title;
+      }
+      if (saved.button === LEGACY_REALM.button) {
+        kept.button = saved.button;
+        delete saved.button;
+      }
+      world.setDynamicProperty(PROP_LEGACY, JSON.stringify(kept));
       saveSettings(Object.keys(saved).length ? saved : undefined);
+      console.warn("[welcome] The old saved welcome was replaced by the default; a copy is kept (operators: /realm:welcome -> Old welcome).");
     }
   }
   world.setDynamicProperty(PROP_MIGRATED, 1);
+}
+
+let profileChecked = false;
+
+/** @typedef {{ body: string, title?: string, button?: string, noted?: 1 }} Legacy */
+
+/** The copy the migration kept, if there is one. @returns {Legacy | undefined} */
+function legacyCopy() {
+  const raw = world.getDynamicProperty(PROP_LEGACY);
+  if (typeof raw !== "string") return undefined;
+  try {
+    const kept = JSON.parse(raw);
+    return kept && typeof kept === "object" && typeof kept.body === "string" ? kept : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 world.afterEvents.worldLoad.subscribe(() => {
@@ -67,6 +101,11 @@ const pongs = new Set();
 /** @type {Promise<void> | undefined} the ping in flight: a join during it waits for the same answer */
 let asking;
 
+/** @type {Set<string> | undefined} the townsfolk ids placed, from Townsfolk's last realm:npc_places (undefined: no answer yet) */
+let placed;
+/** @type {Map<number, string[]>} the parts of a realm:npc_places list still coming */
+let placesParts = new Map();
+
 /** Asks which packs are installed (each answers /realm:help's ping with its folder), at most once a minute. */
 function askInstalled() {
   if (asking) return asking;
@@ -78,6 +117,7 @@ function askInstalled() {
     pongs.add(got);
     try {
       system.sendScriptEvent("realm:help_ping", "");
+      system.sendScriptEvent("realm:npc_places_ping", "{}"); // who is placed, for the story start line
       await system.waitTicks(10);
       installed = got;
     } finally {
@@ -96,6 +136,31 @@ onScriptEvent(
   },
 );
 
+// Townsfolk sends where each townsfolk lives on every change and on realm:npc_places_ping, in parts under 2048 characters.
+onScriptEvent("realm:npc_places", ({ id, message }) => {
+  if (id !== "realm:npc_places") return;
+  /** @type {any} */
+  let m;
+  try {
+    m = JSON.parse(message);
+  } catch {
+    return;
+  }
+  const parts = Number(m?.parts) || 0;
+  const part = Number(m?.part) || 1;
+  if (parts <= 0) {
+    placesParts = new Map();
+    placed = new Set();
+    return;
+  }
+  if (part === 1) placesParts = new Map();
+  placesParts.set(part, Array.isArray(m.folk) ? m.folk.map((/** @type {any} */ f) => String(f?.id ?? "")) : []);
+  if (placesParts.size >= parts) {
+    placed = new Set([...placesParts.values()].flat());
+    placesParts = new Map();
+  }
+});
+
 /**
  * The default welcome, the same in every world: the world, what the installed packs add, where to go next.
  * @returns {{ heading: string, paragraphs: string[] }[]}
@@ -104,7 +169,9 @@ function defaultSections() {
   const intro = [GENERIC.greeting];
   if (installed.has("saga_bp")) {
     intro.push(GENERIC.story);
-    if (installed.has("npc_bp")) intro.push(GENERIC.storyStart);
+    // Only townsfolk who are really placed: a fresh world with Townsfolk installed has nobody to tap yet.
+    const who = installed.has("npc_bp") ? Object.keys(GENERIC.starters).filter((id) => placed?.has(id)) : [];
+    if (who.length) intro.push(GENERIC.storyStart.replace("{who}", who.map((id) => GENERIC.starters[id]).join(" or ")));
   } else intro.push(GENERIC.noStory);
   const features = Object.keys(GENERIC.lines)
     .filter((pack) => installed.has(pack))
@@ -256,6 +323,8 @@ async function welcome(player, { force = false } = {}) {
       fadeOutDuration: 20,
     });
   }
+
+  noteLegacy(player);
 
   // The popup alone is each player's to turn off (/realm:prefs): the chat welcome and the title still come.
   const popup = force || getFor(player, "popup") !== false;
@@ -428,6 +497,49 @@ async function resetWelcome(player) {
 
 const isOp = (/** @type {Player} */ player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 
+/** Tells the first operator who joins after the migration, once, that the old welcome was kept. @param {Player} player */
+function noteLegacy(player) {
+  if (!isOp(player)) return;
+  const kept = legacyCopy();
+  if (!kept || kept.noted) return;
+  world.setDynamicProperty(PROP_LEGACY, JSON.stringify({ ...kept, noted: 1 }));
+  player.sendMessage("§7Welcome Message: the new default welcome replaced this world's old saved one. A copy is kept: §b/realm:welcome§7 -> Old welcome.");
+}
+
+/** The kept copy of the old welcome: restore it or delete it (operators). @param {Player} player */
+async function legacyPage(player) {
+  const kept = legacyCopy();
+  if (!kept) return packMenu(player);
+  const res = await showForm(
+    player,
+    new ActionFormData()
+      .title("Old welcome")
+      .body(
+        `§7When the default welcome arrived, it replaced this world's old saved one. This copy was kept. Restore it to use it again (it replaces the body, and the old title and button if they were kept), or delete the copy.§r\n\n${kept.body}`
+      )
+      .button("Restore it")
+      .button("§cDelete the copy")
+      .button("Back")
+  );
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  if (res.selection === 2) return packMenu(player);
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the page was open
+  const now = legacyCopy(); // another operator may have restored or deleted it meanwhile
+  if (!now) return player.sendMessage("§7The copy is already gone.");
+  if (res.selection === 0) {
+    const saved = savedOverrides();
+    saved.body = now.body;
+    if (typeof now.title === "string") saved.title = now.title;
+    if (typeof now.button === "string") saved.button = now.button;
+    saveSettings(saved);
+    world.setDynamicProperty(PROP_LEGACY, undefined);
+    player.sendMessage("§aThe old welcome is back.§r Run §b/realm:welcome§r to preview it.");
+  } else {
+    world.setDynamicProperty(PROP_LEGACY, undefined);
+    player.sendMessage("§aThe copy of the old welcome is deleted.");
+  }
+}
+
 /** @param {Player} player */
 async function settingsInfo(player) {
   const res = await showForm(
@@ -452,6 +564,7 @@ async function packMenu(player) {
     entries.push({ text: "§4Edit the welcome message\n§8Operators", run: () => openEditor(player) });
     entries.push({ text: "§4Reset to the defaults\n§8Operators", run: () => resetWelcome(player) });
     entries.push({ text: "§4Settings\n§8Operators", run: () => settingsInfo(player) });
+    if (legacyCopy()) entries.push({ text: "§4Old welcome\n§8Restore or delete the kept copy", run: () => legacyPage(player) });
   }
   if (entries.length === 1) return entries[0].run();
   const form = new ActionFormData().title("§lWelcome Message").body("The message new players see when they join.");
