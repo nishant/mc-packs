@@ -22,6 +22,7 @@ import { applyParts, createOwedStore } from "./owed.js";
 import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, placeStates, toWorld } from "./designs.js";
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
+import { addLog, cleanText, logLine, nextLevelText, readLog, townJson } from "./growth.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
@@ -56,18 +57,21 @@ const NEAR_SPOT = 64; // a waiting build goes up when a player is this close to 
  * scan the projects still to get a spot (picked while a player is in the town), nos those with no good spot (an
  * operator sets one), rt those whose spot failed its last check once (a second failure goes to nos), as: 1 once the
  * town's projects were queued for automatic spots (towns from before this version get it on the first check).
- * @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string, plf?: number, scan?: string[], nos?: string[], rt?: string[], as?: number }} Town
+ * log: the town's story so far (growth.js), [Realm day or 0, what happened], at most 12, the oldest dropped first.
+ * @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string, plf?: number, scan?: string[], nos?: string[], rt?: string[], as?: number, log?: import("./growth.js").LogEntry[] }} Town
  */
 /** @typedef {{ min: Vector3, max: Vector3 }} Box inclusive block corners */
 /** @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number }} Progress */
 /** @typedef {{ cr: number, q: [string, string, string][] }} Owed crowns, and [quest id, label, guild] per finished project */
 
 /** Projects from config.js that make sense; the rest are skipped with a warning. */
-const PROJECTS = CONFIG.projects.filter((p) => {
-  const okay = /^[a-z0-9_]{1,32}$/.test(p.id) && p.level >= 1 && p.level < MAX_LEVEL && Object.keys(p.needs ?? {}).length > 0 && BUILDS.includes(p.build);
-  if (!okay) console.warn(`[town] project "${p.id}" in config.js is skipped: check its id, level (1 to 4), needs and build`);
-  return okay;
-});
+const PROJECTS = CONFIG.projects
+  .filter((p) => {
+    const okay = /^[a-z0-9_]{1,32}$/.test(p.id) && p.level >= 1 && p.level < MAX_LEVEL && Object.keys(p.needs ?? {}).length > 0 && BUILDS.includes(p.build);
+    if (!okay) console.warn(`[town] project "${p.id}" in config.js is skipped: check its id, level (1 to 4), needs and build`);
+    return okay;
+  })
+  .map((p) => ({ ...p, why: cleanText(p.why) || undefined })); // what the mayor says it's for: plain ASCII, 60 characters
 const byId = new Map(PROJECTS.map((p) => [p.id, p]));
 
 /** @param {Player} player */
@@ -137,8 +141,11 @@ function allTowns() {
   return (towns = map);
 }
 
-/** Project id lists of a saved town, cleaned: known projects only, each once; empty lists dropped. @param {any} t */
+/** Project id lists of a saved town, cleaned: known projects only, each once; empty lists dropped; its log cleaned. @param {any} t */
 function readSites(t) {
+  const log = readLog(t.log);
+  if (log) t.log = log;
+  else delete t.log;
   for (const k of ["scan", "nos", "rt"]) {
     const list = Array.isArray(t[k]) ? [...new Set(t[k].filter((/** @type {unknown} */ x) => typeof x === "string" && byId.has(x)))] : [];
     if (list.length) t[k] = list;
@@ -150,7 +157,15 @@ function readSites(t) {
 /** @param {Town} t */
 function saveTown(t) {
   allTowns().set(t.id, t);
-  world.setDynamicProperty(TOWN_PREFIX + t.id, JSON.stringify(t));
+  world.setDynamicProperty(TOWN_PREFIX + t.id, townJson(t, PROP_LIMIT)); // the oldest story entries go first if it ever grows too big
+}
+
+/** The Realm day (realm:calendar, from Townsfolk or Realm Calendar), for the town's story; undefined until one says. @type {number | undefined} */
+let realmDay;
+
+/** Adds a line to the town's story (saved with the town by the caller). @param {Town} t @param {string} text */
+function storyAdd(t, text) {
+  t.log = addLog(t.log, realmDay, text);
 }
 
 /** @type {Map<string, Progress>} */
@@ -405,6 +420,8 @@ function finishProject(t, p, pr) {
     .map(([, name, n]) => `${name} ${fmt(n)}`)
     .join(", ");
   const line = `§6${t.n} finished its ${p.name}!${top ? ` Top contributors: ${top}.` : ""} Thank you, everyone!`;
+  storyAdd(t, `The ${p.name} was finished${ranked[0] ? `, thanks to ${ranked[0][1]}` : ""}`);
+  saveTown(t);
   if (get("announce") === true) {
     world.sendMessage(line);
     for (const pl of world.getAllPlayers()) pl.playSound("random.levelup", { pitch: 1, volume: 0.7 });
@@ -450,6 +467,7 @@ function levelUp(t) {
   }
   if (!raised) return;
   queueScan(t, projectsAt(t.lvl).map((p) => p.id));
+  storyAdd(t, `It became a ${levelName(t.lvl)}`);
   saveTown(t);
   const title = `${t.n} is now a ${levelName(t.lvl)} (level ${t.lvl})`;
   const next = projectsAt(t.lvl);
@@ -1064,7 +1082,16 @@ const spotWait = (t, p) =>
 function projectLine(t, p) {
   const pr = progressOf(t, p);
   if (pr.done) return `§a[Done] ${p.name}§r ${pr.built ? "§7(built)" : t.spots[p.id]?.bs ? "§7(being built)" : t.spots[p.id] ? "§7(waiting for someone nearby to be built)" : spotWait(t, p)}`;
-  return `§e${p.name}§r\n${bar(pct(p, pr))} §f${pct(p, pr)} percent`;
+  return `§e${p.name}§r${p.why ? ` §7- ${p.why}§r` : ""}\n${bar(pct(p, pr))} §f${pct(p, pr)} percent`;
+}
+
+/** The town's story so far, oldest first; empty for a town from before the story was kept. @param {Town} t */
+const storyLines = (t) => (t.log?.length ? [`§lThe story so far§r\n${t.log.map((e) => `§7${logLine(e)}§r`).join("\n")}`] : []);
+
+/** What the town's next level brings, or nothing at the top. @param {Town} t */
+function nextLines(t) {
+  const text = nextLevelText({ lvl: t.lvl, max: MAX_LEVEL, name: levelName(t.lvl + 1), projects: projectsAt(t.lvl + 1).map((p) => p.name), housesNow: 0, housesNext: 0 });
+  return text ? [`§7${text}§r`] : [];
 }
 
 /**
@@ -1080,9 +1107,11 @@ async function townMenu(player, townId, canDeliver) {
     `§l${t.n}§r: ${levelName(t.lvl)}, level ${t.lvl} of ${MAX_LEVEL}`,
     `§7Center: ${t.x}, ${t.z}${dist}§r`,
     ...(moodOf(t.id) === "heartened" ? ["§aHeartened§r: the Choir was driven off. Deliveries count x1.25."] : moodOf(t.id) === "shaken" ? ["§cShaken§r: the Choir finished its song here. People are uneasy."] : []),
+    ...storyLines(t),
     t.lvl >= MAX_LEVEL || !open.length
       ? "Every project is done. Thank you, everyone!"
       : `Finish these to make ${t.n} a ${levelName(t.lvl + 1)}:\n\n${open.map((p) => projectLine(t, p)).join("\n\n")}`,
+    ...nextLines(t),
     ...(t.nos ?? []).flatMap((id) => (byId.has(id) ? [`§eNo good spot was found for the ${byId.get(id)?.name}: an operator can set one (Set a project spot).§r`] : [])),
     canDeliver ? "Pick a project to see what it needs and deliver from your inventory." : `Deliver materials through ${mayorName(t)}.`,
   ].join("\n\n");
@@ -1112,6 +1141,7 @@ async function projectMenu(player, townId, projectId, canDeliver) {
   const top = ranking(pr).slice(0, 5);
   const body = [
     `§l${p.name}§r for ${t.n}`,
+    ...(p.why ? [`§7${p.why}.§r`] : []),
     `${bar(pct(p, pr))} §f${pct(p, pr)} percent`,
     needs,
     top.length ? `§lContributors§r\n${top.map(([, name, n], i) => `${i + 1}. ${name}: ${fmt(n)}`).join("\n")}` : "Nobody has delivered anything yet.",
@@ -1286,6 +1316,7 @@ function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
     as: 1,
   };
   queueScan(t, projectsAt(1).map((p) => p.id)); // automatic spots, picked while a player is in the town
+  storyAdd(t, `Founded by ${player.name}`);
   // Its own mayor (Townsfolk): Mayor Bram for the realm's first town, else a new one standing here.
   const mayors = get("townMayors") === true;
   if (mayors) Object.assign(t, { v: 2 }, newTownMayor([...allTowns().values()], t.id, t.n, CONFIG.mayorNames));
@@ -1805,12 +1836,21 @@ world.afterEvents.worldLoad.subscribe(() =>
     }
     send("realm:npc_places_ping", {});
     send("realm:place_ping", {}); // story places: automatic spots keep away from them
+    send("realm:calendar_ping", {}); // the Realm day, for the towns' stories
   }, 100),
 );
 onScriptEvent(
-  ["realm:zones_ping", "realm:town_list_ping", "realm:town_state"],
+  ["realm:zones_ping", "realm:town_list_ping", "realm:town_state", "realm:calendar"],
   ({ id, message }) => {
     if (id === "realm:zones_ping" || id === "realm:town_list_ping") zonesChanged();
+    else if (id === "realm:calendar") {
+      try {
+        const m = JSON.parse(message);
+        if (m && typeof m.day === "number" && Number.isFinite(m.day) && m.day >= 1) realmDay = Math.floor(m.day);
+      } catch {
+        // not ours
+      }
+    }
     else if (id === "realm:town_state") {
       try {
         const m = JSON.parse(message);

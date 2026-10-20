@@ -63,18 +63,19 @@ export const CONFIG = {
    * lowercase letters, digits and `_`), a `name`, the town `level` it belongs to (finishing every
    * project of a level raises the town to the next; level 5 is the top, so projects are for levels 1
    * to 4), the items it `needs` (item id: amount), what gets `build`t (`well`, `lamps`, `stall`,
-   * `bell_tower`, `dock`, `garden` or `notice_board`), and optionally a `structure`: the id of a
-   * structure an operator saved (with a structure block or `/structure save`) to place instead.
+   * `bell_tower`, `dock`, `garden`, `notice_board` or `house`), `why` the town wants it (the mayor says so,
+   * at most 60 characters), and optionally a `structure`: the id of a structure an operator saved (with a
+   * structure block or `/structure save`) to place instead.
    * @type {{ id: string, name: string, level: number, needs: Record<string, number>,
-   *   build: "well" | "lamps" | "stall" | "bell_tower" | "dock" | "garden" | "notice_board", structure?: string }[]}
+   *   build: "well" | "lamps" | "stall" | "bell_tower" | "dock" | "garden" | "notice_board" | "house", why?: string, structure?: string }[]}
    */
   projects: [
-    { id: "well", name: "Well", level: 1, needs: { "minecraft:cobblestone": 64, "minecraft:oak_log": 8, "minecraft:bucket": 1 }, build: "well" },
-    { id: "notice_board", name: "Notice Board", level: 1, needs: { "minecraft:oak_planks": 32, "minecraft:oak_sign": 3 }, build: "notice_board" },
-    { id: "lamps", name: "Lamp Posts", level: 2, needs: { "minecraft:oak_fence": 16, "minecraft:lantern": 4 }, build: "lamps" },
-    { id: "garden", name: "Garden Plot", level: 2, needs: { "minecraft:oak_log": 16, "minecraft:wheat_seeds": 16, "minecraft:bone_meal": 16 }, build: "garden" },
-    { id: "stall", name: "Market Stall", level: 3, needs: { "minecraft:oak_planks": 32, "minecraft:white_wool": 8, "minecraft:red_wool": 8, "minecraft:barrel": 2 }, build: "stall" },
-    { id: "dock", name: "Dock", level: 3, needs: { "minecraft:oak_planks": 64, "minecraft:oak_log": 32, "minecraft:iron_ingot": 16 }, build: "dock" },
-    { id: "bell_tower", name: "Bell Tower", level: 4, needs: { "minecraft:stone_bricks": 128, "minecraft:gold_ingot": 16, "minecraft:iron_ingot": 16 }, build: "bell_tower" },
+    { id: "well", name: "Well", level: 1, needs: { "minecraft:cobblestone": 64, "minecraft:oak_log": 8, "minecraft:bucket": 1 }, build: "well", why: "Fresh water, so families can move in" },
+    { id: "notice_board", name: "Notice Board", level: 1, needs: { "minecraft:oak_planks": 32, "minecraft:oak_sign": 3 }, build: "notice_board", why: "News, and thanks for everyone who helps" },
+    { id: "lamps", name: "Lamp Posts", level: 2, needs: { "minecraft:oak_fence": 16, "minecraft:lantern": 4 }, build: "lamps", why: "Light on the roads after dark" },
+    { id: "garden", name: "Garden Plot", level: 2, needs: { "minecraft:oak_log": 16, "minecraft:wheat_seeds": 16, "minecraft:bone_meal": 16 }, build: "garden", why: "Food for the families who live here" },
+    { id: "stall", name: "Market Stall", level: 3, needs: { "minecraft:oak_planks": 32, "minecraft:white_wool": 8, "minecraft:red_wool": 8, "minecraft:barrel": 2 }, build: "stall", why: "A place to trade what the town makes" },
+    { id: "dock", name: "Dock", level: 3, needs: { "minecraft:oak_planks": 64, "minecraft:oak_log": 32, "minecraft:iron_ingot": 16 }, build: "dock", why: "Boats and fishing for the town" },
+    { id: "bell_tower", name: "Bell Tower", level: 4, needs: { "minecraft:stone_bricks": 128, "minecraft:gold_ingot": 16, "minecraft:iron_ingot": 16 }, build: "bell_tower", why: "A bell to call the whole town together" },
   ],
 };

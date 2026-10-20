@@ -1,6 +1,7 @@
 // Town Projects + Townsfolk, two towns (F36): Riverside (the first town) has Mayor Bram, placed in it; Oakfield gets
 // its own mayor. Each mayor offers its own town wherever the player stands, never the other (both are placed), and
-// opens that town's menu; progress stays per town.
+// opens that town's menu (the mayor's page: the story so far, each open project with why the town wants it, what the
+// next level brings); progress stays per town.
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-two-towns.js --timeout 600
 export default async function (t) {
   const sys = t.system;
@@ -79,6 +80,13 @@ export default async function (t) {
   r = await tap("mayor:oakfield", "Town projects (Oakfield)");
   t.check(JSON.stringify(r.keys) === JSON.stringify(["town:oakfield"]), "Oakfield's mayor: Oakfield");
   t.check(/Oakfield/.test(r.menu.title), `Oakfield's menu opens (${r.menu.title})`);
+  // The mayor's page (F38): Oakfield's own story, its open projects with their why, and the next level.
+  const body = String(r.menu.body ?? "").replace(/§./g, "");
+  t.log("Oakfield's page:", body.replace(/\n/g, " | ").slice(0, 400));
+  t.check(/The story so far/.test(body) && /Founded by Ann/.test(body), "the story so far, from the day it was founded");
+  t.check(!/The Well was finished/.test(body), "Riverside's well isn't in Oakfield's story");
+  t.check(/Well - Fresh water, so families can move in/.test(body), "the open Well says why the town wants it");
+  t.check(/Next, as a Village \(level 2\): new projects \(Lamp Posts, Garden Plot\)/.test(body), "what the next level brings");
 
   // From inside Riverside: still each its own.
   p.teleport({ x: 0.5, y: riverside.y, z: 0.5 });
@@ -87,4 +95,5 @@ export default async function (t) {
   t.check(JSON.stringify(r.keys) === JSON.stringify(["town:oakfield"]), "Oakfield's mayor from Riverside: Oakfield only (Bram is placed)");
   r = await tap("bram", "Town projects (Riverside)");
   t.check(JSON.stringify(r.keys) === JSON.stringify(["town:riverside"]) && /Riverside/.test(r.menu.title), "Bram opens Riverside");
+  t.check(/The Well was finished/.test(String(r.menu.body ?? "").replace(/§./g, "")), "Riverside's story has its finished well");
 }
