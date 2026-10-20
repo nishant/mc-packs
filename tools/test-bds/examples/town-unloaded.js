@@ -6,6 +6,7 @@ export default async function (t) {
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", town: "far", ...extra }));
   const dump = async () => {
+    await t.wait(1); // a dump just before answered in this tick: never take its message for this one
     const since = t.tick;
     town("dump");
     return JSON.parse((await t.waitMessage(p, (x) => x.startsWith('{"town"'), { since, timeout: 60 })).plain);
