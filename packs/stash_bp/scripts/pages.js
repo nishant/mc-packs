@@ -1904,7 +1904,7 @@ export async function recoverInventory(operator, target) {
   const body = first.items
     ? `${target.name}'s inventory move did not finish. Of the ${first.kept} stacks in their saved before-image, these ${first.items} are no longer in their inventory:\n` +
       `${list.join("\n")}\n` +
-      `Confirming puts them into ${first.chests} chest(s) on empty floor next to you, then clears the journal. Stacks they still carry are not copied, and their inventory is not touched. ` +
+      `Confirming puts them into ${first.chests} chest(s) on empty floor next to you, then clears the journal. Stacks they still carry (inventory, cursor, armor and offhand) are not copied, and their inventory is not touched. ` +
       `Anything they dropped or put in a chest since counts as missing: check with them first.` +
       (first.started ? "\nThis export was already started: only the stacks not yet placed are listed, and it must be finished in the dimension where it began." : "")
     : `${target.name}'s inventory move did not finish, but they still carry everything in their saved before-image. Confirming exports nothing and clears the journal.`;

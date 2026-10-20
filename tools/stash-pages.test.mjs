@@ -1800,6 +1800,20 @@ test("F4 recover: a stack held on the cursor counts as carried", async () => {
   p.cursor.item = undefined;
 });
 
+test("F4 recover: a stack moved into armor or the offhand since counts as carried", async () => {
+  const helmet = stack("minecraft:iron_helmet");
+  const { p, op, dim } = stuck({ 21: helmet, 22: stack("minecraft:arrow", 16) });
+  // After the failure the player puts the helmet on and the arrows in the offhand; only the diamonds are gone.
+  p.worn = { Head: p.container.getItem(21), Offhand: p.container.getItem(22) };
+  p.container.setItem(21, undefined);
+  p.container.setItem(22, undefined);
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  const message = await pages.recoverInventory(op, p);
+  assert.match(message, /Exported 1 stacks/, message);
+  assert.deepEqual(chestContents(dim), ["diamond:3"], "nothing worn is copied");
+  p.worn = undefined;
+});
+
 test("F4 recover: an inventory that changes while the operator decides exports nothing", async () => {
   const { p, op, dim } = stuck();
   mc.formResponses.set(op.id, [() => { p.container.setItem(18, stack("minecraft:diamond", 3)); return { selection: 0 }; }]);

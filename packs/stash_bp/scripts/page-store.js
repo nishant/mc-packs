@@ -455,6 +455,9 @@ export function missingPlan(before, live) {
   return plan;
 }
 
+/** The armor and offhand slots (EquipmentSlot values; the main hand is an inventory slot). */
+const WORN = ["Head", "Chest", "Legs", "Feet", "Offhand"];
+
 /** @typedef {{ d: string, p: [number, number, number][], x?: [number, number][], f?: number[] }} ExportJournal */
 
 /**
@@ -482,6 +485,18 @@ function planOf(target, pending, skip) {
       if (held) live.push({ s: -1, item: held });
     } catch {
       // no cursor component: nothing held
+    }
+    // Worn armor and the offhand are carried too: a before-image stack equipped since is not missing.
+    try {
+      const worn = target.getComponent("minecraft:equippable");
+      if (worn) {
+        for (const slot of WORN) {
+          const item = worn.getEquipment(/** @type {any} */ (slot));
+          if (item && !(skip && skip({ s: -2, item }))) live.push({ s: -2, item });
+        }
+      }
+    } catch {
+      // no equipment component: nothing worn
     }
     plan = missingPlan(before, live);
   }
