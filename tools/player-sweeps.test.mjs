@@ -131,3 +131,25 @@ test("milestones: playtime and distance count the same spread over the second; A
   // 20 check runs of 4 players and 8 milestones: 640 lookups when each check asks again, at most 8 a run when shared
   assert.ok(lookups <= 20 * 8, `objective lookups: ${lookups}`);
 });
+
+test("titles: distance counts the same and saves spread over the minute, a tenth of 40 players a run", async () => {
+  const sim = createSim();
+  const w = walkers(sim, 40);
+  await loadReal(sim, "titles_bp");
+  /** @type {Map<number, number>} */
+  const savesAt = new Map();
+  const set = sim.server.world.setDynamicProperty;
+  sim.server.world.setDynamicProperty = (k, v) => {
+    if (String(k).startsWith("titles:p:")) savesAt.set(sim.game.tick, (savesAt.get(sim.game.tick) ?? 0) + 1);
+    return set(k, v);
+  };
+  sim.step(1300);
+  for (const p of w.players) {
+    const r = JSON.parse(sim.props.get(`titles:p:${p.id}`) ?? "null");
+    // 4 blocks a second, saved once a minute: at least 59 seconds' worth by 65 seconds
+    assert.ok(r && r.s.d >= 4 * 50 && r.s.d <= 4 * 65, `${p.name} traveled ${r?.s?.d}`);
+  }
+  assert.ok(w.maxPerTick() <= 4, `at most 4 players a tick, got ${w.maxPerTick()}`);
+  const most = Math.max(...savesAt.values());
+  assert.ok(most <= 4, `at most 4 saves a tick, got ${most}`);
+});

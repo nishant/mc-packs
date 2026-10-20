@@ -5,6 +5,7 @@ import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { savedForm, stale, sweepRecords, unknownFields } from "./prune.js";
+import { spreadPlayers } from "./spread.js";
 
 // Each player's titles, trails and built-in stats are one world property, `titles:p:<player id>`, so
 // other packs can unlock titles for players who are offline and operators can give titles to them.
@@ -272,12 +273,15 @@ world.afterEvents.worldLoad.subscribe(() => {
   if (saved === WeatherType.Rain || saved === WeatherType.Thunder) weather = saved;
 });
 
-/** Outdoors in the Overworld, under the open sky (not in a desert)? @param {Player} player */
-function underStorm(player) {
-  if (player.dimension.id !== OVERWORLD) return false;
-  const feet = player.location;
+/**
+ * Outdoors in the Overworld, under the open sky (not in a desert)?
+ * @param {Player} player @param {import("@minecraft/server").Vector3} [feet] where the player is, when already read
+ * @param {import("@minecraft/server").Dimension} [dimension] their dimension, when already read
+ */
+function underStorm(player, feet = player.location, dimension = player.dimension) {
+  if (dimension.id !== OVERWORLD) return false;
   try {
-    const top = player.dimension.getTopmostBlock({ x: Math.floor(feet.x), z: Math.floor(feet.z) });
+    const top = dimension.getTopmostBlock({ x: Math.floor(feet.x), z: Math.floor(feet.z) });
     if (!top) return false;
     // getTopmostBlock skips water: a sandy lake or sea bed is no desert (the storm falls on the water).
     const up = top.above();
@@ -347,41 +351,58 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   trailSpot.delete(playerId);
 });
 
-let seconds = 0;
-system.runInterval(() => {
-  seconds++;
-  if (!enabled()) {
-    lastSpot.clear();
-    return;
-  }
-  const time = world.getTimeOfDay();
-  const night = time >= 13000 && time < 23000;
-  const storm = weather === WeatherType.Thunder;
-  for (const player of world.getAllPlayers()) {
-    try {
-      const d = dataOf(player.id);
-      const loc = player.location;
-      const dim = player.dimension.id;
-      const last = lastSpot.get(player.id);
-      if (last && last.dim === dim) {
-        const dist = Math.hypot(loc.x - last.x, loc.y - last.y, loc.z - last.z);
-        if (dist <= CONFIG.maxSpeed) d.s.d += dist;
-      }
-      lastSpot.set(player.id, { x: loc.x, y: loc.y, z: loc.z, dim });
-      if (night) d.s.n += 1;
-      if (storm && underStorm(player)) d.s.w += 1;
-      dirty.add(player.id);
-      for (const b of CONFIG.builtins) {
-        if (statOf(d, b.stat) < b.amount) continue;
-        unlockTitle(player.id, b.title, player.name);
-        if (b.trail) unlockTrail(player.id, b.trail, player.name); // also when the title came first from an operator
-      }
-      if (seconds % SAVE_EVERY === 0) save(player.id);
-    } catch (e) {
-      console.warn(`[titles] ${e}`);
+// Each player once a second as before, a tenth of them every 2 ticks (scripts/spread.js), so a full server doesn't
+// count (and save) everyone on one tick. The time of day and the weather are read once a second, as before.
+let on = false;
+let night = false;
+let storm = false;
+spreadPlayers(system, world, {
+  every: 20,
+  parts: 10,
+  start: () => {
+    on = enabled();
+    if (!on) {
+      lastSpot.clear();
+      return;
     }
+    const time = world.getTimeOfDay();
+    night = time >= 13000 && time < 23000;
+    storm = weather === WeatherType.Thunder;
+  },
+  visit: (share, { round, part }) => {
+    if (!on) return;
+    // Saved every SAVE_EVERY seconds, each tenth on a different second.
+    const saving = (round + part) % SAVE_EVERY === 0;
+    for (const player of share) countSecond(player, saving);
+  },
+});
+
+/** One player's second: distance, night and storm time, built-in titles. @param {Player} player @param {boolean} saving */
+function countSecond(player, saving) {
+  try {
+    const d = dataOf(player.id);
+    const loc = player.location;
+    const dimension = player.dimension;
+    const dim = dimension.id;
+    const last = lastSpot.get(player.id);
+    if (last && last.dim === dim) {
+      const dist = Math.hypot(loc.x - last.x, loc.y - last.y, loc.z - last.z);
+      if (dist <= CONFIG.maxSpeed) d.s.d += dist;
+    }
+    lastSpot.set(player.id, { x: loc.x, y: loc.y, z: loc.z, dim });
+    if (night) d.s.n += 1;
+    if (storm && underStorm(player, loc, dimension)) d.s.w += 1;
+    dirty.add(player.id);
+    for (const b of CONFIG.builtins) {
+      if (statOf(d, b.stat) < b.amount) continue;
+      unlockTitle(player.id, b.title, player.name);
+      if (b.trail) unlockTrail(player.id, b.trail, player.name); // also when the title came first from an operator
+    }
+    if (saving) save(player.id);
+  } catch (e) {
+    console.warn(`[titles] ${e}`);
   }
-}, 20);
+}
 
 // ---------------------------------------------------------------------------
 // Trails
@@ -399,7 +420,11 @@ system.runInterval(() => {
   // Nobody online chose a trail (the usual case): don't fetch every player 5 times a second for nothing. The cache
   // holds everyone online (the stats count loads them every second).
   let any = false;
-  for (const d of cache.values()) if (d.tr) any = true;
+  for (const d of cache.values())
+    if (d.tr) {
+      any = true;
+      break;
+    }
   if (!any) return;
   const players = world.getAllPlayers();
   if (!players.length) return;
