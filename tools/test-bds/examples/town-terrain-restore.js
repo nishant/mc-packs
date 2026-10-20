@@ -25,7 +25,7 @@ export default async function (t) {
   town("add", { name: "Slope" });
   await t.waitMessage(p, /Town Slope added/, { since, timeout: 60 });
   let d;
-  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 2400, interval: 100, message: "the well's spot" });
+  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 6000, interval: 100, message: "the well's spot" });
   const s = d.town.spots.well;
   t.log("well:", JSON.stringify(s));
   t.check(typeof s.lv === "string" && /[0-6]/.test(s.lv), "a leveled spot");

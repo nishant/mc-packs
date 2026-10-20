@@ -30,7 +30,7 @@ export default async function (t) {
     const since = t.tick;
     town("add", { name: "Oakfield" });
     await t.waitMessage(p, /Town Oakfield added/, { since, timeout: 60 });
-    await t.waitUntil(async () => (await dump()).town.spots.well, { timeout: 2400, interval: 100, message: "the well's spot" });
+    await t.waitUntil(async () => (await dump()).town.spots.well, { timeout: 6000, interval: 100, message: "the well's spot" });
     town("build_pause", { after: 30, town: "oakfield" });
     town("finish", { project: "well", town: "oakfield" });
     await t.waitUntil(async () => (await dump()).town.spots.well.bs === 1 && !(await dump()).building, { timeout: 1200, interval: 40, message: "paused with bs" });

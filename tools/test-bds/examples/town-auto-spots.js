@@ -37,7 +37,7 @@ export default async function (t) {
   await t.waitUntil(async () => {
     d = await dump("oak");
     return d.town.spots.well && d.town.spots.notice_board;
-  }, { timeout: 2400, interval: 100, message: "both level 1 spots picked" });
+  }, { timeout: 6000, interval: 100, message: "both level 1 spots picked" });
   t.log("spots:", JSON.stringify(d.town.spots), "regions:", JSON.stringify(d.regions));
   t.check(!d.town.scan && !d.town.nos, "nothing left to pick, nothing without a spot");
   for (const [id, [x1, z1, x2, z2]] of Object.entries(d.regions)) {

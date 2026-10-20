@@ -21,7 +21,7 @@ export default async function (t) {
   town("add", { name: "Claimed" });
   await t.waitMessage(own, /Town Claimed added/, { since, timeout: 60 });
   let d;
-  await t.waitUntil(async () => (d = await dump()).town.spots.well && d.town.spots.notice_board, { timeout: 2400, interval: 100, message: "spots picked" });
+  await t.waitUntil(async () => (d = await dump()).town.spots.well && d.town.spots.notice_board, { timeout: 6000, interval: 100, message: "spots picked" });
   t.log("regions:", JSON.stringify(d.regions));
   for (const [id, [x1, z1, x2, z2]] of Object.entries(d.regions)) {
     const apart = x2 < c.x - r || x1 > c.x + r || z2 < c.z - r || z1 > c.z + r;

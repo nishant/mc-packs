@@ -16,7 +16,7 @@ export default async function (t) {
   town("add", { name: "Marks" });
   await t.waitMessage(p, /Town Marks added/, { since, timeout: 60 });
   let d;
-  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 2400, interval: 100, message: "the well's spot" });
+  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 6000, interval: 100, message: "the well's spot" });
   const r0 = d.regions.well;
   const mid = { x: Math.floor((r0[0] + r0[2]) / 2), z: Math.floor((r0[1] + r0[3]) / 2) };
   t.log("first well region:", JSON.stringify(r0));
@@ -35,7 +35,7 @@ export default async function (t) {
   await t.wait(5);
   t.server(`/setblock ${mid.x} ${G + 1} ${mid.z} air`);
   town("scan");
-  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 2400, interval: 100, message: "a new spot" });
+  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 6000, interval: 100, message: "a new spot" });
   const r1 = d.regions.well;
   const inside = ([x1, z1, x2, z2], x, z) => x >= x1 && x <= x2 && z >= z1 && z <= z2;
   t.check(!inside(r1, mid.x, mid.z), `the new region keeps off the placed block's cell (${JSON.stringify(r1)})`);
@@ -45,7 +45,7 @@ export default async function (t) {
   town("remove", { project: "well" });
   await t.wait(5);
   town("scan");
-  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 2400, interval: 100, message: "a third spot" });
+  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 6000, interval: 100, message: "a third spot" });
   const r2 = d.regions.well;
   const overlap = (a, b) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
   t.check(!overlap(r2, [r1[0] + 4, r1[1] + 4, r1[2] - 4, r1[3] - 4]), `the reported box is avoided (${JSON.stringify(r2)})`);

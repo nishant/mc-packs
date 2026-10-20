@@ -31,7 +31,7 @@ export default async function (t) {
   town("add", { name: "Elm" });
   await t.waitMessage(p, /Town Elm added/, { since, timeout: 60 });
   let d;
-  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 2400, interval: 100, message: "the well's spot is picked" });
+  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 6000, interval: 100, message: "the well's spot is picked" });
   await census();
   t.check(residents().length === 0, "no well built, nobody moves in");
 

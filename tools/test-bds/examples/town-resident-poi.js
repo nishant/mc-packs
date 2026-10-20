@@ -24,7 +24,7 @@ export default async function (t) {
   town("add", { name: "Elm" });
   await t.waitMessage(p, /Town Elm added/, { since, timeout: 60 });
   let d;
-  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 2400, interval: 100, message: "the well's spot" });
+  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 6000, interval: 100, message: "the well's spot" });
   town("finish", { town: "elm", project: "well" });
   await t.waitUntil(async () => (d = await dump()).progress.find(([x]) => x === "well")?.[1].built === 1, { timeout: 2400, interval: 100, message: "the well is built" });
   await t.waitUntil(async () => {

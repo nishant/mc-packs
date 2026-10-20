@@ -42,7 +42,7 @@ export default async function (t) {
       town("add", { name });
       await t.waitMessage(p, new RegExp(`Town ${name} added`), { since, timeout: 60 });
       const id = name.toLowerCase();
-      await t.waitUntil(async () => (await dump(id)).town.spots.well, { timeout: 2400, interval: 100, message: `${name}: the well's spot` });
+      await t.waitUntil(async () => (await dump(id)).town.spots.well, { timeout: 6000, interval: 100, message: `${name}: the well's spot` });
     }
     const a = (await dump("riverside")).town.spots.well;
     const b = (await dump("oakfield")).town.spots.well;

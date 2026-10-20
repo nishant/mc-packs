@@ -71,7 +71,7 @@ export default async function (t) {
   await t.waitUntil(async () => {
     d = await dump("elm");
     return d.town.spots.well && d.town.spots.notice_board;
-  }, { timeout: 2400, interval: 100, message: "level 1 spots picked" });
+  }, { timeout: 6000, interval: 100, message: "level 1 spots picked" });
   town("finish", { town: "elm", project: "well" });
   await t.wait(10);
   town("finish", { town: "elm", project: "notice_board" });

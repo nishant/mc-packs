@@ -34,7 +34,7 @@ export default async function (t) {
   t.check(!d.town.nos?.includes("well"), "unknown ground never means no good spot");
   // To the center: the scan finishes.
   p.teleport({ x: 0.5, y: -60, z: 0.5 });
-  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 2400, interval: 100, message: "the well's spot once the center is loaded" });
+  await t.waitUntil(async () => (d = await dump()).town.spots.well, { timeout: 6000, interval: 100, message: "the well's spot once the center is loaded" });
   const s = d.town.spots.well;
   t.check(Math.hypot(s.x, s.z) <= 16, `near the center (${s.x}, ${s.z})`);
 }

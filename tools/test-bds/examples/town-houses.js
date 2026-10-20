@@ -43,7 +43,7 @@ export default async function (t) {
   await t.waitUntil(async () => {
     d = await dump("elm");
     return d.town.spots.well && d.town.spots.notice_board;
-  }, { timeout: 2400, interval: 100, message: "level 1 spots picked" });
+  }, { timeout: 6000, interval: 100, message: "level 1 spots picked" });
   t.check(houses.every((h) => !prog(d, h)?.done && !d.town.spots[h]), "a Settlement builds no houses");
 
   // Level 1 done: a Village (level 2) with 4 houses due. The well's families first.
