@@ -298,6 +298,16 @@ test("an allowlisted function passes, any other doesn't, and --list shows both",
   assert.equal(problemsOf(found, allow, true).problems.length, 2);
 });
 
+test("an (anonymous) allowlist entry exempts nothing and is reported itself (F20)", () => {
+  const found = analyze(fixture({ "hud.js": `system.runInterval(() => { for (const player of world.getAllPlayers()) ${WRITE} }, 20);\n` })).found;
+  assert.deepEqual([...(found.get("packs/x_bp/scripts/hud.js") ?? [])], ["(anonymous)"]);
+  const { problems, allowed } = problemsOf(found, { "packs/x_bp/scripts/hud.js": ["(anonymous)"] }, false);
+  assert.equal(allowed, 0);
+  assert.equal(problems.length, 2);
+  assert.ok(problems.some((p) => /allowlist entry "\(anonymous\)"/.test(p)));
+  assert.ok(problems.some((p) => /\(anonymous\)\(\) calls setActionBar/.test(p)));
+});
+
 test("the function finder keeps control blocks out and names definitions, callbacks and expression arrows", () => {
   const src = `
 function named(a) { if (isOp(a) && ready(a)) { x(); } for (const y of z) { y(); } }
@@ -316,9 +326,9 @@ test("the repository passes, and its allowlist stays the bottom lines and one de
   const allow = JSON.parse(readFileSync(join(repo, "tools", "check-actionbar.allow.json"), "utf8"));
   delete allow.comment;
   assert.deepEqual(allow, {
-    "packs/hud_bp/scripts/main.js": ["(anonymous)"],
+    "packs/hud_bp/scripts/main.js": ["clearOnChange", "hudLoop"],
     "packs/stash_bp/scripts/pages.js": ["(top level)"],
-    "packs/stats_bp/scripts/main.js": ["(anonymous)", "clearTicker"],
+    "packs/stats_bp/scripts/main.js": ["clearTicker", "tickerLoop"],
   }, "a new exception hides new writes: send the request instead, or explain it here and in the allowlist's comment");
   assert.deepEqual(problemsOf(found, allow, false).problems, []);
   assert.ok(sites >= 80, `${sites} writes checked`);

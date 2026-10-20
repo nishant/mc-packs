@@ -121,7 +121,8 @@ function sendState(players, now = false) {
   for (const message of statePartMessages(players, ++stateSeq)) system.sendScriptEvent("realm:hud_state", message);
 }
 
-system.runInterval(() => {
+/** Draws the Coordinates HUD for every player who has it on: the lowest steady line, it only listens and waits. */
+function hudLoop() {
   const now = system.currentTick;
   /** @type {string[]} */
   const seeing = [];
@@ -146,7 +147,8 @@ system.runInterval(() => {
     }
   }
   sendState(seeing);
-}, Math.max(MIN_INTERVAL, CONFIG.intervalTicks));
+}
+system.runInterval(hudLoop, Math.max(MIN_INTERVAL, CONFIG.intervalTicks));
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   shown.delete(playerId);
@@ -157,7 +159,8 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 const seeingNow = () => world.getAllPlayers().filter(hudFor).map((p) => p.id);
 
 // Turning the HUD off (here, in /realm:prefs, or for the whole realm) clears it right away.
-onChange((key, player) => {
+/** @param {string} key @param {import("@minecraft/server").Player | undefined} player */
+function clearOnChange(key, player) {
   const players = player ? [player] : world.getAllPlayers();
   for (const p of players) {
     const had = shown.get(p.id);
@@ -168,7 +171,8 @@ onChange((key, player) => {
     else if (had && !hudFor(p) && (pausedUntil.get(p.id) ?? 0) <= system.currentTick) p.onScreenDisplay.setActionBar("");
   }
   sendState(seeingNow());
-});
+}
+onChange(clearOnChange);
 
 onScriptEvent(
   ["realm:actionbar", "realm:hud_line", "realm:hud_ping"],

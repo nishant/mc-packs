@@ -399,7 +399,8 @@ function clearTicker(player, t) {
   else if (t.via === "bar" && t.text && (pausedUntil.get(player.id) ?? 0) <= system.currentTick) player.onScreenDisplay.setActionBar("");
 }
 
-system.runInterval(() => {
+/** Draws each player's stats ticker, one group of players per tick: the lowest steady line, it only listens and waits. */
+function tickerLoop() {
   const now = system.currentTick;
   const group = Math.floor(now / TICKER_STEP) % TICKER_GROUPS;
   const hudAlive = now - hudHeard < HUD_STALE_TICKS;
@@ -436,7 +437,8 @@ system.runInterval(() => {
       console.warn(`[stats] ticker: ${e}`);
     }
   }
-}, TICKER_STEP);
+}
+system.runInterval(tickerLoop, TICKER_STEP);
 
 onScriptEvent(
   ["realm:actionbar", "realm:hud_state"],
