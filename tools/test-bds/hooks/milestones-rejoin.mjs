@@ -27,7 +27,7 @@ function milestonesProbeReport(qid, player) {
   flush([player.id]);
   const raw = world.getDynamicProperty(RECORD_PREFIX + player.id);
   const r = typeof raw === "string" ? JSON.parse(raw) : undefined;
-  return { id: qid, player: player.id, name: r?.n ?? null, tf: r?.tf === 1 ? 1 : 0, joins: Number(r?.g?.joins) || 0, ...(r ? {} : { error: "missing" }) };
+  return { id: qid, player: player.id, name: r?.n ?? null, tf: r?.tc === 1 ? 1 : 0, joins: Number(r?.g?.joins) || 0, ...(r ? {} : { error: "missing" }) };
 }
 system.afterEvents.scriptEventReceive.subscribe(
   (event) => {
