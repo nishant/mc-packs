@@ -877,6 +877,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return; // another pack (Land Claims) refused this tap: in the bundle it is still delivered here
   const { player, target } = ev;
   try {
     if (target.typeId !== NPC_TYPE || !target.hasTag(OWNER_TAG)) return;
