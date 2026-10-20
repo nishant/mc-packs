@@ -97,8 +97,11 @@ shim's relay (a script event per message), so profile with `--no-relay`. The sim
 the scenario itself also cost server time that no pack is charged for.
 
 ```bash
-node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 900
+node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 900
 ```
+
+Performance runs use 10 players (the Realm has at most 10) and 40 players (a scalability check), never other
+counts. During development use 120 s windows (the default); release validation uses 300 s (`--arg seconds=300`).
 
 `examples/perf-soak.js` spreads `players` simulated players around spawn in groups (two near spawn,
 the others 240+ blocks apart, two in a pool, two in the Nether), makes them walk, look around, sneak
@@ -131,7 +134,8 @@ Options: `--jobs N` (default 2; each run is CPU bound), `--filter <regex>` (scen
 `logs/suite-<time>/<scenario>.out` (run.mjs output) and `.log` (full BDS log). The exit code is 1 when
 anything failed or timed out. The whole suite takes a few hours at `--jobs 2`.
 
-`node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp] [--json out]` runs
+`node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp] [--json out]` (`--perf default`
+is the same 10,40; `--perf-seconds 300` for release validation) runs
 only `perf-soak.js`, once per player count (one at a time, with `--profile`), and prints ms/tick per pack side by
 side with the budget: the whole bundle under 5 ms/tick at 40 players, a typical pack at most 0.15, the Minimap
 (`map_bp`) and HUD (`hud_bp`) at most 1. The JSON reports land in the suite's log folder.
