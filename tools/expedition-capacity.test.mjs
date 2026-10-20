@@ -98,8 +98,9 @@ function realParts(w, ctx, players, runs) {
   vm.runInContext(["freeSlot", "cantStart", "start", "leave", "show", "preview", "resetPending", "prepare"].map(fnSrc).join("\n") + `\n${forgetBlock}`, ctx);
 }
 
-function world({ slots = 3, site = true, real = false } = {}) {
-  const w = { tick: 0, interval: undefined, jobs: [], warns: [], resets: 0, started: [], cfg: { enabled: true, gauntletEnabled: true }, slots, site: site ? { x: 0, z: 0 } : undefined };
+// `store`: the world's saved properties (shared by two worlds to play a script reload or a restart).
+function world({ slots = 3, site = true, real = false, store = new Map() } = {}) {
+  const w = { store, tick: 0, interval: undefined, jobs: [], warns: [], resets: 0, started: [], cfg: { enabled: true, gauntletEnabled: true }, slots, site: site ? { x: 0, z: 0 } : undefined };
   const players = new Map();
   const runs = new Map();
   const system = {
@@ -121,6 +122,9 @@ function world({ slots = 3, site = true, real = false } = {}) {
     system, runs,
     get: (k) => (k === "slots" ? w.slots : w.cfg[k]),
     site: () => w.site,
+    readJson: (k) => (w.store.has(k) ? JSON.parse(w.store.get(k)) : undefined),
+    writeJson: (k, v) => (v === undefined ? w.store.delete(k) : w.store.set(k, JSON.stringify(v))),
+    dungeonById: (id) => [crypt].find((d) => d.id === id),
     online: (id) => players.get(id),
     runOf: (id) => [...runs.values()].find((r) => r.members.has(id)),
     statusLine: (r) => `${r.leader}'s party`,
@@ -137,7 +141,7 @@ function world({ slots = 3, site = true, real = false } = {}) {
     },
   };
   vm.createContext(ctx);
-  if (!real) vm.runInContext("let forgotten = false;", ctx);  vm.runInContext(`${block}\nglobalThis.q = { queue, enqueue, dequeue, clearQueue, pumpQueue, slotBusy, freeRun, queuePlace, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY };`, ctx);
+  if (!real) vm.runInContext("let forgotten = false;", ctx);  vm.runInContext(`${block}\nglobalThis.q = { queue, enqueue, dequeue, clearQueue, pumpQueue, slotBusy, freeRun, queuePlace, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY, loadQueue: typeof loadQueue === "function" ? loadQueue : undefined, queueRejoined: typeof queueRejoined === "function" ? queueRejoined : undefined, QUEUE_REJOIN: typeof QUEUE_REJOIN === "number" ? QUEUE_REJOIN : undefined };`, ctx);
   if (real) realParts(w, ctx, players, runs);
   w.q = ctx.q;
   w.ctx = ctx;
@@ -516,4 +520,66 @@ test("forget: the hook closes and empties the line and blocks every automatic an
   assert.match(a.msgs.at(-1), /wait until the realm reloads/);
   w.q.enqueue(b, crypt, 1, [], undefined, undefined);
   assert.equal(w.q.queue.length, 0, "no new waiting either");
+});
+
+// F28: the line is saved, so a script reload or a restart doesn't drop it without a word.
+test("a script reload keeps the line in order, with the time waited, and tells each leader", async () => {
+  const w = world();
+  w.fill(3);
+  const a = w.player("a", { sigils: ["sig-a"] });
+  const b = w.player("b");
+  w.tick = 100;
+  await w.ctx.start(a, crypt, 2, ["fresh"], "sig-a", { loadout: true });
+  w.tick = 400;
+  await w.ctx.start(b, crypt, 1, [], undefined, undefined);
+  w.tick = 1000;
+  w.q.pumpQueue();
+  // The reload: memory starts over, the saved properties and the players stay.
+  const r = world({ store: w.store });
+  r.fill(3);
+  const [a2, b2] = ["a", "b"].map((id) => r.player(id));
+  r.tick = 50;
+  assert.equal(r.q.loadQueue(), 2);
+  assert.deepEqual(Array.from(r.q.queue, (q) => [q.id, q.L, q.sigilLine ?? null, q.g?.loadout ?? null, q.affixes.join()]), [["a", 2, "sig-a", true, "fresh"], ["b", 1, null, null, ""]]);
+  assert.equal(r.q.queue[0].at, 50 - 900, "a has waited 900 ticks already");
+  assert.match(a2.msgs.at(-1), /still number 1 of 2 in line/);
+  assert.match(b2.msgs.at(-1), /still number 2 of 2 in line/);
+  r.runs.delete(0);
+  r.free(0);
+  r.flush();
+  assert.deepEqual(r.started.map((s) => [s.id, s.L, s.sigilLine, s.fromQueue]), [["a", 2, "sig-a", true]]);
+  assert.equal(JSON.parse(r.store.get("expedition:queue")).length, 1, "the save follows the line");
+});
+
+test("after a restart a leader who rejoins in time keeps the place; one who doesn't is dropped", async () => {
+  const w = world();
+  w.fill(3);
+  for (const id of ["a", "b", "c"]) await w.ctx.start(w.player(id), crypt, 1, [], undefined, undefined);
+  const r = world({ store: w.store });
+  r.fill(3);
+  r.tick = 0;
+  r.q.loadQueue();
+  assert.equal(r.q.queue.length, 3, "nobody is online yet: the places are kept");
+  r.tickTo(100);
+  assert.equal(r.q.queue.length, 3, "the line waits for its leaders");
+  // b comes back first; a slot frees: b starts, a and c keep their places.
+  const b = r.player("b");
+  r.q.queueRejoined(b);
+  assert.match(b.msgs.at(-1), /still number 2 of 3 in line/);
+  r.runs.delete(1);
+  r.free(1);
+  r.flush();
+  assert.deepEqual(r.started.map((s) => s.id), ["b"]);
+  assert.deepEqual(Array.from(r.q.queue, (q) => q.id), ["a", "c"]);
+  const a = r.player("a");
+  r.q.queueRejoined(a);
+  r.tickTo(r.q.QUEUE_REJOIN + 100);
+  assert.deepEqual(Array.from(r.q.queue, (q) => q.id), ["a"], "c never came back and is dropped");
+});
+
+test("a saved line with an unknown dungeon or a bad entry loads what it can", () => {
+  const store = new Map([["expedition:queue", JSON.stringify([{ i: "x", n: "X", d: "gone", L: 1, a: [], w: 0 }, null, { i: "y", n: "Y", d: "crypt", L: 3, a: ["fresh", 7], w: 10 }])]]);
+  const r = world({ store });
+  r.q.loadQueue();
+  assert.deepEqual(Array.from(r.q.queue, (q) => [q.id, q.L, q.affixes.join()]), [["y", 3, "fresh"]]);
 });

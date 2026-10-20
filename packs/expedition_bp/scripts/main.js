@@ -1350,15 +1350,65 @@ const QUEUE_TICKS = 36000;
 /** Game ticks the line holds after a dungeon failed to open (a minute), so one bad site doesn't fail every party in turn. */
 const QUEUE_RETRY = 1200;
 
+/** Game ticks a restored line keeps a leader who isn't online yet after a restart (5 minutes), so they can rejoin. */
+const QUEUE_REJOIN = 6000;
+/** World: JSON SavedQueued[], the line, so a script reload or a restart doesn't drop it without a word. */
+const PROP_QUEUE = "expedition:queue";
+
 /**
- * One party waiting for a dungeon. Memory only and nothing is debited while it waits: the sigil is used up, and a
- * Fixed loadout stored, only when the run really starts; the party is asked then, so who comes along is who is there.
- * @typedef {{ id: string, name: string, d: Dungeon, L: number, affixes: string[], sigilLine: string | undefined, g: { loadout: boolean } | undefined, at: number }} Queued
+ * One party waiting for a dungeon. Nothing is debited while it waits: the sigil is used up, and a Fixed loadout
+ * stored, only when the run really starts; the party is asked then, so who comes along is who is there. The line is
+ * saved (PROP_QUEUE) and read back on world load. `back`: a restored entry whose leader may still rejoin until this tick.
+ * @typedef {{ id: string, name: string, d: Dungeon, L: number, affixes: string[], sigilLine: string | undefined, g: { loadout: boolean } | undefined, at: number, back?: number }} Queued
+ * @typedef {{ i: string, n: string, d: string, L: number, a: string[], s?: string, g?: { loadout: boolean }, w: number }} SavedQueued w: ticks waited
  */
 /** @type {Queued[]} */
 const queue = [];
 /** The line doesn't start anyone before this tick. */
 let queueHold = 0;
+
+/** Saves the line (nothing when it's empty). */
+function saveQueue() {
+  const now = system.currentTick;
+  /** @type {SavedQueued[]} */
+  const out = queue.map((q) => ({ i: q.id, n: q.name, d: q.d.id, L: q.L, a: q.affixes, ...(q.sigilLine ? { s: q.sigilLine } : {}), ...(q.g ? { g: q.g } : {}), w: Math.max(0, now - q.at) }));
+  writeJson(PROP_QUEUE, out.length ? out : undefined);
+}
+
+/**
+ * Reads the saved line back on world load, in its order and with the time already waited. A leader online now (a
+ * script reload) is told they're still in line; one who isn't (a restart) keeps the place for QUEUE_REJOIN ticks.
+ * @returns {number} how many parties are waiting
+ */
+function loadQueue() {
+  const saved = readJson(PROP_QUEUE);
+  if (!Array.isArray(saved)) return 0;
+  const now = system.currentTick;
+  for (const e of saved) {
+    if (queue.length >= QUEUE_MAX) break;
+    const d = e && typeof e.i === "string" && typeof e.d === "string" ? dungeonById(e.d) : undefined;
+    if (!d || !Number.isFinite(e.L) || queuePlace(e.i) >= 0) continue;
+    const g = e.g && typeof e.g === "object" ? { loadout: e.g.loadout === true } : undefined;
+    const affixes = Array.isArray(e.a) ? e.a.filter((x) => typeof x === "string") : [];
+    queue.push({ id: e.i, name: typeof e.n === "string" ? e.n : "", d, L: e.L, affixes, sigilLine: typeof e.s === "string" ? e.s : undefined, g, at: now - Math.max(0, Number(e.w) || 0), back: now + QUEUE_REJOIN });
+  }
+  for (const q of queue) {
+    const p = online(q.id);
+    if (!p) continue;
+    q.back = undefined;
+    p.sendMessage(`§eThe realm reloaded and you're still number ${queuePlace(q.id) + 1} of ${queue.length} in line for a dungeon: it starts by itself when one is free.`);
+  }
+  saveQueue();
+  return queue.length;
+}
+
+/** A leader joined: one still in a restored line is told so. @param {Player} p */
+function queueRejoined(p) {
+  const i = queuePlace(p.id);
+  if (i < 0 || queue[i].back === undefined) return;
+  queue[i].back = undefined;
+  p.sendMessage(`§eThe realm restarted and you're still number ${i + 1} of ${queue.length} in line for a dungeon: it starts by itself when one is free. Leave the line with /realm:expedition_leave.`);
+}
 
 /** @param {string} id */
 const queuePlace = (id) => queue.findIndex((q) => q.id === id);
@@ -1368,6 +1418,7 @@ function dequeue(id) {
   const i = queuePlace(id);
   if (i < 0) return false;
   queue.splice(i, 1);
+  saveQueue();
   return true;
 }
 
@@ -1375,6 +1426,7 @@ function dequeue(id) {
 function clearQueue(text) {
   const n = queue.length;
   for (const q of queue.splice(0)) online(q.id)?.sendMessage(text);
+  if (n) saveQueue();
   return n;
 }
 
@@ -1398,6 +1450,7 @@ function enqueue(leader, d, L, affixes, sigilLine, g) {
     entry.at = queue[had].at;
     queue[had] = entry;
   } else queue.push(entry);
+  saveQueue();
   const busy = [...runs.values()].map(statusLine).join("; ");
   leader.sendMessage(
     `§eEvery dungeon is busy${busy ? ` (${busy})` : ""}. You're number ${queuePlace(leader.id) + 1} of ${queue.length} in line: your ${g ? "Gauntlet" : "expedition"} starts by itself when a dungeon is free, with whoever is in your party then. Leave the line with /realm:expedition_leave.`,
@@ -1414,6 +1467,7 @@ function pumpQueue() {
   for (const q of [...queue]) {
     const p = online(q.id);
     let why = "";
+    if (!p && q.back !== undefined && now < q.back) continue; // restored after a restart: the leader may still rejoin
     if (!p) why = "";
     else if (runOf(q.id)) why = "§7You joined an expedition, so you're out of the line for a dungeon.";
     else if (!on) why = "§eNew expeditions are disabled right now, so you're out of the line for a dungeon.";
@@ -1423,14 +1477,18 @@ function pumpQueue() {
     dequeue(q.id);
     if (p && why) p.sendMessage(why);
   }
-  if (now < queueHold || !site()) return;
+  if (now < queueHold || !site()) return void (queue.length && saveQueue());
   while (queue.length && freeSlot() !== undefined) {
-    const q = queue.shift();
-    const p = q && online(q.id);
-    if (!q || !p) continue;
+    // The first party whose leader is here; a restored one still waiting for its leader keeps its place.
+    const i = queue.findIndex((x) => online(x.id));
+    if (i < 0) break;
+    const [q] = queue.splice(i, 1);
+    const p = online(q.id);
+    if (!p) continue;
     p.sendMessage("§aAn expedition dungeon is free now: starting yours.");
     start(p, q.d, q.L, q.affixes, q.sigilLine, q.g, true).catch((e) => console.warn(`[expedition] queued start: ${e}`));
   }
+  saveQueue(); // also keeps the time waited current, every 100 ticks while anyone waits
 }
 system.runInterval(pumpQueue, 100); // a slot opened by the operators' settings, a hold that ended, an expired party
 
@@ -3833,7 +3891,8 @@ world.afterEvents.playerInteractWithBlock.subscribe(({ player, block }) => {
   }
 });
 
-world.afterEvents.playerSpawn.subscribe(({ player }) => {
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (initialSpawn) queueRejoined(player);
   try {
     if (!runOf(player.id) && player.hasTag(IN_RUN_TAG)) player.removeTag(IN_RUN_TAG); // the run ended (or the world restarted) meanwhile
     const raw = player.getDynamicProperty(PROP_RETURN);
@@ -3992,6 +4051,11 @@ world.afterEvents.worldLoad.subscribe(() => {
       continue;
     }
     pending.set(slot, { ...rec, slot });
+  }
+  try {
+    loadQueue();
+  } catch (e) {
+    console.warn(`[expedition] line: ${e}`);
   }
   try {
     migrateBest();
