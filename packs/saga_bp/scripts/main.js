@@ -45,7 +45,7 @@ import { get, getFor } from "./settings.js";
 import { initFar } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
 import { FAVORS, WANDERERS, WANDER_TEMPLATES } from "./stories/index.js";
-import { choose, clearBox, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
+import { choose, clearBox, currentPage, finishStepFor, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, stepEntry, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
 import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
 import { PACK, busy, cancelInteractions, online, send } from "./util.js";
 import { onScriptEvent } from "./script-events.js";
@@ -590,8 +590,27 @@ function withPlayer(origin, fn) {
   return { status: CustomCommandStatus.Success };
 }
 
+/**
+ * /realm:saga_step: finishes a stuck player's current step, in the story named or, without one, their only chapter (or
+ * their main-story chapter). Each one is written to the content log (finishStepFor). @param {Player} target
+ * @param {string | undefined} storyId @param {Player | undefined} by
+ */
+function finishStepCommand(target, storyId, by) {
+  const tell = (/** @type {string} */ text) => (by ? by.sendMessage(text) : console.warn(`[saga] ${text.replace(/§./g, "")}`));
+  const e = stepEntry(target, storyId);
+  if (!e) {
+    const own = entries(target).filter((x) => !x.pq && !x.fav);
+    if (storyId) return tell(`§7[Story] ${target.name} has no chapter of ${storyId} going${own.length ? ` (they're on: ${own.map((x) => x.story.id).join(", ")})` : ""}.`);
+    if (!own.length) return tell(`§7[Story] ${target.name} isn't working on a chapter of their own${entries(target).some((x) => x.pq) ? " (they only help their party: finish the step for a mate on the chapter)" : ""}.`);
+    return tell(`§7[Story] ${target.name} has several chapters going: name the story (${own.map((x) => x.story.id).join(", ")}).`);
+  }
+  const label = finishStepFor(target, e, by?.name ?? "the server");
+  tell(label ? `§a[Story] Finished ${target.name}'s step "${label}" in ${e.story.title}.` : `§7[Story] ${target.name} has nothing left to do in ${e.story.title}: they can report back.`);
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerEnum("realm:saga_place_name", PLACE_NAMES);
+  customCommandRegistry.registerEnum("realm:saga_story", STORIES.map((s) => s.id));
   customCommandRegistry.registerCommand(
     { name: "realm:saga", description: "Story Questlines: your story log (quests, hints, codex, daily favors)", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
     (origin) => withPlayer(origin, showMenu),
@@ -622,6 +641,31 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     { name: "realm:saga_places", description: "Story Questlines (operators): every story place: set, build with a preview, remove, relocate", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
     (origin) => withPlayer(origin, placesMenu),
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:saga_step",
+      description: "Story Questlines (operators): finish a stuck player's current step (written to the content log)",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [{ name: "player", type: CustomCommandParamType.PlayerSelector }],
+      optionalParameters: [{ name: "realm:saga_story", type: CustomCommandParamType.Enum }],
+    },
+    (origin, targets, story) => {
+      const list = Array.isArray(targets) ? targets.filter((t) => t instanceof Player) : [];
+      if (!list.length) return { status: CustomCommandStatus.Failure, message: "No player matched." };
+      const by = origin.initiator ?? origin.sourceEntity;
+      system.run(() => {
+        for (const p of list) {
+          try {
+            if (p.isValid) finishStepCommand(p, typeof story === "string" && story ? story : undefined, by instanceof Player ? by : undefined);
+          } catch (e) {
+            console.warn(`[saga] step: ${e}`);
+          }
+        }
+      });
+      return { status: CustomCommandStatus.Success };
+    },
   );
   customCommandRegistry.registerCommand(
     {

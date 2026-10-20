@@ -7,7 +7,7 @@
 // accepts it for them, and one member reporting it back completes it for every mate who finished it too (ui.js).
 import { world } from "@minecraft/server";
 import { ORDERED, active, chapterDone, currentChapter, finished, installed, objDone, onHold, ownEntries, partyViews, reached, requires, sagaOf, storyWaitsForPacks, target } from "./data.js";
-import { bump } from "./objectives.js";
+import { bump, watchingVision } from "./objectives.js";
 import { get } from "./settings.js";
 import { npcName } from "./util.js";
 
@@ -282,7 +282,10 @@ function share(tag, key, chapter, parts) {
     state.v[i] = g;
     for (const { p, e } of gives) {
       const val = e.st.o?.[i] ?? 0;
-      if (takes.some((x) => x.e === e) && val !== g && (mode !== "done" || g >= need) && p.isValid) bump(p, e, i, g, true);
+      // A mate watching the vision a step plays (a mate at the same spot finished theirs a moment sooner) sees it to
+      // the end: their own finish counts it, the shared one waits.
+      const watching = obj.type === "vision" && p.isValid && watchingVision(p.id);
+      if (takes.some((x) => x.e === e) && val !== g && (mode !== "done" || g >= need) && p.isValid && !watching) bump(p, e, i, g, true);
       const arr = state.last.get(e.st) ?? [];
       arr[i] = e.st.o?.[i] ?? 0;
       state.last.set(e.st, arr);
