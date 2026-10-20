@@ -1,0 +1,686 @@
+{
+ "plan": {
+  "ws": [
+   {
+    "name": "WS1 Minimap and the side-box channel (map_bp first)",
+    "brief": "ITEMS: O1 (F46/F56/F70 W1: map_bp 3.9 ms against 1, and the bundle under 5 at 40), O2 for elytra_bp/saga_bp/calendar_bp, O5 (the actual 100-player Map and Saga quest windows, F57), O10's map rebuild wave every 200 ticks, and O6's native 100-player hud_state proof (it rides in the same 100-player runs). PACKS (exclusive): map_bp, hud_bp, saga_bp, elytra_bp, calendar_bp, maps_bp, mobhp_bp, plus tools/side-shared.js and sync-side (these 7 packs are exactly the side.js consumers, so the protocol change stays inside this workstream). Do NOT edit tools/name-labels-shared.js or tools/tether-shared.js: WS3 owns them, even though saga has copies. Don't touch the build/stash/stats (group 2) or living-towns (group 5) code.\n\nMEASURED COST (base master, steady window at 40 / 100 players, 67-context soak): map_bp 3.907 / 4.028 ms (10 players: 3.091; one-context bundle at 10: 2.29 of 4.28). Callbacks: runInterval(1) redraw main.js:1290-1356 = 1.984 / 2.072 ms, max 300 ms; runInterval(1) scanner main.js:700-809 = 1.241 / 1.268; runInterval(1) passes main.js:1421-1455 = 0.561 / 0.563; side.js:358-375 sweep = 0.098. setTitle is 1.10/tick, and each draw also sends 2 realm:side events (compass and radar parts, side-shared.js:277) with the 1.3 KB radar text. That makes map the source of almost all of the ~2.18 realm: events/tick. Each event wakes every pack's listener: script-events.js:80 costs 1.36 ms/tick summed over 66 packs at 40. The six other side consumers pay the most because each JSON.parses the radar message: calendar 0.102, saga 0.097, hud 0.092, elytra 0.090, maps 0.083, mobhp 0.075 ms for script events alone. Other costs: saga main.js:70-121 loop 0.081 / 0.143 (r1 line numbers; base :121); elytra main.js:576-695 per-tick loop 0.100 / 0.145; hud main.js:119-144 0.058 / 0.095. Totals at 40: elytra 0.253, saga 0.225, hud 0.186, calendar 0.143, maps 0.137, mobhp 0.108.\n\nAPPROACHES:\n(1) The side protocol, in side-shared.js and synced: stop broadcasting the minimap's per-draw text.\n- Option A, a compositor claim: the pack that draws most for a player (map, while it has a view) sends realm:side_comp {player, from, until}. While that claim is live, the other packs still send their own small slot changes, but they don't redraw that player. The compositor never broadcasts its own compass or radar text. When the claim ends or expires (about 60 ticks), the old behavior resumes, so the packs stay independent and every one still works alone.\n- Minimum fallback if A is rejected: one realm:side event carrying both parts.\n- In every consumer, keep the raw message per (player, from) and JSON.parse it only when drawing.\n- Target: realm: events about 2.2/tick to under 0.5/tick. That should cut roughly 1 ms/tick of listener wakes across all 67 packs at 40 and bring each side consumer's script-event cost to about 0.02.\n- Keep the realm: id rule. A separate namespace for side traffic would need an owner answer, because CLAUDE.md requires realm: ids.\n(2) The map redraw at :1290-1356.\n- Read the split first: turnCheckMs, radarMs and the costMs send share, via realm:map_debug.\n- Read each player's pose (location, getRotation, dimension) once per tick in a snapshot shared by the scanner, the redraw and the passes; extend playersNow() at :691.\n- Make radarOf (:928) reuse terrain rows and pictures for players at the same rounded pose, heading step and store version. The soak's groups of 5 stand together.\n- Skip setTitle and the side send when the composed text hasn't changed.\n- Spread REFRESH keep-alive resends by player id slot (O5's concern: keep-alives using up drawBudget at 100).\n- Because the work is budget-bound (draw 1, rebuild 0.4, pass 0.5, scan 1 ms/tick at budgetLevel normal, main.js:655, 1275-1276, 1385), cheaper units alone just buy more frames. Add a demand cap: each player is drawn only when something visible changed, at most once per N ticks, so the saved time actually lowers ms/tick. Don't change TURN_MIN, MOVE_MIN or the budgetLevel meanings without a measurement and a note for the owner: O15's real-client check of low, normal and high is still pending.\n(3) The scanner at :700-809.\n- Don't re-plan stationary players (planFor :812 reads location and terrain every PLAN_EVERY).\n- Dedupe columns across viewers of the same store.\n- Stop spending the saved-up scanBudget (max 30 ms) when every plan is complete.\n- Check whether stable 2.1.0 has a cheaper top-block read than per-column readers; confirm in the typings.\n(4) The passes at :1421-1455: reuse the shared pose snapshot; skip players with compass and radar both off; lengthen INTERVAL for players who haven't moved; npcsNear (:455) should use event-fed positions rather than entity queries where possible.\n(5) O10: stagger the 200-tick terrain rebuild (:915) per player so the rebuilds don't align. Report p95 and max tick before and after.\n(6) Saga: send per-player sendSeals, sendFlags, sendProgress and sendWanderState (main.js:80-86) only when the payload changed, and batch players into multi-part messages under 2048 chars. For idle players, the story tracker should skip unchanged draws (O5).\n(7) Elytra: poll isGliding every 10 ticks into a gliders set; the per-2-tick spark loop (:663-695) then visits only gliders.\n(8) Hud: send realm:hud_state only when the seeing set changes; it already uses parts after O6.\n- Bump versions, run sync-side, sync-diag, help-catalog only if docs change, and npm run check.\nTARGETS at 40: map_bp <= 1 ms (or report exactly how far measurements allow, with the remaining split); elytra, saga, calendar <= 0.15; hud, maps, mobhp no worse. Every map_bp functional scenario must still pass, plus saga-quest-box, saga-quest-wrap and maps-warmth-steady. Map ones: map, map-turn, map-flight, map-empty-panels, map-others-range, map-places, map-reset, map-water-structures, rook-map-race.\n\nMEASURE: run the same command in /home/user/wt/base (before) and in the workstream tree (after), alternating, twice at 40 (map noise is about 0.25 ms):\n  node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json <out>/ws1-<tree>-<N>.json --only map_bp,hud_bp,saga_bp,elytra_bp,calendar_bp,maps_bp,mobhp_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40> --arg seconds=120 --timeout 3000\nafk_bp is a non-side control that shows the listener-wake drop. Also run saga-perf-quests.js (--only saga_bp,npc_bp,hud_bp,map_bp) and perf-soak with players=100 for O5, before and after. Compare with node /home/user/perf/table.mjs before.json after.json. Report msPerTick, steadyMsPerTick, p95 and max per pack, plus actionBar, setTitle and events per tick. Run no other BDS jobs during a measurement (F55)."
+   },
+   {
+    "name": "WS2 Gear and inventory readers",
+    "brief": "ITEMS: O2 for silly_bp, admin_bp, durability_bp and relics_bp (F46 lists silly 0.26-0.29 and admin 0.21-0.23 over 0.15 at 40), plus 100-player headroom for skills_bp. PACKS (exclusive): silly_bp, admin_bp, durability_bp, relics_bp, skills_bp. Excluded: stash_bp, refill_bp and stats_bp (group 2: F3/F13/F49 and F45).\n\nMEASURED COST (base, at 40 / 100, ms/tick):\n- silly_bp 0.297 / 0.443: runInterval(10) main.js:226-239 readGear for every player = 0.168 / 0.280 (max 14 ms); runInterval(4) main.js:347-363 ambient = 0.084 / 0.109; runInterval(1) main.js:459 = 0.020.\n- admin_bp 0.238 / 0.414: runJob main.js:1196-1210 (the checkSeconds sweep that reads each whole inventory, about 0.2 ms a player) = 0.132 / 0.241; system.run reconcile main.js:1125-1138 = 0.053 / 0.086; playerInventoryItemChange main.js:1144-1167 = 0.021 / 0.033 (it reads cursor_inventory on every change).\n- durability_bp 0.136 / 0.210: runInterval(10) main.js:30-39 check(player, HELD/ALL) = 0.124 / 0.197 (max 21 ms at 100).\n- relics_bp 0.106 / 0.162: runInterval(20) main.js:853-861 passives = 0.086 / 0.134.\n- skills_bp 0.113 / 0.192: runInterval(20) main.js:816-868 travel = 0.054 / 0.094; calling.js:1131-1143 holdTick = 0.027 / 0.047.\n\nAPPROACHES:\n- Event-driven dirty sets instead of full polls. Mark a player dirty on playerInventoryItemChange and playerHotbarSelectedSlotChange, and on the item-use and break events that wear tools down. Check in the @minecraft/server 2.1.0 typings which events fire for armor and offhand. Keep a slow safety sweep for what events miss, spread by player id slot (one share of players per tick) rather than everyone at once.\n- silly: readGear only for dirty players plus a slow sweep. Keep a list of players wearing anything, so ambient (:347) never calls getAllPlayers() and playing() for the rest. Only hyper_jump wearers need the per-tick path.\n- admin: playerInventoryItemChange already reconciles at once (:1125). So the periodic full-inventory runJob becomes a long safety sweep, or checks only the slots where the Realm Configuration item can be. Filter by item type before reading cursor_inventory in :1144.\n- durability: read the held item on hotbar change and on use or break events; read armor on entityHurt (armor only wears on damage) or a slow sweep.\n- relics: cache who holds relics, from inventory change events; passives only for them.\n- skills: holdTick only for players with an active calling; skip AFK players (afk tag) in travel.\n- Behavior must not change: every warning, effect and refund the players get stays the same. Keep each pack's existing scenarios green (silly-*, admin-*, durability-*, relics-*, skills-*).\n- Bump versions, run sync-diag, update PACKS.md when an option's meaning changes, and npm run check.\nTARGETS: each <= 0.15 at 40, and no higher than 0.15 at 100 where measurements allow. Expected gain about 0.5 ms/tick at 40 and 0.8 at 100.\n\nMEASURE: the same command on /home/user/wt/base (before) and the workstream tree (after), alternating, at 10 and 40, seconds 120:\n  node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json <out>/ws2-<tree>-<N>.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40> --arg seconds=120 --timeout 3000\nOne extra run at players=100. perf-soak gives every player gear and runs commands; if silly enchants or relics aren't on enough players to exercise the paths, say so and add a workload argument in a new scenario file rather than editing perf-soak.js. Compare with /home/user/perf/table.mjs."
+   },
+   {
+    "name": "WS3 World entities and night load",
+    "brief": "ITEMS: O3 (elite_bp and wander_bp cost grows 5-12x as night falls; cap the work per entity count; owner F10 kept per-player champion scaling, 0.8 a player, ceiling 80, nearby 3; this workstream does the night/scale timing; F22's guard audit stays in group 4); O2 for wander_bp (F46: 0.17-0.20); O7 (Blood Moon native timing at scale; F5's shelter fix is done); O10 / deferred row 49 (npc_bp 10-tick label loop, 0.20 ms with 12 townsfolk and 40 players: re-measure, act only if over 0.15). PACKS (exclusive): wander_bp, elite_bp, npc_bp, caravan_bp, moon_bp, plus tools/name-labels-shared.js and tools/tether-shared.js with their sync tools. saga_bp also has copies of both: if a shared file changes, the integrator re-syncs saga after WS1 merges; WS3 does not hand-edit saga. Group 5 (living towns F36-F41) later edits npc_bp, town_bp and wander_bp: keep changes local to the label, loop and night code and merge before group 5 starts.\n\nMEASURED COST (base, at 40 / 100, ms/tick):\n- wander_bp 0.185 / 0.494: runInterval(2) updateLabels = 0.115 / 0.304. In r1 the interval is main.js:1575 and the function main.js:686-709: entityById per record and a nameLabels.sync every 2 ticks, with labelObservers' native player queries at :722. Other loops: runInterval(10) (base :1585, r1 about :1600) = 0.016 / 0.098; runInterval(20) (base :1609) = 0.031 / 0.047, max 11 ms.\n- elite_bp 0.066 / 0.053 in the day soak: runTimeout auraLoop main.js:399-407 = 0.024; approachRun main.js:956-982 = 0.012. The night growth isn't in the day soak.\n- moon_bp 0.048 at 40: runInterval(20) main.js:386 = 0.032 (max 10 ms); one runTimeout main.js:317 at 45 ms (40 players) and 39 ms (100): a one-off hitch to find.\n- npc_bp 0.036: loop main.js:744 and updateLabels :747 (r1 lines). The soak has no townsfolk near the players, so use npc-labels-perf.\n- caravan_bp 0.027.\n\nAPPROACHES:\n- wander:\n  - Skip the label sync entirely when no player is within LABEL_REACH of any wanderer, using player positions cached every 20 ticks.\n  - Resolve entityById once per run and cache the result until entityRemove or unload.\n  - Sync labels every 2 ticks only for wanderers with a player near; others at the 20-tick cadence. Keep the visible resend timing that O11 (owner-pending) is checking.\n- elite: measure auraLoop and approachRun at night with 40 and 100 players and maxAlive at its per-player value. Cap the work per tick (round-robin over champions with a fixed per-tick budget) so cost tracks the champions near players, not all alive. Stop at the first proof; never change the owner's density.\n- moon: find the 45 ms runTimeout (:317). If it is wave or dawn cleanup across dimensions, split it with runJob. Measure Blood Moon wave spawns at 40 and 100 players.\n- npc: run npc-labels-perf at 40 players. Act only if over 0.15, then share the observer query across the 12 townsfolk.\n- If name-labels-shared or tether-shared change, run sync-labels and the tether sync, bump each copy's pack, and list saga for the integrator.\n- Keep these green: wander, wander-walk, elite-*, moon-shelter and moon-*, npc-labels*, caravan-*.\n\nMEASURE:\n- Day: on /home/user/wt/base and the workstream tree, at 10 and 40, seconds 120:\n  node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json <out>/ws3-<tree>-<N>.json --only wander_bp,elite_bp,npc_bp,caravan_bp,moon_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40> --arg seconds=120 --timeout 3000\n- Night: add a new scenario file (for example examples/night-soak.js) that sets night or a Blood Moon and spawns champions, rather than editing perf-soak.js. Run it the same way at 40 and 100.\n- npc: npc-labels-perf.js --only npc_bp,build_rp --arg players=40 --arg seconds=60.\n- Report msPerTick, p95 and max, and the growth from the start to the end of the night."
+   },
+   {
+    "name": "WS4 Per-second player sweeps (long tail)",
+    "brief": "ITEMS: O1's bundle total and 100-player headroom (each pack is under 0.15 at 40, but together they cost about 0.5 ms at 40 and 0.8 at 100, and several spike to 9-13 ms max). PACKS (exclusive): atlas_bp, journal_bp, quests_bp, milestones_bp, titles_bp, nick_bp, afk_bp, guilds_bp, dolphin_bp.\n\nMEASURED COST (base, at 40 / 100, ms/tick):\n- atlas_bp 0.084 / 0.153: runInterval(40) tickPlayer main.js:1065-1074 = 0.066 / 0.119 (max 9 / 13 ms, every player in one tick).\n- journal_bp 0.092 / 0.115: runInterval(8) main.js:502-518 = 0.057 / 0.076.\n- quests_bp 0.075 / 0.114: runInterval(20) main.js:397-425 = 0.049 / 0.084 (max 12 ms).\n- milestones_bp 0.086 / 0.116: runInterval(20) main.js:156-185 = 0.036 / 0.051; main.js:283 = 0.036 / 0.053.\n- titles_bp 0.080 / 0.107: runInterval(20) main.js:384 = 0.036 / 0.054; trails main.js:395-467 = 0.033 / 0.037.\n- nick_bp 0.056 / 0.084: runInterval(10) refreshAll main.js:147 = 0.043 / 0.070.\n- afk_bp 0.052 / 0.073: runInterval(20) main.js:125-150 (getRotation and inputInfo per player) = 0.038 / 0.058.\n- guilds_bp 0.050 / 0.080: runInterval(20) main.js:596-630 = 0.036 / 0.063.\n- dolphin_bp 0.079 / 0.114: runInterval(5) main.js:461-470 mountOf for every player = 0.049 / 0.076.\n\nAPPROACHES:\n- Spread each per-player sweep over its interval by player id slot, as journal already does with SPREAD: same per-player cadence, a share of players each tick. This flattens the 9-13 ms max and p95.\n- Read location and dimension once per player per run.\n- Skip AFK players (afk tag) in the travel, playtime and distance counters, where the docs already say AFK time doesn't count.\n- nick: write nameTag only when it differs, and refresh on change events (join, nick change, title change) plus a slow sweep instead of every 10 ticks.\n- dolphin: poll mounts every 20 ticks; the 5-tick path only for known riders. Check in the 2.1.0 typings whether a stable ride event exists.\n- atlas: spread tickPlayer over its 40 ticks.\n- titles: early-out exists; spread the :384 loop.\n- Optional, needs the lead's approval first: a shared per-tick player-pose cache through a new tools/pulse-shared.js and sync tool. It helps only in the one-context bundle (globalThis keyed per tick) and bends 'packs stay independent'. Propose it only with measured numbers; never import between packs.\n- Behavior and saved data must not change. Keep the packs' scenarios green, bump versions, run sync-diag and npm run check.\nTARGETS: every pack <= 0.15 at 100 and lower p95 and max; expected about 0.2 ms/tick at 40 and 0.35 at 100.\n\nMEASURE: the same command on /home/user/wt/base and the workstream tree, alternating, at 10 and 40 (plus one at 100):\n  node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json <out>/ws4-<tree>-<N>.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40|100> --arg seconds=120 --timeout 3000\nCompare msPerTick, p95 and max per pack with /home/user/perf/table.mjs. These packs are near the noise floor (0.01-0.02), so repeat each run twice and report a change only when it beats the run-to-run spread."
+   },
+   {
+    "name": "WS5 Expeditions, soaks and the bundle verdict",
+    "brief": "ITEMS: O19 (F70: the Expeditions stash cart window. The code is expedition_bp gauntlet.js, from b1a1e3ce, not stash_bp. A disconnect, cart break or restart during the roughly 4 ticks of cart creation must never place the structure again, which would copy items. Seen carts are already saved; prove or fix the timed interruption with a restart scenario that cuts in at each tick of the window). O10's expedition build steps of 25-31 ms: act only if hitches show; split the build steps with runJob. O4 (F57: the 60-minute unprofiled memory soak at 40 with an RSS sampler; confirm or rule out a leak and find its pack). O9's actual runs: suite.mjs --perf 10,40 (and 100) as a fail-closed gate, and weather-crowd's profile with the tornado's 8-block sound bands, both still unrun. The final bundle verdict for O1, F46 and F56 once WS1-WS4 merge. PACKS (exclusive): expedition_bp. In tools/test-bds: new scenario files, and the profiler and perf-soak additions below. Group 2 owns test fixes F14/F34/F35/F44/F53, so don't edit the scenarios it touches; coordinate any shared lib file with that group. The weather packs (tornado, weather, storm, rain, climate, rainbow, meteor, night, leaves, translucent) are measured only, not edited, unless weather-crowd shows one over 0.15.\n\nMEASURED BASELINE (base): bundle steady avg at 10 / 40 / 100 players = 6.27 / 9.11 / 14.16 ms (67 contexts); the one-context Realm Bundle at 10 = 4.62 steady (4.28 whole run); expedition_bp 0.022 at 40 (its hitch is the concern, not the mean); RSS at 40 rose to 1584 MB over 900 s.\n\nSTEPS:\n(1) First, so WS1 can use it: add per-event-id counts per tick (realm:side, realm:actionbar, realm:hud_state, saga's sends...) to the profile JSON next to callbacks. That attributes the 2.18 events/tick. Keep this change small and in the profiler lib.\n(2) O19: write the timed-interruption scenario: player leaves, cart broken, and a BDS restart at each tick of cart placement. Pass means no second placement and no lost items. Fix gauntlet.js if it fails, and keep expedition-carts-partial and expedition-carts-seen green.\n(3) O10: run expedition-perf.js (--no-relay --profile --arg players=40 --arg seconds=120 --timeout 1500) on base and the workstream tree. Report the max tick and the build-step times; fix with runJob only if steps over 25 ms show.\n(4) O4: on the merged tree, perf-soak players=40 seconds=3600 without --profile, sampling bedrock_server VmRSS every 5 s. Run the same on /home/user/wt/base. If growth continues past 30 minutes, bisect with --only halves of the pack list to find the pack.\n(5) O9 and the verdict after WS1-WS4 merge:\n- Run on base and the merged tree, alternating, with no other BDS jobs (F55): node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json <out>/bundle-<tree>-<N>.json --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40> --arg seconds=120 --timeout 3000\n- Then the 67-context perf-soak at 10, 40 and 100. O6's 100-player hud_state proof rides in the 100-player run.\n- Then suite.mjs --perf 10,40.\n- Then weather-crowd.js at 10 and 40 with the --only list from its header.\n(6) Record each O-item's result in OPEN.md with shas and numbers. The owner's answer stays: keep the 5 ms goal, improve where measurements show a gain."
+   }
+  ],
+  "coverage": [
+   "O1 (OPEN; F46, F56, F70/W1): WS1 owns map_bp (3.9 ms against 1). WS2, WS3 and WS4 cut the rest of the bundle; WS5 runs the final bundle verdict at 10/40/100 and the one-context --bundle runs.",
+   "O2 (OPEN; F70/W1, F46): split by pack. elytra_bp, saga_bp, calendar_bp go to WS1; silly_bp, admin_bp, durability_bp, relics_bp to WS2; wander_bp to WS3. stash_bp (F3/F13/F49), stats_bp (F45) and build_bp (F7/O48) are group 2, excluded here.",
+   "O3 (OPEN; F22): WS3 owns the night and scale timing and the per-entity work cap for elite_bp and wander_bp. Champion density stays as the owner answered in F10. F22's elite guard audit is group 4.",
+   "O4 (OPEN; F57, F70): WS5, the 60-minute unprofiled memory soak at 40 with an RSS sampler, bisected by pack if it grows.",
+   "O5 (OPEN; F57): WS1 owns the actual 100-player Map and Saga quest windows (perf-soak at 100 and saga-perf-quests at 100). WS5 supplies the per-event-id profiling.",
+   "O6 (DONE, scoped, a83dc571): no task. Its outstanding native 100-player hud_state proof rides in the WS1 and WS5 100-player runs.",
+   "O7 (OPEN; F57; F5's code is done): WS3 owns the native Blood Moon timing at 40 and 100 and the 45 ms moon runTimeout at main.js:317.",
+   "O8 (DONE, scoped): none.",
+   "O9 (DONE, scoped; the actual gate and weather runs were never made): WS5 runs suite.mjs --perf 10,40 (and 100) and weather-crowd with the tornado sound bands.",
+   "O10 (OPEN; F70/W1, F57): split. The npc_bp 10-tick label loop (deferred row 49) is WS3. map_bp's 200-tick rebuild wave is WS1. The expedition build steps of 25-31 ms are WS5. build_bp's preview floor of 0.38 ms (deferred row 68) is group 2, which owns build_bp (F7/F8/F9/F48, O48); WS5 only re-measures it in the final bundle run.",
+   "O11 (OPEN): owner-pending real-client check (F71), excluded. WS3 must keep the label resend timing it checks.",
+   "O12 (OPEN): owner-pending real-client check (F71), excluded.",
+   "O13 (OPEN): owner-pending real-client check (F71), excluded.",
+   "O14 (OPEN): owner-pending real-client check (F71), excluded. WS5 measures tornado sound bands only.",
+   "O15 (OPEN): owner-pending real-client check (F71), excluded. WS1 must not change budgetLevel's meaning or the visible cadence without noting it for this check.",
+   "O16 (OPEN): owner-pending real-client check of the nameplate (F71), excluded.",
+   "O17 (OPEN; F3): group 2 (stash_bp F3/F13/F49 in progress), excluded.",
+   "O19 (OPEN; F70): WS5. The code is expedition_bp gauntlet.js (b1a1e3ce), not stash_bp, so it doesn't clash with group 2's stash work.",
+   "O47 (OPEN; F70, F9): group 2 (build_bp beds in every mode), excluded.",
+   "O48 (OPEN; F7, F70): group 2 (build_bp holder gate and its measurement), excluded. WS5's final bundle run reports build_bp's cost only.",
+   "O71 (OPEN; F45): group 2 (the stats ticker cost), excluded. Its realm:hud_line and action-bar traffic shows up in WS5's per-event-id counts.",
+   "Deferred row 49 (npc_bp label loop, OPEN): WS3. Deferred row 68 (build_bp preview floor, OPEN): group 2.",
+   "Everything else in OPEN.md (O18, O20-O46, O49-O70, O72-O75) is DONE with a sha, an owner decision, or WON'T FIX with an owner answer (O46). None of these is open for group 3.",
+   "F46: WS1 (map, elytra, saga), WS2 (silly, admin), WS3 (wander); build, stash and stats are group 2. F56: the owner's answer ('it is what it is, if we can improve it go for it') is kept as the goal, with the verdict from WS5. F70: every open plan item is assigned above.",
+   "Shared-file sequencing: WS1 owns side-shared.js (all 7 side consumers are inside WS1). WS3 owns name-labels-shared.js and tether-shared.js, whose saga copies the integrator re-syncs after WS1 merges. events-shared.js is not changed; a separate namespace for side traffic would need an owner answer, because CLAUDE.md requires realm: ids. Group 2's diag-shared change (F23) touches every pack's diag.js and manifest, so the integrator resolves those conflicts by re-running sync-diag. WS4's optional globalThis pose cache needs the lead's approval first."
+  ]
+ },
+ "results": [
+  {
+   "worktree": "/home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first-",
+   "branch": "ws/g3-ws1-minimap-and-the-side-box-channel--map-bp-first-",
+   "items": [
+    {
+     "id": "O1 (F46/F56/F70 W1, map_bp)",
+     "status": "partial",
+     "summary": "The side-box traffic is fixed. map_bp is now the side boxes' compositor. It sends realm:side_comp claims: one per new player, then one renewal every 40 ticks for 100, with at most 60 ids per message. It never broadcasts its 1.3 KB compass or radar. While a claim is live, the other packs still send their own small slot changes but don't draw that player; map draws their slots inside its own title. When a claim ends or runs out, each pack draws again on its own. Other packs' messages are parsed only when a copy draws that player, and each copy caches its composed segments and subtitle.\n\nMap-side cuts:\n- A still player's 30-tick refresh redraws the cached title without rebuilding the strip or radar.\n- A pass marks a view dirty only when its markers moved 0.25 block or more, or its second line or settings changed.\n- A jump keeps a roofed viewer's cave layer, so the scanner no longer re-reads a whole new layer store.\n- The 200-tick rebuild is staggered per player (O10), and refresh-due players are always checked (O5).\n\nReview fix: the keep-alive now passes side.keep the parts that were sent (the strip and/or the radar). side.keep extends nothing and returns false when any of those parts ran out, for example during a real title or a late refresh. keepAlive then marks both texts unsent and rebuilds through render(). Before this, a part that expired stayed off for good while the player stood still.\n\nNot reached: map_bp at or under 1 ms at 40 players. The redraw, rebuild, pass and scan work is capped by budgets: 1 + 0.4 + 0.5 + 1 = 2.9 ms per tick at budgetLevel normal. Cheaper work mostly buys more frames while players keep moving. Getting to 1 ms needs smaller budgets or a slower cadence, and both need an owner answer (O15's real-client check of low, normal and high is still pending). Nothing has been measured yet: code-only mode.",
+     "commits": [
+      "6a439ea",
+      "1d497e3",
+      "69ce0f0",
+      "b571cd0",
+      "c319ae1",
+      "bc874bf",
+      "322b9d5",
+      "04fc319"
+     ],
+     "proof": "Unit tests that fail on base 88cc198 and pass now:\n- tools/side-compositor.test.mjs with SIDE_SHARED=<base side-shared.js>: 5 of 7 fail on base. In the synthetic run (8 map draws per tick for 40 players), realm: events drop from 16.00 per tick to under 0.5, and each other pack parses under 0.1 messages per tick.\n- tools/map-hotpaths.test.mjs: tests 7 (keep-alive builds nothing), 8 (still pass is not dirty), 10 (jump keeps the layer) and 11 (refresh-due player at index 90 of 100 is refreshed) fail on base.\n\nReview fix, new tests (both fail on the previous commit c527abe and pass now):\n- side-compositor test 7: the strip is sent at 0 and the radar at 15; at tick 50 a keep naming both is refused, the radar is not extended, and once both are shown again they are kept.\n- map-hotpaths test 8: the real keepAlive calls render with both texts marked unsent when the strip ran out, does not stamp it, and keeps without building when both are up.\n\nRun on HEAD 04fc319: map-hotpaths + side-compositor + map-terrain 49/49, every saga test 151/151, sync-side --check, check-versions and check-ascii all pass.\n\nThe BDS proof is tools/test-bds/examples/map-compositor.js. Perf numbers are in bdsPending."
+    },
+    {
+     "id": "O2 elytra_bp",
+     "status": "done-needs-bds",
+     "summary": "The HUD round already reads every player's isGliding every 5 ticks; it now also keeps a map of who is gliding. The 2-tick slipstream loop visits only those players instead of reading isGliding for everyone. The script-event share of elytra's cost (0.090 ms at 40 players) goes away with the compositor.",
+     "commits": [
+      "3869329",
+      "6a439ea"
+     ],
+     "proof": "tools/o2-hotpaths.test.mjs, new test: 10 walkers over 100 ticks cost 700 isGliding reads on base and 200 now. A fast glider still gets the slipstream, and landing ends it."
+    },
+    {
+     "id": "O2 saga_bp",
+     "status": "done-needs-bds",
+     "summary": "Saga's biggest cut is the compositor. Its script-event cost (0.097 ms at 40 players) was mostly parsing the map's radar messages, which saga no longer receives. Players the map claims no longer get a saga setTitle; the map draws the quest box. sendSeals, sendFlags, sendProgress and sendWanderState already send only when the payload changed, so no batching was needed. Saga's own code did not change: only its side.js copy was synced, and its header.version is now raised to 1.16.13 (review fix).",
+     "commits": [
+      "6a439ea",
+      "322b9d5"
+     ],
+     "proof": "tools/side-compositor.test.mjs, lazy-read test: 0 of 50 messages are parsed by a pack that doesn't draw. Every tools/saga-*.test.mjs, including saga-quest-box.test.mjs, passes (151/151). check-versions now passes (16 of 74 packs changed, each with a higher version)."
+    },
+    {
+     "id": "O2 calendar_bp",
+     "status": "done-needs-bds",
+     "summary": "Calendar's cost at 40 players was 0.143 ms, of which 0.102 ms was script events, almost all of it parsing the map's radar messages. That goes away with the compositor. The only changes are the side.js sync and the version bump.",
+     "commits": [
+      "6a439ea"
+     ],
+     "proof": "tools/side-compositor.test.mjs, traffic test."
+    },
+    {
+     "id": "O5 (F57) 100-player Map and Saga quest windows",
+     "status": "partial",
+     "summary": "Map's code for the keep-alive concern is done. A refresh is a cached setTitle with no strip or radar build and no message. If a part ran out, both parts are rebuilt (review fix). Every refresh-due player is checked on time, even outside the 12-per-tick turn, so strips can't run past HOLD at 100 players. The saga tracker did not change: it already sends only on change, and skipping its recompute for idle players needs a reliable change key (progress, positions, countdowns), which waits for the 100-player saga measurement. The 100-player soaks have not been run yet (code-only mode).",
+     "commits": [
+      "1d497e3",
+      "c319ae1",
+      "04fc319"
+     ],
+     "proof": "map-hotpaths tests 7, 8 and 12 fail before and pass after. The native windows are in bdsPending."
+    },
+    {
+     "id": "O10 map rebuild wave every 200 ticks",
+     "status": "done-needs-bds",
+     "summary": "The radar's STALE_EVERY bucket is now floor((now + staleSlot(id)) / 200), with an FNV-1a slot per player, so stale rebuilds no longer land on the same tick for everyone. p95 and max before and after are not measured yet.",
+     "commits": [
+      "6efb112",
+      "c527abe"
+     ],
+     "proof": "map-hotpaths test 'the 200-tick radar rebuild is spread': at most 4 of 40 sample ids rebuild on one tick, against all 40 on base (the test fails on base, which has no staleSlot). The map-terrain sandboxes were given the real staleSlot with the same assertions; all pass."
+    },
+    {
+     "id": "O6 native 100-player hud_state proof",
+     "status": "done-needs-bds",
+     "summary": "Whenever hud_bp is in the run, perf-soak.js now assembles every realm:hud_state by seq, the way Stats and Parties do. It checks that every message stays under 2048 characters. With --arg hud=1 (HUD on by default; run it with commands=0) it also checks that the last complete list names every player in the world. Also, hud_bp no longer repeats an empty list every 5 seconds: it sends one empty list once. Consumers already treat a list not heard for 200 ticks as empty.",
+     "commits": [
+      "ad0b743",
+      "9b6917c"
+     ],
+     "proof": "tools/hud-state-parts.test.mjs, new test: the base hud sends a state every 100 ticks with nobody on; now it sends none, then one empty list after the HUD is turned off. perf-area-settle.test.mjs and perf-acceptance.test.mjs pass. The native 100-player run is in bdsPending."
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "Full npm run check on the branch (code-only mode so far; tsc/checkJs especially for the new keep(player, ticks, parts) signature and keepAlive)",
+     "after": "cd /home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first- && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+    },
+    {
+     "purpose": "Compositor claim proof (fails before: map sends realm:side and no realm:side_comp; passes after)",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --flat --only map_bp,hud_bp --scenario /home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first-/tools/test-bds/examples/map-compositor.js --timeout 900",
+     "after": "cd /home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first- && node tools/test-bds/run.mjs --quiet --flat --only map_bp,hud_bp --scenario tools/test-bds/examples/map-compositor.js --timeout 900"
+    },
+    {
+     "purpose": "Functional regressions: every map scenario plus the side box, title and saga box scenarios must pass after (no assertion was changed); title-hold and admin-title cover the keep-alive after a real title",
+     "before": "cd /home/user/wt/base && node tools/test-bds/suite.mjs --jobs 1 --retry --filter '^(map|map-turn|map-flight|map-empty-panels|map-others-range|map-places|map-reset|map-water-structures|rook-map-race|saga-quest-box|saga-quest-wrap|saga-box-resend|saga-note-box|maps-warmth-steady|side-boxes|title-hold|admin-title|mobhp-sweep)$' --json /home/user/perf/ws1/suite-base.json",
+     "after": "cd /home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first- && node tools/test-bds/suite.mjs --jobs 1 --retry --filter '^(map|map-turn|map-flight|map-empty-panels|map-others-range|map-places|map-reset|map-water-structures|map-compositor|rook-map-race|saga-quest-box|saga-quest-wrap|saga-box-resend|saga-note-box|maps-warmth-steady|side-boxes|title-hold|admin-title|mobhp-sweep)$' --json /home/user/perf/ws1/suite-ws1.json"
+    },
+    {
+     "purpose": "Perf at 40 players, run 1 of 2. Alternate base, ws1, base, ws1 with no other BDS job, and compare with node /home/user/perf/table.mjs. Report msPerTick, steady, p95 and max per pack, plus setTitle and realm: events per tick; afk_bp is the control pack that draws no side boxes. Targets: map_bp toward 1 ms; elytra, saga and calendar at or under 0.15 ms.",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws1/ws1-base-40-1.json --only map_bp,hud_bp,saga_bp,elytra_bp,calendar_bp,maps_bp,mobhp_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws1/ws1-ws1-40-1.json --only map_bp,hud_bp,saga_bp,elytra_bp,calendar_bp,maps_bp,mobhp_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "Perf at 40, run 2 of 2 (same commands, -2 outputs), then node /home/user/perf/table.mjs /home/user/perf/ws1/ws1-base-40-1.json /home/user/perf/ws1/ws1-ws1-40-1.json /home/user/perf/ws1/ws1-base-40-2.json /home/user/perf/ws1/ws1-ws1-40-2.json. O10: compare map_bp's max and the bundle p95 here",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws1/ws1-base-40-2.json --only map_bp,hud_bp,saga_bp,elytra_bp,calendar_bp,maps_bp,mobhp_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws1/ws1-ws1-40-2.json --only map_bp,hud_bp,saga_bp,elytra_bp,calendar_bp,maps_bp,mobhp_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "Perf at 10 (the owner's Realm size)",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws1/ws1-base-10.json --only map_bp,hud_bp,saga_bp,elytra_bp,calendar_bp,maps_bp,mobhp_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws1/ws1-ws1-10.json --only map_bp,hud_bp,saga_bp,elytra_bp,calendar_bp,maps_bp,mobhp_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "O5/O6 native 100-player windows: map strips never fade past HOLD, and every hud_state list is complete and under 2048 characters",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws1/ws1-base-100.json --only map_bp,hud_bp,saga_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=100 --arg seconds=120 --arg hud=1 --arg commands=0 --timeout 4000",
+     "after": "cd /home/user/wt/g3-ws1-minimap-and-the-side-box-channel--map-bp-first- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws1/ws1-ws1-100.json --only map_bp,hud_bp,saga_bp,afk_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=100 --arg seconds=120 --arg hud=1 --arg commands=0 --timeout 4000"
+    }
+   ],
+   "decisions": [
+    "Review finding 1 (keepAlive could leave the strip or radar off for good): real, fixed in 04fc319. side.keep takes an optional list of required parts and keeps nothing if one ran out. keepAlive passes the parts it sent and, on a refusal, marks both texts unsent (\"\", the convention main.js already uses for invalidation) before render(). This puts a part that was off back up whatever its age, at the cost of resending both parts in that rare case, which beats tracking per-part extension.",
+    "The keep() parts parameter is optional and its old behavior without it is unchanged, so the other packs' copies and any other caller keep working (backwards compatible).",
+    "Review finding 2 (saga_bp's side.js changed without a version bump): real, fixed in 322b9d5. saga_bp is raised to 1.16.13 and its diag.js is synced, and check-versions passes. The other six consumers were already above master, so the later side.js resync in 04fc319 needs no further bump.",
+    "Earlier: map_bp is the only compositor, because it is the one sending 1.3 KB titles and its claims are renewable and expire on their own if map stops.",
+    "Earlier: map_bp's 1 ms target is left partial rather than shrinking the draw budgets, because the visible cadence trade-off needs the owner's real-client check (O15)."
+   ],
+   "generatorsNeeded": [
+    "help-catalog: not needed (no command or doc text change in this fix round)",
+    "admin-catalog: not needed (no command change)",
+    "gen-news: needed only if the integrator adds the newsLines below to docs/NEWS.md"
+   ],
+   "newsLines": [
+    "The Minimap and the side boxes use far less server time with many players on: the Minimap now draws everyone's side boxes in one title instead of every pack redrawing after each Minimap update.",
+    "The Minimap's compass strip and radar no longer go missing while you stand still after a title (a card name or a level-up) appears."
+   ],
+   "packsBumped": [
+    "map_bp",
+    "hud_bp",
+    "elytra_bp",
+    "calendar_bp",
+    "maps_bp",
+    "mobhp_bp",
+    "saga_bp 1.16.13"
+   ],
+   "risks": [
+    "npm run check (tsc with checkJs) has not run on this branch since the keep(player, ticks, parts) change: code-only mode (SUITE_RUNNING). It is the first item in bdsPending.",
+    "When a part ran out, a keep-alive now resends both parts. Each resend is one show per part (the map's own realm:side for a non-claimed player); this only happens after a hold or a delay of more than 10 ticks, so the traffic should be small, but it is unmeasured.",
+    "None of the perf or 100-player numbers are measured yet."
+   ],
+   "sharedLayers": [
+    "tools/side-shared.js (synced into 7 packs: calendar, elytra, hud, map, maps, mobhp, saga)"
+   ]
+  },
+  {
+   "worktree": "/home/user/wt/g3-ws2-gear-and-inventory-readers",
+   "branch": "ws/g3-ws2-gear-and-inventory-readers",
+   "items": [
+    {
+     "id": "O2-durability_bp",
+     "status": "done-needs-bds",
+     "summary": "durability_bp 1.2.10 -> 1.2.11. Before, every player's main hand and off hand were read every 10 ticks, and their armor every 40. Now held items are checked at the next check after a break, a block or entity interaction, an item use (use, release, complete, stop-use-on), a hit on an entity or block, a hotbar change or an inventory change. Armor is checked after the player is hurt, spawns, or moves a wearable item into or out of the inventory. A worn elytra is checked every 4th check, because gliding fires no event. Every slot of every player is also checked once every 10 checks (5 s), spread by a hash of the player id. Turning warnings back on checks at once. Review fix (f9e1674): a hand holding a shield or a brush is checked at every check. Those items wear with no event: a shield that fully blocks a hit causes no hurt, and a brush wears when brushing ends. Their warnings come as fast as before (within one check, 0.5 s), not at the 5 s sweep. Warning levels, re-arm logic and messages are unchanged. PACKS.md and config.js describe the new behavior.",
+     "commits": [
+      "c0c2cfc",
+      "f9e1674"
+     ],
+     "proof": "tools/o2-hotpaths.test.mjs: 'a player who uses nothing is read only by the 5 s sweep...' fails on the old main.js (180 equipment reads in 30 s) and passes after. New test 'a shield that wears with no event (a fully blocked hit) warns at the next check': 10 players' off-hand shields wear with no event, and each must warn (then hit critical) within one check. It fails on c0c2cfc (Guard1 got no warning) and passes on f9e1674. All 4 durability tests pass. BDS scenario tools/test-bds/examples/durability-events.js gained step 4: a shield swapped by script with no event, 33 -> 20 uses left, must warn within 25 ticks, and the final count is now 4 warnings. It should pass on master's poll and on f9e1674, and fail on c0c2cfc. Not run (SUITE_RUNNING)."
+    },
+    {
+     "id": "O2-relics_bp",
+     "status": "done-needs-bds",
+     "summary": "relics_bp 1.2.15 -> 1.2.16. The once-a-second passives loop now skips 'idle' players: no relic at the last scan, no kept effect of ours, an empty set list already sent, and no rescan due. passives() would read and change nothing for them. playerHotbarSelectedSlotChange now marks a rescan too. The freshness check compares the scan age before reading selectedSlotIndex. The 100-tick rescan is kept for armor put on by a dispenser. Effects, sets and lingering are unchanged.",
+     "commits": [
+      "6e569f5"
+     ],
+     "proof": "Unit test in tools/o2-hotpaths.test.mjs: an idle player made 139 selected-slot reads in 100 s before and at most 45 after. A Miner's Lamp helmet put on with no event still gives Haste within the 5 s rescan, and no effect is applied once it is removed. The test fails before and passes after."
+    },
+    {
+     "id": "O2-skills_bp",
+     "status": "done-needs-bds",
+     "summary": "skills_bp 1.1.8 -> 1.1.9. Each player's game mode is cached from playerGameModeChange, and their dimension id from playerDimensionChange (cleared on spawn). Both are dropped and read again at the player's 30 s save slot, as a safety net. active() takes a 'valid' flag, so the travel loop skips the redundant isValid read. The calling loop reads on() once per run. realm:calling sends are spread over 30 s by an id hash instead of all going out on one tick.",
+     "commits": [
+      "a6f938e"
+     ],
+     "proof": "Unit test in tools/o2-hotpaths.test.mjs with the real main.js: 25 s of walking made 35 game-mode and 25 dimension reads before, and at most 3 each after. Exploration XP stops right after the Spectator change event, resumes after Survival, and the Nether dimension comes from the event. The test fails before and passes after."
+    },
+    {
+     "id": "O2-silly_bp",
+     "status": "done-needs-bds",
+     "summary": "silly_bp 1.2.9 -> 1.2.10. Main-hand enchants now come straight from the itemStack of playerHotbarSelectedSlotChange and of playerInventoryItemChange on the selected hotbar slot, with no equipment read. A full read is queued when armor moves into or out of the inventory, on spawn, on a player's death, and on a hurt while wearing silly armor; the helmet is also read on any hurt. A sweep reads one player per tick, each at most every 20 ticks. The ambient and Hyper Jump loops now walk only wearers and jumpers. Review fix (34ee2df): a change of stack size on one item type no longer skips the hand update. The early return also skipped a swap of two different stacks of the same type, such as silly cod for plain cod. Now it skips only the armor queue (armor doesn't stack). The selected slot always sets the hand from the event's item, which costs a lore read and no equipment read.",
+     "commits": [
+      "c974c9a",
+      "34ee2df"
+     ],
+     "proof": "tools/o2-hotpaths.test.mjs: 3 idle players made 600 equipment reads in 20 s before and at most 320 after, and confetti, Disco-by-sweep and Disco-off still work (fails before, passes after). New test 'swapping the held stack for a plain stack of the same item, but another size, drops its hand enchants at once' fails on c974c9a (confetti from plain cod) and passes on 34ee2df. BDS scenario tools/test-bds/examples/silly-gear-events.js was not run (SUITE_RUNNING)."
+    },
+    {
+     "id": "O2-admin_bp",
+     "status": "done-needs-bds",
+     "summary": "admin_bp stays at 1.6.7 (already above master's 1.6.6 and unreleased). The checkSeconds round now reads a whole inventory only for players it hasn't seen yet, players whose operator status changed, players who should get the item and had none, and players whose last removal failed. Every other inventory is read once in 10 rounds. check() passes its fresh reconcile to giveItem (2 inventory scans instead of 3). On an inventory change that involves no real item, the cursor is read only while cursorWatch is set. Review fix (229381d): cursorWatch is now also set when reconcileItems sees a real item in the off hand or on the cursor (an item moving between them fires no inventory event), and on every playerSpawn. PACKS.md checkSeconds row says when the cursor is read.",
+     "commits": [
+      "7315c79",
+      "aba6369",
+      "229381d"
+     ],
+     "proof": "tools/admin-item.test.mjs: round-read, cursor-read and give-round tests fail on the commit before each fix and pass after (555 -> under half the slot reads; 10 -> 0 cursor reads; 109 -> 73 slot reads). New test 13 puts a real item on the cursor with no event; after a round, a copy that appears in slot 7 with no event is removed at the next cobblestone pickup. It fails on aba6369 (2 copies remain) and passes on 229381d. All 14 admin-item and 9 operator-admin tests pass."
+    },
+    {
+     "id": "O2-measurement-workload",
+     "status": "done-needs-bds",
+     "summary": "New tools/test-bds/examples/gear-perf.js: half the players wear Disco/Rainbow/Glow silly armor, hold a Confetti Swing sword and carry a relic. Every second each player walks, switches hotbar slots, picks up blocks or takes a 1-damage hit. suite.mjs has a short gear-perf entry. perf-soak.js never ran these paths, and its refill empties hotbar slot 0, where the admin item goes.",
+     "commits": [
+      "bd50433"
+     ],
+     "proof": "suite.mjs --prepare-only finds gear-perf, durability-events and silly-gear-events with no staging errors. Measurements are pending (see bdsPending)."
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "Perf at 10 players: base vs workstream (run alternately)",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws2/ws2-base-10.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws2-gear-and-inventory-readers && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws2/ws2-ws-10.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "Perf at 40 players (targets: each of the 5 packs <= 0.15 ms/tick; base: silly 0.297, admin 0.238, durability 0.136, relics 0.106, skills 0.113)",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws2/ws2-base-40.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws2-gear-and-inventory-readers && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws2/ws2-ws-40.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "Perf at 100 players (headroom; base: silly 0.443, admin 0.414, durability 0.210, relics 0.162, skills 0.192); compare with node /home/user/perf/table.mjs",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws2/ws2-base-100.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=100 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws2-gear-and-inventory-readers && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws2/ws2-ws-100.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=100 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "Gear workload perf at 40 players (wearer, hand and relic paths), base vs workstream",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws2/ws2-base-gear-40.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario /home/user/wt/g3-ws2-gear-and-inventory-readers/tools/test-bds/examples/gear-perf.js --arg players=40 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws2-gear-and-inventory-readers && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws2/ws2-ws-gear-40.json --only silly_bp,admin_bp,durability_bp,relics_bp,skills_bp --scenario tools/test-bds/examples/gear-perf.js --arg players=40 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "Durability event checks plus the shield step (warning within 25 ticks of a shield wearing with no event). Expected to pass on base and after; the shield step fails on c0c2cfc.",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --only durability_bp --scenario /home/user/wt/g3-ws2-gear-and-inventory-readers/tools/test-bds/examples/durability-events.js",
+     "after": "cd /home/user/wt/g3-ws2-gear-and-inventory-readers && node tools/test-bds/run.mjs --quiet --only durability_bp --scenario tools/test-bds/examples/durability-events.js"
+    },
+    {
+     "purpose": "Silly gear events: confetti within 3 ticks of switching (expected to FAIL on base), Disco stops after a death; silly-effects.js must still pass",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --only silly_bp --scenario /home/user/wt/g3-ws2-gear-and-inventory-readers/tools/test-bds/examples/silly-gear-events.js",
+     "after": "cd /home/user/wt/g3-ws2-gear-and-inventory-readers && node tools/test-bds/run.mjs --quiet --only silly_bp --scenario tools/test-bds/examples/silly-gear-events.js && node tools/test-bds/suite.mjs --filter 'silly|durability|relics|skills|admin' --retry"
+    },
+    {
+     "purpose": "Full checks once the machine is free",
+     "after": "cd /home/user/wt/g3-ws2-gear-and-inventory-readers && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+    }
+   ],
+   "decisions": [
+    "Durability shield finding: real. Fixed by checking every hand that held a shield or brush at its last check (QUIET set, per-player slot set) at every check. I did not use entityHitEntity/projectileHitEntity on the defender: that misses a brush and depends on hit events firing for a blocked hit, while this reads only one slot, and only for players holding those items.",
+    "Durability: the BDS shield step swaps the shield by script with no event to stand in for a blocked hit. Simulated players can't block reliably, and the code path is the same (wear with no event).",
+    "Admin cursor finding: real but small. Fixed by setting cursorWatch when reconcileItems sees a real item in the off hand or on the cursor, and on every playerSpawn. A copy that appears on the cursor while the original stays in a slot, with no event and no prior real item on the cursor or in the off hand, is still left to the safety round or the next time it lands in a slot. It can't be used from the cursor, and reading the cursor on every unrelated change for every item carrier would undo the O2 saving.",
+    "Silly same-type swap finding: real. Fixed by always setting the hand from the event's item for the selected slot (one lore read on the event's stack, no equipment read). The size-only shortcut now skips only the armor queue, since armor doesn't stack. I did not use isStackableWith, because it is another native call per event and gives nothing over reading the lore directly.",
+    "No new version bumps: durability_bp 1.2.11, silly_bp 1.2.10 and admin_bp 1.6.7 are already above master and unreleased in this branch. sync-diag --check is current.",
+    "Code-only mode (SUITE_RUNNING present): BDS, npm run check and build are listed in bdsPending. Each fix has a unit test that fails on the commit before it and passes after."
+   ],
+   "generatorsNeeded": [
+    "help-catalog: yes (PACKS.md changed for durability_bp, admin_bp and silly_bp in this branch; the How to use and Commands tables are unchanged, but run it to be safe)",
+    "admin-catalog: no (no command or parameter changed)",
+    "gen-news: yes, if the newsLines are added to NEWS.md"
+   ],
+   "newsLines": [
+    "Low durability warnings now follow what you do (mining, fighting, using items, getting hurt) instead of checking everyone twice a second, so the server does less work. A shield or brush in your hand still warns right away.",
+    "Silly Enchants notices the item you switch to the moment you switch, so the first hit with a Confetti Swing sword already throws confetti."
+   ],
+   "packsBumped": [
+    "durability_bp 1.2.10 -> 1.2.11",
+    "relics_bp 1.2.15 -> 1.2.16",
+    "skills_bp 1.1.8 -> 1.1.9",
+    "silly_bp 1.2.9 -> 1.2.10",
+    "admin_bp 1.6.6 -> 1.6.7 (bumped earlier in the branch)"
+   ],
+   "risks": [
+    "No BDS run yet for any of these packs: the event coverage (especially Bedrock firing playerInventoryItemChange on the selected slot and the durability use events) is proven only in pack-sim and is pending real-server scenarios.",
+    "Durability: a held item that wears with no event and is not a shield or brush would wait for the 5 s sweep. None is known; the rest wear on break, hit, use or interact events.",
+    "Admin: a real copy that appears on the cursor with no event, while nothing real was seen on the cursor or in the off hand, waits for the safety round (5 to 10 minutes) or the next time it lands in a slot.",
+    "Perf gains are unmeasured until the bdsPending perf runs finish."
+   ],
+   "sharedLayers": []
+  },
+  {
+   "worktree": "/home/user/wt/g3-ws3-world-entities-and-night-load",
+   "branch": "ws/g3-ws3-world-entities-and-night-load",
+   "items": [
+    {
+     "id": "O3",
+     "status": "done-needs-bds",
+     "summary": "Code for the night cost is done in both packs. wander_bp: the label loop syncs every 2 ticks only the wanderers that had a player within 64 blocks at the last full pass. A full pass runs once a second and on spawn or sweep. Entity handles are kept while valid, so there is no world.getEntity call per pass. The full pass keeps the per-wanderer player queries on busy servers. elite_bp: the aura and approach round robins take turns only from champions near a player. A sort of 12 champions per run, in its own round robin, reads player places once a second. Each approach run reads each block once instead of once per angle. Each step reads each player's place once, and a champion's tags are read once per refresh. Owner density is unchanged (0.8 per player, ceiling 80, nearby 3). Review fixes: the aura puffs for no champion while nobody is online, including champions not sorted yet after a reload (2fc7c2c). PACKS.md now says the 64-block check is refreshed about once a second. night-soak.js now spawns the full owner density, ceil(0.8 x players) up to 80. Up to 3 go near each group and the rest go to up to 4 far spots. Each far spot is at least 110 blocks from every group and kept loaded by a ticking area, so the far-champion path is exercised and measured (8a2ca8f). Phases report a far-champion count. The two test files have their base CRLF/LF line endings back, so the test additions show as plain additions (98a1156).",
+     "commits": [
+      "62deacb",
+      "8a29d5b",
+      "f46448c",
+      "71a8c69",
+      "f0c13d8",
+      "e779696",
+      "8a2ca8f",
+      "2fc7c2c",
+      "98a1156"
+     ],
+     "proof": "Unit tests fail on base 88cc198 and pass after. tools/wander-labels-load.test.mjs: on base, far wanderers synced 100 times in 100 runs and getEntity was called every run; after, at most 10 syncs and 6 lookups. In tools/night-entity-budget.test.mjs, 'far champions take no aura or approach turn' and 'sorting bounded and a champion a player walks up to is picked up' fail on base. Blocked-step block reads go from 95 to 30. Place reads (4 steps, 5 players) go from 96 to 20, and tag reads from 4 to 1. New test 'with nobody online the aura puffs for no champion, not even unsorted ones after a reload': 28 puffs without the 2fc7c2c fix, 0 with it. All 16 night-entity-budget tests and all 18 moon-scale tests pass (node --test). git diff --ignore-cr-at-eol after the line-ending restore is empty, and the diff against base for the two files is now +213/-5. No valid ms/tick before/after exists yet for the final code: the only night soak (10 players, elite 0.526 ms/tick) ran before all the cuts and overlapped the suite. The night-soak.js changes are syntax-checked only, because the machine is in TIMING_SOAK code-only mode."
+    },
+    {
+     "id": "O2-wander",
+     "status": "done-needs-bds",
+     "summary": "F46 wander_bp (0.17-0.20 at 40 players): the cost of the runInterval(2) updateLabels loop (0.115 at 40 players, 0.304 at 100) is cut by the near/far label passes and the cached entity handles. The tether and upkeep loops also use the cached handles.",
+     "commits": [
+      "62deacb",
+      "8a29d5b"
+     ],
+     "proof": "Same unit proofs as O3 (tools/wander-labels-load.test.mjs). The ms/tick numbers are in bdsPending (day perf-soak at 10 and 40 players)."
+    },
+    {
+     "id": "O7",
+     "status": "partial",
+     "summary": "The one-off 40-45 ms moon_bp hitch was runTimeout main.js:313/317, playerMadeBlocks(), which built the 641-type list in one tick. It is now a system.runJob generator. BlockTypes.getAll() still runs whole in its first step, and the id reads follow in slices of 64. A wave that needs the list earlier finishes the same generator at once. It is not measured whether getAll() or the id reads cost the 40 ms. If getAll() did, the hitch has only moved into one runJob step. So the PACKS.md text and the code comment no longer claim 'no hitch' (4916785). Commit 4a1e53b's message still says 'removing the one-off 40-45 ms load hitch'. That claim is unproven until the bdsPending comparison runs. The integrator should not repeat it.",
+     "commits": [
+      "4a1e53b",
+      "e779696",
+      "4916785"
+     ],
+     "proof": "tools/moon-scale.test.mjs has 2 new tests. With a fake runJob that runs one step per tick, base fails 'at most 64 ids read in one tick (most: 1200)' and the after tree passes. That proves the slicing of the id reads per generator step. It does not prove BDS tick cost, because the real runJob runs as many steps as fit its budget. A wave before the job ends still gets the whole list, with each id read once. Next: compare the max of the old runTimeout with the max of the new runJob steps (bdsPending). If getAll() turns out to be the cost, record that this API call is the floor (there is no stable-API way to page it)."
+    },
+    {
+     "id": "O10-row49",
+     "status": "partial",
+     "summary": "npc_bp 10-tick label loop: not re-measured, because the machine stayed busy (TIMING_SOAK). No code change, since the brief says to act only above 0.15 ms/tick. updateLabels already makes one world.getPlayers call per sync for all townsfolk. If it measures over 0.15, the remaining per-target native reads are in the shared name-labels module (target nameTag read every sync, getHeadLocation).",
+     "commits": [],
+     "proof": "Measurement command in bdsPending."
+    },
+    {
+     "id": "review-findings",
+     "status": "done-verified",
+     "summary": "Reviewer findings: (1) O7 overclaim, real: docs and comment softened, O7 kept partial (4916785). (2) night-soak density and far path, real: full 0.8 a player up to 80, the extras at far kept-loaded spots (8a2ca8f). (3) aura with stale or empty player places, real: no puffs with nobody online, and PACKS.md documents the about-once-a-second refresh (2fc7c2c). (4) CRLF to LF churn, real: the original line endings are restored (98a1156).",
+     "commits": [
+      "4916785",
+      "8a2ca8f",
+      "2fc7c2c",
+      "98a1156"
+     ],
+     "proof": "See O3 and O7 proofs. The aura test fails without the fix (28 puffs) and passes with it (0)."
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "Day perf-soak at 10 and 40 players, before/after (wander O2/O3, elite, moon, npc, caravan). The before tree /home/user/wt/g3-ws3-before is 88cc198 plus the uncommitted harness from e779696 (night-soak.js and per-phase profile-report)",
+     "before": "cd /home/user/wt/g3-ws3-before && for N in 10 40; do node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws3/ws3-before-$N.json --only wander_bp,elite_bp,npc_bp,caravan_bp,moon_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=$N --arg seconds=120 --timeout 3000; done",
+     "after": "cd /home/user/wt/g3-ws3-world-entities-and-night-load && for N in 10 40; do node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws3/ws3-after-$N.json --only wander_bp,elite_bp,npc_bp,caravan_bp,moon_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=$N --arg seconds=120 --timeout 3000; done"
+    },
+    {
+     "purpose": "Night soak with a Blood Moon and champions at full owner density (ceil(0.8 x players) up to 80: 3 near each group, the rest at far kept-loaded spots), at 40 and 100 players. Records msPerTick, p95 and max per pack and per phase (dusk, early, mid, late, dawn), growth from start to end of night, and far-champion counts per phase (O3, O7). Both runs use the after tree's updated night-soak.js by absolute path, so the workload is identical",
+     "before": "cd /home/user/wt/g3-ws3-before && for N in 40 100; do node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws3/ws3-before-night-$N.json --only wander_bp,elite_bp,npc_bp,caravan_bp,moon_bp --scenario /home/user/wt/g3-ws3-world-entities-and-night-load/tools/test-bds/examples/night-soak.js --arg players=$N --arg seconds=300 --timeout 3000; done",
+     "after": "cd /home/user/wt/g3-ws3-world-entities-and-night-load && for N in 40 100; do node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws3/ws3-after-night-$N.json --only wander_bp,elite_bp,npc_bp,caravan_bp,moon_bp --scenario tools/test-bds/examples/night-soak.js --arg players=$N --arg seconds=300 --timeout 3000; done"
+    },
+    {
+     "purpose": "O10 / row 49: npc label loop at 40 players. Act only if over 0.15 ms/tick",
+     "before": "cd /home/user/wt/g3-ws3-before && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws3/ws3-before-npclabels-40.json --only npc_bp,build_rp --scenario tools/test-bds/examples/npc-labels-perf.js --arg players=40 --arg seconds=60 --timeout 900",
+     "after": "cd /home/user/wt/g3-ws3-world-entities-and-night-load && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws3/ws3-after-npclabels-40.json --only npc_bp,build_rp --scenario tools/test-bds/examples/npc-labels-perf.js --arg players=40 --arg seconds=60 --timeout 900"
+    },
+    {
+     "purpose": "Moon load hitch (O7): compare the max of moon_bp's runTimeout at main.js:313 (before) with the max of its runJob steps (after), from packs[].top for moon_bp in the 10-player day soak JSONs above. If the after max is still about 40 ms, BlockTypes.getAll() is the cost: record it and keep O7 partial or WON'T FIX (no paged stable API). Then run the functional gates on the after tree: the scenarios to keep green, then the full check",
+     "after": "cd /home/user/wt/g3-ws3-world-entities-and-night-load && node tools/test-bds/suite.mjs --jobs 1 --retry --filter '^(wander|elite-|moon-|npc-labels|caravan-|night-soak)' && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+    }
+   ],
+   "decisions": [
+    "wander labels: a 2-tick sync only for wanderers with a player within 64 blocks (LABEL_REACH 40 + 24) at the last full pass. The full pass runs every 10th run (1 s), on spawn and on sweep. O11 resend timing for near wanderers is unchanged. A player who covers more than 24 blocks in 1 s (elytra) sees the label up to 1 s late.",
+    "wander handles: the world.getEntity result is cached while isValid and dropped in lost() (entityRemove). An unloaded entity's handle goes invalid and is looked up again, so the results match the old code.",
+    "wander full pass: uses labelObservers(targets, LABEL_HOT), the per-wanderer queries on a busy server, so the O3 'no read of every player' test holds unchanged.",
+    "elite: kept the per-run caps (aura 12, approach 8) and the owner's density. Turns come only from champions near a player. Sorting is a bounded round robin (SORT_PER_RUN 12) with player places read once per 20 ticks. Unsorted new champions count as near so they get turns at once. Far champions get the same detour cleanup as a step with no target.",
+    "elite approach: a per-run block snapshot cache, cleared after the run and never kept across ticks.",
+    "elite: the ownedElsewhere (Expedition tag) result is cached per champion and cleared on every 100-tick refresh.",
+    "moon: the block list is split with system.runJob rather than a precomputed static id list, which would lose add-on blocks and need a generator. playerMadeBlocks() finishes the same generator synchronously if a wave needs it first.",
+    "Did not change tools/name-labels-shared.js or tools/tether-shared.js, so saga_bp needs no re-sync from WS3.",
+    "npc_bp, caravan_bp: no code change. npc is unmeasured and already shares one getPlayers call across its townsfolk. caravan measured 0.027 ms/tick.",
+    "Added night-soak.js as a new scenario rather than editing perf-soak.js. Per-phase stats (workload.phases) are in tools/test-bds/lib/profile-report.mjs, covered by lib/profile-phases.test.mjs.",
+    "Before tree: /home/user/wt/g3-ws3-before (88cc198 plus the uncommitted harness from e779696) so before and after night soaks use the same profile code. /home/user/wt/base (5422aac) has no phase support. The before night soak passes the after tree's night-soak.js by absolute path, so both run the same workload.",
+    "Review finding 1 (O7 overclaim): real. PACKS.md and the main.js comment now say getAll() still runs in one job step and the split of the 40-45 ms is unmeasured. O7 stays partial. I did not rewrite 4a1e53b's message (no interactive rebase here). The correction is commit 4916785, and the integrator should not quote 'removing the hitch'.",
+    "Review finding 2 (night-soak density): real. CHAMPIONS is now ceil(0.8 x players) up to 80 with no 3-per-group cap. The extras over 3 per group (the nearby limit) go to up to 4 far spots at least 110 blocks from every group (aura 64, approach 48 + 16, plus walk and spread room), each kept loaded by its own ticking area and removed at the end. Requested spawns don't count against maxAlive, so the scenario sets the density itself. A 5 s wait lets the far chunks load first.",
+    "Review finding 3 (aura on stale player places): real but small. aura() now takes no turns while the last player read was empty, which covers unsorted champions after a reload. I accepted the up-to-1-2 s staleness after the last player walks away, rather than adding a getAllPlayers call per run, and documented it in PACKS.md.",
+    "Review finding 4 (CRLF to LF): real. The base files' mixed CRLF/LF endings are restored line by line (a script keeps each unchanged line's original ending; added lines take their neighbor's). The plain diff against base is now +213/-5, and the ignore-cr diff against the previous HEAD is empty. New test lines use the file's CRLF."
+   ],
+   "newsLines": [
+    "Champions out at night cost the server less: only the ones near a player puff their aura and walk toward you, and none puff while nobody is online.",
+    "Wanderers far from everyone no longer redraw their name labels several times a second; nearby ones look the same as before."
+   ],
+   "generatorsNeeded": [
+    "help-catalog: probably not needed (the PACKS.md edits are in Champions' and Blood Moon's 'How it works' text, not their summary, How to use or Commands tables). npm run check will say so if it is",
+    "admin-catalog: not needed (no command changes)",
+    "gen-news: needed for the newsLines once the integrator adds them to NEWS.md"
+   ],
+   "packsBumped": [
+    "wander_bp",
+    "elite_bp",
+    "moon_bp"
+   ],
+   "risks": [
+    "No ms/tick before/after yet for any final code: everything perf-related is in bdsPending. The machine was in TIMING_SOAK code-only mode throughout.",
+    "O7 may not be fixed at all if BlockTypes.getAll() itself is the 40 ms. The bdsPending comparison decides.",
+    "The night-soak.js changes (far spots, ticking areas named night_far0..3) are syntax-checked but have not run on BDS. If ticking areas run out, or a far chunk isn't loaded by nightfall, elite logs a champion_spawn warning and the phase far count shows it.",
+    "npm run check, the build and the BDS scenario gates have not run on this branch since the review fixes. Only node --test runs of the two touched test files pass (16 and 18 tests)."
+   ],
+   "sharedLayers": [
+    "tools/test-bds/lib/profile-report.mjs (optional workload.phases)",
+    "tools/test-bds/examples/night-soak.js (new)"
+   ]
+  },
+  {
+   "worktree": "/home/user/wt/g3-ws4-per-second-player-sweeps--long-tail-",
+   "branch": "ws/g3-ws4-per-second-player-sweeps--long-tail-",
+   "items": [
+    {
+     "id": "O1 (long tail: atlas, journal, quests, milestones, titles, nick, afk, guilds, dolphin)",
+     "status": "done-needs-bds",
+     "summary": "Added a shared spreader, tools/spread-shared.js. node tools/sync-spread.mjs copies it into each pack as scripts/spread.js, and its --check runs in npm run check. Every player is still visited once every N ticks, but a fair share of them runs on each of K runs, and each player keeps their slot by player id. Moved every per-player sweep in the 9 packs onto it. Atlas: 40 ticks in 10 shares. Quests, Milestones, Titles, Guilds, AFK: 20 ticks in 10 shares. Journal: 80 ticks in 10 shares. Milestones check: checkSeconds shares. Dolphin: 5 ticks in 5 shares. Staggered the bulk per-player saves (Titles every 60 s, Guilds every 30 s) per share. Guilds' placed-block save now runs from the spread round's start (review fix 135d699), so it happens every 30 s whoever is online and whichever shares are empty, as in base. Other cuts: Milestones and Guilds skip position reads for AFK players. Guilds reads the game mode only for players who moved. Milestones looks up each Stats objective once per check run and skips milestones already at their top tier. Titles reads position and dimension once, and reads time of day and weather once a round. AFK skips the movement read once a player has turned, and its night-skip count runs once a round. Journal reads the dimension id once per look and the world spawn once a round. Nicknames: the every-player-every-10-ticks refreshAll is gone. AFK and Titles now send realm:nametag {player, from}, Nicknames fixes that player's tag at once, and a 5-second spread sweep catches the rest. PACKS.md now says that Deck of Many Things' rainbow or false-title name tag is put right only by that 5-second check (review fix 54655b7). Dolphin: the 5-tick ride lookup is spread over its 5 ticks and skipped while no loaded tamed dolphin is counted.",
+     "commits": [
+      "63c13e2",
+      "bc0d811",
+      "a8332fc",
+      "82dacf5",
+      "c36be6d",
+      "d894ab7",
+      "4657cec",
+      "347dd2d",
+      "43cb602",
+      "032245f",
+      "cde1573",
+      "135d699",
+      "54655b7"
+     ],
+     "proof": "tools/player-sweeps.test.mjs now has 10 tests and all pass on the worktree. The new one, 'guilds: placed blocks save within 30 seconds while share 0 is empty', starts 3 players, has the slot-0 player leave, places an iron ore, then steps 31 s. Against the previous commit's guilds main.js it fails ('placed block saved: \"\"'); with the fix it passes. The earlier 9 tests each fail against their pack's 88cc198 main.js, as reported before. tools/spread-shared.test.mjs (4 tests) passes. These light checks pass now: check-docs, check-ascii, help-catalog --check and check-versions (18 packs changed, each with a higher version). Not run here: tsc, npm run check, BDS and the perf runs. /home/user/SUITE_RUNNING was present, so this was code-only mode; see bdsPending."
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "O1 perf, 10 players, run 1 (alternate base and tree, run each twice; compare msPerTick, p95 and max per pack with /home/user/perf/table.mjs)",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-base-10a.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-tree-10a.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "O1 perf, 10 players, run 2",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-base-10b.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-tree-10b.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "O1 perf, 40 players, run 1 (expected total about 0.5 -> about 0.2 ms/tick)",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-base-40a.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-tree-40a.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "O1 perf, 40 players, run 2",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-base-40b.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-tree-40b.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "O1 perf, 100 players, once (target: every pack <= 0.15 ms/tick, total about 0.35)",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-base-100.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=100 --arg seconds=120 --timeout 3000",
+     "after": "cd /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail- && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/ws4/ws4-tree-100.json --only atlas_bp,journal_bp,quests_bp,milestones_bp,titles_bp,nick_bp,afk_bp,guilds_bp,dolphin_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=100 --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "Every existing scenario of the 9 packs (plus smoke, forms, admin-diag and news-new-world) still passes; dolphin-riding is the important one",
+     "before": "cd /home/user/wt/base && node tools/test-bds/suite.mjs --filter '^(atlas|journal|quests|milestones|nick|afk|guilds|dolphin)|^(smoke|forms|admin-diag|news-new-world)' --retry",
+     "after": "cd /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail- && node tools/test-bds/suite.mjs --filter '^(atlas|journal|quests|milestones|nick|afk|guilds|dolphin)|^(smoke|forms|admin-diag|news-new-world)' --retry"
+    },
+    {
+     "purpose": "New scenario: AFK's realm:nametag makes Nicknames show [AFK] Nickname within a few ticks, and the 5-second sweep fixes an unannounced change within 101 ticks",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --only nick_bp,afk_bp --scenario /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail-/tools/test-bds/examples/nick-afk-nametag.js --timeout 300",
+     "after": "cd /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail- && node tools/test-bds/run.mjs --quiet --only nick_bp,afk_bp --scenario tools/test-bds/examples/nick-afk-nametag.js --timeout 300"
+    },
+    {
+     "purpose": "Full checks (tsc, including the new start callback in guilds) and a one-context bundle smoke test",
+     "after": "cd /home/user/wt/g3-ws4-per-second-player-sweeps--long-tail- && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3 && npm run bundle -- --all && node tools/test-bds/run.mjs --quiet --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/bundle-smoke.js"
+    }
+   ],
+   "decisions": [
+    "Shared module tools/spread-shared.js plus tools/sync-spread.mjs (its --check is in npm run check). Packs never import each other, and 9 packs need the same slot-keeping spreader.",
+    "Players keep their slot by player id, not by list position, so one player leaving doesn't shift everyone else's cadence.",
+    "Dolphin keeps its 5-tick ride lookup, spread over the 5 ticks. There is no stable ride event in @minecraft/server 2.1.0, and dolphin-riding needs steering within 8 ticks.",
+    "Nicknames drops its 10-tick refreshAll for realm:nametag pushes from AFK and Titles plus a 5-second spread sweep. Config changes still refresh everyone at once.",
+    "Review finding guilds main.js:605 (medium) is real. Fixed in 135d699: savePlaced moved from the share-0 visit to spreadPlayers' start, which runs every round even when share 0 or every share is empty. That restores base's save every 30 s whoever is online. A regression test fails before the fix and passes after; guilds_bp was already bumped to 1.1.12 in this branch.",
+    "Review finding nick main.js:162 (low) is real but cosmetic: a stale or rainbow Deck of Many Things name tag can now show for up to 5 s, not 0.5 s. domt_bp is not one of this workstream's packs, so I didn't change it; I documented the delay in PACKS.md (Nicknames 'how it works' and the AFK <-> Nicknames row) in 54655b7. Follow-up for the integrator: have domt_bp send realm:nametag {player, from: 'domt_bp'} after `p.nameTag = orig` (end of effect and restore on join) and bump domt_bp."
+   ],
+   "newsLines": [
+    "Busy servers run smoother: Atlas, Journal, Daily Quests, Milestones, Titles, Nicknames, AFK, Guilds and Dolphin Friends now check a few players at a time instead of everyone on the same tick."
+   ],
+   "generatorsNeeded": [
+    "help-catalog: not needed (help-catalog --check passes; the changed PACKS.md text is outside How to use and Commands)",
+    "admin-catalog: not needed (no command changes)",
+    "gen-news: needed by the integrator after adding the newsLines entry to NEWS.md"
+   ],
+   "packsBumped": [
+    "atlas_bp",
+    "journal_bp",
+    "quests_bp",
+    "milestones_bp",
+    "titles_bp",
+    "nick_bp",
+    "afk_bp",
+    "guilds_bp",
+    "dolphin_bp"
+   ],
+   "sharedLayers": [
+    "tools/spread-shared.js -> packs/*/scripts/spread.js via tools/sync-spread.mjs (--check in npm run check)"
+   ],
+   "risks": [
+    "tsc, npm run check, BDS scenarios and the perf soaks were not run (SUITE_RUNNING was present). The guilds start callback is typed by spread.js's JSDoc, so tsc should accept `(_, round) =>`.",
+    "If domt_bp gets no follow-up, a nicknamed player's Deck of Many Things name effect (or the name it puts back) can show for up to 5 seconds before Nicknames corrects it."
+   ]
+  },
+  {
+   "worktree": "/home/user/wt/g3-ws5-expeditions--soaks-and-the-bundle-verdict",
+   "branch": "ws/g3-ws5-expeditions--soaks-and-the-bundle-verdict",
+   "items": [
+    {
+     "id": "O19 (F70) stash cart window",
+     "status": "done-needs-bds",
+     "summary": "gauntlet.js keeps a world-side mark for each stored record (expedition:cart_marks, {tag: 0 = put down | 1 = seen}), so knowing that the carts were there no longer depends on the player. From the put-down tick, the world looks for the carts at once and then every tick for 40 ticks. While that window is open it listens to beforeEvents.entityRemove (subscribed only during the window), and the entityLoad hook marks carts that load later. cartsOf treats a seen mark as seen, and look() no longer hands back a cart that was broken during its recheck. Reviewer fix (58b60ce): the cap is now 800 (about 23K chars, under the 32767 limit). Over the cap, the oldest 0 marks are dropped first, and a 1 mark only when no 0 mark is left; the mark just made is never dropped. cartsOf now copies a seen mark onto the record as seen when the hand-over runs again, so the mark no longer has to last after that. expedition_bp 2.4.12 -> 2.4.13 (still unreleased, so not bumped again; diag in sync). The PACKS.md Saved data paragraph and key table are updated.",
+     "commits": [
+      "5764fcd",
+      "58b60ce"
+     ],
+     "proof": "tools/expedition-carts-window.test.mjs now has 76 tests and all 76 pass. Against the previous branch commit (the old FIFO cap of 200, via GAUNTLET_SRC=<HEAD~ gauntlet.js>), the 3 new tests fail: 1000 abandoned put-downs, 600 seen put-downs, and the record learning seen. Against base 88cc198, 29+ fail. expedition-carts-seen 6/6 and expedition-forget 7/7 pass; sync-diag --check and check-ascii pass. The native BDS fail-before and pass-after are still pending: SUITE_RUNNING is set, so this session is code-only."
+    },
+    {
+     "id": "Step 1: per-event-id counts in the profile JSON (for WS1)",
+     "status": "done-verified",
+     "summary": "lib/profile.js counts each pack's sendScriptEvent calls by id (scriptEventsSent), and the calls and ms of its scriptEventReceive listeners by id (scriptEventsHandled). profile-report.mjs adds them up into bundle.scriptEvents and prints the 8 most-sent ids per tick. Commit 5288d34 stands alone, so WS1 can cherry-pick it.",
+     "commits": [
+      "5288d34"
+     ],
+     "proof": "tools/test-bds/lib/profile-events.test.mjs: 2/2 pass after and fail before. perf-acceptance.test.mjs: 14/14."
+    },
+    {
+     "id": "O10 expedition build steps 25-31 ms",
+     "status": "partial",
+     "summary": "The profiler now lists each pack's 5 longest single calls ('slowest', by max ms), so the max of the runJob build step is visible. Decision rule: split the 16x16x20 fills (into 8x8 columns and 10-block layers) only if slowest[].max for runJob @ main.js:601 is over 25 ms, or the server's tickIntervalMaxMs shows a hitch while building. expedition-perf on base and on the worktree has not run yet (code-only mode); the commands are in bdsPending. O10 is not closed.",
+     "commits": [
+      "9556b22"
+     ],
+     "proof": "profile-events.test.mjs asserts that slowest is present. No timing yet."
+    },
+    {
+     "id": "O4 (F57) 60-minute memory soak with an RSS sampler",
+     "status": "partial",
+     "summary": "tools/test-bds/rss-soak.mjs wraps one run.mjs command, samples VmRSS/VmHWM of bedrock_server from /proc, and writes a summary: 10-minute medians after a 5-minute warm-up, the slope in each half, and a verdict. Reviewer fix (af4876c): only the main pid (longest sampled span; on a tie, the later one) is judged, with its warm-up counted from its own first sample. Every pid is listed in summary.pids, along with pid and startS. The partial file is written every 60 sampling intervals, not on an exact sample count. The README is updated. The 3600 s soaks have not run yet.",
+     "commits": [
+      "d0f3cd4",
+      "af4876c"
+     ],
+     "proof": "rss-soak.test.mjs: 6/6 pass. The 2 new tests cover a template server before the soak server, and a restart's fresh low process after a growing server. The test file fails before the fix (mainPid is not exported)."
+    },
+    {
+     "id": "O9 actual runs (suite --perf 10,40,100 gate; weather-crowd)",
+     "status": "partial",
+     "summary": "No code change is needed: the gate and the scenario already exist. Both runs are in bdsPending, to run after WS1-WS4 merge. They have not run (SUITE_RUNNING or TIMING_SOAK_RUNNING was set the whole session).",
+     "commits": []
+    },
+    {
+     "id": "O1 / F46 / F56 final bundle verdict",
+     "status": "partial",
+     "summary": "The verdict needs the merged WS1-WS4 tree and alternating, uncontended runs (F55). The commands are in bdsPending. The owner answer stands: keep the 5 ms goal and improve where measured. Baseline: 6.27 / 9.11 / 14.16 ms at 10/40/100 players (67 contexts); the one-context bundle at 10 players is 4.62 ms steady.",
+     "commits": []
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "O19 native fail-before: timed leave, break or restart in the cart window on base expedition_bp. Expect the L and B cases inside the window to put the structure down twice (74 dirt / 2 swords).",
+     "before": "rm -rf /tmp/o19-before && node /home/user/wt/g3-ws5-expeditions--soaks-and-the-bundle-verdict/tools/test-bds/hooks/expedition-carts-window.mjs /tmp/o19-before/packs /home/user/wt/base && cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/o19-before/packs --only expedition_bp --scenario /home/user/wt/g3-ws5-expeditions--soaks-and-the-bundle-verdict/tools/test-bds/examples/expedition-carts-window.js --timeout 2400",
+     "after": "rm -rf /tmp/o19 && cd /home/user/wt/g3-ws5-expeditions--soaks-and-the-bundle-verdict && node tools/test-bds/hooks/expedition-carts-window.mjs /tmp/o19/packs && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/o19/packs --only expedition_bp --scenario tools/test-bds/examples/expedition-carts-window.js --timeout 2400"
+    },
+    {
+     "purpose": "O19 regressions stay green: partial carts, Nether carts, restart, gauntlet and leave-death on the fix tree",
+     "after": "cd /home/user/wt/g3-ws5-expeditions--soaks-and-the-bundle-verdict && node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-carts-partial.js --timeout 600 && node tools/test-bds/suite.mjs --filter 'expedition-(carts|nether-carts|restart|gauntlet|leave-death)' --retry"
+    },
+    {
+     "purpose": "Full check and build on the worktree (tsc, docs coverage for expedition:cart_marks, every unit test, versions)",
+     "after": "cd /home/user/wt/g3-ws5-expeditions--soaks-and-the-bundle-verdict && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+    },
+    {
+     "purpose": "O10: Expedition build-step hitches at 40 players. Read packs[expedition_bp].slowest (the max of runJob @ main.js:601) and server.tickIntervalMaxMs, and split the fills only if a step exceeds 25 ms.",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/o10/exp-base.json --only expedition_bp --scenario tools/test-bds/examples/expedition-perf.js --arg players=40 --arg seconds=120 --timeout 1500",
+     "after": "cd /home/user/wt/g3-ws5-expeditions--soaks-and-the-bundle-verdict && node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/o10/exp-ws5.json --only expedition_bp --scenario tools/test-bds/examples/expedition-perf.js --arg players=40 --arg seconds=120 --timeout 1500"
+    },
+    {
+     "purpose": "O4: 60-minute unprofiled memory soak at 40 players with the RSS sampler, on the merged tree, then on base (copy rss-soak.mjs into base's tools/test-bds/ uncommitted). If the verdict is 'growing', bisect with --only halves of the pack list and rerun.",
+     "before": "cd /home/user/wt/base && node tools/test-bds/rss-soak.mjs --every 5 --out /tmp/o4/rss-base-40-3600.json -- --quiet --no-relay --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=3600 --timeout 4500",
+     "after": "cd <merged tree> && node tools/test-bds/rss-soak.mjs --every 5 --out /tmp/o4/rss-merged-40-3600.json -- --quiet --no-relay --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=3600 --timeout 4500"
+    },
+    {
+     "purpose": "O1/F46/F56/O9 verdict step 1: the one-context Realm Bundle, alternating base and merged, N=1..2 each, with nothing else running (F55). Build dist/realm_bundle.mcpack in each tree first (npm run bundle -- --all).",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/verdict/bundle-base-<N>-p<10|40>.json --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40> --arg seconds=120 --timeout 3000",
+     "after": "cd <merged tree> && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/verdict/bundle-merged-<N>-p<10|40>.json --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40> --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "Verdict step 2: the 67-context perf soak at 10/40/100 players, alternating base and merged. O6's 100-player hud_state proof rides in the 100-player run.",
+     "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/verdict/ctx-base-p<10|40|100>.json --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40|100> --arg seconds=120 --timeout 3000",
+     "after": "cd <merged tree> && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/verdict/ctx-merged-p<10|40|100>.json --scenario tools/test-bds/examples/perf-soak.js --arg players=<10|40|100> --arg seconds=120 --timeout 3000"
+    },
+    {
+     "purpose": "O9: the suite --perf gate, then weather-crowd (the tornado's 8-block sound bands) at 10 and 40 players on the merged tree",
+     "after": "cd <merged tree> && node tools/test-bds/suite.mjs --perf 10,40 && node tools/test-bds/suite.mjs --perf 100 && node tools/test-bds/suite.mjs --filter 'weather-crowd' --retry"
+    }
+   ],
+   "decisions": [
+    "Finding 1 (nothing measured natively): real, but it cannot be fixed in this session. /home/user/SUITE_RUNNING was still set at every check, so this session stayed code-only. O19 stays done-needs-bds, and O10, O4, O9 and the verdict stay partial. expedition_bp 2.4.13 must not be published until the O19 native fail-before and pass-after and npm run check have run (listed first in bdsPending).",
+    "Finding 2 (a seen mark evicted before the owner returns): real; fixed in 58b60ce. Over the cap, the oldest 0 marks are dropped first, a 1 mark only when no 0 mark is left, and the mark just made is never dropped. Reason: dropping a 0 mark only brings back the old behavior for carts that never appeared, while dropping a 1 mark can copy items.",
+    "Finding 2: MARKS_MAX raised from 200 to 800. Reason: a tag is about 30 chars, so 800 marks stay near 23K chars, under the 32767 dynamic-property limit, and dead seen marks from players who never return need four times more churn to matter.",
+    "Finding 2: cartsOf copies a seen mark onto the record as seen when the hand-over runs again. Reason: from then on the record no longer depends on the mark. A stash record lives on the player, so it cannot learn this while they are away; that is why the eviction order is the main fix.",
+    "Finding 2: expedition_bp stays at 2.4.13 rather than 2.4.14. Reason: 2.4.13 has never been released and is already higher than origin/master, and diag is in sync.",
+    "Finding 3 (rss-soak mixes pids, warm-up counted from run.mjs spawn, partial write can be skipped): real; fixed in af4876c. Only the pid with the longest sampled span is judged (on a tie, the later one), its warm-up is counted from its own first sample, every pid is reported in summary.pids, and the partial file is written every 60 sampling intervals.",
+    "Not run: help-catalog, admin-catalog and gen-news (the brief forbids it). Only the PACKS.md Saved data section changed, which /realm:help does not include."
+   ],
+   "newsLines": [
+    "Expeditions: if you leave, a cart is broken or the server restarts just as your stashed items are handed back, they can no longer be handed out twice."
+   ],
+   "packsBumped": [
+    "expedition_bp 2.4.12 -> 2.4.13"
+   ],
+   "generatorsNeeded": [
+    "none: the help-catalog's sources (summary, How to use, Commands) did not change; only PACKS.md Saved data did. gen-news is needed when the integrator adds the news line."
+   ],
+   "risks": [
+    "O19 has only unit-test proof (a vm fake of the game). The native BDS scenario has not run on base or on the fix.",
+    "The 800-mark world JSON is about 23K chars at worst; if tag counters grow far beyond today's lengths, the limit should be rechecked.",
+    "The verdict, O4, O9 and O10 numbers are all pending a machine without SUITE_RUNNING or TIMING_SOAK_RUNNING."
+   ],
+   "sharedLayers": [
+    "tools/test-bds/lib/profile.js and profile-report.mjs (scriptEvents and slowest; WS1 can cherry-pick 5288d34)",
+    "tools/test-bds/rss-soak.mjs"
+   ]
+  }
+ ]
+}

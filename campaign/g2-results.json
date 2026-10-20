@@ -1,0 +1,547 @@
+[
+ {
+  "worktree": "/home/user/wt/stash-perf",
+  "branch": "ws/stash-perf",
+  "items": [
+   {
+    "id": "F3",
+    "status": "done-needs-bds",
+    "summary": "The page index entry now records `p`, the kinds that have a stack with room left (written on every page commit). `mayTake` takes the stack's kind and the mode. In \"merge\" mode it needs a partial stack of that kind; in \"fill\" mode it also takes a free slot. A full page of full stacks of the item is therefore skipped without restoring its structure. Index entries without `p` (from 1.8.8 or older) still work: their page is loaded once, the result is remembered by snapshot id, and later passes skip it. stash_bp is 1.8.9 and sync-diag was run. PACKS.md is updated. After the review, the full-page BDS scenario now counts page snapshot restores (storage entity spawns not caused by Spawned, or entityLoad) against routing saves (cause Spawned). It asserts at most 1 restore per save; 88cc198 makes about 2 per save. A run on the old code now fails, so the scenario proves F3 itself and does not just check that items are kept.",
+    "commits": [
+     "a7ddb3c",
+     "ec96fdc",
+     "f2a3582"
+    ],
+    "proof": "Unit tests in tools/stash-pages.test.mjs count structure loads. (1) A full page of 24 x 64 dirt is restored 0 times over 5 routed pickups; base 88cc198 restores it every pass. (2) A full page with one partial dirt stack is read once and topped up. (3) A pre-1.8.9 index entry is read once, then skipped. Tests 1-3 fail against base code. At HEAD the file passes 151/0. The BDS scenario stash-autostore-full-page.js now asserts restores <= saves, which fails on 88cc198 (see bdsPending). The ms/tick numbers are still owed."
+   },
+   {
+    "id": "F13",
+    "status": "done-needs-bds",
+    "summary": "liveTotals (the hotbar, cursor and worn-gear totals) runs only when the viewed page has 4 or fewer free slots (LIVE_MARGIN). The review found a stuck case: a burst could take the page from 5 or more free slots to 1 or none within one look (a broken chest, mob loot, or several pickups between two 25 s quiet scans). That look had no earlier totals and only took a baseline, so a full page and hotbar could stay unrouted for good. The fix: snapshots now also record `empty`. When the look before had more than LIVE_MARGIN free slots and no totals, every new stack on the page counts as arrived and is routed as usual (one transaction, nothing lost). The only side effect is that a stack the player moved from the hotbar onto the page within that same look also goes to another of their pages. PACKS.md replaces the wrong 'stays on the page / within half a second' caveat with this behavior.",
+    "commits": [
+     "8e843eb",
+     "8973edb"
+    ],
+    "proof": "New unit test \"F13: a burst that fills a roomy page at once is still routed, not left stuck on a full page\": six 64-dirt stacks land in one look on a page with 6 free slots. Before 8973edb it fails with '0 free'. After, at least 2 slots are free again, the dirt that left is on page 1, and all 384 dirt are kept exactly once. These still pass: \"F13: auto-store looks at a page with room...\" (0 worn-gear reads against 18 on base) and \"F13: near a full page ... a move still isn't\" (a hotbar-to-page move near a full page is not routed). The whole file passes 151/0."
+   },
+   {
+    "id": "F49",
+    "status": "done-verified",
+    "summary": "storedCount no longer reads every old `stash:page:<n>` property on each realm:stash_count_ask. Pages with a native snapshot are skipped. A page found holding an old property is remembered per player, and only pages not yet known are checked. playerLeave clears legacyCache and storedCache. The review's stale-cache finding is not real here, so nothing changed. Nothing removes a player's `stash:page:<n>` while they are online. /realm:diag forget clears World dynamic properties only: diag-shared.js wraps World.prototype get/set/ids/clear and never touches Player properties. stash_bp never writes or deletes these properties. No pack calls player.clearDynamicProperties. A page's first native write adds its ref, which changes the signature.",
+    "commits": [
+     "fcc298b"
+    ],
+    "proof": "Unit test \"F49: storedCount reads an old JSON page property once...\": over 7 asks, the shadowed 30 KB property is read 0 times and page 3's old property 3 times. Both checks fail on base 88cc198. The whole file passes 151/0. The no-removal claim was checked with grep: no setDynamicProperty(PAGE_PROP..., undefined) or player clearDynamicProperties in packs/*/scripts; diag-shared.js forget() only calls wp (World.prototype) set/clear."
+   },
+   {
+    "id": "O19",
+    "status": "wontfix",
+    "summary": "Not this workstream's. O19 (the Expeditions stash cart window, F70) is code in expedition_bp, not stash_bp, and the task assigned it only if it was stash_bp's. Nothing was changed.",
+    "commits": []
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "F3 perf and correctness: stash_bp ms/tick while mining dirt with page 1 full of 24 x 64 dirt. The scenario asserts at most 1 page restore per routing save (88cc198: about 2, because page 1 is restored every pass), that every pickup is on page 2 or 3 exactly once, and that page 1 still holds 1536 dirt. Expect 'before' to FAIL on the restores assertion. It logs the raw entitySpawn causes and entityLoad counts. If saves or restores show 0 (BDS reports these events differently than expected), use those logged counts to adjust the classification; only the profile delta is evidence then.",
+    "before": "cd /home/user/mc-packs && git worktree add --detach /home/user/wt/stash-perf-before 88cc198 && ln -s /home/user/mc-packs/node_modules /home/user/wt/stash-perf-before/node_modules; cd /home/user/wt/stash-perf-before && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/wt/stash-perf-f3-before.profile.json --only stash_bp --scenario /home/user/wt/stash-perf/tools/test-bds/examples/stash-autostore-full-page.js",
+    "after": "cd /home/user/wt/stash-perf && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/wt/stash-perf-f3-after.profile.json --only stash_bp --scenario tools/test-bds/examples/stash-autostore-full-page.js"
+   },
+   {
+    "purpose": "F13 perf: the review's page-2 pickup soak (1 pickup every 10 ticks for 60 s on a page with room). Compare stash_bp ms/tick and p95.",
+    "before": "cd /home/user/wt/stash-perf-before && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/wt/stash-perf-f13-before.profile.json --only stash_bp --scenario /home/user/wt/stash-perf/tools/test-bds/examples/stash-autostore-perf.js",
+    "after": "cd /home/user/wt/stash-perf && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/wt/stash-perf-f13-after.profile.json --only stash_bp --scenario tools/test-bds/examples/stash-autostore-perf.js"
+   },
+   {
+    "purpose": "Regression: the existing stash page scenarios and the saga count bridge still pass with the room index, the F13 margin plus burst fallback, and the F49 legacy cache.",
+    "after": "cd /home/user/wt/stash-perf && node tools/test-bds/suite.mjs --filter '^stash-(pages|pages-persistence|pages-shrink|page-transfer|page-transfer-restart|saga-solo-gather|autostore-full-page)$' --retry"
+   },
+   {
+    "purpose": "Full checks (including tsc for the new snapshot `empty` field and the `was`-optional gain). Not run because of code-only mode (TIMING_SOAK_RUNNING exists).",
+    "after": "cd /home/user/wt/stash-perf && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+   }
+  ],
+  "decisions": [
+   "F3: The room data is a list of the kinds that have a stack with room left (`p`), keyed like `k`. Matching by kind can only over-report room, so a page is never wrongly skipped; at worst one load is wasted.",
+   "F3: For old index entries without `p`, what was learned is kept in memory by snapshot id rather than written to the index outside a commit. Snapshot ids name immutable contents and are never reused.",
+   "F3: In merge mode a page is skipped when its room list is known and has no partial stack of the kind; the fill pass still loads it if there is a free slot.",
+   "F13: I used a free-slot margin (totals only at 4 or fewer free slots) rather than an inventory-event dirty flag. While mining, every look follows a change, so a flag saves nothing, and skipping the quiet scan would remove its safety net.",
+   "Review finding 1 (F13 burst, real): when the look before had more than LIVE_MARGIN free slots and so no carried totals, and the page is now down to 1 or 0 free slots, the new stacks on the page are routed as pickups. Reason: functionality comes before UX. Leaving them would keep a full page and hotbar stuck, and the worst misread only moves the player's own stack to another of their pages, with no loss. I rejected a bigger LIVE_MARGIN (no finite margin covers a broken chest) and an event-time baseline (afterEvents arrive after a same-tick burst has landed, and cursor and worn gear have no events).",
+   "Review finding 2 (scenario, real): the full-page scenario now counts storage-entity restores against routing saves through entitySpawn causes (with entityLoad as a fallback) and asserts restores <= saves, so it fails on 88cc198. I could not use a structureManager hook because the scenario runs in another script context. The scenario fails closed if the events don't show up, and the raw counts are logged.",
+   "Review finding 3 (F49 stale legacyCache, not real, no change): nothing removes a `stash:page:<n>` player property while the player is online. /realm:diag forget clears only World dynamic properties (diag-shared wraps World.prototype), stash_bp never writes or deletes them, and no pack clears player properties. Re-checking presence on each ask would re-read the property (up to 30 KB), which is the cost F49 removed.",
+   "Version: stash_bp stays at 1.8.9 (already bumped in this branch and unreleased; origin/master is 1.8.7), so the review fixes need no further bump; diag.js already carries 1.8.9.",
+   "O19: Not done here. It is expedition_bp's cart code.",
+   "Line endings: pages.js and stash-pages.test.mjs have mixed CRLF/LF. New lines take their neighbors' endings."
+  ],
+  "generatorsNeeded": [
+   "gen-news (for the news lines below). help-catalog and admin-catalog are not needed: no How to use, Commands or summary text changed, and no command changed."
+  ],
+  "newsLines": [
+   "Auto-store is lighter: a saved page that is full of full stacks of what you are picking up is skipped without being opened."
+  ],
+  "packsBumped": [
+   "stash_bp 1.8.8 -> 1.8.9"
+  ],
+  "risks": [
+   "No BDS run or ms/tick numbers yet (code-only mode). The F3 and F13 perf gains are proven only by unit tests that count structure loads and worn-gear reads.",
+   "The full-page scenario's restore count depends on how BDS reports entitySpawn causes for structure-loaded entities and on reading typeId of an entity that was removed in the same call. If the counts log as 0, the scenario fails closed and the classification needs adjusting from the logged numbers.",
+   "tsc and npm run check were not run (code-only mode). The new JSDoc (snapshot `empty`, the optional `was`, PageIndex `p`) needs tsc to confirm.",
+   "F13 burst fallback: a hotbar-to-page move of stacks within the same look that takes a roomy page (5 or more free) to 1 or 0 free is routed to another page like a pickup. This is documented in PACKS.md, and nothing is lost.",
+   "Other workstreams that touch stash_bp pages.js or page-store.js will conflict in mayTake, autoStore, the snapshots type or storedCount, and in the version (1.8.9)."
+  ],
+  "sharedLayers": []
+ },
+ {
+  "worktree": "/home/user/wt/build-gate",
+  "branch": "ws/build-gate",
+  "items": [
+   {
+    "id": "O47",
+    "status": "done-needs-bds",
+    "summary": "Beds go through the same main pipeline (confirmPlacement -> claims filter -> placeBlocks) in every shape mode. A new unit test covers all 12 shape modes, Line and Cube with Mirror X+Z, Array and Radial, and Air Build. Every placed bed has both halves, and survival is charged one item per bed (4 to 36 beds per case). No code fix was needed. main.js exports confirmPlacement, placeAir and readPlaced as test seams. New native scenario build-beds-modes.js, written but not run (TIMING_SOAK_RUNNING is still there). Simulated players still can't make a real second click, as recorded before.",
+    "commits": [
+     "803d1f9"
+    ],
+    "proof": "node --test tools/build-beds-modes.test.mjs: 17/17 pass. The BDS scenario is in bdsPending."
+   },
+   {
+    "id": "NEW-preview-zero",
+    "status": "done-verified",
+    "summary": "On master, every non-bed block-shape preview showed '0 blocks (1)' and drew nothing: the shared positions array was emptied before it was copied. It is now copied only when the bed expansion made a new array.",
+    "commits": [
+     "7a919b1"
+    ],
+    "proof": "tools/build-preview.test.mjs 'a stone line preview outlines its blocks and counts them': fails on 4e21c08^, passes after."
+   },
+   {
+    "id": "F9",
+    "status": "done-verified",
+    "summary": "The destroy preview now reads each block once and reads getAllStates only for beds. readPlaced (destroy confirm) also reads states only for beds.",
+    "commits": [
+     "4e21c08"
+    ],
+    "proof": "build-preview.test.mjs F9: 46 getBlock reads before, at most 26 after, with at most 2 state reads. build-beds-modes.test.mjs readPlaced: 0 state reads for stone, 1 for a bed."
+   },
+   {
+    "id": "F7",
+    "status": "done-needs-bds",
+    "summary": "holdsBuildTool is narrower: the Building or Tutorial Book, Copy/Paste, or a block or digging tool only while a build mode or a Mirror/Array/Radial modifier is on. Hands come from events and holdsBuildTool makes no inventory read. The loops walk only the gate's holder list.",
+    "commits": [
+     "628d439",
+     "924c4ec",
+     "f70cebe"
+    ],
+    "proof": "build-preview.test.mjs F7: 20 survival players holding blocks with building off are not holders and cost 0 inventory reads over 40 ticks. It fails on the old code. ms/tick is still pending (bdsPending)."
+   },
+   {
+    "id": "F48",
+    "status": "done-verified",
+    "summary": "The tool gate's begin() takes the tick and runs once per tick, so every loop in the same tick sees the same released players.",
+    "commits": [
+     "628d439"
+    ],
+    "proof": "build-preview.test.mjs F48 fails on the old gate and passes now; build-w9.test.mjs createToolGate passes unchanged."
+   },
+   {
+    "id": "F8",
+    "status": "done-verified",
+    "summary": "Switching to a sword, food or an empty hand keeps the anchor; it just isn't drawn. Another block, or a digging tool on a block anchor, starts over. Changing the mode clears the anchor. A pickaxe click on a block anchor no longer builds the stone shape. Review fix (f62327e): an anchor from another dimension is now always dropped. Each click handler (interact and itemUse) and confirmPlacement drop it before building (dropAnchorElsewhere). A playerDimensionChange subscription drops it as soon as the player changes dimension. The preview loop's dimension check now runs before the hidden-preview and held-item skips. PACKS.md How to use step 2 says a dimension change clears the anchor.",
+    "commits": [
+     "fff398c",
+     "f62327e"
+    ],
+    "proof": "build-anchor.test.mjs, 3/3 pass. New case: an Overworld stone anchor, the player moved to the Nether without an event, then confirmPlacement. The anchor is dropped, no stone is placed in either dimension and none is charged; the dimension change event also drops it. On the code before f62327e this case fails and the first two pass. build-preview (5), build-beds-modes (17), build-idle-cost (2), build-w9 (7), build-w9-actions (8) and build-w9-source (6) all pass."
+   },
+   {
+    "id": "O48",
+    "status": "done-needs-bds",
+    "summary": "Idle cost is cut throughout build_bp: the loops walk only holders, the books or anchored players, and backstop checks catch a missed hand event. The offline mock can honor interval periods and fire events. New perf scenario build-holders-perf.js. The ms/tick runs and the SERVER_SETUP.md 'Easy Building (0.6 to 1 ms)' update can't be done yet: the machine is still in code-only mode (/home/user/TIMING_SOAK_RUNNING). The exact runs are in bdsPending; SERVER_SETUP.md waits for the measured numbers, so it doesn't get a guess.",
+    "commits": [
+     "628d439",
+     "924c4ec",
+     "3129676",
+     "f70cebe"
+    ],
+    "proof": "build-idle-cost.test.mjs: 9.75 inventory reads and 1 getAllPlayers per tick before; 0.4 reads and 0.1 lists per tick after. The ms/tick runs are pending."
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "F7/O48 ms/tick: survival holders, building off, 40 players (build_bp alone)",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/build-gate/holders-40-before.json --only build_bp,build_rp --scenario /home/user/wt/build-gate/tools/test-bds/examples/build-holders-perf.js --arg players=40 --arg seconds=120 --timeout 3000",
+    "after": "cd /home/user/wt/build-gate && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/build-gate/holders-40-after.json --only build_bp,build_rp --scenario tools/test-bds/examples/build-holders-perf.js --arg players=40 --arg seconds=120 --timeout 3000"
+   },
+   {
+    "purpose": "F7/O48 ms/tick: survival holders at 10 players",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/build-gate/holders-10-before.json --only build_bp,build_rp --scenario /home/user/wt/build-gate/tools/test-bds/examples/build-holders-perf.js --arg players=10 --arg seconds=120 --timeout 3000",
+    "after": "cd /home/user/wt/build-gate && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/build-gate/holders-10-after.json --only build_bp,build_rp --scenario tools/test-bds/examples/build-holders-perf.js --arg players=10 --arg seconds=120 --timeout 3000"
+   },
+   {
+    "purpose": "O48 standard perf soak for build_bp at 40 players (0.73-0.78 ms/tick before)",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/build-gate/soak-40-before.json --only build_bp,build_rp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=300 --timeout 4000",
+    "after": "cd /home/user/wt/build-gate && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/build-gate/soak-40-after.json --only build_bp,build_rp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=300 --timeout 4000"
+   },
+   {
+    "purpose": "O48 standard perf soak for build_bp at 10 players (0.44-0.50 ms/tick before)",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/build-gate/soak-10-before.json --only build_bp,build_rp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 3000",
+    "after": "cd /home/user/wt/build-gate && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /home/user/perf/build-gate/soak-10-after.json --only build_bp,build_rp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 3000"
+   },
+   {
+    "purpose": "O48 production-diagnostics idle floor at 40 empty-handed players (<= 0.15 ms/tick)",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --flat --only build_bp,build_rp --scenario tools/test-bds/build-idle-diag.js --timeout 600",
+    "after": "cd /home/user/wt/build-gate && node tools/test-bds/run.mjs --quiet --flat --only build_bp,build_rp --scenario tools/test-bds/build-idle-diag.js --timeout 600"
+   },
+   {
+    "purpose": "O47 beds in every shape mode on BDS (coverage proof; no code fix, so no meaningful before)",
+    "after": "cd /home/user/wt/build-gate && node tools/test-bds/run.mjs --quiet --only build_bp,build_rp --scenario tools/test-bds/examples/build-beds-modes.js --timeout 900"
+   },
+   {
+    "purpose": "After the soaks: replace 'Easy Building (0.6 to 1 ms)' in docs/SERVER_SETUP.md with the measured 10 and 40 player figures, in a commit on ws/build-gate",
+    "after": "cd /home/user/wt/build-gate && edit docs/SERVER_SETUP.md from /home/user/perf/build-gate/soak-*-after.json, then npm run check 2>&1 | tail -30"
+   },
+   {
+    "purpose": "Full check once the machine is free (after help-catalog has run)",
+    "after": "cd /home/user/wt/build-gate && node tools/help-catalog.mjs && node tools/sync-diag.mjs && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+   }
+  ],
+  "decisions": [
+   "Finding 1 (anchor from another dimension), REAL, fixed in f62327e. The anchor is dropped in three places: in confirmPlacement and in both click handlers before they build, by the playerDimensionChange after-event (stable), and by the preview loop, whose dimension check now runs before its hidden-preview and held-item skips. Reason: the confirm path is the only guard that also covers the one-tick race and Disable preview mode; the event clears the anchor at once so it is never shown or kept.",
+   "When a click finds an anchor from another dimension, the handlers drop it and then treat the click as the first click of a new shape in the current dimension. Reason: the player's click starts something sensible instead of being swallowed.",
+   "Finding 2 (help catalog not regenerated), not fixable in this workstream: the campaign brief forbids running help-catalog/admin-catalog/gen-news here, and the integrator runs them. help-catalog is listed in generatorsNeeded (How to use step 2 changed in fff398c and again in f62327e). It bumps help_bp, then sync-diag runs.",
+   "Finding 3 (no NEWS.md entry), not fixable in this workstream: the brief forbids editing NEWS.md and asks for player-facing lines in newsLines. The lines below cover the kept anchor, the pickaxe fix, the preview showing 0 blocks, and the dimension change.",
+   "Finding 4 (perf numbers not measured), real but blocked: /home/user/TIMING_SOAK_RUNNING still exists, so this workstream is in code-only mode and may not start BDS. O48, F7 and O47 stay done-needs-bds with the exact runs in bdsPending. SERVER_SETUP.md waits for the measured figures, so it doesn't get a guess.",
+   "build_bp stays at 3.0.10 for f62327e: one bump over origin/master covers the whole branch for check-versions, and diag.js already carries 3.0.10."
+  ],
+  "generatorsNeeded": [
+   "node tools/help-catalog.mjs (Easy Building How to use step 2 changed; it bumps help_bp), then node tools/sync-diag.mjs",
+   "node tools/gen-news.mjs at bundle time for the new NEWS entry"
+  ],
+  "newsLines": [
+   "Easy Building: your shape's first anchor now stays when you switch to a sword, food or an empty hand. Hold the block again to see it and finish the shape. Right-clicking with a different block or a tool starts over.",
+   "Easy Building: right-clicking with a pickaxe while a block shape is anchored no longer builds the shape.",
+   "Easy Building: shape previews show their outline and block count again (they showed 0 blocks).",
+   "Easy Building: going to another dimension clears your shape's anchor, so a shape is never built in the wrong world."
+  ],
+  "packsBumped": [
+   "build_bp 3.0.9 -> 3.0.10"
+  ],
+  "risks": [
+   "The measured ms/tick for O48/F7 is still missing; SERVER_SETUP.md shows the old 0.6 to 1 ms figure until the soaks run.",
+   "The playerDimensionChange subscription runs in the bundle's shared context; it only touches players who have an anchor (it checks anchoredPlayers first), so it costs almost nothing.",
+   "npm run check and npm run build have not run on this branch: the soak lock was on the whole time. help-catalog has to run first, or check fails on the stale /realm:help text."
+  ],
+  "sharedLayers": [
+   "tools/build-w9-mc-mock.mjs (offline mock: opt-in interval periods and fireEvent, used by build tests only)"
+  ]
+ },
+ {
+  "worktree": "/home/user/wt/mediums-misc",
+  "branch": "ws/mediums-misc",
+  "items": [
+   {
+    "id": "F12",
+    "status": "done-verified",
+    "summary": "cooking_bp: settle moved to packs/cooking_bp/scripts/settle.js (settleOwed). It hands over only dishes that really left the owed store. If the save fails, the debt stays owed for the next join, so it is never paid twice. If a write lands only partly, only what is gone counts. cooking_bp 1.1.13 -> 1.1.14. The PACKS.md cooking:owed row is updated.",
+    "commits": [
+     "f97b8dd"
+    ],
+    "proof": "tools/cooking-settle.test.mjs: 5/5 pass. Against the 88cc198 settle logic, 2 tests fail ('a failed save keeps the dishes owed' and 'a failed removal of the last dish')."
+   },
+   {
+    "id": "F11",
+    "status": "done-needs-bds",
+    "summary": "find_bp decideMode: a world counts as 'existing' only from Chest Finder's own data (find:cfg or find:idx:0), and the world-wide choice is saved through settings.set, so the settings cache is updated at once. find_bp 1.4.7 -> 1.4.8. The PACKS.md privateIndex and find:mig rows are updated. Review fix ecfc418: the native scenario find-mode-bundle.js no longer queues a form answer for each search. It now spots a list as a new entry in t.forms(p) and closes it itself. Before, the private search's unused queued answer stayed in the FIFO and took the world-wide list, so the scenario would have failed on correct code.",
+    "commits": [
+     "ba94844",
+     "ecfc418"
+    ],
+    "proof": "tools/find-private.test.mjs: 16/16 pass. The two F11 tests fail against the 88cc198 main.js. Both scenario files pass node --check. The BDS before/after run is still to do (code-only mode: TIMING_SOAK_RUNNING)."
+   },
+   {
+    "id": "F23",
+    "status": "done-needs-bds",
+    "summary": "tools/diag-shared.js claim(): a prefix stored as null (one that two packs declare or use) now returns null, so the key stays unowned. sync-diag rewrote all 67 diag.js copies. 55 packs got a patch bump; 12 were already above origin/master. The PACKS.md diag_forget text is updated.",
+    "commits": [
+     "1f7dfe1"
+    ],
+    "proof": "The new test in tools/diag.test.mjs fails before the claim fix and passes after; diag.test.mjs 8/8. sync-diag --check: all 67 copies current."
+   },
+   {
+    "id": "F66",
+    "status": "done-needs-bds",
+    "summary": "Three narrowed fixtures are restored: diag-owned-reload expects exactly 3 probe keys; admin-size-profile expects exactly 7 changes, with Champions already matching; find-index checks again after the restart that the index is still private for a stranger. Review fix 162fc9c: find-index's private search no longer queues an answer that is never used. That answer would have closed the world-wide diamond list before the scenario's own step. The search now spots a list with t.forms(p) and closes it itself.",
+    "commits": [
+     "1f7dfe1",
+     "dfbb032",
+     "92034d4",
+     "162fc9c"
+    ],
+    "proof": "Unit tests: the tools/find-private.test.mjs F66 test passes; size-profile-constants.test.mjs 2/2. The native runs are still to do (bdsPending)."
+   },
+   {
+    "id": "F10",
+    "status": "done-verified",
+    "summary": "Owner answer: keep the per-player champion scaling. No pack code changes; admin-size-profile is pinned to it.",
+    "commits": [
+     "dfbb032"
+    ],
+    "proof": "The owner answer is recorded in FIXES.md F10. The scenario asserts eliteLarge === eliteSmall (80) and that exactly 7 settings change."
+   },
+   {
+    "id": "F45",
+    "status": "done-needs-bds",
+    "summary": "stats_bp ticker made cheaper (4 player groups 5 ticks apart, a changed number written only with the 2-second refresh, nothing read while another pack holds the bar, ranks from boards read at most every 100 ticks plus a binary search). Review fix c68498d: My stats and the leaderboards now use the same tie rule as the ticker. Tied scores share a place (place = the number of strictly higher scores). A player tied first sees #1 everywhere, and the leaderboard numbers tied players alike. The PACKS.md 'How to use' line says so. stats_bp stays at its unreleased 1.4.13 bump from 1f7dfe1. The ms/tick before/after at 10 and 40 players is not measured yet: the machine was in code-only mode the whole session (TIMING_SOAK_RUNNING), so the perf-soak commands are in bdsPending, and F45 is not done until they pass.",
+    "commits": [
+     "5c6e6a5",
+     "c68498d"
+    ],
+    "proof": "tools/stats-ticker-prefs.test.mjs: 10/10. The 4 F45 tests fail against the 88cc198 main.js. The new tie test fails against 5c6e6a5's main.js (Bob, tied first, saw #2 in My stats) and passes after."
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "F11: a new world in a one-add-on bundle, where another pack writes on world load, starts with the private index. It should fail before the fix (the barrel is listed in phase 1) and pass after, now that each search spots its form without queued answers.",
+    "before": "cd /home/user/wt/base && mkdir -p /tmp/findmode-before && node tools/test-bds/hooks/diag-bundle.mjs /tmp/findmode-before find_bp --probe-first --first-key claims:next && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/findmode-before --scenario /home/user/wt/mediums-misc/tools/test-bds/examples/find-mode-bundle.js --timeout 600",
+    "after": "cd /home/user/wt/mediums-misc && mkdir -p /tmp/findmode-after && node tools/test-bds/hooks/diag-bundle.mjs /tmp/findmode-after find_bp --probe-first --first-key claims:next && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/findmode-after --scenario tools/test-bds/examples/find-mode-bundle.js --timeout 600"
+   },
+   {
+    "purpose": "F23/F66: diag-owned-reload phase 1 expects exactly 3 probe keys. It should fail before (4 keys, because help:orphan is claimed by its writer).",
+    "before": "cd /home/user/wt/base && mkdir -p /tmp/diago-before && node tools/test-bds/hooks/diag-bundle.mjs /tmp/diago-before admin_bp,help_bp,nick_bp --declare decl,help --late && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/diago-before --scenario /home/user/wt/mediums-misc/tools/test-bds/examples/diag-owned-reload.js --timeout 900",
+    "after": "cd /home/user/wt/mediums-misc && mkdir -p /tmp/diago-after && node tools/test-bds/hooks/diag-bundle.mjs /tmp/diago-after admin_bp,help_bp,nick_bp --declare decl,help --late && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/diago-after --scenario tools/test-bds/examples/diag-owned-reload.js --timeout 900"
+   },
+   {
+    "purpose": "F66: find-index's restart half checks the private index again, now without a leftover queued answer. It should pass.",
+    "after": "cd /home/user/wt/mediums-misc && node tools/test-bds/run.mjs --quiet --only find_bp --scenario tools/test-bds/examples/find-index.js --timeout 600"
+   },
+   {
+    "purpose": "F66/F10: admin-size-profile is pinned to exactly 7 changes, with Champions already matching",
+    "after": "cd /home/user/wt/mediums-misc && node tools/test-bds/run.mjs --quiet --only admin_bp,map_bp,elite_bp,cleanup_bp,find_bp,afk_bp,mail_bp --scenario tools/test-bds/examples/admin-size-profile.js --timeout 600"
+   },
+   {
+    "purpose": "F45 perf at 40 players (required before F45 counts as done): stats_bp ms/tick and setActionBar calls per tick, before vs after. Target: under 0.15 ms/tick (the fleet measured 0.17-0.18 ms and 1.18 bar writes per tick). If after > 0.15, the next step is decision 'F45 getAllPlayers'.",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/f45-before-40.json --only stats_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000",
+    "after": "cd /home/user/wt/mediums-misc && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/f45-after-40.json --only stats_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000"
+   },
+   {
+    "purpose": "F45 perf at 10 players (the owner's Realm size)",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/f45-before-10.json --only stats_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000",
+    "after": "cd /home/user/wt/mediums-misc && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/f45-after-10.json --only stats_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 3000"
+   },
+   {
+    "purpose": "F45 perf on a big board (40 tickers, 1000 names)",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --only stats_bp --scenario tools/test-bds/examples/stats-ticker-scale.js --timeout 900",
+    "after": "cd /home/user/wt/mediums-misc && node tools/test-bds/run.mjs --quiet --no-relay --profile --only stats_bp --scenario tools/test-bds/examples/stats-ticker-scale.js --timeout 900"
+   },
+   {
+    "purpose": "F45 behavior: every stats scenario still passes",
+    "after": "cd /home/user/wt/mediums-misc && node tools/test-bds/suite.mjs --filter '^stats-' --retry"
+   },
+   {
+    "purpose": "Gates not run in code-only mode",
+    "after": "cd /home/user/wt/mediums-misc && npm run check 2>&1 | tail -30 && npm run test 2>&1 | tail -5 && npm run build 2>&1 | tail -3"
+   }
+  ],
+  "decisions": [
+   "F12: settle lives in its own module (scripts/settle.js), so the unit test runs the real code. On a failed save it re-reads the store and returns only what is gone. Reason: a write can land the value but fail on the index.",
+   "F12: when the save fails, the dishes stay owed until the next join. Reason: no duplicate and no loss; the owed store is the single source of truth.",
+   "F11: only Chest Finder's own find:cfg or find:idx:0 marks a world as existing. Reason: in a bundle, other packs write on world load before Chest Finder decides.",
+   "F23: an ambiguous (null) prefix leaves the key unowned. Reason: giving it to the first pack that touches it lets that pack's forget delete another pack's data.",
+   "F10: champion scaling is kept. Reason: owner answer.",
+   "Review finding 1 (find-mode-bundle leftover answer) is real. Fixed in ecfc418: forms are detected through t.forms(p) and closed by the scenario, never through a queued answer. Reason: the harness's answer queue is a per-player FIFO that only a form consumes.",
+   "Review finding 2 (find-index leftover answer) is real. Fixed in 162fc9c the same way. Reason: the unused answer silently closed the next form.",
+   "Review finding 3 (F45 unmeasured; getAllPlayers every 5 ticks) is real in that no measurement was taken. F45 stays done-needs-bds, with the perf-soak at 10 and 40 players as a must-pass bdsPending item. Reason: code-only mode (TIMING_SOAK_RUNNING) all session.",
+   "F45 getAllPlayers: I tried a one-list-per-second bucket and reverted it. New joiners waited up to 2 s for their first draw, which broke existing 'drawn within the first second' tests. Per CLAUDE.md I won't add a second unmeasured optimization. If the 40-player soak shows stats_bp over 0.15 ms, the next step is buckets refreshed on playerSpawn/playerLeave. Reason: 3 extra getAllPlayers calls a second are small next to the bar writes and score reads already removed.",
+   "Review finding 4 (tie rule mismatch) is real. Fixed in c68498d: rankedInfo also gives each name its shared place, which placeOf, My stats and the leaderboard numbers use. The leaderboard's 'your position below the top N' still uses the list index to decide whether to add the extra line. Reason: one tie rule everywhere a player sees a rank.",
+   "Review finding 5 (no NEWS entry) is real, but the task forbids editing NEWS.md. The player-facing lines are in newsLines for the integrator."
+  ],
+  "newsLines": [
+   "Kitchen: a finished dish waiting for you is never handed over twice, even if the world fails to save at that moment.",
+   "Chest Finder: a brand-new world now starts with the private index (you find what you placed or opened), and switching to world-wide takes effect at once.",
+   "Stats: the ticker above your hotbar is lighter on the server. A number that keeps changing (like distance walked) now updates every 2 seconds instead of every second.",
+   "Stats: players with the same score now share a place on the ticker, in My stats and on the leaderboards."
+  ],
+  "generatorsNeeded": [
+   "help-catalog: yes. PACKS.md stats_bp and find_bp 'How to use' text changed (help_bp rebuild and bump).",
+   "admin-catalog: no. No command or parameter changed.",
+   "gen-news: yes, after the integrator adds the newsLines to docs/NEWS.md (runs with npm run bundle)."
+  ],
+  "packsBumped": [
+   "cooking_bp 1.1.14",
+   "find_bp 1.4.8",
+   "stats_bp 1.4.13 (unchanged since 1f7dfe1, still above origin/master)",
+   "every behavior pack got a patch bump for the diag.js change (F23): 55 bumped, 12 already above origin/master"
+  ],
+  "risks": [
+   "F45 ms/tick has not been measured; if stats_bp is still over 0.15 ms at 40 players, follow decision 'F45 getAllPlayers'.",
+   "npm run check, npm run test, the build and every BDS scenario are still to run (code-only mode all session)."
+  ],
+  "sharedLayers": [
+   "tools/diag-shared.js (synced to all 67 diag.js copies)"
+  ]
+ },
+ {
+  "worktree": "/home/user/wt/tests-acceptance",
+  "branch": "ws/tests-acceptance",
+  "items": [
+   {
+    "id": "F14",
+    "status": "done-needs-bds",
+    "summary": "Wrote every missing native acceptance scenario. O27: claims-animals.js covers feeding and shearing in a claim, a positive control outside the claim, the owner's own use, protectAnimals off, the visitors' door switch (doors only, a chest stays closed) and the operators' audit list with its sorts. O29: mail-moderation.js covers the per-sender unread cap, blocking and unblocking, and the operators' purge by sender, including a de-op during the confirmation. party-moderation.js covers the leader's mute, the one-message-a-second cooldown, and pruning of long-gone solo parties after a restart (seeded through the probe). O30: crowns-limit.js covers the 5,000 daily limit, a refused payment that moves nothing, a new UTC day through the saved day total, and the audit ledger order and UTC dates. After review, it now waits for both players' daily login bonus messages (JOIN_DELAY is 200 ticks) before it measures balances. O31: nick-reserved.js covers reserved words in any spacing, listed gamertags, online operators' gamertags and a player's own gamertag. Owed migrations: owed-legacy-consumers.js covers relics, fishing, bounty, guilds and town, each with its real legacy shape, a too-long id and a rejected record. It checks the migration, the index, that unknown fields are kept, payment exactly once and the state after a restart. All of this runs through the harness-only hook tools/test-bds/hooks/owed-probe.mjs. None of it has run on BDS yet: TIMING_SOAK_RUNNING was there the whole session.",
+    "commits": [
+     "c63e8c3",
+     "2702183",
+     "ba823ff",
+     "a0be3eb",
+     "2fa57a1",
+     "b1d637d",
+     "2a4dc8d",
+     "4ca26cf",
+     "496073b",
+     "625afeb"
+    ],
+    "proof": "Offline only. tools/test-bds/probe-hooks.test.mjs passes 6/6. tools/check-pipeline.mjs passes. The native fail-before and pass-after runs are in bdsPending, and are still owed."
+   },
+   {
+    "id": "F34",
+    "status": "done-needs-bds",
+    "summary": "Rewrote all four tests so they fail on the old code for the right reason. owed-legacy-restart seeds and reads Cooking's store through the harness probe, so on 7eb5f72 it fails at 'per-player key and index exist'. w10-milestones-flag has 2 phases with a physical restart through hooks/milestones-rejoin.mjs, so on 537cbaf it fails at tf. refill-pages counts the pages stash_bp loads through hooks/stash-loads.mjs, so its miss case fails on f7a824e^. saga-quest-wrap and tools/saga-quest-box.test.mjs check every box against a client font model (tools/lib/client-font.mjs) with at most 10 rows.",
+    "commits": [
+     "f979bc2",
+     "d7a4e28",
+     "1a4d788",
+     "30348a7"
+    ],
+    "proof": "node --test tools/saga-quest-box.test.mjs passes 14/14. tools/client-font.test.mjs passes 3/3. The native before and after runs are in bdsPending, and are still owed."
+   },
+   {
+    "id": "F35",
+    "status": "done-needs-bds",
+    "summary": "Added elite-density.js (O3 per-player and nearby caps; it fails on 4b79281^ at '1 champion'), elite-invalid.js (O58, run with --strict) and elite-crowd-perf.js (the O3 perf workload). After review, elite-invalid stress 1 is split. In 1a, the scenario removes 10 spawns in the same tick, which reaches the spawn handler's guard. In 1b, the new harness probe hooks/elite-remove.mjs removes 20 spawns inside elite_bp's own entitySpawn flush. The probe subscribes on the first tick, so it runs after the pack's handler has scheduled convert() and before the runTimeout(1) fires. This reaches the delayed conversion, and the scenario checks that the probe removed all 20 while they were still valid. Stress 2 now waits up to 5 ticks for each requested champion and checks that at least 8 of 10 were removed on arrival. The scenario now runs from a header recipe (--packs). The build_bp gate scenario (F7) belongs to the build_bp workstream.",
+    "commits": [
+     "4e1131a",
+     "a5fe139",
+     "14f8b09",
+     "5d53f1a"
+    ],
+    "proof": "node --check passes. probe-hooks.test.mjs passes 6/6, including 2 new elite-remove tests: the probe comes right after diag.js and subscribes on the first tick, the pack is otherwise unchanged, the pack still converts a tick after the spawn, and it works on an old source tree. suite.mjs --list stages the header recipe. The native runs, the convert-guard mutation run and the perf before/after are in bdsPending, and are still owed."
+   },
+   {
+    "id": "F44",
+    "status": "partial",
+    "summary": "The formal re-run of build-beds, welcome-generic-bundle and diag-owned-reload with --retry is still owed. Their wiring was already fixed at 8aa5cf06 (2f2e7743, 2e381e3b, 024af820), so no code change was needed. The machine stayed in code-only mode (TIMING_SOAK_RUNNING), so the run could not be done. Do not count F44 as closed until the bdsPending suite run is recorded.",
+    "commits": [],
+    "proof": "Not run. The command is in bdsPending."
+   },
+   {
+    "id": "F53",
+    "status": "done-needs-bds",
+    "summary": "Root-caused both remaining flakes from the code. cleanup-keep: the kept item lay 2 blocks away, inside pickup reach, and got a random push. It now lies 3 blocks away, its velocity is cleared and its distance is asserted. guilds-placed-restart: flat-world animals stood on the target cells. Mob spawning is now off, the row is cleared before each retry and what was in the way is logged. Wander was fixed by F69 (9f5b835) and calendar by fixture fixes. No assertion was weakened.",
+    "commits": [
+     "a68ba42",
+     "4143f89"
+    ],
+    "proof": "The causes are inferred from code. The repeat-runs proof is in bdsPending, and is still owed."
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "F14 owed migrations in relics, fishing, bounty, guilds and town (owed-legacy-consumers.js)",
+    "before": "S=/home/user/ta-pre-w4 && rm -rf $S && mkdir -p $S/src && git -C /home/user/mc-packs archive 7eb5f72 packs | tar -x -C $S/src && cd /home/user/wt/tests-acceptance && node tools/test-bds/hooks/owed-probe.mjs $S/packs relics_bp,fishing_bp,bounty_bp,guilds_bp,town_bp $S/src && node tools/test-bds/run.mjs --quiet --timeout 1200 --packs $S/packs --only relics_bp,fishing_bp,bounty_bp,guilds_bp,town_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/owed-legacy-consumers.js   # expect FAIL at 'relics_bp: per-player key and index exist'",
+    "after": "cd /home/user/wt/tests-acceptance && rm -rf /home/user/ta-oc && node tools/test-bds/hooks/owed-probe.mjs /home/user/ta-oc/packs relics_bp,fishing_bp,bounty_bp,guilds_bp,town_bp && node tools/test-bds/run.mjs --quiet --timeout 1200 --packs /home/user/ta-oc/packs --only relics_bp,fishing_bp,bounty_bp,guilds_bp,town_bp --scenario tools/test-bds/examples/owed-legacy-consumers.js   # expect PASS (3 phases)"
+   },
+   {
+    "purpose": "F34 owed-legacy-restart fails at the migration check, not at a missing hook",
+    "before": "S=/home/user/ta-pre-w4c && rm -rf $S && mkdir -p $S/src && git -C /home/user/mc-packs archive 7eb5f72 packs | tar -x -C $S/src && cd /home/user/wt/tests-acceptance && node tools/test-bds/hooks/owed-probe.mjs $S/packs cooking_bp $S/src && node tools/test-bds/run.mjs --quiet --timeout 900 --packs $S/packs --only cooking_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/owed-legacy-restart.js   # expect FAIL 'per-player key and index exist'",
+    "after": "cd /home/user/wt/tests-acceptance && rm -rf /home/user/ta-ocook && node tools/test-bds/hooks/owed-probe.mjs /home/user/ta-ocook/packs cooking_bp && node tools/test-bds/run.mjs --quiet --timeout 900 --packs /home/user/ta-ocook/packs --only cooking_bp --scenario tools/test-bds/examples/owed-legacy-restart.js   # expect PASS (one expected caught grant-failure warning, non-strict as before)"
+   },
+   {
+    "purpose": "F34 w10-milestones-flag across a real restart",
+    "before": "S=/home/user/ta-pre-o53 && rm -rf $S && mkdir -p $S/src && git -C /home/user/mc-packs archive 537cbaf packs/milestones_bp | tar -x -C $S/src && cd /home/user/wt/tests-acceptance && node tools/test-bds/hooks/milestones-rejoin.mjs $S/packs $S/src && node tools/test-bds/run.mjs --quiet --packs $S/packs --only milestones_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/w10-milestones-flag.js --timeout 600   # expect FAIL 'the owning pack saved tf on Ann's record'",
+    "after": "cd /home/user/wt/tests-acceptance && rm -rf /home/user/ta-ms && node tools/test-bds/hooks/milestones-rejoin.mjs /home/user/ta-ms/packs && node tools/test-bds/run.mjs --quiet --packs /home/user/ta-ms/packs --only milestones_bp --scenario tools/test-bds/examples/w10-milestones-flag.js --timeout 600   # expect PASS (2 phases, no title resent)"
+   },
+   {
+    "purpose": "F34 refill-pages: the page index answers a miss without loading pages",
+    "before": "S=/home/user/ta-pre-index && rm -rf $S && mkdir -p $S/src && git -C /home/user/mc-packs archive f7a824e^ packs/stash_bp packs/refill_bp | tar -x -C $S/src && cd /home/user/wt/tests-acceptance && node tools/test-bds/hooks/stash-loads.mjs $S/packs $S/src && node tools/test-bds/run.mjs --quiet --flat --packs $S/packs --only refill_bp,stash_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/refill-pages.js --timeout 600   # expect FAIL in case 6 (the miss loads page 1)",
+    "after": "cd /home/user/wt/tests-acceptance && rm -rf /home/user/ta-rp && node tools/test-bds/hooks/stash-loads.mjs /home/user/ta-rp/packs && node tools/test-bds/run.mjs --quiet --flat --packs /home/user/ta-rp/packs --only refill_bp,stash_bp --scenario tools/test-bds/examples/refill-pages.js --timeout 600   # expect PASS"
+   },
+   {
+    "purpose": "F34 saga-quest-wrap: the client font model check",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --flat --only saga_bp,party_bp --scenario tools/test-bds/examples/saga-quest-wrap.js --timeout 600   # expect PASS (offline: node --test tools/saga-quest-box.test.mjs already passes 14/14)"
+   },
+   {
+    "purpose": "F14 O27 claims-animals",
+    "before": "S=/home/user/ta-pre-o27 && rm -rf $S && mkdir -p $S && git -C /home/user/mc-packs archive 4dc2433^ packs/claims_bp | tar -x -C $S && cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --packs $S/packs --only claims_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/claims-animals.js --timeout 900   # expect FAIL at the first in-claim feeding check",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/suite.mjs --filter '^claims-animals$' --retry   # expect PASS"
+   },
+   {
+    "purpose": "F14 O29 mail-moderation",
+    "before": "S=/home/user/ta-pre-o29m && rm -rf $S && mkdir -p $S && git -C /home/user/mc-packs archive 7035c69^ packs/mail_bp | tar -x -C $S && cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --packs $S/packs --only mail_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/mail-moderation.js --timeout 600   # expect FAIL at the per-sender unread cap",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --only mail_bp --scenario tools/test-bds/examples/mail-moderation.js --timeout 600   # expect PASS"
+   },
+   {
+    "purpose": "F14 O29 party-moderation",
+    "before": "S=/home/user/ta-pre-o29p && rm -rf $S && mkdir -p $S/src && git -C /home/user/mc-packs archive 8fe54f0^ packs/party_bp | tar -x -C $S/src && cd /home/user/wt/tests-acceptance && node tools/test-bds/hooks/owed-probe.mjs $S/packs party_bp $S/src && node tools/test-bds/run.mjs --quiet --packs $S/packs --only party_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/party-moderation.js --timeout 3000   # expect FAIL at the leader's mute",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/suite.mjs --filter '^party-moderation$' --retry   # expect PASS (header recipe with owed-probe)"
+   },
+   {
+    "purpose": "F14 O30 crowns-limit (the bonus wait from review is fixed in 625afeb)",
+    "before": "S=/home/user/ta-pre-o30 && rm -rf $S && mkdir -p $S/src && git -C /home/user/mc-packs archive a5c90b4^ packs/crowns_bp | tar -x -C $S/src && cd /home/user/wt/tests-acceptance && node tools/test-bds/hooks/owed-probe.mjs $S/packs crowns_bp $S/src && node tools/test-bds/run.mjs --quiet --packs $S/packs --only crowns_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/crowns-limit.js --timeout 600   # expect FAIL 'the next 1 is refused'",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/suite.mjs --filter '^crowns-limit$' --retry   # expect PASS, and the log shows both bonus messages before 'balances:'"
+   },
+   {
+    "purpose": "F14 O31 nick-reserved",
+    "before": "S=/home/user/ta-pre-o31 && rm -rf $S && mkdir -p $S && git -C /home/user/mc-packs archive fba71bc^ packs/nick_bp | tar -x -C $S && cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --packs $S/packs --only nick_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/nick-reserved.js --timeout 300   # expect FAIL at the first reserved word",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --only nick_bp --scenario tools/test-bds/examples/nick-reserved.js --timeout 300   # expect PASS"
+   },
+   {
+    "purpose": "F35 O3 elite-density",
+    "before": "S=/home/user/ta-pre-o3 && rm -rf $S && mkdir -p $S && git -C /home/user/mc-packs archive 4b79281^ packs/elite_bp | tar -x -C $S && cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --flat --packs $S/packs --only elite_bp --scenario /home/user/wt/tests-acceptance/tools/test-bds/examples/elite-density.js --timeout 600   # expect FAIL at '1 champion'",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --flat --only elite_bp --scenario tools/test-bds/examples/elite-density.js --timeout 600   # expect PASS"
+   },
+   {
+    "purpose": "F35 O58 elite-invalid: stress 1b reaches convert() (proved with a copy that has convert's isValid guard removed), and stress 1a reaches the old unguarded spawn handler",
+    "before": "S=/home/user/ta-ei-mut && rm -rf $S && mkdir -p $S/src/packs && cp -r /home/user/wt/tests-acceptance/packs/elite_bp $S/src/packs/ && sed -i 's/if (!e.isValid || e.hasTag(CHAMP) || e.hasTag(SPLIT)) return;/if (e.hasTag(CHAMP) || e.hasTag(SPLIT)) return;/' $S/src/packs/elite_bp/scripts/main.js && cd /home/user/wt/tests-acceptance && node tools/test-bds/hooks/elite-remove.mjs $S/packs $S/src && node tools/test-bds/run.mjs --quiet --strict --flat --packs $S/packs --only elite_bp --scenario tools/test-bds/examples/elite-invalid.js --timeout 900   # expect FAIL on an [elite] InvalidEntityError warning during stress 1b. ALSO: S2=/home/user/ta-ei-old && rm -rf $S2 && mkdir -p $S2/src && git -C /home/user/mc-packs archive 6f85410^ packs/elite_bp | tar -x -C $S2/src && node tools/test-bds/hooks/elite-remove.mjs $S2/packs $S2/src && node tools/test-bds/run.mjs --quiet --strict --flat --packs $S2/packs --only elite_bp --scenario tools/test-bds/examples/elite-invalid.js --timeout 900   # expect FAIL on the warning from stress 1a",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/suite.mjs --filter '^elite-invalid$' --retry   # expect PASS: 'probe removed every spawn ... (20 of 20)' and 'removed right after they arrived' with at least 8"
+   },
+   {
+    "purpose": "F35 O3 elite-crowd-perf before/after profile (ms/tick for elite_bp)",
+    "before": "S=/home/user/ta-pre-o3p && rm -rf $S && mkdir -p $S && git -C /home/user/mc-packs archive 4b79281^ packs/elite_bp | tar -x -C $S && cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --no-relay --flat --profile --profile-json /home/user/ta-elite-before.json --packs $S/packs --only elite_bp --scenario tools/test-bds/examples/elite-crowd-perf.js --arg players=10 --arg champions=40 --arg seconds=120 --timeout 900",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/run.mjs --quiet --no-relay --flat --profile --profile-json /home/user/ta-elite-after.json --only elite_bp --scenario tools/test-bds/examples/elite-crowd-perf.js --arg players=10 --arg champions=40 --arg seconds=120 --timeout 900"
+   },
+   {
+    "purpose": "F44 formal re-run of the three rewired scenarios",
+    "after": "cd /home/user/wt/tests-acceptance && node tools/test-bds/suite.mjs --filter 'build-beds|welcome-generic-bundle|diag-owned-reload' --retry   # expect 3 PASS; record the result before closing F44"
+   },
+   {
+    "purpose": "F53 flake fixes hold over repeated runs",
+    "before": "cd /home/user/wt/base && for i in 1 2 3 4 5; do node tools/test-bds/run.mjs --quiet --only cleanup_bp --scenario tools/test-bds/examples/cleanup-keep.js --timeout 600; node tools/test-bds/run.mjs --quiet --flat --only guilds_bp --scenario tools/test-bds/examples/guilds-placed-restart.js --timeout 600; done   # expect an occasional FAIL",
+    "after": "cd /home/user/wt/tests-acceptance && for i in 1 2 3 4 5; do node tools/test-bds/run.mjs --quiet --only cleanup_bp --scenario tools/test-bds/examples/cleanup-keep.js --timeout 600; node tools/test-bds/run.mjs --quiet --flat --only guilds_bp --scenario tools/test-bds/examples/guilds-placed-restart.js --timeout 600; done   # expect 10/10 PASS"
+   },
+   {
+    "purpose": "Whole-branch gate once the machine is free",
+    "after": "cd /home/user/wt/tests-acceptance && npm run check 2>&1 | tail -30"
+   }
+  ],
+  "decisions": [
+   "Review finding 1 (elite-invalid stress 1 never reaches convert): real, fixed in 14f8b09. The mob is removed by a harness probe inside elite_bp (hooks/elite-remove.mjs), not from a scenario entitySpawn listener as the reviewer suggested. The order in which separate script contexts get an after-event is not defined, so a scenario listener could run before the pack's handler and again test only the handler guard. Inside one context, a subscription made on the first tick runs after main.js's own handler. The scenario checks that all 20 were removed while still valid.",
+   "Also on finding 1: convert()'s isValid guard predates 6f85410 (6f85410 added the spawn-handler and upkeep guards). So stress 1b's fail-before proof is a copy with convert's guard taken out, and the 6f85410^ run proves stress 1a (the handler guard), which is kept. Both are in bdsPending.",
+   "Review finding 2 (stress 2 unchecked): real, fixed in 5d53f1a. It counts removals and checks at least 8 of 10, as the reviewer proposed. It also waits up to 5 ticks for each champion, so a late script event still counts as a removal on arrival.",
+   "Review finding 3 (crowns-limit bonus wait): real, fixed in 625afeb. It waits for the '(Daily login bonus' message on both Payer and Payee, using since = the tick before they joined and timeout 300 (dailyBonus defaults to 5 and JOIN_DELAY is 200), and the comment is corrected.",
+   "Review finding 4 (F44 and the native proofs not run): real but cannot be done now. /home/user/TIMING_SOAK_RUNNING was still there, so the session stayed code-only. F44 stays partial, F14/F34/F35/F53 stay done-needs-bds, and every recipe is in bdsPending, including the F44 suite filter with --retry."
+  ],
+  "generatorsNeeded": [
+   "none: only test scenarios, harness hooks and tools/test-bds/README.md changed; no pack, PACKS.md or command changed"
+  ],
+  "newsLines": [],
+  "packsBumped": [],
+  "risks": [
+   "None of the new or rewritten scenarios has run on BDS: string matches, form flows and timings are unverified until the bdsPending runs.",
+   "elite-invalid now runs from a header recipe (--packs copy of elite_bp with the probe). The suite stages it (suite.mjs --list confirmed), but a run with plain --only elite_bp no longer applies.",
+   "elite-invalid stress 1 spawns zombies within about 40 blocks of the player, assuming those chunks are loaded around the simulated player. spawnEntity throws in an unloaded chunk, which would fail the run loudly, not silently."
+  ],
+  "sharedLayers": [
+   "tools/test-bds/hooks/elite-remove.mjs (new harness-only probe)",
+   "tools/test-bds/probe-hooks.test.mjs (2 new tests)",
+   "tools/test-bds/README.md (probe hooks list)"
+  ]
+ }
+]

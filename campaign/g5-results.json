@@ -1,0 +1,885 @@
+{
+ "design": {
+  "steps": [
+   {
+    "title": "Step 1: A mayor per town (F36)",
+    "plan": "Worktree /home/user/wt/g5-towns, branch ws/g5-towns. The design note is /home/user/wt/g5-towns/docs/audits/2026-10-deep-audit/LIVING_TOWNS.md, committed as 0d98cea (sections 2, 3 and 13.1). (a) Move design(), localBox and footprint math out of town_bp/scripts/main.js into a new pure module, town_bp/scripts/designs.js. Behavior must not change; tools/town-designs.test.mjs proves the 7 existing footprints are the same, so old snapshots and saved b boxes still match. (b) Town schema v2: add v, m (mayor npc id, either \"bram\" or \"mayor:<id>\") and mn (mayor name). Old records still read. (c) npc_bp: add the realm:npc_mayor {op:set|rename|remove} protocol, answered with realm:npc_mayor_ack, and the full id list realm:npc_mayors {part,parts,ids}. Store mayors in npc:mayors (at most 64). Add folkOf(id) built from CONFIG.mayorTemplate. load() and audit keep a mayor:* record only when npc:mayors lists it, and npc_bp drops unlisted mayors only after it has received a complete list. Mayor skins are saved as structure realm_npc:m_<town>. Mayors get the mayor role only, with no affinity, gifts or letters. (d) town_bp: addTown creates the mayor (a name from CONFIG.mayorNames) at the town center. The 100-tick interval sends set again when a player is near and the mayor is missing from realm:npc_places (at most once per town per 30 s). Offer routing: npc === t.m offers that town wherever the player stands; any mayor also offers the town the player stands in if that town has no mayor placed (fallback); other config mayor-role NPCs keep the nearest-town rule. Operators get a Mayor submenu in /realm:town: move here, and rename. Bram can only be moved, through realm:npc_summon, and is never renamed. Removing a town removes its mayor:* NPC. (e) Migration: after load + 100 ticks, ping realm:npc_places. Bram's town is the town nearest his post within townRadius; if there is none, or Bram is not placed, it is the oldest town. With no answer (Townsfolk not installed), nothing is written. Every other town gets mayor:<id> the next time a player comes near. Spots and progress stay untouched.",
+    "items": "Unit tests: tools/town-mayors.test.mjs, tools/npc-mayors.test.mjs. BDS scenarios: town-mayor-add.js, town-two-towns.js, town-bram-migrate.js; rerun town-news.js and the npc-* scenarios. Docs in the same commits: PACKS.md Town Projects (mayors, saved data, options townMayors) and Townsfolk (town mayors, the realm:npc_mayor protocol), README rows. Bump town_bp and npc_bp, then node tools/sync-diag.mjs. Options: townMayors (Enabled). For the lead: help-catalog, admin-catalog (no new commands), gen-news. Decisions D3, D6, D7. Machine rule: TIMING_SOAK_RUNNING was present, so this step was CODE-ONLY; BDS commands go in bdsPending."
+   },
+   {
+    "title": "Step 2: Automatic project spots and the terrain rule (F37)",
+    "plan": "(a) Pure module town_bp/scripts/sites.js: the natural allow list (grass_block, dirt, coarse_dirt, podzol, mycelium, dirt_with_roots, mud, sand, red_sand, gravel, clay, stone, granite, diorite, andesite, deepslate, tuff, calcite, sandstone, red_sandstone, snow, snow_layer). Any block not on the list counts as man-made: planks, glass, cobblestone, terracotta, farmland, grass_path, crops, saplings, the lodestone, and anything a future update adds. Leaves count as natural only with persistent_bit false. A column with a log is a tree and is never cut. A solid block above an air gap rejects the spot (catches roofs and huts). The module also has the column model (N/W/T/M/L/U), the grading plan and the scoring. Grading: pad = median of the footprint's ground, then pad-1 and pad+1. Apron at distance d (1 or 2): t = pad + clamp(g - pad, -d, d). Cut or fill at most levelDepth (3). Steps between neighboring columns at most 1, the outside ring counted at its natural height. A cut column must not be next to water or lava, and the 2 blocks under each new top must be natural and solid. Filling uses dirt with the surrounding top block on top. Score in order: least leveling (in buckets of 6), already level, height variety (fewer picked pads within 1), distance (the well's counts 4 times). Docks go on the shoreline nearest the center, with 3x10 water. Every build faces the center. (b) Scan job: one town at a time, only while a player is within townRadius, a column cache, 12 column reads per tick, rings every 3 blocks, stop after 6 valid candidates once the next ring is 16 blocks past the best, then validate the best 3. Pending work is saved as t.scan. (c) Exclusions: one realm:claims_check for the whole town box (if it returns 10, check each finalist), realm:npc_places posts (6 blocks), the mayor (4), realm:place_ready story places (16, after realm:place_ping), other spots' regions (footprint + 2 must not overlap). Safe zones are not an exclusion (D4). (d) Placed-block cells: world.afterEvents.playerPlaceBlock marks 4x4x4 cells for natural kinds inside a town, stored in town:pl:<town>:0..1, at most 5,000 cells (when full: plf, and that town never levels). Also accept realm:blocks_placed {dim, box}. (e) Building at an automatic spot (Spot a:1, plan lv): show the outline to players within 32 for outlineSeconds, then validate block by block (and recheck claims; wait while a player stands on the spot; one rescan on failure). Save the snapshot over the whole region and its depth plus bs:1 before the first block. The build job does 48 block changes per tick and pauses on unloaded chunks. A build interrupted by a restart resumes from bs, and applying it twice changes nothing. Remove spot restores the terrain. (f) Menu: projects with no valid spot are listed in t.nos ('No good spot was found ... an operator can set one'), operators get a 'Find spots again' button, and spots operators set are kept and never leveled (D5). Existing towns get automatic spots for open and finished projects that have no spot.",
+    "items": "Unit test: tools/town-sites.test.mjs (allow-list ids against vanilla-data, persistent leaves, overhangs, the plan's rules, scoring order, a synthetic hillside giving more than one pad height, every rejection, dock, facing, unknown columns waiting); tools/town-placed.test.mjs. BDS scenarios: town-auto-spots.js (a planks cabin and a path are avoided), town-hillside.js (more than one pad height, apron steps of at most 1, nothing outside the regions changed), town-terrain-restore.js, town-build-resume.js (/reload mid-build), town-claims-spots.js (with claims_bp), town-unloaded.js, town-placed-marks.js. Options: autoSpots (Enabled), levelDepth (3), outlineSeconds (5). Docs: PACKS.md How to use (operators no longer need to set spots), saved data, cost. Bump town_bp and run sync-diag. For the lead: admin_bp presets 'Town Project Spots' checklist text plus an admin_bp bump; ask the build_bp owner to emit realm:blocks_placed after its fills. Decisions D1, D4, D5, D10."
+   },
+   {
+    "title": "Step 3: Growth stages and houses (F38, F40 houses)",
+    "plan": "(a) Add a why line to each config project. Keep the town log t.log, at most 12 entries of 60 chars, dated with the Realm day from realm:calendar. The mayor's page and Town info show the story so far, the open projects with their why, and what the next level brings. Levels, needs, rewards, realm:quest_done and realm:rep_add stay as they are. (b) Town works, separate from CONFIG.projects (D8): ALL = PROJECTS + WORKS is used for spot, build, remove and delete loops; leveling, deliveries and rewards stay on PROJECTS. Works use the existing progress record with done:1. (c) New build kind house in designs.js: a 7x7 cottage with a door facing the spot, glass panes, a slab roof, a lantern, a two-block bed with the right states, and one job-site block from CONFIG.houseJobs (composter, lectern, barrel, smoker, cartography_table, brewing_stand, fletching_table, loom, stonecutter_block, grindstone; ids checked). From level 2 the town builds works house_1..house_N, N being the level's resident count, at automatic spots through the step-2 scan and build job, with no deliveries. Removing the town or a spot cleans them up like projects. Keep the town record under PROP_LIMIT (it now holds up to 18 spots and their plans).",
+    "items": "Unit test: tools/town-designs.test.mjs (the house: bed and job site inside the footprint; existing footprints unchanged). BDS scenarios: town-houses.js (level 2 builds houses at automatic spots, each with a bed and a job site), and a mayor-page check in town-two-towns.js. Option: houses (Enabled). Docs: PACKS.md Town Projects (growth, houses, saved data). Bump town_bp and run sync-diag. For the lead: gen-news entry lines."
+   },
+   {
+    "title": "Step 4: Residents move in (F39)",
+    "plan": "(a) Gate D2 first, on BDS 1.26. Copy the vanilla villager_v2 behavior file (from the BDS 1.26 vanilla pack / Mojang's bedrock-samples) into town_bp/entities/villager_v2.json. Add one component group, realm:town_resident: minecraft:dweller with can_find_poi:false and can_migrate:false, plus minecraft:home with a restriction radius. Add one event, realm:become_resident. Base components stay unchanged so existing villagers are unaffected. Prove on BDS that a resident never claims a player's bed or job site and stays near home. If that cannot be proven, ship residents Disabled by default and report it. (b) Add town_bp to tools/sync-spawn.mjs (scripts/spawn.js). Spawn with spawnFresh(dim, 'minecraft:villager_v2', home, {spawnEvent:'minecraft:spawn_from_village', fresh:true}), then add the tags realm:resident, town:r:<town> and town:rid:<town>.<n>, a name from CONFIG.residentNames, the realm:become_resident event and the profession look event matching the house's job site. Save town:r:<town> {n, r:[{i,n,h,e,p,d}], new}. (c) Counts: residentsPerLevel [2,4,6,8,10]; level 1's two only once the well is built. Caps: residentCapTown 10 (config, hard limit) and residentCapWorld 20 (setting, 0-40). When over the world cap, serve the highest level first, then the oldest town. Lowering a cap never removes anyone. (d) Event driven: entityDie (entityTypes villager_v2) sets d = world.getAbsoluteTime() + replaceMinutes*1200. A census every 600 ticks, only for a town with a player in it, is one getEntities by tag: a resident missing twice while its home is loaded counts as gone; one past townRadius is teleported home; a duplicate rid loses its tags and is never killed. A due replacement spawns at its loaded home with 'A new family moved into <town>'. When a resident's home changes, it moves by respawning under the same name while nobody is within 24 blocks. (e) residentsTrade is Disabled by default: a beforeEvents.playerInteractWithEntity handler, whose first line is if (ev.cancel) return;, cancels taps on realm:resident.",
+    "items": "Unit test: tools/town-residents.test.mjs (slots, cap priority, due ticks, census reconcile). BDS scenarios: town-residents.js (the well brings 2; a killed one is replaced after a short replaceMinutes, with the message), town-resident-poi.js (a player's bed stays unclaimed through a night; this is the D2 gate), and town-houses.js extended so residents end up in their houses. Options: residents (Enabled, subject to D2), residentCapWorld (20), residentsTrade (Disabled), replaceMinutes (20). Docs: PACKS.md (residents, tags, cost), SERVER_SETUP.md (resident cap and mob count; the villager_v2 override conflicts with any other add-on that defines villager_v2), and How the packs work together (the realm:resident tag). For the lead: add villager_v2 to CLAUDE.md's vanilla entity overrides list. Bump town_bp and run sync-diag."
+   },
+   {
+    "title": "Step 5: Small life, docs and performance (F40 touches, F41)",
+    "plan": "(a) Paths (townLife): when something is built at an automatic spot, turn grass_block at ground level into a 1-wide grass_path from its front toward the center, with steps of at most 1, stopping at anything else, at most 48 blocks. Save them in town:w:<town> so Remove spot turns them back to grass. (b) At each new level, put lantern posts (a fence with a lantern) on natural ground beside the town's own paths, every 8 blocks, at most 12 per town. (c) Garden pen: a pen work (a 5x5 fence ring with a gate) next to the garden, 2 sheep and 2 chickens spawned once with spawnFresh and tagged town:a:<town>; they are not replaced. (d) Notice board: sign 2 shows projects done and the resident count, sign 3 the newest residents. (e) Mayor gossip: town_bp sends realm:gossip {kind:'town_life', place, from:'mayor:<id>'} for a new family, a house or a level, rate-limited by the existing one piece per in-game hour. npc_bp adds GOSSIP.town_life templates and honors from, so only that townsfolk (or Bram for his town) tells it. (f) Docs: PACKS.md Town Projects (How to use without the operator spot step, mayors, residents, houses, options, saved data, cost), Townsfolk (town mayors, gossip from), How the packs work together, the welcome feature list (welcome_bp config), SERVER_SETUP.md. (g) Perf: tools/test-bds/examples/town-capital-perf.js, 2 towns at Capital and 10 players with residents and no scan running. Targets: town_bp at most 0.15 ms/tick, npc_bp no more than 0.05 above baseline; report the scan and build transients separately. Then run the full suite.mjs --filter 'town|npc' --retry and the one-context bundle smoke.",
+    "items": "BDS scenarios: town-life.js (pen with 4 animals, the board lists residents, mayor gossip with from), town-capital-perf.js; the suite filter town|npc; bundle-smoke.js with --bundle. Unit test: an npc_bp gossip test for 'from'. Option: townLife (Enabled). Bump town_bp and npc_bp (and welcome_bp if its feature list changes), then run sync-diag. For the lead, after merging: node tools/help-catalog.mjs, node tools/admin-catalog.mjs plus an admin_bp bump (presets checklist text), node tools/gen-news.mjs. Suggested newsLines: 'Every town now has its own mayor.'; 'Towns pick their own building spots and follow the land; nothing players built is touched.'; 'Families move into growing towns, with houses from Village up.'; 'Lanterns, paths and a garden pen bring towns to life.'"
+   }
+  ]
+ },
+ "built": [
+  {
+   "items": [
+    {
+     "id": "F36-step1-designs",
+     "status": "done",
+     "summary": "I moved design(), localBox, FORWARD, toWorld, isOptional and the built-in footprint math out of town_bp/scripts/main.js into a new pure module, packs/town_bp/scripts/designs.js. Behavior is unchanged. tools/town-designs.test.mjs pins the block count, local box and a sha256 of each of the 7 designs, using values read from the int23 main.js before the move. It also checks the world footprints for all 4 facings.",
+     "commits": [
+      "0491828"
+     ],
+     "proof": "node --test tools/town-designs.test.mjs: 3/3 pass. The extracted design() output was byte-identical before and after the move (sha256 compared)."
+    },
+    {
+     "id": "F36-step1-npc",
+     "status": "done (code-only, BDS pending)",
+     "summary": "npc_bp now answers realm:npc_mayor {op:set|rename|remove} with realm:npc_mayor_ack {id,op,ok,error?}. It also reads the full list realm:npc_mayors {part,parts,ids} and drops mayor:* records that are not listed, but only after a complete list arrives (no list arrives when town_bp is not installed). The new pure module packs/npc_bp/scripts/mayors.js holds the id check, the skin key, normalizeMayors (at most 64), parseMayorRequest, folkFor (built from CONFIG.mayorTemplate, roles ['mayor'] only), keepPlaced and the list assembler. In main.js: folkOf(id) replaces folk.get for placed townsfolk (labels, audit, loop, places, Who lives here, list, remove). npc:mayors is the new store, loaded before npc:list. load() keeps a mayor:* post only while it is listed, and keeps every one while npc:mayors cannot be read. The audit leaves mayor entities alone while npc:mayors is corrupt. Skins are realm_npc:m_<town>. Affinity, gifts, keepsakes, talk points, Ask about and hearts are for the cast only. /realm:npc_houses moves only the cast. /realm:npc_remove on a mayor also drops it from npc:mayors. A set puts the mayor on the nearest standable spot within 3 blocks, lifted onto a slab or path if needed. npc_bp is bumped to 1.8.0 and sync-diag was run. PACKS.md Townsfolk got town mayors, the mayorTemplate option, npc:mayors and the realm_npc:m_<town> structure in saved data, and the protocol under How it works; the README row is updated too. tools/name-labels.test.mjs got the folkOf lookup in a follow-up commit.",
+     "commits": [
+      "2bf082d",
+      "93f0699"
+     ],
+     "proof": "node --test passes for tools/npc-mayors.test.mjs (8/8; it runs main.js's real load()/upgrade() in vm), tools/name-labels.test.mjs (13/13), npc-cancel, npc-post-tether, tap-cancel-guards, invalid-entity-guards, spawn-fresh and events-shared. Without the main.js and config changes, npc-mayors fails 4 of 8."
+    },
+    {
+     "id": "F36-step1-town",
+     "status": "done (code-only, BDS pending)",
+     "summary": "Town schema v2 adds v, m and mn. readMayor reads v1 records unchanged and drops an invalid m. addTown with townMayors on gives Mayor Bram to the realm's first town. Any other town gets mayor:<id> named 'Mayor <name>' from CONFIG.mayorNames (20 names that no cast member, wanderer, elite or story character uses; when all are taken, 'Mayor <Town>'). The new mayor is set at the town center, facing the way the operator faces. Offers go through the pure offerTowns: a town's own mayor offers its town wherever the player stands. Any mayor-role NPC also offers the town the player is in when that town's own mayor is not placed (own town first, at most 2 buttons). A mayor-role NPC an operator added in config.js keeps the old nearest-town rule, and so does everyone when townMayors is off. The 100-tick interval asks again for a mayor missing from realm:npc_places when a player is in its town, at most once per town per 30 s. Operators get a Mayor submenu in /realm:town: Move here and Rename (24 ASCII characters) for a town mayor, and only Move Bram here (through realm:npc_summon) for Bram. Removing a town sends a remove for its mayor:*; Bram is never removed. At load+100, town_bp sends realm:npc_places_ping and the realm:npc_mayors list in parts, but only when the towns could be read. Refused requests are told to the operator who asked. Test hook: dump now includes the placed ids, plus new mayor_move, mayor_rename and remove_town actions. The townMayors option (Enabled) is added in config.js and settings.js. town_bp is bumped to 1.3.0 and sync-diag was run. PACKS.md Town Projects (intro, How to use, Mayors, menu, Commands, Configuration, saved data, How it works) and the README row are updated.",
+     "commits": [
+      "51bd025",
+      "dad2119"
+     ],
+     "proof": "node --test tools/town-mayors.test.mjs: 10/10 pass. It covers names, readMayor, newTownMayor, every offerTowns routing case, parts under 2048, the places assembler, bramTown and planMigration. It also runs main.js's real mayorMigrate() in vm and checks source wiring."
+    },
+    {
+     "id": "F36-step1-migration",
+     "status": "done (code-only, BDS pending)",
+     "summary": "Towns saved before mayors (no v) migrate on the 100-tick interval as soon as a complete realm:npc_places answer is in. Bram keeps the town in his dimension nearest his post within townRadius; if there is none, or Bram is not placed, he keeps the oldest town. Every other town gets mayor:<id> with a name, and its NPC is made the next time a player comes near. Only v, m and mn are written. Spots, progress, owed rewards, snapshots and protection stay untouched. Nothing is written with no answer, with townMayors Disabled, or while the scenario-only 'v1' hold is set. The 'v1' test hook makes every town look like a v1 record and removes town mayors until the next load. The design note's migration text is fixed and decisions D12-D19 are added.",
+     "commits": [
+      "dd54767"
+     ],
+     "proof": "The town-mayors.test.mjs migration test runs the real mayorMigrate. Bram near the younger town keeps it; with Bram unplaced the oldest town is his; no answer, Disabled or held writes nothing; a second run writes nothing; the records are deep-equal apart from v, m and mn."
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "Adding a town creates mayor:<id> at its center with the mayor role only. A tap offers only its own town, and from inside Elm (Bram not placed) its own town then Elm. Rename reaches the NPC. It stays one of a kind and is removed with its town.",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-mayor-add.js --timeout 600"
+    },
+    {
+     "purpose": "Two towns: Bram placed in Riverside (the first town) and Oakfield's own mayor. Each offers only its own town from inside either town and opens that town's menu. Progress stays per town.",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-two-towns.js --timeout 600"
+    },
+    {
+     "purpose": "An existing v1 world (via the 'v1' test hook) with Bram placed in the younger town, then a restart. Bram keeps Oakfield and Riverside gets mayor:riverside when Ann is near it. Spots, progress, level and protection are unchanged. Tapped Bram offers only Oakfield.",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-bram-migrate.js --timeout 900"
+    },
+    {
+     "purpose": "Regression: town news and letters (Bram's offer path is unchanged when no mayor:* exists).",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-news.js --timeout 300"
+    },
+    {
+     "purpose": "Regression: every Townsfolk and town scenario (folkOf, skins, audit, load).",
+     "after": "node tools/test-bds/suite.mjs --filter 'town|npc' --retry"
+    },
+    {
+     "purpose": "One-context bundle (shared store, onScriptEvent ordering of realm:npc_mayor and realm:npc_places)",
+     "after": "npm run bundle -- --all && node tools/test-bds/run.mjs --quiet --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/bundle-smoke.js"
+    },
+    {
+     "purpose": "Static checks that were not run because of the TIMING_SOAK_RUNNING code-only rule: tsc, check-docs, check-ascii, check-events, check-ids, the full unit suite and check-versions.",
+     "after": "npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+    }
+   ],
+   "decisions": [
+    "D3 applied: new mayors start with the default NPC skin. An operator picks one in the NPC editor (sneak-tap in creative), and npc_bp's snapshot (realm_npc:m_<town>) keeps it.",
+    "D6 applied: Bram is never created, renamed or removed by town_bp. Move Bram here sends realm:npc_summon. When Bram is unplaced or far from every town, the oldest town is his.",
+    "D7 applied: mayors have roles ['mayor'] only. Affinity, gifts, keepsakes, talk points and Ask about are gated on folk.has(id) (the cast), and npc:aff never gets mayor keys.",
+    "D12: migration runs on the build interval as soon as a complete realm:npc_places answer is in, not inside a fixed 40-tick window. With no answer nothing is written. I corrected the design note.",
+    "D13: with townMayors Disabled, no mayors are made, asked for again or migrated. Mayors already standing stay, and every mayor-role NPC uses the int23 nearest-town rule.",
+    "D14: names are 'Mayor <first name>' from 20 mayorNames that do not clash with the cast, wanderers (wander_bp lines.js), elites or story characters (Pell, Tamsin, Jory, Nell and others were avoided). They show as 'Mayor Alda of Riverside' (mayorTemplate.title 'of {town}').",
+    "D15: town_bp does not save a mayor's post, because npc_bp owns posts. A mayor whose record is gone comes back at the town center facing south. A new mayor faces the way the operator faces, as /realm:npc_add does, instead of 'facing the operator'.",
+    "D16: /realm:npc_remove on a mayor also drops it from npc:mayors. With Town Projects it comes back with the default skin when a player is in its town, unless townMayors is Disabled. This is documented, and removing the town is the way to remove a mayor for good.",
+    "D17: a corrupt npc:mayors keeps every mayor: post and entity (the audit leaves them alone) until town_bp sets them again.",
+    "D18: mayors are left out of /realm:npc_houses and /realm:npc_add (the enum stays cast-only). They appear in Who lives here, /realm:npc_list and realm:npc_places, so the Minimap shows them.",
+    "D19: a town added while older towns still wait for migration takes Bram only when there are no towns at all.",
+    "Test-only hooks were added to realm:town_test (server console or operators only): mayor_move, mayor_rename, remove_town, and v1 (strip mayor fields and hold migration until the next load)."
+   ],
+   "generatorsNeeded": [
+    "node tools/help-catalog.mjs (Town Projects and Townsfolk How to use, summaries and the /realm:town and /realm:npc_remove Commands rows changed)",
+    "node tools/admin-catalog.mjs (no new commands or parameters; run it to confirm it is clean; consider an admin_bp/scripts/presets.js label for the new townMayors setting)",
+    "node tools/gen-news.mjs (after adding the NEWS.md entry)"
+   ],
+   "newsLines": [
+    "Every town now has a mayor of its own. Add a town and its mayor (like Mayor Alda of Riverside) is waiting at the town's center, ready to take deliveries for that town's projects.",
+    "Mayor Bram is still the realm's main mayor and keeps his town. Every other town gets its own mayor the next time someone visits it.",
+    "Operators: /realm:town -> Mayor moves the town's mayor to where you stand or renames them."
+   ],
+   "packsBumped": [
+    "town_bp 1.2.10 -> 1.3.0",
+    "npc_bp 1.7.16 -> 1.8.0"
+   ],
+   "risks": [
+    "Code-only step (TIMING_SOAK_RUNNING was present). tsc, npm run check, the full unit suite, the build and all BDS scenarios are still to run (see bdsPending). I checked JSDoc types by reading, and ran node --check on every changed script and scenario.",
+    "Commit 2bf082d on its own fails tools/name-labels.test.mjs (folkOf not in its vm context). 93f0699 fixes it. Squash the two if each commit must pass on its own.",
+    "The scenarios are untested on BDS. They rely on realm:npc_debug taps opening a form that t.waitForm captures, and on harness ticking areas keeping the far town's mayor loaded. Assertions on button text and order may need adjusting on the first run.",
+    "On add, the mayor spawns at the operator's feet. npc_bp lifts it, or moves it within 3 blocks if the spot is not standable, so it may nudge the operator.",
+    "If Townsfolk refuses a set (for example the 64-mayor cap), town_bp asks again every 30 s while a player is in that town, with one console warning each time. The cost is small but it can add log noise.",
+    "The realm:npc_mayors prune runs once per load. A town removed while npc_bp was absent is cleaned up at the next load, not at once."
+   ]
+  },
+  {
+   "items": [
+    {
+     "id": "F37-step2-sites",
+     "status": "done (code-only, BDS pending)",
+     "summary": "New pure module packs/town_bp/scripts/sites.js. It has the natural allow list (the 22 ids from the plan; anything else is man-made), UNDER (natural plus ores and bedrock) and WILD (main.js's PLANTS without air and sweet berry bush). Leaves are natural only with persistent_bit false; a log makes a column a tree. The column model readColumn gives N/W/T/M/L/U: a solid block over an air gap, or over a man-made block, is M; water is read through a surface() callback (C15); a missing read is U (C16). gradePlan: footprint at the pad, apron t = pad + clamp(g - pad, -d, d), at most levelDepth, steps of at most 1 against the outside ring at its natural height, and no water above the new top or lava next to a cut. The plan is saved as lv: outer x, inner z, '.' or '0'..'6'. scoreKey/compareKeys give the scoring order. scanTown is a generator that yields column, block and claims requests. Rings are every 3 blocks, from 6 for the well and 10 for the rest, out to radius-8. A project stops after 6 valid candidates once the next ring is 16 past the best, then the best 3 are deep-checked (2 UNDER blocks under every cut, plus a per-finalist claims check when 10 came back). Cheap rejects come before any read: radius-4, other regions (footprint+2), posts and places, claims. Placed cells are rejected per pad. The dock goes on the shore nearest the center, facing the water, with a 3x10 deck of the same surface and a margin of water or natural ground. Every other build has its front facing the center. Unknown columns make a project wait, unless `final`.",
+     "commits": [
+      "1a7524c",
+      "ef5cde7"
+     ],
+     "proof": "node --test tools/town-sites.test.mjs: 12/12 pass. It covers: allow-list ids against vanilla-data; man-made ids (planks, glass, cobblestone, terracotta, farmland, grass_path, crops, sapling, lodestone, sweet berry bush, a future id); persistent leaves; trees; overhang and basement; water, lava and unknown columns; plan depth and steps; cut next to water or lava; scoring order; facing; a flat town (all 6 projects level, the well within 8 of the center, under 9,000 reads); a terraced hillside (more than one pad height, every plan within the rules, regions disjoint); a cabin and a path avoided; every rejection (T/W/L/M/U in the margin, leaves near a tree, posts 6, claims, claims-more finalists, taken regions, placed cells, edge, all water); unknown ground waiting and final; the dock on the shore."
+    },
+    {
+     "id": "F37-step2-placed",
+     "status": "done (code-only, BDS pending)",
+     "summary": "New pure module packs/town_bp/scripts/placed.js holds the 4x4x4 cells relative to the town center, packed in 4 base-36 characters. They are saved in town:pl:<town>:0..1, 2,500 cells per property and 5,000 in all; past that the oldest are dropped and the town gets plf. It also has the box-to-cells function (bounded) and touches(). In main.js, world.afterEvents.playerPlaceBlock first checks the type (NATURAL only), then the distance to each town, and marks the cell. realm:blocks_placed accepts {dim, box:[x1,y1,z1,x2,y2,z2]} or the six fields, clipped to each town's square; a box over 5,000 cells marks the town full. Saves are coalesced every 200 ticks, and deleteTown removes them. With plf a town scans with depth 0 and never levels. town_bp is bumped to 1.4.0 and sync-diag was run.",
+     "commits": [
+      "336160a"
+     ],
+     "proof": "node --test tools/town-placed.test.mjs: 4/4 pass. It covers packing range, encode/decode with damaged chunks, the 5,000 bound with the oldest dropped and full, reload, duplicates, box cells and the huge-box bound, touches, and the main.js wiring (it failed before the wiring commit, as shown in this session)."
+    },
+    {
+     "id": "F37-step2-auto",
+     "status": "done (code-only, BDS pending)",
+     "summary": "main.js wiring. t.scan (a list of project ids) is queued on add (as:1) and on level-up. Towns saved before this version queue once on the 100-tick check: current-level projects and finished projects without a spot (as:1). One scan at a time runs while a player is within townRadius (D10). It starts with a realm:claims_check over the town square (player \"\", 20-tick wait, no answer means no Land Claims), then sites.scanTown runs at 12 column or block reads a tick and at most 4,000 steps. Posts come from realm:npc_places (the town's mayor 4, others 6) and story places from realm:place_ready, with realm:place_ping sent at load+100 (16). Taken regions cover every spot in the dimension; pads are this town's spots. After 3 waiting scans in a session the scan becomes final. finishScan keeps picks that don't collide with a newly set operator spot. nos gets an ops message ('No good spot was found for Riverside's Well: an operator can set one'). A build at an a:1 spot is queued into a single budgeted job (a 1-tick interval, cleared when idle) instead of the one-tick build. The job goes through these steps: (1) outline for outlineSeconds to players within 32, with 'goes up here in N seconds'; (2) checkRegion, 32 reads a tick from pad-5 to top+1 over footprint+2: allowedInRegion, placed cells, ground within 3 of the plan, 2 UNDER blocks under every cut; (3) wait while a player is anywhere in the region ('Step off the spot'); (4) recheck claims; (5) snapshot of the whole region and its depth, then s.bs=1; (6) applyBuild at 48 steps a tick: cuts top-down remove only NATURAL and WILD blocks, fills bottom-up put dirt into open air right under the new top (never into a cave), the top block becomes lt (or grass on bared dirt), then the design through the new placeDesignSteps generator, where auto 'ground' places may replace natural ground. An unloaded chunk pauses the job and bs resumes it; a resumed job skips outline and check (D24). A failed check or snapshot calls respot: one rescan (rt), then nos. Remove spot and Relocate also take away a half-done build (bs), with kinds plus dirt and lt. restoreGround now runs two passes (air top-down, then the rest bottom-up). Menus: project lines read '(a spot is being picked)', '(no good spot was found: an operator can set one)' or '(being built)'. The town page lists nos lines. Operators get 'Find spots again' and a nos line in /realm:town, and Manage spots explains automatic spots. applySpot clears scan, nos and rt, so an operator spot is kept and never leveled (D5). The join reminder skips projects being scanned. New options autoSpots (Enabled), levelDepth (3, 0-3) and outlineSeconds (5, 0-15) are in config.js and settings.js. Test hooks: scan, build_pause{after}, and dump now has scanning, building, cells and regions. PACKS.md Town Projects got the intro, How to use (operators no longer set spots), automatic spots, leveling, menu, removing, Commands, Configuration, the in-game list, Saved data (spot a/lv/lt/bs, town scan/nos/rt/as/plf, the bigger structure) and How it works (scan, build, cost, test hooks). The README row and the manifest description are updated, and the design note got fixes and D20-D30. Seven new BDS scenarios are written. town-bram-migrate.js now sets autoSpots Disabled, so it stays about mayors.",
+     "commits": [
+      "71fc5c8",
+      "c802863",
+      "f5c232d"
+     ],
+     "proof": "node --test tools/town-autobuild.test.mjs: 4/4 pass. It runs main.js's own readCol, checkRegion, applyBuild, placeDesignSteps and restoreGround in vm on a fake world. Checked: hillside picked through readCol with both cut and fill; apron columns at their planned top; no natural ground above the pad in the footprint; apron steps of at most 1; at most 3; nothing outside the region changed (a torch next to it kept); a second run changes 0 blocks; restore gives every block back. A sand mound with 2-deep cuts: no falls while leveling or restoring. A 40-step interruption then a resume ends identical to a straight run. The check refuses planks, a placed cell, a dug pit, and reports unloaded. Mutation checks: disabling the cut loop fails test 1, and removing the restore pass filter fails the sand test. Also pass: town-sites 12/12, town-placed 4/4, town-designs 3/3, town-mayors 10/10, owed-shared 29/29, probe-hooks 6/6. node --check main.js passes. npm run check, tsc and BDS were NOT run (SUITE_RUNNING was present)."
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "Automatic spots avoid a planks cabin and a grass_path line, face the center, and the well shows its outline and builds, leaving the cabin and path untouched",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-auto-spots.js --timeout 3000"
+    },
+    {
+     "purpose": "Hillside: more than one pad height, apron steps of at most 1, at most 3, nothing outside the regions changed; dock gets nos with no water",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-hillside.js --timeout 6000"
+    },
+    {
+     "purpose": "Remove spot at a leveled automatic spot restores every block of the region",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-terrain-restore.js --timeout 3000"
+    },
+    {
+     "purpose": "A build paused after 30 changes plus a server restart (t.restart, the harness equivalent of /reload mid-build) resumes from bs and equals an uninterrupted twin build",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-build-resume.js --timeout 4000"
+    },
+    {
+     "purpose": "A Land Claims claim at the town center: no spot region overlaps it",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,claims_bp --scenario tools/test-bds/examples/town-claims-spots.js --timeout 3000"
+    },
+    {
+     "purpose": "Center unloaded (player at the edge): the scan waits (no nos), then picks near the center once the player walks there",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-unloaded.js --timeout 3000"
+    },
+    {
+     "purpose": "A placed dirt block (playerPlaceBlock) and a realm:blocks_placed box are kept as cells and avoided, even after the dirt is broken",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-placed-marks.js --timeout 3000"
+    },
+    {
+     "purpose": "Regression: the step 1 scenarios with automatic spots now on (bram-migrate sets autoSpots Disabled)",
+     "after": "node tools/test-bds/suite.mjs --filter 'town|npc' --retry"
+    },
+    {
+     "purpose": "Scan and build transient cost (design note section 10: about 0.4 ms a tick scan, 0.5 ms build) and idle town_bp at or under 0.15 ms a tick; profile a town scan and a build at 10 players",
+     "after": "node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/town-scan.json --only town_bp --scenario tools/test-bds/examples/town-hillside.js --timeout 6000"
+    },
+    {
+     "purpose": "Bundle smoke: the one-context bundle still loads with the new town_bp modules",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/bundle-smoke.js"
+    },
+    {
+     "purpose": "Full static checks (tsc, check-docs, check-events, check-ids, check-ascii, check-versions) were not run in this code-only session",
+     "after": "npm run check 2>&1 | tail -30"
+    }
+   ],
+   "decisions": [
+    "D1, D4, D5, D10 applied as in the design note. Placed cells, persistent leaves, overhangs and the re-check before building are layered. Safe zones are not exclusions. Operator spots are never leveled and still build as before in one tick (D23). Scans and builds only run while a player is in the town.",
+    "D20: the step rule checks neighbor pairs where at least one column changes; natural steps between untouched columns stay.",
+    "D21: distance adds a leveling bucket every 48 blocks, every 12 for the well, which is what 'the well's distance counts 4 times' means here. A pure last tiebreak scaled by 4 would change no order.",
+    "D22: t.scan is a list of project ids (not 1). as:1 marks a town queued once. Remove spot never re-queues. 'Find spots again' re-queues every unbuilt project up to the town's level.",
+    "D24: a resumed build (bs:1) skips the outline and the block check. Cuts remove only natural blocks, fills fill only air or wild plants, and the design only replaces what canReplace allows, so nothing man-made is touched.",
+    "D25: at automatic spots, 'ground' design places may also replace natural ground (sand, gravel, stone). The snapshot keeps it.",
+    "D26: restoreGround runs two passes (blocks that become air top-down, the rest bottom-up) for every snapshot, so no sand or gravel falls. Old snapshots restore the same blocks.",
+    "D27: after 3 scans of a town that waited on unloaded ground in one session, the scan takes the best spot it knows.",
+    "D28: the dock shore is found by walking from water ring positions up to 4 blocks toward the center. The deck tries facing the water first, then the two sides.",
+    "D29: a failed check or snapshot forgets the spot and rescans once (rt); a second failure goes to nos.",
+    "D30: realm:blocks_placed accepts {dim, box:[...]} or the six fields. A box over 5,000 cells marks the town full at once.",
+    "Budgets: SCAN 12 reads a tick (plus at most 4,000 candidate steps), CHECK 32 block reads a tick (each read is 2 native calls), APPLY 48 steps a tick (each step is one read and at most one change, so a resumed build never spikes).",
+    "Players anywhere in the region (not only on the footprint) hold the build ('Step off the spot'), so a fill can't wall anyone in.",
+    "The design note (docs/audits/2026-10-deep-audit/LIVING_TOWNS.md) is updated in commit 71fc5c8: scan list, step rule, distance, the new unit test, decisions D20-D30.",
+    "For the lead (admin_bp/scripts/presets.js, 'Town Project Spots' checklist entry, then bump admin_bp). Suggested help: 'Optional: towns pick their project spots themselves. Stand where a project should be built, facing the way it should face, to choose its spot yourself (a spot you set is never leveled).' Suggested why: 'Set one when the town finds no good spot (a dock with no water nearby) or to choose the place yourself.'",
+    "For the build_bp owner: send realm:blocks_placed {dim, box:[x1,y1,z1,x2,y2,z2]} after each scripted fill or paste of natural-kind blocks (dirt, sand, stone...), so towns never level them. Boxes over 5,000 4x4x4 cells mark the town 'never level'."
+   ],
+   "generatorsNeeded": [
+    "node tools/help-catalog.mjs (Town Projects How to use changed; bumps help_bp)",
+    "admin_bp presets.js 'Town Project Spots' text plus an admin_bp version bump (lead), then node tools/admin-catalog.mjs if the lead's check needs it (no command or parameter changed in town_bp)",
+    "node tools/gen-news.mjs after the NEWS.md entry (lead)"
+   ],
+   "newsLines": [
+    "Towns now choose where their projects go. The well, the notice board and the rest are built on natural ground near the town's center and never on anything you built. Where the ground isn't flat it is gently leveled, at most 3 blocks, and the town keeps its hills. Players nearby see the outline for a few seconds before it goes up. Operators can still set or move any spot."
+   ],
+   "packsBumped": [
+    "town_bp 1.3.0 -> 1.4.0 (sync-diag run, diag.js current)"
+   ],
+   "risks": [
+    "Code-only session (/home/user/SUITE_RUNNING was present). npm run check, tsc and every BDS scenario are unrun. Types were checked by reading only: tuple casts, generator yield types and union arrays were reviewed by hand. The 7 new scenarios have never been executed and may need harness-level fixes, especially town-unloaded.js, which relies on 'tickingarea remove_all' and on simulation distance to unload the center.",
+    "BDS behavior that was never seen running: Dimension.getBlockBelow with includeLiquidBlocks for the water surface; leaves' 'persistent_bit' state name; getTopmostBlock on plants or snow layers; and structure createFromWorld on a region box 7x14x15 (dock).",
+    "Per-tick cost is estimated, not measured. A scan of 12 columns a tick is about 50-100 native calls (perhaps 0.5-1 ms/tick, above the note's 0.4 estimate) for 20-40 s. The check is 32 reads (about 0.6 ms) and apply 48 steps (up to about 1.4 ms) for a few seconds. Lower SCAN_READS_TICK and APPLY_TICK if the profile says so. Idle cost is nil: the 1-tick job interval exists only while there is work.",
+    "Existing worlds: on the first 5-second check after the update, every town gets as:1 written and automatic spots for its current-level and finished-without-spot projects. Finished projects then build themselves (with the outline) when a player is near. This is the requested behavior, but the owner may be surprised in Bram's town.",
+    "restoreGround's kinds for automatic spots include dirt and the fill top. Dirt or grass a player places in the region after the build reverts on Remove spot (the existing 'kind the build is made of' rule, documented).",
+    "Natural-kind blocks players placed before this update, in open ground with no overhang, can still be leveled (D1 residual risk); Remove spot puts them back."
+   ]
+  },
+  {
+   "items": [
+    {
+     "id": "F40-step3-house-design",
+     "status": "done (code-only, BDS pending)",
+     "summary": "designs.js has a new build kind, house: a 7x7 cottage (x -3..3, z 1..7). It has oak log corners, plank walls 3 high with glass panes, a wooden door in the front wall facing the spot, an oak slab roof, a standing lantern, a two-block bed and one job-site block. The job site comes from design(kind, job), or DEFAULT_JOB. The floor (planks at y -1) is optional. The new placeStates(pl, f) turns the bed's direction and the door's minecraft:cardinal_direction with the spot, and connects each pane along its wall. The 7 older designs keep their states unchanged. In main.js, placeDesignSteps puts the two halves of a bed or a door in during the same step, both or neither. designOf(p) passes a house's job site. CONFIG.houseJobs lists the 10 job sites; their ids are checked against vanilla-data. A new spill() helper fixes item loss: before restoreGround or clearBuild replaces a container of the build that holds items, or a lectern, it breaks it with setblock ... air destroy, so the contents drop. This covers the stall's barrels too. town_bp is bumped to 1.5.0 and sync-diag was run. PACKS.md has the house build and houseJobs.",
+     "commits": [
+      "1694313",
+      "606caf6"
+     ],
+     "proof": "node --test tools/town-designs.test.mjs: 5/5 pass. The 7 existing footprints and hashes are unchanged. The house test checks the bed (foot, then head paired with it) and the job site inside the walls, the door in the front wall at every facing, and that block ids and state names exist in vanilla-data's mojang-block.d.ts. tools/town-autobuild.test.mjs: 7/7 pass. A house is leveled and built on the fake hillside with the door, both bed halves (direction equals s.f) and the lectern; a second run changes nothing. A chest under one bed half leaves both halves out. spill destroys a full barrel and a lectern, but not an empty barrel or planks. These tests fail before the change: house didn't exist and spill wasn't there."
+    },
+    {
+     "id": "F38-step3-growth",
+     "status": "done (code-only, BDS pending)",
+     "summary": "Every config project now has a why line, at most 60 ASCII characters, cleaned at load. growth.js is a new pure module with addLog, readLog, logLine, cleanText, nextLevelText and townJson. t.log keeps up to 12 entries of [day, text], with text at most 60 characters. The day comes from realm:calendar (town_bp listens for it and sends realm:calendar_ping at load+100); it is 0 when no calendar has said one. Story lines are written when a town is founded, a project is finished (with its top contributor), the town levels up, and a house is built. The mayor's page and Town info (townMenu) show the story so far, each open project with its why, the house count and what the next level brings. projectMenu shows the why line too. readSites cleans a saved log. saveTown saves through townJson(t, PROP_LIMIT), which drops the oldest story entries first if the record is ever too big. Levels, needs, rewards, realm:quest_done and realm:rep_add are unchanged. PACKS.md has the town's story, the projects' why, log in saved data and the realm day in How it works.",
+     "commits": [
+      "d8734df"
+     ],
+     "proof": "node --test tools/town-growth.test.mjs: 10/10 pass. It covers the log bound and ASCII, cleaning on read, the next-level text, the property-limit trim, every project's why, and the main.js wiring (storyAdd in addTown, finishProject and levelUp; townJson in saveTown; storyLines and nextLines in townMenu; realm:calendar). The mayor-page checks were added to town-two-towns.js (BDS pending)."
+    },
+    {
+     "id": "F40-step3-houses",
+     "status": "done (code-only, BDS pending)",
+     "summary": "Houses are town works, separate from CONFIG.projects (D8). WORKS = makeWorks(CONFIG.houseJobs) creates house_1..house_10. ALL = PROJECTS + WORKS is used by byId, the build check, deleteTown, cancelAutoBuild, Manage spots, Set a project spot (houses appear once due), the dump and findSpotsAgain. Leveling (projectsAt), deliveries, rewards, the notice board and contributors stay on PROJECTS. queueWorks(t) runs from levelUp, autoTick (so towns already at level 2+ get their houses) and findSpotsAgain. It marks house_1..house_N done, with N = houseCount(lvl, residentsPerLevel, residentCapTown): 0, 4, 6, 8, 10. It then queues them for the step-2 scan, and they are built at automatic spots through the existing budgeted build job. A house's progress is saved as {done, built} only. scanIds() leaves houses out of the scan while houses is Disabled; build() then skips them too, except a house already started (bs), which finishes. A new house is told to players in the town and to operators, without fireworks, and is added to the story. The realm:town_test finish action refuses a house. Config project ids house_1..house_10 are now rejected with a warning. Added: the houses option (Enabled) in config.js and settings.js, plus residentsPerLevel [2,4,6,8,10] and residentCapTown 10 in config.js. PACKS.md (intro, How to use, Houses, Configuration, settings line, saved data, How it works) and the README row are updated. The new BDS scenario is tools/test-bds/examples/town-houses.js. The design note now has decisions D31-D41 and two corrected details (the house's plan bound, and the works' progress shape).",
+     "commits": [
+      "11638f9",
+      "ea44d1f"
+     ],
+     "proof": "node --test tools/town-growth.test.mjs covers houseCount per level and caps, the works' ids and job rotation, the reserved ids, and the worst-case town record. A town with 18 spots, full plans, every list and a full story comes to under 12,000 characters, against the 30,000 PROP_LIMIT. It also checks the main.js wiring (ALL, byId, queueWorks in levelUp and autoTick, deleteTown over ALL, the houses check in build, finishProject untouched). The other town tests still pass: town-mayors 10/10, town-sites 12/12, town-placed 4/4, owed-shared and probe-hooks. node --check main.js is OK. Not run because SUITE_RUNNING is set: npm run check, tsc and BDS."
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "Houses at level 2: house_1..4 due with no deliveries and built at automatic spots, with no region overlaps. Each has a two-block bed that is still whole after a neighbor update (this confirms the bed direction mapping), its own job site from houseJobs and a two-half door in the front wall. The page shows 'Houses: 4 of 4 built' and the next level brings 2 more. Remove spot clears house_1 and keeps it due.",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-houses.js --timeout 6000"
+    },
+    {
+     "purpose": "Mayor's page check: Oakfield's page has 'The story so far' with 'Founded by Ann', 'Well - Fresh water, so families can move in' and 'Next, as a Village (level 2): new projects (Lamp Posts, Garden Plot)', and not Riverside's well. Riverside's page shows 'The Well was finished'.",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-two-towns.js --timeout 600"
+    },
+    {
+     "purpose": "Regressions from the shared changes: placeDesignSteps pairs and placeStates, the spill() helper on Remove spot, ALL in the build check and deleteTown, and the scan's scanIds filter",
+     "after": "node tools/test-bds/suite.mjs --filter 'town|npc' --retry"
+    },
+    {
+     "purpose": "Everything the code-only rule skipped (tsc, check-docs coverage for houses/residentsPerLevel/residentCapTown/houseJobs, check-ids, check-events for realm:calendar and realm:calendar_ping, check-versions with town_bp 1.5.0) and the build",
+     "after": "npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+    }
+   ],
+   "decisions": [
+    "D31: a town has houseCount(lvl) houses: residentsPerLevel[lvl-1], capped by residentCapTown and 10, so 0 at level 1 (its 2 families live at the well), then 4, 6, 8, 10. residentsPerLevel and residentCapTown are added to config.js now because the house count needs them; step 4 uses the same ones.",
+    "D32: house_1..house_10 are reserved ids. A config project with one of them is skipped with a warning.",
+    "D33: taking a build away (Remove spot, Relocate, Rebuild) breaks a container of the build that holds items, and any lectern, with 'setblock x y z air destroy', so the contents drop instead of being lost. The block's own item drops too (a small gain, never a loss). This also applies to the stall's barrels.",
+    "D34: a bed's and a door's two halves are placed in one build step, both or neither. placeStates turns the bed's direction and the door's minecraft:cardinal_direction with the spot (0 south .. 3 east, the same order as FORWARD) and connects each pane along its wall. The bed mapping is confirmed on BDS by the neighbor-update check in town-houses.js.",
+    "D35: the house floor (planks at y -1) is optional. At operator spots it replaces only grass or dirt; at automatic spots it replaces natural ground (D25).",
+    "D36: a new house is told only to players in the town and to operators, without fireworks, and goes into the town's story. The realm-wide announcement stays for projects.",
+    "D37: with houses Disabled, no house is queued for a spot or built, except one already started (bs), which finishes. Built houses and due records stay.",
+    "D38: the story's lines are 'Founded by <operator>', 'The <project> was finished, thanks to <top contributor>', 'It became a <level>' and 'A new house went up (House <n>)'. The day is 0 (shown without a day) when no calendar said one, and town_bp sends realm:calendar_ping at load. Towns from before this version start their story with the next event.",
+    "D39: saveTown drops the oldest story entries if a town record ever passes PROP_LIMIT. The worst case in the unit test is under 12,000 characters.",
+    "D40: houses are listed in Set a project spot once due, and in Manage spots once they have a spot. The /realm:town_spot enum stays the config projects only, so admin-catalog does not change for this step.",
+    "D41: the house is 7x7 with the floor at y -1 and the roof at y 3, so its region is 11x11 and its plan at most 121 characters. I corrected the design note's 15x17 bound.",
+    "The commands to run after merge are node tools/help-catalog.mjs (the README summary, How to use and the Town Projects docs changed) and node tools/gen-news.mjs. admin-catalog is not needed: no command or parameter changed.",
+    "Not in this step: the notice board listing residents, mayor gossip with from, residents in the houses, and the garden pen (steps 4 and 5)."
+   ],
+   "generatorsNeeded": [
+    "node tools/help-catalog.mjs (README summary and the Town Projects How to use changed; bumps help_bp)",
+    "node tools/gen-news.mjs (after the lead adds the NEWS.md entry; bumps news_bp)"
+   ],
+   "newsLines": [
+    "Towns tell their story: tap a town's mayor to see what has happened there so far (when it was founded, each finished project, each new level), why the town wants each open project, and what the next level brings.",
+    "From Village on, towns build their own houses, one for each family the level brings (4 at Village, up to 10 at Capital). Each is a small cottage with a bed and a workplace, built on a spot the town picks, with nothing to deliver."
+   ],
+   "packsBumped": [
+    "town_bp 1.4.0 -> 1.5.0 (sync-diag run)"
+   ],
+   "risks": [
+    "Code-only session (SUITE_RUNNING was set): no tsc, npm run check or BDS ran. The JSDoc casts were chosen to satisfy the checker (WORKS as Project[], designOf through any), but they have not been verified.",
+    "The bed direction mapping (0 south, 1 west, 2 north, 3 east, with the head that way) and the door's minecraft:cardinal_direction mapping are from memory of Bedrock's legacy states. town-houses.js checks the bed with a neighbor update (a mismatched bed breaks). A wrong door mapping would only rotate the door inside its block and would not be caught.",
+    "Glass pane connection states are set explicitly. If BDS 1.26 recomputes or rejects them, perm() falls back to the default states, so the result is only visual.",
+    "Removing a house now drops the contents of its barrel, smoker or brewing stand (and always drops a lectern, plus its book if any) as items. The dropped lectern or container block is a small item gain each time an operator removes a house.",
+    "A level-up queues up to 4 houses plus the level's projects for one scan, so a scan of a Village takes longer (more ring scans, 11x11 regions). It stays budgeted at 12 column reads a tick, but its duration has not been measured.",
+    "If houses cannot all fit, each one goes to nos and is listed on the town page as 'No good spot was found for the House N', which can make a long list in a crowded town."
+   ]
+  },
+  {
+   "items": [
+    {
+     "id": "F39-step4-override",
+     "status": "done (code-only, BDS gate pending)",
+     "summary": "New file packs/town_bp/entities/villager_v2.json. It is the vanilla villager_v2 behavior file, extracted from BDS 1.26.52's packed vanilla archive (behavior_packs/vanilla_1.26.20/__brarchive/entities.brarchive holds the newest villager_v2.json there, format 1.26.20), with three additions: the property realm:resident (bool, default false); the component group realm:town_resident (minecraft:dweller with can_find_poi:false and can_migrate:false, minecraft:home with restriction_radius 16, and minecraft:behavior.move_towards_home_restriction); and the event realm:become_resident, which adds the group and sets the property. Base components, vanilla groups and vanilla events are unchanged. town_bp's manifest got a data module (new uuid) so the entity file loads.",
+     "commits": [
+      "9ed193c"
+     ],
+     "proof": "tools/town-residents.test.mjs passes 11/11. Its villager_v2 test checks that exactly one realm: group, one event and one property were added, that every vanilla dweller (base and the 13 professions) still has can_find_poi:true, that no vanilla event mentions realm:, and that the manifest has a data module."
+    },
+    {
+     "id": "F39-step4-residents",
+     "status": "done (code-only, BDS pending)",
+     "summary": "New pure module packs/town_bp/scripts/residents.js. It holds slotCount (level 1 gets min(residentsPerLevel[0], 2) and only once the well is built; capped by residentCapTown and 10), homesFor (each slot's own house once built, the well for slots 0 and 1, else none), homeAt/lookFor/LOOKS (job site to profession event), allocate (world cap: highest level first, then the oldest; never negative), reconcile (the census), plan (due replacements, then new slots, moves, drops), readResidents, pickName, ridOf/ridTag and addNew.\nIn main.js: town_bp joins tools/sync-spawn.mjs (scripts/spawn.js). A family is spawned with spawnFresh(dim, 'minecraft:villager_v2', at, {spawnEvent:'minecraft:spawn_from_village', fresh:true}). It is then checked for our property (otherwise it is removed before it gets a tag, residents stop and operators are told), named, given the look event and then realm:become_resident, and tagged realm:resident, town:r:<town> and town:rid:<town>.<i>.\nSaved data is town:r:<town> {n, r:[{s,i,n,h,e,p,d?,m?}], new}. entityDie (entityTypes villager_v2) sets d = getAbsoluteTime() + replaceMinutes*1200. A census runs every 600 ticks, one town per 100-tick check, only for a town with a player in it. It is one getEntities by tag: a resident missing twice while its home is loaded is gone; one past townRadius is teleported home unless it is leashed or riding; duplicates and unknown rids are untagged, never killed. Each census does at most 2 spawns or moves, with the message 'A new family moved into <town>: <name>.' and a story line. A move spawns the family at its new home first, drops what the old villager carries, then removes the old one; it waits while a player is within 24 blocks. A removed town's loaded residents are untagged. A finished build or a level-up runs the census at the next check.\nTrading: a beforeEvents.playerInteractWithEntity handler starts with if (ev.cancel) return; and cancels taps on realm:resident unless residentsTrade is on (one message per 10 s). A tagged villager whose town is gone is untagged on tap.\nOptions: residents (default Disabled per D2/D42), residentCapWorld (20, 0-40 step 2), residentsTrade (Disabled), replaceMinutes (20, 5-120 step 5), and residentNames in config.js (40 ASCII names that no cast member, wanderer, elite, story character or mayorNames entry uses).\nTest hooks: census, residents_due, and dump now includes residents and homes.\ntown_bp is bumped to 1.6.0 and sync-diag was run. Docs updated: PACKS.md Town Projects (How to use step 4, a Residents bullet, the Configuration rows and the in-game list, saved data town:r, How it works: residents, the override, cost, test hooks), a new How the packs work together row (the realm:resident tag and the villager_v2 definition), SERVER_SETUP.md (Other add-ons row: the villager_v2 conflict; Known limits: resident caps and mob count) and the README row. Scenarios: new town-residents.js and town-resident-poi.js; town-houses.js is extended so residents end up in their houses with the right looks.",
+     "commits": [
+      "9ed193c"
+     ],
+     "proof": "node --test tools/town-residents.test.mjs passes 11/11 (slots, homes and looks, cap priority, census missing twice / unloaded / teleport, duplicates and strays, plan, record, names, the entity file, main.js's real entityDie and tap callbacks run in vm, wiring order). It fails before the commit because residents.js, villager_v2.json and the main.js handlers don't exist there. These also pass: town-mayors 10/10, town-autobuild 7/7, town-growth 10/10, town-designs 5/5, town-sites 12/12, town-placed 4/4, spawn-fresh 54/54, invalid-entity-guards 4/4, settings-shared 9/9, tap-cancel-guards 2/2. node tools/sync-spawn.mjs --check reports all 8 copies current, and node --check passes on main.js, residents.js and the 3 scenarios. Not run (SUITE_RUNNING, code-only): tsc, npm run check/build, BDS."
+    },
+    {
+     "id": "F39-step4-notes",
+     "status": "done",
+     "summary": "Design note LIVING_TOWNS.md: the options table now says residents is Disabled until the D2 gate passes; the test plan names residents.js; decisions D42-D54 are added.",
+     "commits": [
+      "b713aa2"
+     ]
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "Gate D2: a player's bed stays unclaimed through a night and residents stay near home, plus a control in which an ordinary villager does claim the bed. If this passes, flip config.js residents to true and change the defaults in PACKS.md (How to use step 4, the Residents bullet, the Configuration row) and SERVER_SETUP.md (Known limits) in the same commit. If it fails, keep residents Disabled and tell the owner.",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-resident-poi.js --timeout 6000"
+    },
+    {
+     "purpose": "The well brings 2 residents (tags, names, property, farmer and fisherman looks, message). A killed one is replaced once due; one removed without a death is missing twice, then replaced; a stray is untagged and not killed.",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-residents.js --timeout 4000"
+    },
+    {
+     "purpose": "Houses at level 2: the well's pair move into house_1 and house_2 and 2 more come to house_3 and house_4, each at home with its job-site look. The scenario's existing house checks still pass.",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-houses.js --timeout 6000"
+    },
+    {
+     "purpose": "Regressions in the other town and npc scenarios, then the one-context bundle smoke (the bundle must carry town_bp's entities/villager_v2.json and its data module).",
+     "after": "node tools/test-bds/suite.mjs --filter 'town|npc' --retry && npm run bundle -- --all && node tools/test-bds/run.mjs --quiet --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/bundle-smoke.js"
+    },
+    {
+     "purpose": "Code-only checks that were not allowed this step: tsc (JSDoc types in the new residents code), check-ids and check-ascii over the new entity file and the settings labels, check-versions, sync-spawn --check, and the build.",
+     "after": "npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+    }
+   ],
+   "decisions": [
+    "D42: residents ships Disabled by default. The D2 gate could not run on BDS in this step (SUITE_RUNNING, code-only), and an unproven gate counts as failed. Once town-resident-poi.js passes, set config.js residents: true and flip the PACKS.md and SERVER_SETUP.md defaults together.",
+    "D43: the pure module is residents.js, not residents-core.js, beside sites.js and growth.js. The design note is fixed.",
+    "D44: town:r:<town> is {n, r:[{s,i,n,h,e,p,d?,m?}], new}. s is the slot; gaps are allowed because houses go up in any order. i is a resident number from the town counter n; every spawn takes a new one, moves included. m counts misses in a row. A found villager counts only if its rid belongs to a living record, and when two share a rid, only the one whose id is the record's e. Every other one loses the tags and is never killed.",
+    "D45: each spawn checks the override through the entity property realm:resident, which only town_bp's villager_v2.json defines. A villager spawned without it is removed before it is tagged, residents stop and operators are told. The census re-triggers realm:become_resident on a resident whose property is not true.",
+    "D46: the profession look event goes before realm:become_resident, because every profession group carries its own minecraft:dweller with can_find_poi:true and the group added last wins.",
+    "D47: home anchors are (0,0,4) inside a house, in front of the bed, and (-3,0,3) / (3,0,3) beside the well. The spawn uses the nearest place within 3 blocks up or 2 down that has feet and head free on solid ground. The well's two families are a farmer and a fisherman.",
+    "D48: level 1 gets min(residentsPerLevel[0], 2) families. Slots 0 and 1 live at the well until house_1 and house_2 are built; the other slots wait for their own house. With houses Disabled, the well pair stays at the well.",
+    "D49: replacements and new families are both new mobs under the world cap, replacements first. A census does at most 2 spawns or moves. A dead record past the town's slots is dropped; a living resident never is.",
+    "D50: when a town is removed, its loaded residents lose the tags; a far-away one loses them on its first tap. The realm:town_resident group stays on them, because removing a group that overrides a component removes that component, so they would lose dweller altogether.",
+    "D51: a move spawns the family at its new home first, then drops what the old villager carries where it stood, then removes it. Item spawn comes before slot clear, so a failure keeps the item.",
+    "D52: with residents Disabled there is no census, spawn, replacement or teleport. Residents already living stay, and taps still follow residentsTrade.",
+    "D53: new and replacement families both send 'A new family moved into <town>: <name>.' to players in the town, with one story line per census.",
+    "D54: a canceled tap tells the player '<name> lives in <town> and doesn't trade.' at most once per 10 s.",
+    "For the lead: add town_bp/entities/villager_v2.json to CLAUDE.md's 'Vanilla entity overrides' list. Note that BDS 1.26.52 has no loose vanilla entity files: they are in behavior_packs/vanilla_*/__brarchive/entities.brarchive, a simple archive (16-byte header, 256-byte entries: name length, name, u32 offset, u32 size). The newest villager_v2.json is in vanilla_1.26.20."
+   ],
+   "generatorsNeeded": [
+    "node tools/help-catalog.mjs (the Town Projects How to use and summary changed)",
+    "node tools/admin-catalog.mjs plus an admin_bp bump, and labels, ranges and setup checklist entries for residents, residentCapWorld, residentsTrade and replaceMinutes in packs/admin_bp/scripts/presets.js",
+    "node tools/gen-news.mjs after adding the NEWS.md entry"
+   ],
+   "newsLines": [
+    "Towns can now have residents: villagers move in as a town grows, 2 by the well and then a family for each house, named, each with the job of its house. They never take a player's bed or job site and stay near home. If one dies, a new family moves in after a while. They don't trade. Operators turn residents on in /realm:config (Town Projects)."
+   ],
+   "packsBumped": [
+    "town_bp 1.5.0 -> 1.6.0 (sync-diag run)"
+   ],
+   "risks": [
+    "Not run this step (SUITE_RUNNING, code-only): tsc, npm run check/build and every BDS scenario. The JSDoc types in the new residents code, check-ids/check-ascii on the 120 KB entity file and the settings labels are unverified.",
+    "minecraft:home's restriction_type field ('random_movement') and minecraft:behavior.move_towards_home_restriction were written from documentation, not checked on 1.26. A wrong field shows as a content log warning; staying near home is also enforced by the census teleport.",
+    "The order of triggerEvent calls on a just-spawned villager (profession event, then realm:become_resident) is assumed to apply in order. If it doesn't, the census re-triggers become_resident, but between those points dweller could have can_find_poi:true. town-resident-poi.js is the proof.",
+    "Entity ids are assumed to persist across restarts. If one doesn't, reconcile takes the single villager carrying the rid and updates e, so nothing is lost.",
+    "Only one behavior pack may define minecraft:villager_v2. This is now documented in SERVER_SETUP.md, and an override that loses is detected per spawn through the missing property.",
+    "The bundle tool must carry town_bp's new data module and entities/ folder into realm_bundle (it already does this for dolphin_bp and translucent_bp; not verified for town_bp)."
+   ]
+  },
+  {
+   "items": [
+    {
+     "id": "F40-pen-design",
+     "status": "done",
+     "summary": "I added the pen build kind to designs.js and BUILDS: a 5 x 5 oak fence ring (x -2..2, z 1..5) with a fence_gate in the middle of its front side. The gate turns with the spot through placeStates (minecraft:cardinal_direction). The 7 older designs are unchanged.",
+     "commits": [
+      "ae0980c"
+     ],
+     "proof": "node --test tools/town-designs.test.mjs passes 6/6. The new pen test checks the vanilla-data state names for all 4 facings. It fails before the change because design('pen') is empty."
+    },
+    {
+     "id": "F40-scan-near",
+     "status": "done",
+     "summary": "sites.js ScanProject now takes near {x,z}. The scan then looks in rings 9 to 30 blocks around that point (SCAN.minNear/maxNear) and measures distance from it, while the build still faces the town center and stays inside the town. main.js scanInput gives the pen near = the middle of the garden.",
+     "commits": [
+      "cb88006"
+     ],
+     "proof": "node --test tools/town-sites.test.mjs passes 13/13. The new near test fails before the change (12/13): the pen lands beside the garden instead of at the center, and with man-made ground everywhere near it there is no spot."
+    },
+    {
+     "id": "F40-life-module",
+     "status": "done",
+     "summary": "New pure module packs/town_bp/scripts/life.js. It has: planPath (grass_block under air only, 4-connected toward the center, steps of at most 1, stops 3 blocks from the center, at most 48 blocks, a single-block wild plant is cleared, stops at anything else or where stop() refuses, unloaded ground is flagged); planPosts (every 8 blocks beside a path, on natural ground with 2 air above, at least 4 apart, at most 12 a town); packCells/unpackCells (6 base-36 characters a block, relative to the town center); readWorks (town:w record with whole cells only, '~<id>' leftovers of at most 2 paths); and boardTexts.",
+     "commits": [
+      "6ca3b27"
+     ],
+     "proof": "node --test tools/town-life.test.mjs passes 13/13 at HEAD, including the worst-case record under 16,500 characters and the vanilla ids."
+    },
+    {
+     "id": "F40-touches-wiring (a-e)",
+     "status": "done (code-only, BDS pending)",
+     "summary": "New townLife option, Enabled by default (config.js, settings.js). (a) Paths: on the 5 s check, while a player is in the town, each built automatic spot without pt gets a path planned from 1 block in front of its spot: one claims_check, then 32 reads a tick. Each block is checked again before it changes. Paths are saved in town:w:<town>, and the spot gets pt: 1. Unloaded ground is retried 3 times a session. (b) Lantern posts: placed once per level (t.lp) after that level's automatic builds are up and no scan is pending; at most 12 a town. (c) Pen: a town work 'pen' (reserved id) is due once the garden is built, gets a spot beside the garden and is built like a house. Its 2 sheep and 2 chickens are spawned once (spawnFresh with fresh: true, then tagged town:a:<town>; an: 1 on the pen's progress). (d) Notice board: sign 2 shows projects done and 'Residents: n'; sign 3 the 3 newest families, else the contributors. The board refreshes after each census that changed something. (e) lifeNews sends realm:gossip {kind:'town_life', place, from: t.m} for a house, a level or new families, through the existing once-an-hour gossip(). Remove spot and moves take the path and posts away first, so the ground under them comes back too; a failed removal clears pt so the path is laid again. Parts that aren't loaded wait as '~<id>' and are finished on a later check. deleteTown drops town:w and leaves the blocks standing. The dump test hook now has life and living. Docs: PACKS.md Town Projects (intro, How to use, the board row, Small life, Town news, townLife row, the reserved pen id, saved data town:w/pt/lp/an, How it works, cost, messages) and the README row. town_bp is bumped to 1.7.0 and sync-diag was run.",
+     "commits": [
+      "8280bea",
+      "7cf55eb"
+     ],
+     "proof": "node --test passes: town-life 13/13 (vm tests run main.js's own layPath, clearLife and restoreLife, plus a source check that clearLife comes before unbuild), town-growth 11/11, town-autobuild 7/7, town-designs 6/6, town-mayors 10/10, town-placed 4/4, town-residents 11/11, town-sites 13/13. BDS town-life.js was written but has not run (TIMING_SOAK_RUNNING)."
+    },
+    {
+     "id": "F40-npc-gossip-from",
+     "status": "done (code-only, BDS pending)",
+     "summary": "New in npc_bp: mayors.js gossipFrom (cast-like or mayor:<town> ids only) and tellsGossip. hearGossip keeps the sender as g.f; the 30-minute replace rule now requires the same f, so two towns' news are two pieces. gossipLine only tells a piece whose f is that townsfolk's id. hearth.js has GOSSIP.town_life (3 lines with {place}, no {name}). The npc_debug gossip dump shows from as the 4th field. PACKS.md Townsfolk (town mayors, the gossip protocol) and the README row are updated. npc_bp is bumped to 1.9.0 and sync-diag was run.",
+     "commits": [
+      "41e2c7f"
+     ],
+     "proof": "node --test tools/npc-gossip-from.test.mjs passes 4/4 (it runs main.js's real hearGossip and gossipLine in vm) and fails before the change. npc-mayors 8/8 and name-labels 13/13 still pass."
+    },
+    {
+     "id": "F41-docs",
+     "status": "done",
+     "summary": "Welcome: town_bp line in GENERIC.lines ('Towns that grow as you help, each with its mayor (\u00a7b/realm:town\u00a7r)'), its PACKS.md row, and operator-welcome.test.mjs now installs town_bp and pins the line (the file's CRLF line endings were kept); welcome_bp is bumped to 1.5.12 and sync-diag was run. 'How the packs work together': town_life is in the gossip producers row, there are new rows for Town Projects with Townsfolk (mayors, npc_mayor/npc_mayors/npc_places, town_life from) and for claims, story places, townsfolk houses and realm:blocks_placed against automatic spots and small life, and the realm:gossip protocol bullet gained from and town_life. SERVER_SETUP.md: setup step 5 says towns pick their own spots, One cast says each town has its own mayor, and the residents bullet counts the pen animals. Design note D55-D67 and the data-model rows (town:w shape, pt, lp, an) are recorded.",
+     "commits": [
+      "39d8f95",
+      "a986f32",
+      "67f27af"
+     ],
+     "proof": "node --test tools/operator-welcome.test.mjs passes 12/12 and fails before the welcome change (11/12)."
+    },
+    {
+     "id": "F41-perf-scenario",
+     "status": "done (BDS pending)",
+     "summary": "tools/test-bds/examples/town-capital-perf.js: Ash and Birch at Capital with 18 spots set by hand (autoSpots Disabled during setup), every project, 10 houses and the pen built, census calls until 20 residents, both mayors, and 10 players (5 a town) walking during the soak. It checks there is no scan, build or path job before the soak, 20 residents and 4 pen animals a town, and reports perf-workload with the soak window and retention. --arg baseline=1 is the Townsfolk-only baseline; --arg transient=scan or build adds a third town, Cedar, so the scan or its first builds and paths run inside the window.",
+     "commits": [
+      "99569a5"
+     ],
+     "proof": "node --check passes; not run (TIMING_SOAK_RUNNING)."
+    }
+   ],
+   "bdsPending": [
+    {
+     "purpose": "Small life: paths from the well and the board, the garden pen with 4 animals spawned once, lantern posts at level 2, the board's resident count and newest families, town_life gossip from mayor:elm kept by Townsfolk, and Remove spot turning the path back to grass",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-life.js --timeout 9000"
+    },
+    {
+     "purpose": "Perf steady state: 2 towns at Capital, 10 players, residents, no scan running. Targets: town_bp <= 0.15 ms/tick and npc_bp <= baseline + 0.05",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/town-capital.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=120 --timeout 9000"
+    },
+    {
+     "purpose": "Perf Townsfolk baseline (no towns), to compare npc_bp against",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/town-capital-base.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=120 --arg baseline=1 --timeout 9000"
+    },
+    {
+     "purpose": "Perf transients, reported separately: the scan, then the build with leveling and paths",
+     "after": "node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/town-scan.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=60 --arg transient=scan --timeout 9000 ; then the same with --arg transient=build --profile-json /tmp/town-build.json"
+    },
+    {
+     "purpose": "Every town and npc scenario, including the edited town-hillside.js (lantern posts left out of the outside check) and town-build-resume.js (townLife Disabled)",
+     "after": "node tools/test-bds/suite.mjs --filter 'town|npc' --retry"
+    },
+    {
+     "purpose": "Genuine one-context bundle smoke",
+     "after": "npm run bundle -- --all && node tools/test-bds/run.mjs --quiet --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/bundle-smoke.js"
+    },
+    {
+     "purpose": "Full checks after the lead's catalogs",
+     "after": "npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+    }
+   ],
+   "decisions": [
+    "D55: a path starts 1 block in front of the spot (local z -1) at the pad's height and walks 4-connected toward the center, stopping 3 blocks from it. A single-block wild plant on the grass is cleared (no drop). A two-block plant, a crop, a sapling or snow stops the path, because taking half of a tall plant away would drop the other half.",
+    "D56: paths and posts also stop at every spot's region (picked or built, except the path's own), at claims (one claims_check), within 16 blocks of a story place, and at placed-block cells. Each block is checked again just before it changes. Without this, a picked spot whose region got a path would fail its own check.",
+    "D57: paths are laid from the 5 s check, not the build job. The spot's pt: 1 marks one done. Unloaded ground is retried 3 times a session, then what was found is laid. This survives a restart without a persisted queue (C23).",
+    "D58: Remove spot and moves take the build's path and posts away before the ground is put back, so a path over leveled ground is restored with everything else. Blocks are reverted only while they are still grass_path, oak_fence or lantern, without drops. Unloaded parts wait under '~<id>' and are finished later, never touching a newer path. A failed removal clears pt so the path is laid again.",
+    "D59: lantern posts go every 8 blocks along a path, on the left else the right, on natural ground with 2 air above, at least 4 blocks from another post, at most 12 a town.",
+    "D60: posts are placed once per level (lp) after that level's automatic builds are up and no spot is still being picked. A level-1 town gets none. Towns with operator spots have no paths, so they get no posts.",
+    "D61: the pen is the town work 'pen' (reserved id, like the houses in D32). It is due when the garden is built with townLife Enabled, which includes older towns whose garden is already built. Its spot is scanned 9 to 30 blocks around the garden's middle; with none there, operators get 'No good spot'. Operators can also set it by hand.",
+    "D62: the pen's 2 sheep and 2 chickens are spawned once, with spawnFresh(fresh) and then tagged town:a:<town>. an: 1 on the pen's progress stops a rebuild or move from spawning more. The animals are never replaced.",
+    "D63: sign 3 shows the 3 newest residents, newest first. With none, it falls back to the top contributors, then 'Bring materials'. Sign 2 shows projects done, 'Residents: <living>' and See /realm:town. The board refreshes after each census that changed something.",
+    "D64: town_life gossip goes out for a new house, a new level and a census that brought families. It uses the existing one-piece-an-hour gossip() (shared with project news), with from = t.m; a v1 town without m sends no from.",
+    "D65: npc_bp keeps from as f only when it is a townsfolk id. A piece with f is told only by that townsfolk. Pieces with a different f never replace each other.",
+    "D66: with townLife Disabled, no new paths, posts or pen are added (a pen already half built is finished), the animals stay, and leftover restores still run.",
+    "D67: the perf scenario sets its 18 spots by hand and fills residents with census calls, so its soak has no scan or build running. It has a baseline mode and separate scan and build transient modes.",
+    "BUILDS now includes 'pen', so a config project could also use build 'pen'. That is harmless; the config typedef was left unchanged."
+   ],
+   "generatorsNeeded": [
+    "node tools/help-catalog.mjs",
+    "node tools/admin-catalog.mjs plus an admin_bp bump (the 'Town Project Spots' setup checklist text in admin_bp/scripts/presets.js: towns pick their own spots)",
+    "node tools/gen-news.mjs"
+   ],
+   "newsLines": [
+    "Every town now has its own mayor.",
+    "Towns pick their own building spots and follow the land; nothing players built is touched.",
+    "Families move into growing towns, with houses from Village up.",
+    "Lanterns, paths and a garden pen bring towns to life."
+   ],
+   "packsBumped": [
+    "town_bp 1.6.0 -> 1.7.0",
+    "npc_bp 1.8.0 -> 1.9.0",
+    "welcome_bp 1.5.11 -> 1.5.12"
+   ],
+   "risks": [
+    "This step was code-only. SUITE_RUNNING was there when I started; it went away mid-step, then TIMING_SOAK_RUNNING appeared (an hour-long soak at 40 players). So nothing ran on BDS: town-life.js, town-capital-perf.js, the town|npc suite and the bundle smoke are all pending, and npm run check, build and bundle were not run.",
+    "One tsc run did happen while TIMING_SOAK_RUNNING was there: the flag appeared at the same moment and I hadn't seen it yet. It showed a tsc error that is already on the branch base: packs/stash_bp/scripts/page-store.js(109,58) Property 'p' does not exist on type 'PageIndex'. Stashing my changes showed the same error, so it isn't mine. npm run check runs tsc first and will stop there until it is fixed.",
+    "town-hillside.js now leaves lantern-post columns out of its 'nothing outside the regions changed' check, and town-build-resume.js turns townLife off so paths can't race its block comparison. Both edits are unverified on BDS.",
+    "Paths change grass outside build regions by design, so any other scenario that compares raw blocks outside regions after a build may need the same treatment. town-terrain-restore should still pass because paths are now removed before the ground is restored.",
+    "Removing our own lantern posts uses setPermutation(air), which drops nothing. If a player swapped in an identical lantern or fence at exactly that spot, it would be removed without a drop. This is accepted as negligible.",
+    "Pen animals are ordinary mobs and may despawn or wander off if the gate is opened; they are never replaced (D62). They add 4 entities per town."
+   ]
+  }
+ ],
+ "rev": {
+  "findings": [
+   {
+    "file": "packs/town_bp/scripts/sites.js",
+    "severity": "high",
+    "problem": "The scan's per-tick budget does not limit its pure-JS work. stepScan (main.js ~2115) only counts generator yields (SCAN_READS_TICK=12, SCAN_STEPS_TICK=4000), but scanTown yields only when a column is not in its cache. Candidates whose regions are already cached (house_2..house_N use the same 7x7 design as house_1, and later projects re-walk the rings house_1 read) run evalBuild + gradePlan for every ring position with no yield, all inside one tick. I measured it with a node harness on sites.js (scratchpad g5/spike.mjs: rolling natural terrain, radius 96, 4 houses): one gap between yields was 62-117 ms in V8. Bedrock's QuickJS is much slower, so a level-up that queues 4+ houses can stall the server for hundreds of ms in a single tick (watchdog / slow-script risk). This breaks section 10's \"about 0.4 ms/tick\" claim and the PACKS.md Cost text.",
+    "fix": "Count work, not yields: give scanTown a step counter (e.g. yield [\"tick\"] every N candidates, or after every evalBuild/gradePlan), and have stepScan treat that request as the end of its tick budget. Add a unit test that drives scanTown on cached terrain and checks the largest compute gap between yields (or the number of candidates evaluated between yields) stays bounded."
+   },
+   {
+    "file": "packs/town_bp/scripts/main.js",
+    "severity": "medium",
+    "problem": "A resumed automatic build skips every safety check (stepBuild: phase = s.bs ? \"apply\" : ..., D24). There is no outline, no checkRegion, no 'step off the spot' wait (playersOn), no claims check, and placed cells marked since the first check are not looked at. A resume can happen long after the first check: the build pauses when its chunk unloads and resumes whenever a player comes within 64 blocks. Then: (a) applyBuild's cut sets any NATURAL/WILD block to air with no drop, so dirt, sand or stone a player placed on the half-leveled spot meanwhile, and flowers they planted, are deleted (playerPlaceBlock marked them, but nothing reads the marks on resume); (b) fills and the design (house walls, the well) are placed onto a player standing in the region, which can entomb or suffocate them; (c) for a config project with a saved `structure`, structureManager.place overwrites everything in its box, including a chest a player put there, so its contents are lost. D24's argument that only natural blocks are cut is true, but it ignores that players place natural-kind blocks and stand on spots.",
+    "fix": "On resume, still run the 'standing' phase. Also re-check the placed cells (touches(...)) over the region, and skip, or respot, columns where a mark is newer than the plan. For a structure build, re-validate its box block by block (or drop structure projects from automatic spots) before place()."
+   },
+   {
+    "file": "packs/town_bp/scripts/main.js",
+    "severity": "medium",
+    "problem": "Player-planted flowers and plants are never recorded as placed, so builds and paths remove them with no drop. The playerPlaceBlock handler (~2908) only marks NATURAL kinds ('anything else is man-made anyway'), but WILD plants (poppy, tulips, cornflower, mushrooms, ferns, pink_petals, leaf_litter, sunflower, lilac, rose_bush...) count as natural in the scan (readColumn skips them, allowedInRegion allows them). applyBuild's cut and placeDesignSteps replace them with setPermutation (no drop). A player's flower bed on open grass can therefore be chosen as a spot and wiped. In the same way, layPath clears a CLEARABLE flower on every path cell (setPermutation(air), no drop), and restoreLife turns the path back to grass without putting the flower back (the `c: 1` flag is saved but never used on restore).",
+    "fix": "Also mark WILD/CLEARABLE kinds in playerPlaceBlock (they are only placed by players or bonemeal), and have paths stop at flowers instead of clearing them, or restore the plant from `c` (and keep its id) on Remove spot."
+   },
+   {
+    "file": "tools/town-autobuild.test.mjs",
+    "severity": "low",
+    "problem": "No test pins the 'blocks players added since stay' rule of restoreGround. I deleted `if (!b.isAir && !b.isLiquid && !kinds.has(b.typeId)) continue; // someone's own block` from main.js in a scratch copy and all 7 tests in town-autobuild.test.mjs still pass. Removing it would let Remove spot overwrite chests and other blocks players built on a leveled region (item loss). The other two mutations I tried were caught: making the cut remove any non-air block, and dropping allowedInRegion from checkRegion.",
+    "fix": "Add a case: after the build, place a chest with an item (and a cobblestone block) in the region, run restoreGround, and assert both are still there."
+   },
+   {
+    "file": "tools/test-bds/examples/town-capital-perf.js",
+    "severity": "medium",
+    "problem": "F39/F41's 'measure 2 towns at Capital at 10 players' is not done: the scenario exists, but no result is recorded anywhere (not in LIVING_TOWNS.md, PACKS.md or the commit messages). The PACKS.md Cost numbers ('about 0.4 ms a tick', 'under 0.01 ms') are estimates, not measurements. The D2 bed gate (town-resident-poi.js) was also never run on BDS (D42), so residents ship Disabled and F39 is not delivered by default. I found no record that any of the 15 new BDS scenarios has passed.",
+    "fix": "Run town-capital-perf.js (steady, baseline, transient=scan, transient=build) and record ms/tick per pack against section 10. Run town-resident-poi.js and the town|npc suite, then record the results before marking F36-F41 done."
+   },
+   {
+    "file": "packs/help_bp/scripts/catalog.js",
+    "severity": "low",
+    "problem": "The branch fails `npm run check` as it stands: `node tools/help-catalog.mjs --check` reports that help_bp's catalog.js is out of date with docs/PACKS.md (Town Projects' How to use changed). There is also no docs/NEWS.md entry for a change players will notice, and the admin_bp presets 'Town Project Spots' checklist text was not updated. The design note leaves these to the lead after merging, but CLAUDE.md says check must pass before the PR.",
+    "fix": "Before merging: add a NEWS.md entry, run help-catalog.mjs (bumps help_bp), admin-catalog.mjs plus the admin_bp bump and presets.js text, and gen-news."
+   },
+   {
+    "file": "CLAUDE.md",
+    "severity": "low",
+    "problem": "Town Projects now ships a vanilla entity override (packs/town_bp/entities/villager_v2.json, which changes every villager in the world, and adds a data module to town_bp). CLAUDE.md's 'Vanilla entity overrides' rule still lists only translucent_bp/player.json and dolphin_bp/dolphin.json, so the 're-copy after a Minecraft update' maintenance step will miss it. The copy's match with vanilla (BDS 1.26.52) apart from the three additions could not be verified here: no vanilla villager_v2.json is on disk.",
+    "fix": "Add town_bp/entities/villager_v2.json (and its three additions) to the overrides rule in CLAUDE.md and docs/WORKING.md. Keep a diff of the vanilla source, or a check that only the realm:* keys differ."
+   },
+   {
+    "file": "packs/town_bp/scripts/mayors.js",
+    "severity": "low",
+    "problem": "The code does not do what the design note says about Bram. LIVING_TOWNS.md section 3 says Bram is never removed and 'the next town added becomes his if he has none'. newTownMayor only gives Bram to a new town when no towns exist at all. After Bram's town is removed, every later town gets its own mayor:<id>, and Bram stays mayor of nothing (he only offers the fallback).",
+    "fix": "In newTownMayor, return { m: BRAM } when no existing town has m === BRAM and none still waits for migration (keep D19). Otherwise correct the note."
+   }
+  ]
+ },
+ "fixed": {
+  "items": [
+   {
+    "id": "F36-step1-designs",
+    "status": "done",
+    "summary": "Town Projects' designs and footprint math moved, unchanged, into packs/town_bp/scripts/designs.js. tools/town-designs.test.mjs pins every design.",
+    "commits": [
+     "0491828"
+    ],
+    "proof": "node --test tools/town-designs.test.mjs: 6/6 pass (as of this pass, garden pen design included)."
+   },
+   {
+    "id": "F36-step1-npc",
+    "status": "done (code-only, BDS pending)",
+    "summary": "npc_bp supports a mayor per town. It answers realm:npc_mayor set/rename/remove with acks. It reads the realm:npc_mayors list and prunes old mayors only after a complete list arrives. Records are saved in npc:mayors and skins as realm_npc:m_<town>. Mayors have the mayor role only (no affinity, gifts or stories). folkOf replaces folk.get for placed townsfolk. Later commits added gossip `from` (41e2c7f). npc_bp is now 1.9.0.",
+    "commits": [
+     "2bf082d",
+     "93f0699",
+     "41e2c7f"
+    ],
+    "proof": "node --test passes for tools/npc-mayors.test.mjs (8/8) and tools/name-labels.test.mjs (13/13)."
+   },
+   {
+    "id": "F36-step1-town",
+    "status": "done (code-only, BDS pending)",
+    "summary": "Town schema v2 adds m and mn. Each new town gets its own mayor (Mayor Bram for the first). A mayor offers its own town wherever the player stands; the nearest-town rule is kept as a fallback. A missing mayor is asked for again. Operators get a Mayor submenu (Move/Rename; only Move for Bram). A mayor is removed with its town. New option townMayors.",
+    "commits": [
+     "51bd025",
+     "dad2119"
+    ],
+    "proof": "node --test tools/town-mayors.test.mjs: 10/10 pass."
+   },
+   {
+    "id": "F36-step1-migration",
+    "status": "done (code-only, BDS pending)",
+    "summary": "Towns saved before mayors (v1) migrate once a complete realm:npc_places answer is in. Bram keeps the town nearest his post, or the oldest town. Every other town gets mayor:<id>. Only v, m and mn are written.",
+    "commits": [
+     "dd54767"
+    ],
+    "proof": "The town-mayors.test.mjs migration test runs the real mayorMigrate in vm."
+   },
+   {
+    "id": "F36-review-bram",
+    "status": "done (code-only)",
+    "summary": "Review fix: newTownMayor now gives Bram to a new town when no town has him and every town has v: 2. So after Bram's town is removed, the next town added is his, as section 3 of the design note says. A town still waiting for migration keeps first claim on him (D19). PACKS.md Mayors and D71 are updated.",
+    "commits": [
+     "edba2e2"
+    ],
+    "proof": "node --test tools/town-mayors.test.mjs: 10/10. Without the mayors.js change, 9/10 (the Bram-after-removal case fails)."
+   },
+   {
+    "id": "F37-step2-sites",
+    "status": "done (code-only, BDS pending)",
+    "summary": "New pure spot finder sites.js: natural allow list, column model, gradePlan (at most 3 deep, steps of 1, keeps the town's elevation), scoring order and the ring scan with dock and rejections. Later commits added `near` (cb88006).",
+    "commits": [
+     "1a7524c",
+     "ef5cde7",
+     "f5c232d",
+     "cb88006"
+    ],
+    "proof": "node --test tools/town-sites.test.mjs: 14/14."
+   },
+   {
+    "id": "F37-step2-placed",
+    "status": "done (code-only, BDS pending)",
+    "summary": "placed.js keeps 4x4x4 cells where players placed blocks, filled from playerPlaceBlock and realm:blocks_placed boxes. Saved in town:pl:<town>:0..1, at most 5,000 cells, then plf.",
+    "commits": [
+     "336160a"
+    ],
+    "proof": "node --test tools/town-placed.test.mjs: 4/4."
+   },
+   {
+    "id": "F37-step2-auto",
+    "status": "done (code-only, BDS pending)",
+    "summary": "Automatic spots: a budgeted scan while a player is in the town, avoiding claims, posts, places and placed cells. Then a build job: outline, block check, step-off wait, claims, snapshot plus bs, a budgeted apply, resume after a restart, and the ground restored on Remove spot. New options autoSpots, levelDepth and outlineSeconds.",
+    "commits": [
+     "71fc5c8",
+     "c802863",
+     "f5c232d"
+    ],
+    "proof": "node --test tools/town-autobuild.test.mjs: 11/11 (as of this pass)."
+   },
+   {
+    "id": "F37-review-scan-budget",
+    "status": "done (code-only, BDS pending)",
+    "summary": "Review fix (high): scanTown now counts its own work. Each column lookup counts, cached or not, plus 8 and the list lengths per position. At SCAN.workTick = 400 it yields [\"tick\"], and stepScan ends its tick on it. So later houses that re-walk cached rings no longer evaluate every candidate in one tick. Measured with node --jitless, the closest stand-in for QuickJS here, on the reviewer's rolling-terrain harness (well plus 5 houses, radius 96): median 0.59 ms a tick, p99 2.1 ms, total 4,898 ticks. Before, single gaps were 62-117 ms even in JIT V8. The rare 7-8 ms outliers are GC: they fall at random ticks and also appear at workTick 300. The cost is that a level takes about 1 to 5 minutes to pick its spots. PACKS.md Cost and How to use, design note section 10 and D68 are updated. Scenario spot waits are raised from 2400 to 6000 ticks. town_bp is bumped to 1.7.1 and sync-diag was run.",
+    "commits": [
+     "a5df65d",
+     "001b8bc",
+     "8d2900e"
+    ],
+    "proof": "New test in tools/town-sites.test.mjs: at most workTick/8+1 positions between yields, more than 100 tick requests, and stepScan wired. It passes 14/14 and fails 13/14 with the sites.js/main.js change stashed."
+   },
+   {
+    "id": "F37-review-resume-guards",
+    "status": "done (code-only, BDS pending)",
+    "summary": "Review fix (medium): a resumed build (bs) now starts at 'standing', not 'apply'. It waits players off the spot, checks claims again, and keeps the existing snapshot. The apply phase also pauses while a player is in the region. applyBuild and placeDesignSteps take a `mine` predicate, which reads town:pl cells live. They never cut, fill or build over a block in a cell a player placed blocks in since the check, and apply waits while those cells are unreadable. Before structureManager.place, the structure's box is checked block by block: only unmarked air, natural ground or wild plants may be there. A claim over a half-done build, or a blocked structure box, holds the build (session map heldBuilds, one ops message). It does not respot, which would forget a half-leveled spot. Remove spot clears the hold, and a restart tries again. PACKS.md, D24 (corrected) and D69 are updated.",
+    "commits": [
+     "a8068c8"
+    ],
+    "proof": "3 new tools/town-autobuild.test.mjs cases (mine on cut/fill/pad; a chest or a marked cell in a structure's box stops place(), which is placed once clear; stepBuild wiring) pass 10/10. With the main.js change stashed, those 3 fail. New BDS scenario town-resume-guards.js (pending)."
+   },
+   {
+    "id": "F37-review-restore-test",
+    "status": "done",
+    "summary": "Review fix (low): a test now pins restoreGround's 'someone's own block' rule. A chest and bricks placed on the leveled apron stay, nothing is broken, and everything else is restored.",
+    "commits": [
+     "72211fd"
+    ],
+    "proof": "Mutation check: deleting `continue; // someone's own block` from main.js makes the new test fail (10/11); restored, 11/11."
+   },
+   {
+    "id": "F38",
+    "status": "done (code-only, BDS pending)",
+    "summary": "The town grows with player progress. Each town has a story the mayor tells (t.log, dated with the Realm day) and a why for each project. Level-ups queue scans for the new projects.",
+    "commits": [
+     "d8734df"
+    ],
+    "proof": "node --test tools/town-growth.test.mjs: 11/11."
+   },
+   {
+    "id": "F39",
+    "status": "done (code-only, BDS pending; ships Disabled)",
+    "summary": "Residents through a villager_v2 override whose added group claims no bed, job site or bell: 2 at the well, then a family per house, with a death handler and a census. They ship Disabled (D42) until town-resident-poi.js passes on BDS. Review: WORKING.md now lists all three vanilla entity overrides and their additions (99ad9ff). The CLAUDE.md rule still needs the villager_v2 line (left to the lead, see decisions).",
+    "commits": [
+     "9ed193c",
+     "b713aa2",
+     "99ad9ff"
+    ],
+    "proof": "node --test tools/town-residents.test.mjs: 11/11. It checks that the override's only realm: keys are the property, group and event, and that no vanilla event uses them. It cannot diff against vanilla: no vanilla villager_v2.json is on disk."
+   },
+   {
+    "id": "F40",
+    "status": "done (code-only, BDS pending)",
+    "summary": "Houses are built as town works from level 2. Small life (townLife): paths, lantern posts, the garden pen with 2 sheep and 2 chickens, the notice board and town news. A build's path is taken away before its ground is restored. Review fix (medium): playerPlaceBlock now also marks wild plants, so a player's flower bed is avoided by the scan and the check. A path clears only grass tufts, dead bushes, bushes and leaf litter (CLEARABLE); flowers, ferns, petals and mushrooms stop it. PACKS.md and D70 are updated.",
+    "commits": [
+     "1694313",
+     "11638f9",
+     "ea44d1f",
+     "606caf6",
+     "ae0980c",
+     "6ca3b27",
+     "8280bea",
+     "7cf55eb",
+     "67f27af",
+     "2a09f95"
+    ],
+    "proof": "node --test tools/town-life.test.mjs: 13/13 (11/13 with the old life.js). tools/town-placed.test.mjs: 4/4, with a new wiring assertion for WILD."
+   },
+   {
+    "id": "F41",
+    "status": "partly done: code written, measurements owed",
+    "summary": "town-capital-perf.js exists: 2 towns at Capital, 10 players, a baseline, and scan and build transients. Review (medium): it has never been run. The PACKS.md Cost figures are estimates; the scan figure is now marked as one from tests outside the game. The D2 bed gate (town-resident-poi.js) has not been run either. Not recorded as done until the runs below are in. Review (low): the setup checklist's 'Town Project Spots' text now says it is optional and that a spot you set is never leveled (admin_bp 1.6.8). help-catalog, admin-catalog and gen-news are left to the lead, so npm run check fails until then.",
+    "commits": [
+     "99569a5",
+     "a986f32",
+     "39d8f95",
+     "d122b6a"
+    ],
+    "proof": "node --test tools/town-setup-preset.test.mjs: 1/1. The BDS measurements are in bdsPending."
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "F41 / review: steady cost of 2 towns at Capital, 10 players, no scan or build. Record ms/tick per pack against section 10 (town_bp 0.15 or less, npc_bp no more than 0.05 above baseline) in LIVING_TOWNS.md and the PACKS.md Cost text.",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/town-capital.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=120 --timeout 9000"
+   },
+   {
+    "purpose": "F41: Townsfolk baseline for the comparison",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/town-capital-base.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=120 --arg baseline=1 --timeout 9000"
+   },
+   {
+    "purpose": "F41 / review fix a5df65d: the scan transient in QuickJS, with SCAN.workTick 400. Check the largest tick is under about 1 ms; if not, lower workTick.",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/town-capital-scan.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=120 --arg transient=scan --timeout 9000"
+   },
+   {
+    "purpose": "F41: the build transient (apply phase now also calls playersOn every tick)",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/town-capital-build.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=120 --arg transient=build --timeout 9000"
+   },
+   {
+    "purpose": "D2/D42 bed gate: residents claim no bed, job site or bell. If it passes, residents can default to Enabled (F39).",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-resident-poi.js --timeout 6000"
+   },
+   {
+    "purpose": "Review fix a8068c8: a resumed build waits while a player stands on the spot (Step off the spot), finishes once they step off, and keeps a dirt block marked through realm:blocks_placed after the check",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-resume-guards.js --timeout 4000"
+   },
+   {
+    "purpose": "Regression: a build resumed after a restart ends the same as one built straight through (resume now goes through standing and claims)",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-build-resume.js --timeout 4000"
+   },
+   {
+    "purpose": "Mayors: an added town gets mayor:<id> with offers, rename and removal",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-mayor-add.js --timeout 600"
+   },
+   {
+    "purpose": "Mayors: two towns, each mayor offers only its own town",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-two-towns.js --timeout 600"
+   },
+   {
+    "purpose": "Migration of an existing v1 world: Bram keeps his town, data unchanged",
+    "after": "node tools/test-bds/run.mjs --quiet --flat --only town_bp,npc_bp --scenario tools/test-bds/examples/town-bram-migrate.js --timeout 900"
+   },
+   {
+    "purpose": "Automatic spots, hillside leveling, claims, placed marks, unloaded ground and terrain restore (spot waits are now 6000 ticks for the paced scan)",
+    "after": "node tools/test-bds/suite.mjs --filter 'town-(auto-spots|hillside|claims-spots|placed-marks|unloaded|terrain-restore)' --retry"
+   },
+   {
+    "purpose": "Houses, residents, small life (paths now stop at flowers) and news",
+    "after": "node tools/test-bds/suite.mjs --filter 'town-(houses|residents|life|news)' --retry"
+   },
+   {
+    "purpose": "Regression: every Townsfolk and town scenario",
+    "after": "node tools/test-bds/suite.mjs --filter 'town|npc' --retry"
+   },
+   {
+    "purpose": "One-context bundle (shared store, event ordering)",
+    "after": "npm run bundle -- --all && node tools/test-bds/run.mjs --quiet --flat --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/bundle-smoke.js"
+   },
+   {
+    "purpose": "Static checks not run under the TIMING_SOAK_RUNNING code-only rule: tsc (new JSDoc on applyBuild returning boolean | string, the mine params and the [\"tick\"] ScanRequest), check-docs, check-ascii, check-versions and the full unit suite. Run after help-catalog, admin-catalog and gen-news.",
+    "after": "npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+   }
+  ],
+  "decisions": [
+   "D68: the scan counts its own work (every column lookup, cached or not, plus 8 and the list lengths per position) and yields [\"tick\"] at SCAN.workTick = 400; stepScan ends its tick on it. Measured with node --jitless: median 0.59 ms a tick, p99 2.1 ms. A level now takes about 1 to 5 minutes to pick its spots instead of under one: performance over UX.",
+   "D69: a resumed build goes through standing and claims again. Apply pauses while a player is in the region. Blocks in cells players placed since the check are never cut, filled or built over (mine). A structure's box is checked before place(). A claim over a half-done build, or a blocked structure, holds it (heldBuilds, one ops message, cleared by Remove spot or a restart) instead of respot, which would forget a half-leveled spot. D24 is corrected.",
+   "D70: playerPlaceBlock also marks WILD plants. Paths clear only short_grass, short_dry_grass, tall_dry_grass, deadbush, bush and leaf_litter; flowers, ferns, petals and mushrooms stop a path. A cleared tuft is not given back on Remove spot (`c` stays informational).",
+   "D71: newTownMayor gives Bram to a new town when no town has him and every town has v: 2, so the next town after his town is removed is his. D19 is kept: a town waiting for migration keeps first claim on him.",
+   "Review finding on CLAUDE.md, not applied by this agent: the mc-packs CLAUDE.md 'Vanilla entity overrides' rule should also name town_bp/entities/villager_v2.json and its three additions (realm:resident property, realm:town_resident group, realm:become_resident event). I did not edit CLAUDE.md because it holds the owner's instructions; the lead should make that one-line change. docs/WORKING.md now lists all three overrides.",
+   "Review finding on F41 measurements and the help catalog: not resolvable in code-only mode. The BDS runs are in bdsPending, and help-catalog, admin-catalog and gen-news go to the lead (generatorsNeeded). F41 stays 'measurements owed', and residents stay Disabled until town-resident-poi.js passes.",
+   "admin_bp was bumped to 1.6.8 with the presets.js 'Town Project Spots' text. admin-catalog.mjs needs no further admin_bp bump unless it changes catalog.js after 1.6.8 is merged.",
+   "town_bp was bumped once, 1.7.0 -> 1.7.1, for all review fixes, with sync-diag run (check-versions compares against origin/master).",
+   "Scenario spot waits raised from 2400 to 6000 ticks for the paced scan. The runner --timeout values were left as they were."
+  ],
+  "generatorsNeeded": [
+   "node tools/help-catalog.mjs (Town Projects and Townsfolk How to use, summaries and Commands rows changed, including 'a minute or a few for a level'; it bumps help_bp)",
+   "node tools/admin-catalog.mjs (no new commands; confirm it is clean; admin_bp is already 1.6.8 with the presets.js text)",
+   "node tools/gen-news.mjs (after the lead adds the docs/NEWS.md entry from newsLines)"
+  ],
+  "newsLines": [
+   "Every town now has a mayor of its own. Add a town and its mayor (like Mayor Alda of Riverside) is waiting at the town's center, ready to take deliveries for that town's projects.",
+   "Mayor Bram is still the realm's main mayor and keeps his town. Every other town gets its own mayor the next time someone visits it.",
+   "Towns now pick their own building spots on natural ground and level it gently (never more than 3 blocks), and they never touch anything you built, placed or planted.",
+   "As towns grow they build houses, lay grass paths to the center, light them with lantern posts and keep a garden pen with sheep and chickens.",
+   "Operators: /realm:town -> Mayor moves the town's mayor to where you stand or renames them."
+  ],
+  "packsBumped": [
+   "town_bp 1.2.10 -> 1.7.1 (1.7.0 -> 1.7.1 in this review pass)",
+   "npc_bp 1.7.16 -> 1.9.0",
+   "welcome_bp 1.5.11 -> 1.5.12",
+   "admin_bp 1.6.7 -> 1.6.8 (setup checklist text)"
+  ],
+  "risks": [
+   "Code-only pass (TIMING_SOAK_RUNNING present). Not run: tsc, npm run check/build and every BDS scenario. Only single unit-test files ran: every tools/town-*.test.mjs plus npc-mayors and name-labels pass. node --check passes on every changed script.",
+   "SCAN.workTick = 400 is tuned on V8 --jitless, not QuickJS. If the BDS scan transient shows ticks over about 1 ms, lower it (300 gave a median of 0.36 ms a tick). Spots then take longer.",
+   "A held build (claim, or a player's block in a structure's box) stays half leveled until an operator uses Remove spot or the server restarts. One ops message per session.",
+   "Remove spot still overwrites a player's block when that block's kind is one the build uses (a well's cobblestone, the fill's dirt or grass). Such blocks are in `kinds` by design; containers spill their contents, so no items are lost. Not changed here.",
+   "town-resume-guards.js is new and untested on BDS. It relies on realm:blocks_placed accepting {dim, box} and on the save coalescing within 260 ticks. Its teleports and assertions may need adjusting on the first run.",
+   "Several commits are not self-contained: 2bf082d fails name-labels until 93f0699. Squash them if each commit must pass on its own.",
+   "The CLAUDE.md overrides line is still to be added by the lead (see decisions)."
+  ]
+ }
+}

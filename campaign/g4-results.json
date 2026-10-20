@@ -1,0 +1,494 @@
+[
+ {
+  "worktree": "/home/user/wt/g4-saga-map-hud",
+  "branch": "ws/g4-saga-map-hud",
+  "items": [
+   {
+    "id": "F15",
+    "status": "done-needs-bds",
+    "summary": "hud_bp statePartMessages now keeps a running byte count per part (envelope with the widest part numbers + each id's JSON form + a comma), so each id is encoded once instead of re-stringifying the whole growing part. The output is byte-for-byte the same greedy split. hud_bp 1.3.8 -> 1.3.9.",
+    "commits": [
+     "4189025"
+    ],
+    "proof": "New unit test in tools/hud-state-parts.test.mjs (300 mixed ids: unicode, 4-byte, quotes, backslashes, control chars) checks the parts are identical to the old greedy split and that JSON.stringify output during one publish is under 4x what is sent. Before the fix it fails ('encoded 300458 characters for 7924 sent'); after, 16/16 pass. Node microbenchmark of the function on this machine, run while the timing soak was going (old -> new per publish): 40 ids 216 -> 10.5 us, 100 ids 998 -> 19.3 us, 250 ids 2597 -> 58 us, same output. A publish happens on a change and every 100 ticks. The BDS ms/tick check is in bdsPending."
+   },
+   {
+    "id": "F16",
+    "status": "done-needs-bds",
+    "summary": "map_bp applyReset sends the 'An operator reset everyone's destination and marked spots' line only when resetPlayer returns true (something was cleared). Brand-new players, and online players who had nothing saved, are stamped with the generation silently. PACKS.md map_reset Commands row says so. map_bp 1.3.8 -> 1.3.9.",
+    "commits": [
+     "3a1163f"
+    ],
+    "proof": "New pack-sim unit test in tools/map-reset.test.mjs loads the real map_bp main.js with map:reset already set and spawns a new player, an old player with spots and an up-to-date player. It fails before ('a brand-new player is not told about an old reset') and passes after (10/10). Extended BDS scenario tools/test-bds/examples/map-reset.js: the player who lost a spot is told once, the operator with nothing saved and a later joiner are not told (in bdsPending)."
+   },
+   {
+    "id": "F68",
+    "status": "done-verified",
+    "summary": "PACKS.md saved-data rows now say what the values are. map:reset is a whole number set to max(previous + 1, Unix seconds) on each confirm, not a count of resets, and missing or 0 means no reset has run. map:gen is written on the first join after a reset even with nothing to clear, and a lower value means a reset on the next join. The WORLD_GEN comment in reset.js says the same.",
+    "commits": [
+     "1570cb8"
+    ],
+    "proof": "Docs and comment only; check-docs and check-ascii pass."
+   },
+   {
+    "id": "F17",
+    "status": "done-needs-bds",
+    "summary": "Brought back fitTail in saga_bp ui.js. Quest box step lines now carry their whereOf text as a separate `tail` on BoxLine. The last-resort cut in layoutBox shortens the label at a word with '...' and keeps the tail (' NE 240m', '1:20 left', 'Mara NE 40m', '(hint available)'). If the tail can't fit on its own, it falls back to fitRows as before. PACKS.md Story tracker paragraph updated. saga_bp 1.16.13 -> 1.16.14.",
+    "commits": [
+     "68d9b67"
+    ],
+    "proof": "New test in tools/saga-quest-box.test.mjs runs the production box region with 340/500/680-character labels and 4 tail shapes. Before: fails ('340: the step keeps \" NE 240m\"'). After: 15/15 pass, and so do the whole-content sweeps and boundary tests (every story, favor, stranger and hostile), saga-interaction-lifecycle and saga-pack-fallback. The real-client look stays on the F71 checklist."
+   },
+   {
+    "id": "F18",
+    "status": "done-verified",
+    "summary": "Removed the unreachable second `needs.length ? ...` branch from currentPage's step line in saga_bp ui.js. Behavior is unchanged.",
+    "commits": [
+     "94c51bd"
+    ],
+    "proof": "Dead code (the first branch of the same conditional already tests needs.length). saga-quest-box, saga-interaction-lifecycle and saga-pack-fallback unit tests pass."
+   },
+   {
+    "id": "F27",
+    "status": "done-verified",
+    "summary": "Moved saga's session champion list into packs/saga_bp/scripts/champions-session.js (imports nothing; tests import it). objectives.js forgets a champion's id in its entityDie champion branch, and the list keeps at most the latest 256 ids, oldest dropped first. PACKS.md Story > Champions line documents it.",
+    "commits": [
+     "cf156e3"
+    ],
+    "proof": "New tools/saga-champions-session.test.mjs: track/forget, the 256 cap with oldest-first eviction, and the objectives.js wiring (forgetChampion(deadEntity.id) in the entityDie CHAMPION_TAG branch, no second list). Against the old objectives.js the wiring test fails (2 pass, 1 fail); after, 3/3 pass."
+   },
+   {
+    "id": "F25",
+    "status": "done-verified",
+    "summary": "New tools/check-event-guards.mjs, wired into npm run check after check-actionbar (check-pipeline passes). It uses the TypeScript parser on every pack script and tools/*-shared.js. For each onScriptEvent with literal ids (or a const array), it checks (1) that every id the handler compares with (===/!==/switch case) is registered, and (2) that every top-level `if (id !== a && ...) return;` guard, including as one part of an `||`, lets through every registered id still reaching it (minus ids that earlier `if (id === x) {...return}` branches took). The inner guards stay in place, and the check stops them from drifting. WORKING.md C29 row mentions it.",
+    "commits": [
+     "300fd0a"
+    ],
+    "proof": "The real tree passes: 536 files, 153 guards checked, and every `!==` realm: comparison inside an onScriptEvent handler is in a checked guard (--list prints none unchecked). The only 4 comparisons outside handlers are admin_bp's '*' listener and command-name filters. Mutation runs: adding an id to saga main.js's, wander main.js's or settings-shared.js's registration without its guard is reported with the guard's line. New tools/check-event-guards.test.mjs (7 tests: exact match, missing id, || guard, ids taken earlier, unregistered compare in if/switch, named handler + renamed id + const list, '*' skipped) passes."
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "F16: only players who lost spots are told about a map reset (operator with none and a later joiner are not)",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --timeout 600 --only map_bp --scenario /home/user/wt/g4-saga-map-hud/tools/test-bds/examples/map-reset.js   # expected FAIL: 'the operator with nothing saved is not told (1)'",
+    "after": "cd /home/user/wt/g4-saga-map-hud && node tools/test-bds/run.mjs --quiet --timeout 600 --only map_bp --scenario tools/test-bds/examples/map-reset.js   # expected PASS"
+   },
+   {
+    "purpose": "F17 regression: quest box on BDS still renders and wraps",
+    "after": "cd /home/user/wt/g4-saga-map-hud && node tools/test-bds/run.mjs --quiet --only saga_bp,party_bp --scenario tools/test-bds/examples/saga-quest-box.js --timeout 600 && node tools/test-bds/run.mjs --quiet --flat --only saga_bp,party_bp --scenario tools/test-bds/examples/saga-quest-wrap.js --timeout 600"
+   },
+   {
+    "purpose": "F15 regression: Party/Stats still join realm:hud_state parts",
+    "after": "cd /home/user/wt/g4-saga-map-hud && node tools/test-bds/run.mjs --quiet --only hud_bp,party_bp --scenario tools/test-bds/examples/party-hud-coords.js --timeout 600"
+   },
+   {
+    "purpose": "F15 perf: hud_bp ms/tick at 40 players before/after (same machine, one at a time)",
+    "before": "cd /home/user/mc-packs && git worktree add /home/user/wt/g4-before cb86c73 && ln -s /home/user/mc-packs/node_modules /home/user/wt/g4-before/node_modules && cd /home/user/wt/g4-before && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/claude-0/-home-user/19cc7f0e-0d2d-50e1-96da-fa30ba298f68/scratchpad/hud-before.json --only hud_bp,stats_bp,party_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000",
+    "after": "cd /home/user/wt/g4-saga-map-hud && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/claude-0/-home-user/19cc7f0e-0d2d-50e1-96da-fa30ba298f68/scratchpad/hud-after.json --only hud_bp,stats_bp,party_bp --scenario tools/test-bds/examples/perf-soak.js --arg players=40 --arg seconds=120 --timeout 3000"
+   },
+   {
+    "purpose": "Full gate once the machine is free (code-only mode during this workstream: tsc and the whole unit suite not run)",
+    "after": "cd /home/user/wt/g4-saga-map-hud && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+   }
+  ],
+  "decisions": [
+   "Bumped hud_bp 1.3.8->1.3.9, map_bp 1.3.8->1.3.9 and saga_bp 1.16.13->1.16.14 once each over int23, as the task says; ran sync-diag. The integrator keeps the highest version if another workstream also bumps.",
+   "F15: count sizes incrementally (base envelope at part numbers 9999 + JSON(id) + comma) instead of a new data shape, so the output is byte-identical to the old split and receivers need no change.",
+   "F16: kept clearing the in-memory caches on every generation stamp; only the chat line depends on resetPlayer's return. Clearing an empty cache is harmless, and it keeps the code path simple.",
+   "F16: an online player with nothing saved is no longer told at reset time either. The message says their data was reset, which is false for them.",
+   "F17: restored fitTail's exact old algorithm (from 7eb5f72), carried by an optional `tail` field on BoxLine, instead of parsing the tail back out of the text.",
+   "F27: forget on entityDie only, not entityRemove. WORKING.md says entityRemove also fires on chunk unload, and a live champion forgotten there would be swept as a leftover by sweepLoadedChampion when its chunk reloads mid-fight. A 256-id cap (oldest first) bounds the list instead.",
+   "F27: put the list in a small module the unit test imports (in line with F24), not a code region the test extracts.",
+   "F25: chose the 'add a check' option over removing the guards. Removing them would touch about 45 packs and the settings/zones/side shared copies (version bumps and merge conflicts with every other workstream), while the check makes drift impossible to ship. It also catches compares against unregistered ids and guards hidden inside `||` conditions.",
+   "F25: the check skips '*' handlers (they filter on purpose) and handlers whose ids are not literals or a same-file const. --list showed no realm: `!==` comparison inside a handler is left unchecked today.",
+   "No NEWS/FIXES/OPEN edits (integrator). help-catalog is needed because the Minimap map_reset Commands row changed; admin-catalog is not (no command or parameter changed)."
+  ],
+  "generatorsNeeded": [
+   "help-catalog (Minimap /realm:map_reset Commands row text changed in PACKS.md)",
+   "gen-news (if the integrator adds the newsLines below)"
+  ],
+  "newsLines": [
+   "Minimap: new players are no longer told an operator reset their map; only players whose destination or marked spots were actually cleared get that message.",
+   "Story: when a quest step is too long for the quest box, its name is shortened and the direction, distance or time left always stays visible."
+  ],
+  "packsBumped": [
+   "hud_bp 1.3.9",
+   "map_bp 1.3.9",
+   "saga_bp 1.16.14"
+  ],
+  "risks": [
+   "Code-only mode the whole time (TIMING_SOAK_RUNNING): tsc, npm run check, npm run test and BDS were not run. Only the touched unit-test files and the light checks were run (check-ascii, check-docs, check-events, check-pipeline, sync-diag --check, check-event-guards).",
+   "check-event-guards depends on the typescript package (already a devDependency used by tsc) and runs in about 2 s.",
+   "F17 still needs the real-client look on the F71 checklist (row counts are a 32-column estimate)."
+  ],
+  "sharedLayers": [
+   "tools/check-event-guards.mjs (new, in npm run check)",
+   "tools/check-event-guards.test.mjs (new)",
+   "package.json check script",
+   "docs/WORKING.md C29 row"
+  ]
+ },
+ {
+  "worktree": "/home/user/wt/g4-tools-quality",
+  "branch": "ws/g4-tools-quality",
+  "items": [
+   {
+    "id": "F33",
+    "status": "done-verified",
+    "summary": "Split the glued statements in cooking main.js:32, nick main.js:207, titles main.js:346 and mail main.js:660. Replaced the literal \\n in mail policy.js:16 (its CRLF line ending kept) and in two scenario headers: welcome-generic-bundle.js, and expedition-nether-carts.js, a new case found by a repo-wide grep. The 'comments that don't match the code' part is covered by F51 and F20.",
+    "commits": [
+     "c790ca2"
+    ],
+    "proof": "Whitespace and comment changes only. node --check passes on each file, and a repo-wide grep for glued statements and literal \\n in comments finds nothing."
+   },
+   {
+    "id": "F51",
+    "status": "done-verified",
+    "summary": "The crowns_audit description now says 'the newest 50 pays and gives (operators)', which is what the form shows. The claims_bp isTamed comment now gives the real reason: tamedToPlayerId lives on minecraft:tameable, which a mob loses once it is tamed. The OPEN.md O27 wording is left to the integrator.",
+    "commits": [
+     "d2bc48a"
+    ],
+    "proof": "Text-only change. admin_bp/scripts/catalog.js still has the old description until admin-catalog is regenerated (see generatorsNeeded); until then admin-catalog --check fails."
+   },
+   {
+    "id": "F20",
+    "status": "done-verified",
+    "summary": "The anonymous setActionBar writers are now named functions: hud_bp hudLoop and clearOnChange, and stats_bp tickerLoop. The allowlist lists exactly those plus clearTicker and stash's '(top level)'. check-actionbar now refuses an '(anonymous)' allowlist entry: it exempts nothing and is reported itself.",
+    "commits": [
+     "4b25390"
+    ],
+    "proof": "New unit test: fails against the old check-actionbar.mjs (0/1) and passes with the fix. check-actionbar.test.mjs passes 16/16. check-actionbar: 82 calls OK."
+   },
+   {
+    "id": "F50",
+    "status": "done-verified",
+    "summary": "cooking applyOwed(player) no longer takes test parameters: the server-only test hook sets a module flag for its one claim and resets it in a finally. find_bp subscribes playerPlaceBlock without optional chaining, and the find-marker test mock now provides that event. milestones' recheck/report stay as they are because they already live only in the server test handler.",
+    "commits": [
+     "b9c4173",
+     "fca654a"
+    ],
+    "proof": "The new owed-shared.test.mjs case fails on the old cooking main.js and passes on the new one (30/30). find-marker passes 4/4. The owed-legacy-restart BDS run is still to do (see bdsPending)."
+   },
+   {
+    "id": "F24",
+    "status": "done-verified",
+    "summary": "The comment-marker blocks are now modules the tests import as they ship: expedition_bp queue.js and forget.js, and saga_bp stash-bridge.js. Review follow-up: expedition-capacity now asserts the exact createQueue({...}) dependency list and its order (commit 7f51d68). Both expedition tests fall back to the shipped queue.js and forget.js when EXPEDITION_SRC is an older copy without them, so fail-before runs fail on assertions instead of crashing on import (commit 885e9f5).",
+    "commits": [
+     "a167e94",
+     "dd6236b",
+     "7f51d68",
+     "885e9f5"
+    ],
+    "proof": "expedition-capacity passes 19/19, expedition-forget 8/8 and saga-collect-stash 13/13. Mutation checks: removing the forgotten() guard, swallowing the sweep message or returning live instead of max(live, had) each fails a test. Wiring check: a main.js copy with start/resetPending swapped, and another with cantStart removed, each fail the new assertion; both passed the old regex. Run against the c790ca2 scripts (before queue.js and forget.js), capacity gives 14 pass / 5 fail and forget 7 pass / 1 fail on wiring assertions, instead of an import crash. tsc still needs npm run check."
+   },
+   {
+    "id": "F26",
+    "status": "done-verified",
+    "summary": "tools/prune-shared.js replaces the three hand-copied prune.js files (party, nick, titles), copied by sync-prune. tools/gossip-shared.js (createGossip) replaces 19 pasted gossip limiters, copied as scripts/gossip.js by sync-gossip. Both use tools/lib/shared-copy.mjs with an expect list, and their --check runs in npm run check.",
+    "commits": [
+     "fee6b69",
+     "7787164"
+    ],
+    "proof": "inactive-prune passes 19/19, w10-news 21/21 and saga-gossip 1/1 against each pack's real wiring and copy. The NEWS_SEEN behavioral check fails with 63 and with 65. sync-prune/sync-gossip --check: all copies current."
+   },
+   {
+    "id": "F52",
+    "status": "done-verified",
+    "summary": "planNow (six copies: rain, storm, climate, tornado, night, moon) is now tools/weather-plan-shared.js, copied as scripts/weather-plan.js by sync-weather, whose --check runs in npm run check.",
+    "commits": [
+     "c3be2b9"
+    ],
+    "proof": "weather-plan-intake.test.mjs passes 39/39 with all six real packs, including a check that each copy equals header + shared. map-hotpaths and the other related tests pass."
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "Whole repository checks: tsc on the new modules, check-pipeline, the new sync --checks, all unit tests. Run after the integrator regenerates admin-catalog for the crowns description.",
+    "after": "cd /home/user/wt/g4-tools-quality && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+   },
+   {
+    "purpose": "Expedition queue and forget hook behave the same after the move to queue.js/forget.js (F24)",
+    "before": "cd /home/user/wt/int23 && node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-queue.js --timeout 600 && node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-forget.js",
+    "after": "cd /home/user/wt/g4-tools-quality && node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-queue.js --timeout 600 && node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-forget.js"
+   },
+   {
+    "purpose": "Saga collect steps still count stash pages through stash-bridge.js (F24)",
+    "before": "cd /home/user/wt/int23 && node tools/test-bds/run.mjs --quiet --flat --only saga_bp,stash_bp --scenario tools/test-bds/examples/stash-saga-solo-gather.js --timeout 900 && node tools/test-bds/run.mjs --quiet --only saga_bp --scenario tools/test-bds/examples/saga-collect-count.js --timeout 300",
+    "after": "cd /home/user/wt/g4-tools-quality && node tools/test-bds/run.mjs --quiet --flat --only saga_bp,stash_bp --scenario tools/test-bds/examples/stash-saga-solo-gather.js --timeout 900 && node tools/test-bds/run.mjs --quiet --only saga_bp --scenario tools/test-bds/examples/saga-collect-count.js --timeout 300"
+   },
+   {
+    "purpose": "Cooking owed test hook works with the module flag instead of applyOwed parameters (F50)",
+    "before": "cd /home/user/wt/int23 && node tools/test-bds/hooks/owed-probe.mjs /tmp/owed-cooking-int23/packs cooking_bp && node tools/test-bds/run.mjs --quiet --timeout 900 --packs /tmp/owed-cooking-int23/packs --only cooking_bp --scenario tools/test-bds/examples/owed-legacy-restart.js",
+    "after": "cd /home/user/wt/g4-tools-quality && node tools/test-bds/hooks/owed-probe.mjs /tmp/owed-cooking-g4tq/packs cooking_bp && node tools/test-bds/run.mjs --quiet --timeout 900 --packs /tmp/owed-cooking-g4tq/packs --only cooking_bp --scenario tools/test-bds/examples/owed-legacy-restart.js"
+   },
+   {
+    "purpose": "find_bp placed-container ownership with the non-optional playerPlaceBlock subscription (F50)",
+    "after": "cd /home/user/wt/g4-tools-quality && node tools/test-bds/run.mjs --quiet --only find_bp --scenario tools/test-bds/examples/find-index.js --timeout 600"
+   },
+   {
+    "purpose": "Every pack's town news through the shared gossip.js gate (F26), plus the Coordinates HUD and stats ticker after naming their loops (F20)",
+    "before": "cd /home/user/wt/int23 && node tools/test-bds/suite.mjs --filter '(-news|w10-guilds-news|stats-ticker|party-hud-coords)\\.js' --retry",
+    "after": "cd /home/user/wt/g4-tools-quality && node tools/test-bds/suite.mjs --filter '(-news|w10-guilds-news|stats-ticker|party-hud-coords)\\.js' --retry"
+   }
+  ],
+  "decisions": [
+   "Review finding admin_bp/scripts/catalog.js (crowns description out of date): real, but left to the integrator as instructed (the workstream may not run admin-catalog). Listed in generatorsNeeded: run node tools/admin-catalog.mjs, bump admin_bp, then run sync-diag.",
+   "Review finding expedition-capacity wiring regex too loose: real, fixed in 7f51d68. The test now builds the exact createQueue destructuring, the 13 dependencies in order and the runInterval line, and requires them verbatim in main.js. A swapped start/resetPending, or a missing cantStart, now fails; both passed the old regex.",
+   "Review finding EXPEDITION_SRC fail-before runs crash on import: real, fixed in 885e9f5. A copy without queue.js/forget.js now falls back to the shipped modules, noted in both headers. The tests then run and fail on the main.js wiring assertions (checked against c790ca2: capacity 5 fails, forget 1 fail) instead of crashing. I chose a fallback over a hard error so that the old copy's main.js is still checked.",
+   "Edited the test files byte-preserving (expedition-capacity.test.mjs has mixed CRLF/LF endings), so the diffs touch only the changed lines.",
+   "F50: milestones recheck/report left unchanged: they already live only in the ScriptEventSource.Server test handler and add no parameter to production functions.",
+   "F52: the shared copy covers all six planNow copies (rain, storm, climate, tornado, night, moon), not only the three FIXES.md named, because all six were identical hand copies."
+  ],
+  "generatorsNeeded": [
+   "node tools/admin-catalog.mjs then bump admin_bp and run node tools/sync-diag.mjs (the crowns_audit description changed in d2bc48a)"
+  ],
+  "newsLines": [],
+  "sharedLayers": [
+   "tools/prune-shared.js + tools/sync-prune.mjs (party, nick, titles)",
+   "tools/gossip-shared.js + tools/sync-gossip.mjs (19 packs, scripts/gossip.js)",
+   "tools/weather-plan-shared.js + tools/sync-weather.mjs (rain, storm, climate, tornado, night, moon)",
+   "tools/lib/shared-copy.mjs (common copier for the sync tools)"
+  ],
+  "risks": [
+   "tsc and npm run check have not been run on this branch (CODE-ONLY mode, TIMING_SOAK_RUNNING present). The JSDoc dependency types of queue.js/forget.js/stash-bridge.js still need tsc.",
+   "npm run check fails at admin-catalog --check until the integrator regenerates the admin catalog.",
+   "BDS confirmation of the F24/F26/F50/F20 refactors is still to do (see bdsPending)."
+  ],
+  "packsBumped": []
+ },
+ {
+  "worktree": "/home/user/wt/g4-items",
+  "branch": "ws/g4-items",
+  "items": [
+   {
+    "id": "F30",
+    "status": "done-verified",
+    "summary": "mail_bp planSystemLetter: when a pack letter is refused because the realm's mail is full, `drop` now holds only the expired ids. Before, it also held the recipient's 'over' and 'spare' letters, which mail_send deleted (unread ones too) and then delivered nothing. PACKS.md Realm Mail updated.",
+    "commits": [
+     "2dedd11"
+    ],
+    "proof": "tools/mail-policy.test.mjs, \"when the realm's mail is full, a refused pack letter deletes only expired letters (F30)\": fails on the old policy.js, passes now (12/12)."
+   },
+   {
+    "id": "F32",
+    "status": "done-needs-bds",
+    "summary": "milestones_bp marks the top-tier backfill done only after Titles & Trails confirms every title (`realm:title_ack`, answered by titles_bp for new and already-owned titles). Reviewer fix: confirmation is now a new key `tc` (set with `tf`). A legacy `tf: 1` without `tc` was written by the old code (4b7c01a) with no confirmation, so it counts as unconfirmed and gets one more confirmed backfill. `tf` is still written, so an older pack version keeps skipping the backfill. A new top tier clears both keys. The test report (`tf` in realm:milestones_test_report and in the milestones-rejoin hook) now reads `tc`, so it reports confirmation. PACKS.md saved-data row and Milestones text updated.",
+    "commits": [
+     "5c90206",
+     "b39f9df",
+     "04de3ab"
+    ],
+    "proof": "tools/w10-news.test.mjs: 26/26 pass. The two new legacy tests (start from { g: {m0: 3}, tf: 1 }: the title is sent once more, tc is set after Titles answers, and nothing is sent on the next join; with no Titles, tc stays unset) fail on the previous main.js. The existing fixtures that stand for a confirmed record got `tc: 1` added; no assertion was changed. probe-hooks.test.mjs passes. BDS milestones-title-ack.js is written but not run (CODE-ONLY)."
+   },
+   {
+    "id": "F31",
+    "status": "done-needs-bds",
+    "summary": "cooking_bp gives old dishes (from before the `\u00a78Dish:` line) the current lore, so they stack with new servings. This runs when a dish enters an inventory (playerInventoryItemChange, filtered natively to the dish base items, ignoreQuantityChange) and once on join. Only genuine dishes are changed, and other packs' appended lines are kept. Logic is in packs/cooking_bp/scripts/dish-lore.js. PACKS.md Kitchen updated.",
+    "commits": [
+     "7814882"
+    ],
+    "proof": "tools/cooking-dish-lore.test.mjs: 5/5 pass. Its wiring test fails on the old main.js. The BDS scenario cooking-old-dish-stack.js is written but not run."
+   },
+   {
+    "id": "F29",
+    "status": "done-needs-bds",
+    "summary": "A pet's own tamer can use it inside other people's claims. Vanilla tamed pets lose tameable/tamemount and their tamedToPlayerId, so packs/claims_bp/scripts/tamer.js records `claims:tamer` when the taming happens. Reviewer fix: there is now one watch per animal and per player, so a second player's tap never replaces the first, and the watch list is capped at 256 animals. A tamer is recorded only when exactly one player accounts for the taming. For a mount, that is the one tapper who mounted it and is still riding. For feeding, it is the one player who fed it within 40 ticks; when several did, it is the one who tapped it since it was last seen wild (1 tick of slack). Otherwise nobody is recorded and the pet stays locked, as before F29. PACKS.md claims text updated.",
+    "commits": [
+     "5f88e08",
+     "153bdc2"
+    ],
+    "proof": "tools/claims-tamer.test.mjs: 10/10 pass. Both reviewer cases are new tests, and both fail on the previous tamer.js: Ann rides a horse, Bob taps it, Ann tames it and gets it; Ann and Bob feed the same wolf in the same tick and neither is recorded. My own earlier test 'the last player to feed it gets it' allowed the reviewer's case 2. It is replaced by 'the one player who fed it since it was last seen wild gets it' (a wild check comes between the two feeds). BDS claims-own-pet.js is written but not run."
+   },
+   {
+    "id": "F28",
+    "status": "done-needs-bds",
+    "summary": "expedition_bp saves the line in `expedition:queue` and restores it on worldLoad. After a reload, online leaders are told they are still number N of M. After a restart, an offline leader keeps the place for 5 minutes (QUEUE_REJOIN) and is told on rejoin. Reviewer fix: a server stop disconnects everyone first, and the leave handler used to dequeue and save at once, which emptied the saved line just before the restart. Now a leave only marks the leader (queueLeft, in-memory queueGone). The 100-tick pump drops them once QUEUE_GONE (200 ticks) has passed, so any pump in the shutdown window saves the line with them still in it. A leader who reconnects sooner keeps the place silently. dequeue and clearQueue clear the marks. system.beforeEvents.shutdown is in 2.1.0, but it fires after players have left, and its before-event (read-only) can't save, so the grace is the fix. PACKS.md queue text updated.",
+    "commits": [
+     "3d45086",
+     "1e8498b"
+    ],
+    "proof": "tools/expedition-capacity.test.mjs: 25/25 pass. Three new tests fail on the previous main.js (EXPEDITION_SRC=<old>): a leave saves nothing and the leader is dropped after QUEUE_GONE; a quick reconnect keeps the place without a message; a stop where every leader leaves and a pump runs still restores the line. The wiring regex that pinned `dequeue(playerId)` in the leave handler now pins `queueLeft(playerId)`, and the new behavior tests prove that leaving still drops the party. New BDS scenario tools/test-bds/examples/expedition-queue-restart.js uses t.restart() and the new probe hook tools/test-bds/hooks/expedition-queue-rejoin.mjs (it reads the pack's saved line and moves a restored entry onto the leader's new id, the way milestones-rejoin does). It is offline-checked in probe-hooks.test.mjs (7/7) but not run (CODE-ONLY)."
+   },
+   {
+    "id": "F19",
+    "status": "done-needs-bds",
+    "summary": "tornado_bp stops the previous wind clip with one dimension stopsound for everyone near the funnel instead of one player.runCommand per listener. Each listener still gets its own playSound per clip, and the distance bands stay. Not counted as a performance gain: the ms/tick before/after is not measured yet (C28). If tornado-sound-perf.js shows the difference is noise, the summary must say so and F19 stays a correctness/doc-only change.",
+    "commits": [
+     "94149a6",
+     "d000841"
+    ],
+    "proof": "tools/tornado-sound-batch.test.mjs (3/3) and tornado-sound-bands.test.mjs (9/9) pass. On the old main.js the batching tests fail. Perf numbers are pending (bdsPending)."
+   },
+   {
+    "id": "F22",
+    "status": "done-needs-bds",
+    "summary": "elite_bp guards entity access after an await or a tick boundary: forPlayer's system.run, menu(), page() before it re-opens the menu, and removeForm's first player.dimension. Reviewer fix: the championHurt guard is removed. It was dead code: the entityHurt handler already checks hurtEntity.isValid, and nothing synchronous between that check and the guard can remove the champion. F22 no longer claims a shield-break fix.",
+    "commits": [
+     "036f23d",
+     "59c24ef"
+    ],
+    "proof": "The BDS scenario tools/test-bds/examples/elite-invalid-leave.js (--strict: three players run a command and disconnect in the same tick; a player who stays gets the list) is written but not run. elite-invalid.js should be rerun as a regression."
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "F31 old dishes restack",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --only cooking_bp --scenario /home/user/wt/g4-items/tools/test-bds/examples/cooking-old-dish-stack.js --timeout 300   (expected FAIL: the old serving does not stack)",
+    "after": "cd /home/user/wt/g4-items && node tools/test-bds/run.mjs --quiet --only cooking_bp --scenario tools/test-bds/examples/cooking-old-dish-stack.js --timeout 300"
+   },
+   {
+    "purpose": "F32 tc only after Titles confirms",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --only milestones_bp --scenario /home/user/wt/g4-items/tools/test-bds/examples/milestones-title-ack.js --timeout 600   (expected FAIL: the flag is set with no Titles)",
+    "after": "cd /home/user/wt/g4-items && node tools/test-bds/run.mjs --quiet --only milestones_bp --scenario tools/test-bds/examples/milestones-title-ack.js --timeout 600"
+   },
+   {
+    "purpose": "F32 regression: the W10 flag scenario with Titles installed (the hook now reports tc)",
+    "after": "cd /home/user/wt/g4-items && rm -rf /tmp/milestones-flag && mkdir -p /tmp/milestones-flag && node tools/test-bds/hooks/milestones-rejoin.mjs /tmp/milestones-flag/packs && node tools/test-bds/run.mjs --quiet --packs /tmp/milestones-flag/packs --only milestones_bp,titles_bp --scenario tools/test-bds/examples/w10-milestones-flag.js --timeout 600"
+   },
+   {
+    "purpose": "F29 a visitor's own pet in another's claim",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --flat --only claims_bp --scenario /home/user/wt/g4-items/tools/test-bds/examples/claims-own-pet.js --timeout 600   (expected FAIL: the tamer's lead is refused)",
+    "after": "cd /home/user/wt/g4-items && node tools/test-bds/run.mjs --quiet --flat --only claims_bp --scenario tools/test-bds/examples/claims-own-pet.js --timeout 600 && node tools/test-bds/run.mjs --quiet --flat --only claims_bp --scenario tools/test-bds/examples/claims-animals.js --timeout 600"
+   },
+   {
+    "purpose": "F28 the saved line survives a real restart (do disconnects on shutdown empty it?)",
+    "before": "cd /home/user/wt/g4-items && rm -rf /tmp/eqr-before && mkdir -p /tmp/eqr-before/src && git archive 1e8498b^ packs | tar -x -C /tmp/eqr-before/src && node tools/test-bds/hooks/expedition-queue-rejoin.mjs /tmp/eqr-before/packs /tmp/eqr-before/src && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/eqr-before/packs --only expedition_bp --scenario tools/test-bds/examples/expedition-queue-restart.js --timeout 900   (expected FAIL at 'the saved line survived the restart' if leave events reach the script on shutdown; if it passes, the reviewer's risk did not occur on BDS and the grace is defense in depth)",
+    "after": "cd /home/user/wt/g4-items && rm -rf /tmp/exp-queue-restart && mkdir -p /tmp/exp-queue-restart && node tools/test-bds/hooks/expedition-queue-rejoin.mjs /tmp/exp-queue-restart/packs && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/exp-queue-restart/packs --only expedition_bp --scenario tools/test-bds/examples/expedition-queue-restart.js --timeout 900"
+   },
+   {
+    "purpose": "F28 regression: the live queue and restart scenarios",
+    "after": "cd /home/user/wt/g4-items && node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-queue.js --timeout 600 && node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-restart.js --timeout 900"
+   },
+   {
+    "purpose": "F22 no InvalidEntityError when a player leaves mid-command",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --strict --flat --only elite_bp --scenario /home/user/wt/g4-items/tools/test-bds/examples/elite-invalid-leave.js --timeout 300   (expected FAIL under --strict with [elite] InvalidEntityError warnings)",
+    "after": "cd /home/user/wt/g4-items && node tools/test-bds/run.mjs --quiet --strict --flat --only elite_bp --scenario tools/test-bds/examples/elite-invalid-leave.js --timeout 300"
+   },
+   {
+    "purpose": "F22 regression: elite-invalid with the spawn remover hook",
+    "after": "cd /home/user/wt/g4-items && rm -rf /tmp/elite-invalid && mkdir -p /tmp/elite-invalid && node tools/test-bds/hooks/elite-remove.mjs /tmp/elite-invalid/packs && node tools/test-bds/run.mjs --quiet --strict --flat --packs /tmp/elite-invalid/packs --only elite_bp --scenario tools/test-bds/examples/elite-invalid.js --timeout 900"
+   },
+   {
+    "purpose": "F19 tornado wind ms/tick before/after (30 listeners); report the numbers, and if the difference is noise, do not count F19 as a perf gain",
+    "before": "cd /home/user/wt/base && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/tornado-before.json --only tornado_bp --scenario /home/user/wt/g4-items/tools/test-bds/examples/tornado-sound-perf.js --timeout 3000",
+    "after": "cd /home/user/wt/g4-items && node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json /tmp/tornado-after.json --only tornado_bp --scenario tools/test-bds/examples/tornado-sound-perf.js --timeout 3000"
+   },
+   {
+    "purpose": "whole branch: npm run check once the soak is over",
+    "after": "cd /home/user/wt/g4-items && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3"
+   }
+  ],
+  "decisions": [
+   "Finding 1 (F32 legacy tf:1) is real. Fixed with a new key `tc` instead of `tf: 2`: `tf` stays 1 on confirmed records, so older pack versions (which read tf) still skip the backfill, and every existing assertion `record.tf === 1` holds. Fixtures that stand for a confirmed record got `tc: 1`.",
+   "The test report's `tf` field (pack recordReport and the milestones-rejoin hook) now reports confirmation (`tc`). The W10 flag scenario asks exactly that, and its assertions are unchanged.",
+   "Finding 2 (F28 restart) is real as a risk. Fixed with a leave grace (QUEUE_GONE 200 ticks; the pump drops the party, not the leave). system.beforeEvents.shutdown exists in 2.1.0 but fires after players have left and is read-only, so it can't save. Wrote a t.restart() BDS scenario with a probe hook that remaps the leader's id, as the reviewer asked. Not run: TIMING_SOAK_RUNNING.",
+   "Replaced the expedition wiring regex that pinned `dequeue(playerId)` on leave with `queueLeft(playerId)`. Behavior tests prove leaving still drops the party, after 10 s. The old pin described the mechanism the fix removes.",
+   "Finding 3 (tamer watch replaced by another tap) is real. One watch per (animal, player). Ambiguity records nobody: a wrongly granted pet is worse than the pre-F29 locked state. My own earlier 'last feeder gets it' test codified the reviewer's case 2. It is replaced by a test with a wild check between the feeds.",
+   "Finding 4 (championHurt guard) is real: dead code, removed. The other F22 guards stay.",
+   "Finding 5 (NEWS.md) is not acted on in the branch: the brief forbids editing NEWS.md (the integrator writes it from newsLines). Player-facing lines for F28, F29 and F31 (plus F30, F32) are in newsLines, and gen-news is listed in generatorsNeeded.",
+   "Finding 6 (F19 unmeasured) is real but can't be done now: TIMING_SOAK_RUNNING. The exact before/after profile commands are in bdsPending. F19 is not claimed as a perf gain until measured.",
+   "No manifest bumps in these commits: every touched pack (milestones 1.0.7, expedition 2.4.13, claims 1.5.8, elite 1.3.13, tornado 1.2.11, cooking 1.1.14, titles 1.2.12, mail 1.2.8) is already one above origin/master 5422aac on this base, so check-versions passes, and diag.js already carries those versions."
+  ],
+  "generatorsNeeded": [
+   "node tools/help-catalog.mjs: PACKS.md text changed for Milestones, Land Claims, Expeditions, Kitchen and Realm Mail (summary/How to use are untouched, but rerun it to be safe; check-catalogs decides)",
+   "node tools/gen-news.mjs after the integrator adds the newsLines to docs/NEWS.md",
+   "admin-catalog: not needed (no command changes)"
+  ],
+  "newsLines": [
+   "Land Claims: your own pets now work in other people's claims too. A wolf, cat or parrot you feed tame, or a horse you ride tame, can be leashed, ridden or told to sit by you anywhere. Pets tamed before this update stay locked in others' claims.",
+   "Kitchen: old dishes from before the Dish: line now stack with new servings once they are in your inventory or when you join.",
+   "Expeditions: the line for a dungeon now survives a reload or a restart. Leaders are told they're still number N of M, and after a restart you have 5 minutes to come back and keep your place.",
+   "Milestones: top-tier titles you missed while Titles & Trails was off are now sent again until Titles confirms them.",
+   "Realm Mail: a pack letter refused because the realm's mail is full no longer deletes your oldest letters."
+  ],
+  "packsBumped": [],
+  "risks": [
+   "F28 leave grace: a leader who leaves stays in the line for up to 10 s plus one 100-tick pump (about 15 s), but the start loop skips offline leaders, so no party is held up. If BDS shows the leave event does not fire on shutdown, the grace is only defense in depth.",
+   "F29: when two players feed the same animal within the same window, nobody is recorded and the pet stays locked in others' claims (documented).",
+   "F32: on the first join after this update, every player who already had tf=1 gets their top-tier titles sent once more. Titles ignores titles a player already owns, so it adds a few script events per such player and no duplicate titles.",
+   "All BDS proofs and the F19 perf numbers are still pending (CODE-ONLY mode during the timing soak). npm run check has not been run on this branch since the reviewer fixes."
+  ],
+  "sharedLayers": [
+   "tools/test-bds/hooks/expedition-queue-rejoin.mjs (new probe hook, listed in tools/test-bds/README.md and tools/test-bds/probe-hooks.test.mjs)",
+   "tools/test-bds/hooks/milestones-rejoin.mjs (report tf now reads tc)"
+  ]
+ },
+ {
+  "worktree": "/home/user/wt/g4-welcome-docs",
+  "branch": "ws/g4-welcome-docs",
+  "items": [
+   {
+    "id": "F64",
+    "status": "done-needs-bds",
+    "summary": "welcome_bp: (N10) the one-time migration now keeps what it takes out (the body, plus the old title and button only when they were removed) in welcome:legacy. It logs this, tells the first operator who joins once in chat, and adds an operators-only 'Old welcome' page in /realm:welcome with Restore it and Delete the copy. The op check runs again on submit, and the copy is read again in case another operator acted. After review: Restore always brings back the body, but brings back the old title or button only where no newer one was saved. (N11) the retired welcome:profile key is deleted once per load, also in worlds that migrated earlier. (N12) the story start line names only the prologue givers who are placed. Welcome sends realm:npc_places_ping with its help ping (at most once a minute) and keeps Townsfolk's last realm:npc_places list (multi-part aware). storyStart is 'Tap {who} in town to begin ...' with a GENERIC.starters map. PACKS.md updated. welcome_bp stays at 1.5.11 (already bumped in int23 and unreleased).",
+    "commits": [
+     "0e3f8c1",
+     "a2544ac"
+    ],
+    "proof": "node --test tools/operator-welcome.test.mjs: 18/18 pass on the fix. Against the old welcome_bp code: before 0e3f8c1, 5 of the F64 tests fail. With only a2544ac reverted (git stash of packs/welcome_bp), 17 pass and 1 fails: the new 'Restore keeps a title or button saved after the migration' test. welcome-boot-order.test.mjs passes. BDS scenario welcome-generic-bundle.js was extended, not weakened (no townsfolk named before placement; after /realm:npc_add tobin a late joiner sees 'Tap Old Tobin ...' and no Mara). BDS not run (TIMING_SOAK_RUNNING present)."
+   },
+   {
+    "id": "F65",
+    "status": "done-verified",
+    "summary": "SERVER_SETUP.md 'Updating' gets generic Realm steps back (the Realm's owner opens both .mcpack files, activates both and checks the versions), with no 'the owner does it' rule. WORKING.md finishing step 7 keeps the owner-uploads sentence and adds: never remind the owner, never automate the upload, no .mcpack handover, end with the live Realm Bundle and Realm Resources versions after check-live. Hosting CLAUDE.md already matches on hosting master (79cd7cb via #108).",
+    "commits": [
+     "cfc8788"
+    ],
+    "proof": "grep: 'owner does it' is now only in docs/WORKING.md and CLAUDE.md in mc-packs. Hosting origin/master CLAUDE.md lines 30-37 have the matching wording."
+   },
+   {
+    "id": "F71",
+    "status": "partial",
+    "summary": "Preparation done: docs/audits/2026-10-deep-audit/REAL_CLIENT_CHECKLIST.md, a phone and PC checklist for a private test world with cheats on. It has 18 checks (A1-A5 HUD, side boxes and welcome; B1-B3 labels and walking; C1-C2 story; D1-D4 stash and finder; E1-E4 stats, tornado, Easy Building and menus), each with PASS and FAIL criteria and a results table. After review: it now says to run it only once the fix release is live (both bundles later than 2026.1020.532, Welcome Message 1.5.11 or later on the realm page; setup step 2 checks that). A5 must run first, in a fresh world before any npc_add or story accept. Remaining: the owner runs it, then fixes for what he reports, and the integrator publishes it.",
+    "commits": [
+     "557821c",
+     "fd30ef0"
+    ],
+    "proof": "Every command and in-game text was checked against PACKS.md and the code. The live versions were read from hosting site/packs/packs.json: Realm Bundle and Realm Resources 2026.1020.532, Welcome Message 1.5.10."
+   }
+  ],
+  "bdsPending": [
+   {
+    "purpose": "F64 N12 + migration in a small bundle with Townsfolk: the new phase-1 checks fail on base and pass on the fix",
+    "before": "cd /home/user/wt/base && rm -rf /tmp/g4wb && mkdir -p /tmp/g4wb && node tools/test-bds/hooks/diag-bundle.mjs /tmp/g4wb admin_bp,help_bp,find_bp,settings_bp,welcome_bp,saga_bp,npc_bp --probe-first --first-key welcome:settings --first-value '{\"body\":\"Tap Old Tobin or Mara in town to begin\\n== Rules ==\",\"showOnce\":true}' && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/g4wb --arg expect=default --scenario /home/user/wt/g4-welcome-docs/tools/test-bds/examples/welcome-generic-bundle.js   (expect FAIL: 'F64: no townsfolk named before any is placed')",
+    "after": "cd /home/user/wt/g4-welcome-docs && rm -rf /tmp/g4wa && mkdir -p /tmp/g4wa && node tools/test-bds/hooks/diag-bundle.mjs /tmp/g4wa admin_bp,help_bp,find_bp,settings_bp,welcome_bp,saga_bp,npc_bp --probe-first --first-key welcome:settings --first-value '{\"body\":\"Tap Old Tobin or Mara in town to begin\\n== Rules ==\",\"showOnce\":true}' && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/g4wa --arg expect=default --scenario tools/test-bds/examples/welcome-generic-bundle.js   (expect PASS both phases)"
+   },
+   {
+    "purpose": "F64 in the genuine Realm Bundle (new world) and the operator-saved case",
+    "after": "cd /home/user/wt/g4-welcome-docs && node tools/bundle.mjs --all && node tools/test-bds/hooks/full-bundle-protocols.mjs --from dist/realm_bundle.mcpack --out /tmp/g4full && node tools/test-bds/run.mjs --quiet --flat --bundle /tmp/g4full/realm_bundle --arg expect=default --scenario tools/test-bds/examples/welcome-generic-bundle.js --timeout 1200 ; then rm -rf /tmp/g4ws && mkdir -p /tmp/g4ws && node tools/test-bds/hooks/diag-bundle.mjs /tmp/g4ws admin_bp,help_bp,find_bp,settings_bp,welcome_bp,saga_bp,npc_bp --probe-first --first-key welcome:settings --first-value '{\"body\":\"Saved old body\"}' && node tools/test-bds/run.mjs --quiet --flat --packs /tmp/g4ws --arg expect=saved --scenario tools/test-bds/examples/welcome-generic-bundle.js"
+   },
+   {
+    "purpose": "Gates not run in code-only mode (after the integrator runs help-catalog: help-catalog --check is part of npm run check)",
+    "after": "cd /home/user/wt/g4-welcome-docs && node tools/help-catalog.mjs && npm run check 2>&1 | tail -30 && npm run build 2>&1 | tail -3 && node tools/test-bds/run.mjs --quiet --only welcome_bp,settings_bp --scenario tools/test-bds/examples/welcome-edit-concurrent.js"
+   }
+  ],
+  "decisions": [
+   "Review finding 1 (help catalog stale), real: not fixed in the branch because workstreams must not run help-catalog. generatorsNeeded lists help-catalog (the Welcome How to use step 3 changed; it bumps help_bp), and npm run check stays pending until it runs.",
+   "Review finding 2 (A5 order), real: fixed in fd30ef0. The checklist says to do A5 first in a fresh world before any npc_add or story accept; A5 gets a step 0 to start a new world if a townsfolk is already placed.",
+   "Review finding 3 (testing the old build), real: fixed in fd30ef0. A line at the top says to run the checklist only once both bundles on the realm page are later than 2026.1020.532 and Welcome Message is 1.5.11 or later (the live versions read from hosting packs.json); setup step 2 checks this.",
+   "Review finding 4 (Restore overwrites later title or button), fixed in a2544ac although it was documented behavior, because item loss outranks UX. Restore now brings back the old title and button only where the current saved overrides have none; the body is always replaced, since bringing it back is the point of Restore. The page text and PACKS.md say so, and a new unit test fails before and passes after.",
+   "F64 N10: the removed fields stay in welcome:legacy until an operator restores or deletes them, with no timed delete (a timed delete would lose house rules silently; the copy is under 21 KB).",
+   "F64 N10: the first operator who joins after the migration gets one chat line, never players, and nobody is nagged.",
+   "F64 N10: worlds that already ran the 1.5.10 migration lost the old body; it can't be recovered with the stable API.",
+   "F64 N11: welcome:profile is deleted once per load, before the migrated early return.",
+   "F64 N12: the start line is gated on placed townsfolk through the realm:npc_places protocol; only placed starters are named, and none placed means no Tap line.",
+   "F64: welcome_bp stays 1.5.11 (bumped in int23, unreleased), so no second bump or sync-diag.",
+   "F64: tools/operator-welcome.test.mjs is CRLF and stays CRLF (F67 normalizes it).",
+   "F65: no hosting CLAUDE.md change is needed (79cd7cb is merged in #108). Integrator: update OPEN.md O66.",
+   "F71: the checklist uses a second account on the phone; two-player checks are 'not run' without one."
+  ],
+  "generatorsNeeded": [
+   "help-catalog (docs/PACKS.md Welcome How to use step 3 changed; bumps help_bp)"
+  ],
+  "newsLines": [
+   "Welcome Message: if the new default welcome replaced your world's old one, operators get the old one back from /realm:welcome -> Old welcome (restore or delete it).",
+   "The welcome only tells new players to tap Old Tobin or Mara once they actually stand in town."
+  ],
+  "packsBumped": [],
+  "risks": [
+   "BDS proof and npm run check/build are still pending (code-only mode).",
+   "The checklist's minimum version (after 2026.1020.532) assumes the next published release carries the campaign's fixes."
+  ],
+  "sharedLayers": []
+ }
+]
