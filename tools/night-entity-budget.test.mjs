@@ -77,6 +77,7 @@ function eliteContext({ champions, players, config = {}, tick = 1000 }) {
       calls.night++;
       return true;
     },
+    CONFIG: { approach: { range: 48 } },
     CHAMP: "realm:champion",
     SPLIT: "elite:split",
   };
@@ -95,10 +96,20 @@ function eliteContext({ champions, players, config = {}, tick = 1000 }) {
     optFn(elite, "aliveCap"),
     optFn(elite, "crowdedAround"),
     "const approachSeen = new Map();",
+    // The near-player sort (O3 night scaling): absent in the baseline, where aura and approach take every champion.
+    "const detours = new Map();",
+    /^const NEAR_TICKS = /m.test(elite) ? line(elite, "NEAR_TICKS") : "",
+    /^const NEAR_MARGIN = /m.test(elite) ? line(elite, "NEAR_MARGIN") : "",
+    /^const SORT_PER_RUN = /m.test(elite) ? line(elite, "SORT_PER_RUN") : "",
+    /^const playersAt = /m.test(elite) ? line(elite, "playersAt") : "",
+    /^const nearState = /m.test(elite) ? line(elite, "nearState") : "",
+    /^let sortCursor;/m.test(elite) ? "let sortCursor;" : "",
+    optFn(elite, "sortNear"),
+    /^const nearIds = /m.test(elite) ? line(elite, "nearIds") : "",
     fn(elite, "aura"),
     optFn(elite, "approachRun"),
     fn(elite, "convert").replace(/\n {2}if \(get\("surfaceOnly"\)[\s\S]*$/, "\n  return true;\n}"),
-    "globalThis.api = { aura, convert, set loaded(v) { loaded = v; } };",
+    "globalThis.api = { aura, convert, set loaded(v) { loaded = v; }, detours };",
   ].join("\n");
   vm.runInContext(code, ctx);
   // the new source names approachRun; the baseline had the same body inline in a runInterval callback
@@ -266,6 +277,10 @@ function wanderContext(players, targetCount) {
       line(wander, "LABEL_QUERY_PLAYERS", "8"),
       line(wander, "LABEL_QUERY_TARGETS", "16"),
       "let onlineN = 0; let onlineAt = -Infinity;",
+      // The near/far label passes (O3/O2 wander): absent in the baseline.
+      /^const LABEL_HOT = /m.test(wander) ? line(wander, "LABEL_HOT") : "",
+      /^const LABEL_FULL_EVERY = /m.test(wander) ? line(wander, "LABEL_FULL_EVERY") : "",
+      /^let labelRun = /m.test(wander) ? "let labelRun = 0; let hotLabels = new Set(); const labelDims = () => [];" : "",
       optFn(wander, "labelObservers"),
       "let ready = true; const DIMENSIONS = []; const live = liveRecords; const camps = {}; const NAMED_BY_ID = new Map();",
       "const nameLabels = { sync(t, observers) { globalThis.seen = observers(); } };",

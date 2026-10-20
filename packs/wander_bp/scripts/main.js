@@ -762,11 +762,13 @@ function updateLabels(full = false) {
     nameLabels.sync(targets, () => labelObservers(targets), labelDims);
     return;
   }
+  // The full pass asks for the players within LABEL_HOT (the same reads as a sync's observers, a little wider): they
+  // sort the wanderers and are the sync's observers (it measures the real distance itself).
   /** @type {Player[]} */
   let players = [];
   if (targets.length) {
     try {
-      players = world.getPlayers({ excludeGameModes: [GameMode.Spectator] });
+      players = labelObservers(targets, LABEL_HOT);
     } catch {
       players = [];
     }
@@ -794,16 +796,16 @@ function updateLabels(full = false) {
     }
   }
   hotLabels = hot;
-  nameLabels.sync(targets, players, labelDims);
+  nameLabels.sync(targets, () => players, labelDims);
 }
 
 /**
  * Who a label sync reads: every player, or, on a busy server, only the players near a wanderer (one native query
  * per wanderer instead of a read of every player's place on every sync; the sync still measures the real
  * distance, so what it does is the same).
- * @param {{ entity: Entity }[]} targets
+ * @param {{ entity: Entity }[]} targets @param {number} [reach] how far from a wanderer a player counts (LABEL_REACH)
  */
-function labelObservers(targets) {
+function labelObservers(targets, reach = LABEL_REACH) {
   const every = () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] });
   const tick = system.currentTick;
   if (tick - onlineAt >= 100 || tick < onlineAt) {
@@ -815,7 +817,7 @@ function labelObservers(targets) {
   const near = new Map();
   for (const t of targets) {
     try {
-      for (const p of t.entity.dimension.getPlayers({ location: t.entity.location, maxDistance: LABEL_REACH, excludeGameModes: [GameMode.Spectator] })) near.set(p.id, p);
+      for (const p of t.entity.dimension.getPlayers({ location: t.entity.location, maxDistance: reach, excludeGameModes: [GameMode.Spectator] })) near.set(p.id, p);
     } catch {
       // unloaded or removed this tick: nobody can be near it
     }
