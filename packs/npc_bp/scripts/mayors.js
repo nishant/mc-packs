@@ -148,3 +148,12 @@ export function createIdsAssembler() {
 
 /** Mayor ids we keep that a complete list from town_bp doesn't have. @param {Map<string, unknown>} mayors @param {Set<string>} ids */
 export const unlisted = (mayors, ids) => [...mayors.keys()].filter((id) => !ids.has(id));
+
+/**
+ * Who may tell a piece of gossip (realm:gossip `from`): a townsfolk id (a cast id like `bram`, or `mayor:<town>`),
+ * cleaned; undefined for anything else, so the piece is everyone's to tell. @param {unknown} v @returns {string | undefined}
+ */
+export const gossipFrom = (v) => (typeof v === "string" && (isMayorId(v) || /^[a-z][a-z0-9_]{0,31}$/.test(v)) ? v : undefined);
+
+/** May this townsfolk tell this piece? Everyone, unless it names who tells it (`f`). @param {{ f?: unknown }} g @param {string} npcId */
+export const tellsGossip = (g, npcId) => typeof g.f !== "string" || g.f === npcId;

@@ -586,6 +586,12 @@ export const GOSSIP = {
     ["A merchant caravan pulled in at {place}. Bring Crowns, and hold on to them.", "A merchant caravan pulled in at {place}. Bring Crowns, and hold on to them."],
     ["The caravan's here, at {place}! Llamas everywhere. Wren has named three already.", "The caravan's here, at {place}! Llamas everywhere. Wren has named three already."],
   ],
+  // Town Projects' small life, told only by the town's own mayor (realm:gossip `from`): {place} is the mayor's town.
+  town_life: [
+    ["{place} keeps growing. New roofs, new faces. I can hardly keep up with the paperwork.", "{place} keeps growing. New roofs, new faces. I can hardly keep up with the paperwork."],
+    ["Good news from {place}: another family settled in, or another house went up. Come and see.", "Good news from {place}: another family settled in, or another house went up. Come and see."],
+    ["{place} is coming along nicely. Every delivery shows, believe me.", "{place} is coming along nicely. Every delivery shows, believe me, {player}."],
+  ],
   // Town news about nobody in particular, for a kind not listed here.
   news: [
     ["Something's going on in town. Everyone's talking about it.", "Something's going on in town. Everyone's talking about it."],

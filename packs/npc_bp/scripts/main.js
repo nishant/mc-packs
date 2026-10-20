@@ -21,7 +21,7 @@ import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } fro
 import { get } from "./settings.js";
 import { createFallWatch, createSnapGuard, floorGone, freeSpotNear, settledBelow, standable } from "./tether.js";
 import { onScriptEvent } from "./script-events.js";
-import { MAX_MAYORS, createIdsAssembler, folkFor, isMayorId, keepPlaced, mayorsJson, normalizeMayors, parseMayorRequest, skinKey, unlisted } from "./mayors.js";
+import { MAX_MAYORS, createIdsAssembler, folkFor, isMayorId, gossipFrom, keepPlaced, mayorsJson, normalizeMayors, parseMayorRequest, skinKey, tellsGossip, unlisted } from "./mayors.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
 // the game's skins in its NPC editor). Each one lives inside its own house and stays there: its one spot (its
@@ -33,7 +33,7 @@ import { MAX_MAYORS, createIdsAssembler, folkFor, isMayorId, keepPlaced, mayorsJ
 //   realm:npc_choose { player, npc, pack, key }         -> the pack whose button the player picked
 // Hearth & Hearsay (affinity, gifts, gossip, the Realm day counter) is further down; its protocol:
 //   realm:affinity { player, npc, level, pts, off } on a level change, { player, all, off } on join  -> consumers
-//   realm:gossip   { kind, player, name?, place?, n? }                                              <- producers
+//   realm:gossip   { kind, player, name?, place?, n?, from? }  (from: only that townsfolk tells it) <- producers
 //   realm:npc_flags { player, flags }                                                               <- saga_bp
 //   realm:calendar { day, season, festival?, ends?, doy, year, from }   at dawn, on join, on realm:calendar_ping
 //   realm:mail_send { to, from, subject, body }                                                     -> mail_bp
@@ -987,7 +987,7 @@ const GOSSIP_REPEAT_MS = 30 * 60000; // the same news about the same player with
 const GOSSIP_PER_KIND = 4; // most pieces of one kind kept at once, so one busy pack can't push every other piece out
 
 /** @typedef {[number, number, number, number, number]} Aff points, last talk day, last gift day, bits, last keepsake day (UTC days) */
-/** @typedef {{ i: number, k: string, p: string, n: string, pl?: string, x?: number, t: number, c?: number }} Gossip */
+/** f: the only townsfolk who tells it (realm:gossip `from`, e.g. a town's mayor). @typedef {{ i: number, k: string, p: string, n: string, pl?: string, x?: number, t: number, c?: number, f?: string }} Gossip */
 /** @typedef {"loved" | "liked" | "neutral" | "disliked"} Tier */
 
 /** Today's real (UTC) day number: talks and gifts count once per real day, so sleeping can't farm them. */
@@ -1339,7 +1339,10 @@ function hearGossip(msg) {
   if (typeof msg.place === "string" && msg.place.trim()) g.pl = msg.place.trim().replace(/§./g, "").slice(0, 48);
   if (isNum(msg.n)) g.x = Math.round(msg.n);
   if (subject && crowned(subject)) g.c = 1;
-  const same = (/** @type {Gossip} */ o) => o.p === g.p && now - o.t < GOSSIP_REPEAT_MS && (o.k === g.k || (!!g.p && !!g.pl && o.pl === g.pl));
+  const from = gossipFrom(msg.from);
+  if (from) g.f = from;
+  // Pieces told by different townsfolk (two towns' mayors) are different news.
+  const same = (/** @type {Gossip} */ o) => o.p === g.p && o.f === g.f && now - o.t < GOSSIP_REPEAT_MS && (o.k === g.k || (!!g.p && !!g.pl && o.pl === g.pl));
   gossip = gossipAlive().filter((o) => !same(o));
   const ofKind = gossip.filter((o) => o.k === g.k);
   if (ofKind.length >= GOSSIP_PER_KIND) {
@@ -1375,7 +1378,7 @@ function gossipLine(player, t) {
   if (get("affinity") !== true || Math.random() * 100 >= chance) return undefined;
   const alive = gossipAlive();
   const heard = heardOf(player);
-  const g = alive.filter((x) => !heard.includes(x.i)).sort((a, b) => b.i - a.i)[0];
+  const g = alive.filter((x) => !heard.includes(x.i) && tellsGossip(x, t.id)).sort((a, b) => b.i - a.i)[0];
   if (!g) return undefined;
   const self = !!g.p && g.p === player.id; // town news (no player) is never about the listener
   // A playerless piece names nobody. Lines that need {name} fall back to the nameless news line, so the
@@ -2356,7 +2359,7 @@ function questDone(msg) {
 // realm:npc_debug { player, action: "tap", npc, sneak? } (operators and test scenarios; /scriptevent needs operator
 // rights): a tap on that townsfolk by that player (id or name), as if they tapped it (sneak: a gift). Simulated
 // players' taps fire no interact events, so the test scenarios tap this way.
-// { action: "gossip" } answers realm:npc_gossip { count, kinds: { kind: count }, last: [[kind, name, place], ...] }
+// { action: "gossip" } answers realm:npc_gossip { count, kinds: { kind: count }, last: [[kind, name, place, from], ...] }
 // (the newest 6), so a scenario can see what the town remembers.
 onScriptEvent(
   "realm:npc_debug",
@@ -2370,7 +2373,7 @@ onScriptEvent(
         /** @type {Record<string, number>} */
         const kinds = {};
         for (const g of alive) kinds[g.k] = (kinds[g.k] ?? 0) + 1;
-        const last = alive.slice(-6).map((g) => [g.k, g.n.slice(0, 16), (g.pl ?? "").slice(0, 24)]);
+        const last = alive.slice(-6).map((g) => [g.k, g.n.slice(0, 16), (g.pl ?? "").slice(0, 24), g.f ?? ""]);
         system.sendScriptEvent("realm:npc_gossip", JSON.stringify({ count: alive.length, kinds, last }));
         return;
       }
