@@ -10,6 +10,7 @@ import {
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { spreadPlayers } from "./spread.js";
 
 const CHECK_TICKS = 20;
 /** After /afk, ignore small movements (closing chat, camera settling) for this long. */
@@ -122,32 +123,43 @@ function setAfk(player, afk) {
   }
 }
 
-system.runInterval(() => {
-  const now = system.currentTick;
-  for (const player of world.getAllPlayers()) {
+// Each player once a second (CHECK_TICKS) as before, a tenth of them every 2 ticks (scripts/spread.js), so a full
+// server doesn't read everyone's rotation and input on one tick. The night skip is counted once a second.
+spreadPlayers(system, world, {
+  every: CHECK_TICKS,
+  parts: 10,
+  start: () => {
     try {
-      const s = getState(player);
-      const r = player.getRotation();
-      const turned = Math.abs(r.y - s.yaw) > 0.5 || Math.abs(r.x - s.pitch) > 0.5;
-      const mv = player.inputInfo.getMovementVector();
-      // Movement keys/stick, not position: water streams and minecarts don't count.
-      const moving = Math.hypot(mv.x, mv.y) > STICK_DEADZONE;
-      s.yaw = r.y;
-      s.pitch = r.x;
-
-      if (turned || moving) markActive(player);
-      else if (player.isSleeping) s.lastActive = now; // lying in bed waiting for the night isn't AFK
-      else if (s.afkSince === undefined && now - s.lastActive >= get("afkMinutes") * 60 * 20) setAfk(player, true);
+      if (get("sleep.enabled")) checkSleep();
     } catch (e) {
-      console.warn(`[afk] ${e}`);
+      console.warn(`[afk] sleep: ${e}`);
     }
-  }
-  try {
-    if (get("sleep.enabled")) checkSleep();
-  } catch (e) {
-    console.warn(`[afk] sleep: ${e}`);
-  }
-}, CHECK_TICKS);
+  },
+  visit: (share) => {
+    const now = system.currentTick;
+    for (const player of share) {
+      try {
+        const s = getState(player);
+        const r = player.getRotation();
+        const turned = Math.abs(r.y - s.yaw) > 0.5 || Math.abs(r.x - s.pitch) > 0.5;
+        s.yaw = r.y;
+        s.pitch = r.x;
+        // Movement keys/stick, not position: water streams and minecarts don't count. Not read when turning already counts.
+        let moving = false;
+        if (!turned) {
+          const mv = player.inputInfo.getMovementVector();
+          moving = Math.hypot(mv.x, mv.y) > STICK_DEADZONE;
+        }
+
+        if (turned || moving) markActive(player);
+        else if (player.isSleeping) s.lastActive = now; // lying in bed waiting for the night isn't AFK
+        else if (s.afkSince === undefined && now - s.lastActive >= get("afkMinutes") * 60 * 20) setAfk(player, true);
+      } catch (e) {
+        console.warn(`[afk] ${e}`);
+      }
+    }
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Night skip

@@ -184,3 +184,32 @@ test("guilds: travel counts the same spread over the second, saves spread over t
   const most = Math.max(...savesAt.values());
   assert.ok(most <= 4, `at most 4 saves a tick, got ${most}`);
 });
+
+test("afk: idle players go AFK after afkMinutes as before, turning players don't, a tenth of 40 read a run", async () => {
+  const sim = createSim();
+  const w = walkers(sim, 40);
+  /** @type {Map<number, Set<string>>} */
+  const rotAt = new Map();
+  /** @type {Map<string, number>} */
+  const inputs = new Map();
+  const turner = w.players[3];
+  for (const p of w.players) {
+    p.getRotation = () => {
+      const t = sim.game.tick;
+      if (!rotAt.has(t)) rotAt.set(t, new Set());
+      rotAt.get(t).add(p.id);
+      return p === turner ? { x: 0, y: t % 360 } : { x: 0, y: 0 };
+    };
+    p.inputInfo = { getMovementVector: () => (inputs.set(p.id, (inputs.get(p.id) ?? 0) + 1), { x: 0, y: 0 }) };
+  }
+  await loadReal(sim, "afk_bp");
+  sim.step(5 * 1200 - 40);
+  assert.ok(w.players.every((p) => !p.hasTag("afk")), "nobody is AFK before 5 minutes");
+  sim.step(80);
+  for (const p of w.players) assert.equal(p.hasTag("afk"), p !== turner, `${p.name} AFK: ${p.hasTag("afk")}`);
+  const most = Math.max(...[...rotAt.values()].map((s) => s.size));
+  assert.ok(most <= 4, `at most 4 players a tick, got ${most}`);
+  // turning already counts as active: the turning player's movement input isn't read
+  assert.ok((inputs.get(turner.id) ?? 0) <= 1, `movement reads for a turning player: ${inputs.get(turner.id)} (only the first look, before there is a turn to compare)`);
+  assert.ok((inputs.get(w.players[0].id) ?? 0) > 250, "an idle player's movement is read every second");
+});
