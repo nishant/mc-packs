@@ -40,6 +40,8 @@ export default async function (t) {
   p.attackEntity(pig);
   await t.wait(3);
   t.check(!seen("realm:silly_confetti", since), "no confetti from a plain stick");
+  // A mob ignores hits for 10 ticks after one lands (no entityHitEntity at all), so each hit waits that out first.
+  await t.wait(10);
   p.selectedSlotIndex = 1;
   await t.wait(1);
   since = t.tick;
@@ -47,12 +49,19 @@ export default async function (t) {
   p.attackEntity(pig);
   await t.waitUntil(() => seen("realm:silly_confetti", since), { timeout: 3, message: "no confetti on the first hit after switching to the sword" });
   t.log("confetti on the first hit after the switch");
+  await t.wait(10);
   p.selectedSlotIndex = 0;
   await t.wait(1);
   since = t.tick;
+  let hits = 0;
+  const hitSub = t.world.afterEvents.entityHitEntity.subscribe(({ hitEntity }) => {
+    if (hitEntity === pig) hits++;
+  });
   p.lookAtEntity(pig);
   p.attackEntity(pig);
   await t.wait(3);
+  t.world.afterEvents.entityHitEntity.unsubscribe(hitSub);
+  t.check(hits > 0, "the hit with the stick landed");
   t.check(!seen("realm:silly_confetti", since), "switching back to the stick stops it at once");
   pig.remove();
 
