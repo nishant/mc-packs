@@ -376,3 +376,29 @@ test("stepBuild: a resumed build still waits players off the spot (also while ap
   assert.match(body, /applyBuild\(dim, p, s, geo, job\.out, placedBy\(t\)\)/, "the placed cells guard the build");
   assert.match(body, /typeof r\.value === "string"\) return holdBuild/);
 });
+
+test("Remove spot keeps the blocks players added on a leveled region since (a chest, bricks), and puts the rest back", () => {
+  const w = fakeWorld(hill);
+  const fns = load(w);
+  const s = pick(w, fns);
+  const geo = fns.autoGeometry(well, s);
+  const before = new Map();
+  for (let x = geo.region.x1; x <= geo.region.x2; x++) for (let z = geo.region.z1; z <= geo.region.z2; z++) for (let y = geo.y1; y <= geo.y2; y++) before.set(`${x},${y},${z}`, w.read(x, y, z).id);
+  drain(fns.applyBuild(w.dim, well, s, geo, { placed: 0, skipped: 0 }));
+  // On the leveled apron, where the snapshot has air or ground: a chest that holds something, and a bricks block.
+  const c = geo.plan.find((q) => sites.distTo(geo.fp, q.x, q.z) > 0 && q.t < hill(q.x, q.z));
+  const chestAt = [c.x, c.t + 1, c.z];
+  const bricksAt = [c.x, c.t, c.z];
+  w.set.set(chestAt.join(","), { id: "minecraft:chest" });
+  w.set.set(bricksAt.join(","), { id: "minecraft:bricks" });
+  assert.notEqual(before.get(chestAt.join(",")), "minecraft:chest");
+  const commands = [];
+  const dim = { ...w.dim, runCommand: (cmd) => commands.push(cmd) };
+  const snap = { getBlockPermutation: ({ x, y, z }) => w.permOf(before.get(`${x + geo.region.x1},${y + geo.y1},${z + geo.region.z1}`)) };
+  const kinds = new Set([...designs.design("well").map((p) => p.block), "minecraft:dirt", "minecraft:grass_block"]);
+  fns.restoreGround(dim, snap, { min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, kinds);
+  assert.equal(w.read(...chestAt).id, "minecraft:chest", "the chest stays (and what it holds)");
+  assert.equal(w.read(...bricksAt).id, "minecraft:bricks", "their bricks stay");
+  assert.deepEqual(commands, [], "nothing of theirs broken");
+  for (const [k, id] of before) if (k !== chestAt.join(",") && k !== bricksAt.join(",")) assert.equal(w.read(...k.split(",").map(Number)).id, id, `restored at ${k}`);
+});
