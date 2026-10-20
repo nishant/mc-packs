@@ -820,6 +820,7 @@ world.afterEvents.playerLeave.subscribe(ev => {
     savedModeBeforeToggle.delete(ev.playerId);
     selectionFovMap.delete(ev.playerId);
     zoomedPlayers.delete(ev.playerId);
+    sweepSlot.delete(ev.playerId);
     cleanupActionBar(ev.playerId);
     cleanupGuideBook(ev.playerId);
     cleanupCoach(ev.playerId);
@@ -957,6 +958,17 @@ system.runInterval(() => {
 const SLOT_WATCH_TICKS = 10;
 const HAND_SWEEP_TICKS = 20;
 const handClock = createIdleClock();
+/** player id -> a small hash, so the sweep spreads players by who they are, not by their place in the list (C21) */
+const sweepSlot = new Map();
+function slotOf(id) {
+    let n = sweepSlot.get(id);
+    if (n === undefined) {
+        n = 0;
+        for (let i = 0; i < id.length; i++) n = (n * 31 + id.charCodeAt(i)) >>> 0;
+        sweepSlot.set(id, n);
+    }
+    return n;
+}
 let handTicks = 0;
 system.runInterval(() => {
     handTicks++;
@@ -974,7 +986,7 @@ system.runInterval(() => {
         const player = all[i];
         try {
             if (!handKnown(player.id)) markHandDirty(player);
-            else if (sweep && idleDue(i, phase, false, false)) refreshHand(player);
+            else if (sweep && idleDue(slotOf(player.id), phase, false, false)) refreshHand(player);
             else checkSlot(player);
         } catch {}
     }
