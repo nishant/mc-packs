@@ -1354,6 +1354,14 @@ const QUEUE_RETRY = 1200;
 const QUEUE_REJOIN = 6000;
 /** World: JSON SavedQueued[], the line, so a script reload or a restart doesn't drop it without a word. */
 const PROP_QUEUE = "expedition:queue";
+/**
+ * Game ticks a leader who left the game keeps the place (10 seconds) before the line drops them. A server stopping
+ * disconnects everyone first: dropping (and saving) on the leave itself would empty the saved line just before a
+ * restart, so the leave only marks the time and the 100-tick pump drops the party once this has passed.
+ */
+const QUEUE_GONE = 200;
+/** Leaders in the line who left the game, and the tick they left. @type {Map<string, number>} */
+const queueGone = new Map();
 
 /**
  * One party waiting for a dungeon. Nothing is debited while it waits: the sigil is used up, and a Fixed loadout
@@ -1402,8 +1410,14 @@ function loadQueue() {
   return queue.length;
 }
 
+/** A leader left the game: marked, not dropped (QUEUE_GONE). @param {string} id */
+function queueLeft(id) {
+  if (queuePlace(id) >= 0) queueGone.set(id, system.currentTick);
+}
+
 /** A leader joined: one still in a restored line is told so. @param {Player} p */
 function queueRejoined(p) {
+  queueGone.delete(p.id);
   const i = queuePlace(p.id);
   if (i < 0 || queue[i].back === undefined) return;
   queue[i].back = undefined;
@@ -1418,6 +1432,7 @@ function dequeue(id) {
   const i = queuePlace(id);
   if (i < 0) return false;
   queue.splice(i, 1);
+  queueGone.delete(id);
   saveQueue();
   return true;
 }
@@ -1426,6 +1441,7 @@ function dequeue(id) {
 function clearQueue(text) {
   const n = queue.length;
   for (const q of queue.splice(0)) online(q.id)?.sendMessage(text);
+  queueGone.clear();
   if (n) saveQueue();
   return n;
 }
@@ -1468,6 +1484,8 @@ function pumpQueue() {
     const p = online(q.id);
     let why = "";
     if (!p && q.back !== undefined && now < q.back) continue; // restored after a restart: the leader may still rejoin
+    const left = queueGone.get(q.id);
+    if (!p && left !== undefined && now - left < QUEUE_GONE) continue; // just left: maybe the server is stopping
     if (!p) why = "";
     else if (runOf(q.id)) why = "§7You joined an expedition, so you're out of the line for a dungeon.";
     else if (!on) why = "§eNew expeditions are disabled right now, so you're out of the line for a dungeon.";
@@ -3927,7 +3945,7 @@ world.afterEvents.entityLoad.subscribe(({ entity }) => {
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  dequeue(playerId);
+  queueLeft(playerId); // dropped by the pump after QUEUE_GONE, so a server stopping doesn't empty the saved line
   const run = runOf(playerId);
   if (!run) return;
   const m = run.members.get(playerId);

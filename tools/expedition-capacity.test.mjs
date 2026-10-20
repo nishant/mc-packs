@@ -141,7 +141,7 @@ function world({ slots = 3, site = true, real = false, store = new Map() } = {})
     },
   };
   vm.createContext(ctx);
-  if (!real) vm.runInContext("let forgotten = false;", ctx);  vm.runInContext(`${block}\nglobalThis.q = { queue, enqueue, dequeue, clearQueue, pumpQueue, slotBusy, freeRun, queuePlace, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY, loadQueue: typeof loadQueue === "function" ? loadQueue : undefined, queueRejoined: typeof queueRejoined === "function" ? queueRejoined : undefined, QUEUE_REJOIN: typeof QUEUE_REJOIN === "number" ? QUEUE_REJOIN : undefined };`, ctx);
+  if (!real) vm.runInContext("let forgotten = false;", ctx);  vm.runInContext(`${block}\nglobalThis.q = { queue, enqueue, dequeue, clearQueue, pumpQueue, slotBusy, freeRun, queuePlace, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY, loadQueue: typeof loadQueue === "function" ? loadQueue : undefined, queueLeft: typeof queueLeft === "function" ? queueLeft : undefined, QUEUE_GONE: typeof QUEUE_GONE === "number" ? QUEUE_GONE : undefined, queueRejoined: typeof queueRejoined === "function" ? queueRejoined : undefined, QUEUE_REJOIN: typeof QUEUE_REJOIN === "number" ? QUEUE_REJOIN : undefined };`, ctx);
   if (real) realParts(w, ctx, players, runs);
   w.q = ctx.q;
   w.ctx = ctx;
@@ -329,7 +329,8 @@ test("wiring: the line is the only wait; slots stay 1-3, the release is the queu
   const startAt = mainSource.indexOf("async function start(");
   const startBody = mainSource.slice(startAt, mainSource.indexOf("async function", startAt + 10));
   assert.ok(startBody.indexOf("slotBusy(fromQueue)") > 0 && startBody.indexOf("slotBusy(fromQueue)") < startBody.indexOf("useSigil("), "the line is checked before a sigil is taken");
-  assert.match(mainSource, /playerLeave\.subscribe\(\(\{ playerId \}\) => \{\n {2}dequeue\(playerId\);/);
+  // F28: a leave marks the leader (queueLeft) and the pump drops them after QUEUE_GONE; see the leave tests below.
+  assert.match(mainSource, /playerLeave\.subscribe\(\(\{ playerId \}\) => \{\n {2}queueLeft\(playerId\);/);
   assert.match(mainSource, /freeRun\(run\.slot, true\);[\s\S]{0,60}refundSigil\(run\);[\s\S]{0,40}return;\n {2}\}\n {2}run\.checked = true;/, "a site that can't be built on holds the line");
   assert.match(mainSource, /system\.run\(pumpQueue\);/, "a finished reset starts the next party");
   assert.match(mainSource, /if \(!Array\.isArray\(kept\) \|\| \(kept\.length === affixes\.length[\s\S]{0,160}delete rolls\[levelKey\(L\)\]/, "a newer roll isn't deleted by a start that used older affixes");
@@ -575,6 +576,59 @@ test("after a restart a leader who rejoins in time keeps the place; one who does
   r.q.queueRejoined(a);
   r.tickTo(r.q.QUEUE_REJOIN + 100);
   assert.deepEqual(Array.from(r.q.queue, (q) => q.id), ["a"], "c never came back and is dropped");
+});
+
+test("a leader who leaves the game is dropped from the line once QUEUE_GONE has passed, not on the leave itself", async () => {
+  const w = world();
+  w.fill(3);
+  for (const id of ["a", "b"]) await w.ctx.start(w.player(id), crypt, 1, [], undefined, undefined);
+  w.tick = 1000;
+  w.q.queueLeft("a");
+  w.leave("a");
+  assert.deepEqual(JSON.parse(w.store.get("expedition:queue")).map((e) => e.i), ["a", "b"], "the leave saves nothing");
+  w.tickTo(1100);
+  assert.deepEqual(Array.from(w.q.queue, (q) => q.id), ["a", "b"], "a pump within QUEUE_GONE keeps the place");
+  assert.deepEqual(JSON.parse(w.store.get("expedition:queue")).map((e) => e.i), ["a", "b"], "and saves it");
+  w.runs.delete(0);
+  w.free(0);
+  w.flush();
+  assert.deepEqual(w.started.map((s) => s.id), ["b"], "the next leader who is here starts; the one who left doesn't");
+  w.tickTo(1000 + w.q.QUEUE_GONE);
+  assert.equal(w.q.queue.length, 0, "dropped once QUEUE_GONE passed");
+  assert.equal(w.store.has("expedition:queue"), false, "and the saved line is removed");
+});
+
+test("a leader who leaves and comes back within QUEUE_GONE keeps the place without a word", async () => {
+  const w = world();
+  w.fill(3);
+  await w.ctx.start(w.player("a"), crypt, 1, [], undefined, undefined);
+  w.tick = 500;
+  w.q.queueLeft("a");
+  w.leave("a");
+  w.tick = 550;
+  const a = w.player("a");
+  const told = a.msgs.length;
+  w.q.queueRejoined(a);
+  w.tickTo(500 + w.q.QUEUE_GONE + 100);
+  assert.deepEqual(Array.from(w.q.queue, (q) => q.id), ["a"]);
+  assert.equal(a.msgs.length, told, "no restart message for a quick reconnect");
+});
+
+test("a server stop: every leader leaves, the world restarts, and the line comes back from the save (F28)", async () => {
+  const w = world();
+  w.fill(3);
+  for (const id of ["a", "b"]) await w.ctx.start(w.player(id), crypt, 1, [], undefined, undefined);
+  w.tick = 300;
+  // Stopping disconnects everyone before the world closes; a pump may still run in between.
+  for (const id of ["a", "b"]) {
+    w.q.queueLeft(id);
+    w.leave(id);
+  }
+  w.tickTo(400);
+  const r = world({ store: w.store });
+  r.fill(3);
+  assert.equal(r.q.loadQueue(), 2, "the saved line survived the leaves");
+  assert.deepEqual(Array.from(r.q.queue, (q) => q.id), ["a", "b"]);
 });
 
 test("a saved line with an unknown dungeon or a bad entry loads what it can", () => {
