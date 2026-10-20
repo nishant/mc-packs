@@ -12,8 +12,8 @@ fix they found. Each fix has an id (F1...), so PRs and `../OPEN.md` can refer to
 - `stash-fill-locked.probe.test.mjs`: the probe that reproduces F1.
 - `scenarios/autostore-perf.js`: the measurement behind F2.
 - `scenarios/chestpair.js`: shows two adjacent recovery chests stay separate on BDS.
-- The perf and suite comparison of the branch against master at 10 and 40 players is added as `perf-report.md`
-  when it finishes.
+- `perf-report.md`: the perf and suite comparison of the branch (aef10dc) against master (7dac598): 8 valid soaks
+  at 10 and 40 players, the Realm Bundle at 10, the full suite (249 scenarios) and the master reruns.
 
 ## How to run this (instructions for the session)
 
@@ -50,7 +50,7 @@ Run this only after msftMyt's release of that branch is merged to `master` and p
 Severity order:
 1. F1-F4, the blockers and highs
 2. F5-F14, the mediums
-3. the lows (F15-F35), and F42 (wanderers rubber-banding, owner-reported; treat it as a medium)
+3. F43-F45 (test regressions, broken new scenarios, the stats ticker cost) with the mediums; the lows (F15-F35); and F42 (wanderers rubber-banding, owner-reported; treat it as a medium)
 4. the living towns feature (F36-F41), after F1-F14
 5. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
 
@@ -233,6 +233,59 @@ Severity order:
     For each, say whether it can loop and fix it.
   - Test: a BDS scenario that places a camp wanderer on open flat ground for 5 minutes and counts snap-backs:
     before, many; after, zero or nearly zero. The wanderer must still stay within the camp area.
+
+- [ ] **F43 (high) Scenarios that pass on master and fail twice on the branch** (`perf-report.md`; branch suite: 249
+  scenarios, 230 pass, 17 fail, 2 flaky):
+  - admin-diag-bundle
+  - admin-size-profile
+  - expedition-pending
+  - expedition-slot-spawn
+  - find-index
+  - stash-pages
+  - stats-new-name
+  - stats-ticker
+  - wander-walk
+  - probably atlas (failed twice on the branch, "no message /Beat its three keepers/"; only flaky on master)
+
+  For each, root-cause it: a real regression (fix the pack) or an intended behavior change (update the scenario, and
+  say why in the commit). Clues to check, not confirmed:
+  - stats-ticker and stats-new-name wait for chat text (/Deaths/, /Mined/), and the ticker moved to the action bar
+    (O71).
+  - find-index, wander-walk and the new find-marker and w10-npc-nameless all fail with "no form for <player> within
+    N ticks", which may be one shared cause, possibly in the new event router or the form lifecycle changes.
+
+  Never weaken a scenario just to make it pass.
+- [ ] **F44 (medium, tests) New scenarios that are broken as wired:**
+  - build-beds: the suite passes `--port`, which `build-beds.mjs` rejects.
+  - welcome-generic-bundle: its `<stage>` placeholder is never filled in.
+  - diag-owned-reload: fails at "phase 1: the probe wrote decl:a and has its probe:big".
+
+  Five of the 28 new scenarios fail. Fix their wiring so the suite runs them, then make them pass for the right
+  reason.
+- [ ] **F45 (medium, perf) The stats ticker now writes the action bar for every player every second.**
+  - `stats_bp` `runInterval(20)` at `main.js` :362. setActionBar went from about 0 to 1.1-1.2 per tick at 40
+    players (0.3 at 10), and stats_bp from 0.068 to 0.17 ms/tick. It is the only pack newly over the 0.15 ms budget.
+  - It comes from O71: the ticker defaults on. Keep the behavior the owner chose (on by default, personal off
+    switch). Make it cheaper:
+    - redraw only when the line's text changed (diff per player)
+    - spread players over the second
+    - skip players whose bar is held by another pack (the actionbar protocol)
+  - Re-measure at 10 and 40 players.
+- [ ] **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
+  - map_bp 3.6-3.8 ms against its 1 ms budget
+  - build_bp 0.73-0.78
+  - stash_bp 0.53-0.57
+  - silly_bp 0.26-0.29
+  - elytra_bp 0.22-0.23
+  - admin_bp 0.21-0.23
+  - saga_bp 0.19-0.21
+  - wander_bp 0.17-0.20
+  - stats_bp 0.16-0.18
+
+  The bundle is still over 5 ms at 40 players in both trees. At 10 players only map, build, elytra, stash and saga
+  are over. As one Realm Bundle at 10 players (the owner's case), the branch is under 5 ms: 4.75 in the steady
+  window, 4.27 over the whole run. Use these as the "before" numbers for F2, F7 and F45, and treat calendar and
+  wander (failing in both trees) as known failures to fix or explain.
 
 ## Feature: living towns (owner request, October 19)
 
