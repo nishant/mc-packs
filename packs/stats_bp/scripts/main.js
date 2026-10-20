@@ -507,7 +507,8 @@ const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel
  * (every read is a call into the game), and `rank` finds a name's place without walking the list: on a big server the
  * boards hold everyone who ever played, and walking them for each ticker cost about 16 ms a second with 40 players
  * and 1,000 names.
- * @type {Map<string, { tick: number, list: Ranked[], rank: Map<string, number> }>}
+ * `rank` is a name's index in the list; `place` its place (0 = first), shared by tied scores (the number of higher scores).
+ * @type {Map<string, { tick: number, list: Ranked[], rank: Map<string, number>, place: Map<string, number> }>}
  */
 const rankedCache = new Map();
 
@@ -529,10 +530,17 @@ function rankedInfo(id) {
   list.sort((a, b) => b.score - a.score);
   /** @type {Map<string, number>} */
   const rank = new Map();
+  /** @type {Map<string, number>} */
+  const place = new Map();
+  let first = 0; // index of the first entry with this entry's score: tied scores share a place, as on the ticker
   list.forEach((r, i) => {
-    if (!rank.has(r.name)) rank.set(r.name, i);
+    if (i > 0 && r.score !== list[i - 1].score) first = i;
+    if (!rank.has(r.name)) {
+      rank.set(r.name, i);
+      place.set(r.name, first);
+    }
   });
-  const info = { tick: now, list, rank };
+  const info = { tick: now, list, rank, place };
   rankedCache.set(id, info);
   return info;
 }
@@ -540,8 +548,11 @@ function rankedInfo(id) {
 /** @param {string} id */
 const ranked = (id) => rankedInfo(id).list;
 
-/** A name's place on a stat's board (0 = first), or -1 when it isn't on it. @param {string} id @param {string} name */
-const placeOf = (id, name) => rankedInfo(id).rank.get(name) ?? -1;
+/**
+ * A name's place on a stat's board (0 = first; tied scores share a place, as on the ticker), or -1 when it isn't on it.
+ * @param {string} id @param {string} name
+ */
+const placeOf = (id, name) => rankedInfo(id).place.get(name) ?? -1;
 
 /** @param {boolean} on */
 const state = (on) => (on ? "Enabled" : "Disabled");
@@ -671,17 +682,20 @@ async function leaderboardMenu(player) {
 
 /** @param {Player} player @param {Stat} stat @returns {Promise<boolean>} true = back to the list */
 async function leaderboard(player, stat) {
-  const list = ranked(stat.id);
+  const { list, rank } = rankedInfo(stat.id);
   const medals = ["§6§l1.§r", "§7§l2.§r", "§c§l3.§r"];
   const size = get("leaderboardSize");
+  // Numbered by place: tied scores share a number, as in My stats and on the ticker.
+  let n = 0;
   const lines = list.slice(0, size).map((s, i) => {
+    if (i > 0 && s.score !== list[i - 1].score) n = i;
     const me = s.name === player.name;
-    const place = medals[i] ?? `§8${i + 1}.`;
+    const place = medals[n] ?? `§8${n + 1}.`;
     return `${place} ${me ? "§b§l" : "§r"}${s.name}§r  ${fmt(stat, s.score)}`;
   });
-  const myRank = placeOf(stat.id, player.name);
-  if (myRank >= size) {
-    lines.push("§8...", `§8${myRank + 1}. §b${player.name}§r  ${fmt(stat, list[myRank].score)}`);
+  const myIndex = rank.get(player.name) ?? -1;
+  if (myIndex >= size) {
+    lines.push("§8...", `§8${placeOf(stat.id, player.name) + 1}. §b${player.name}§r  ${fmt(stat, list[myIndex].score)}`);
   }
 
   const res = await show(

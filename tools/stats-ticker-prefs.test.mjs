@@ -421,3 +421,48 @@ test("F45: while another pack's note holds the bar the ticker reads and writes n
   deaths.getScore = getScore;
   restoreTicker();
 });
+
+test("tied scores share a place in My stats and the leaderboard, as on the ticker", async () => {
+  onlyStat("mined");
+  const mined = board("mined");
+  mined.scores.clear();
+  mined.scores.set("Ann", 5);
+  mined.scores.set("Bob", 5);
+  mined.scores.set("Carl", 2);
+  const many = [new Player("Ann"), new Player("Bob"), new Player("Carl")];
+  players.splice(0, players.length, ...many);
+  tickers();
+  assert.match(plain(many[0].bars.at(-1)), /#1 of 3/);
+  assert.match(plain(many[1].bars.at(-1)), /#1 of 3/);
+  const proto = ui.ActionFormData.prototype;
+  const { title, body, show } = proto;
+  /** Opens /realm:stats, picks `pick` on the main menu then 0 on the next form, and returns every form's body. */
+  async function open(player, ...picks) {
+    /** @type {string[]} */
+    const bodies = [];
+    let n = 0;
+    proto.title = function (t) { this._t = t; return this; };
+    proto.body = function (b) { bodies.push(plain(b)); return this; };
+    proto.show = function () { return Promise.resolve(n < picks.length ? { canceled: false, selection: picks[n++] } : { canceled: true }); };
+    try {
+      commands.get("realm:stats")({ sourceEntity: player });
+      for (let i = 0; i < 20; i++) {
+        flush();
+        await new Promise((r) => setImmediate(r));
+      }
+    } finally {
+      Object.assign(proto, { title, body, show });
+    }
+    return bodies;
+  }
+  const mine = (await open(many[1], 0)).find((b) => /Blocks mined/.test(b)) ?? "";
+  assert.match(mine, /Blocks mined: 5 \(#1 of 3\)/, `Bob, tied first, is first in My stats too: ${mine}`);
+  const carl = (await open(many[2], 0)).find((b) => /Blocks mined/.test(b)) ?? "";
+  assert.match(carl, /Blocks mined: 2 \(#3 of 3\)/, `Carl, below two tied players, is third: ${carl}`);
+  const { STATS } = await import(new URL("../packs/stats_bp/scripts/stats.js", import.meta.url).href);
+  const lb = (await open(many[2], 1, STATS.findIndex((st) => st.id === "mined"))).find((b) => /Carl/.test(b)) ?? "";
+  assert.match(lb, /1\. Ann  5/, `leaderboard: ${lb}`);
+  assert.match(lb, /1\. Bob  5/, `the leaderboard numbers tied scores alike: ${lb}`);
+  assert.match(lb, /3\. Carl  2/, `leaderboard: ${lb}`);
+  restoreTicker();
+});
