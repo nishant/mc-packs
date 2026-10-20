@@ -439,6 +439,39 @@ test("production resetPending pumps the line itself when a box is filled in (no 
   assert.match(a.msgs.at(-1), /dungeon is free now/);
 });
 
+test("production reset retains a reset slot until its native ticking-area removal has settled", async () => {
+  const w = world({ real: true, slots: 1 });
+  const dim = { getEntities: () => [] };
+  let resume, settleTicks;
+  Object.assign(w.ctx, {
+    extent: () => ({ o: { x: 0, y: 0, z: 0 }, size: 16, top: 5 }),
+    overworld: () => dim,
+    waitLoaded: async () => true,
+    box: () => ({ from: { x: 0, y: 0, z: 0 }, to: { x: 15, y: 5, z: 15 } }),
+    leftoversAfterRestart: () => true,
+    findBlocks: () => [],
+    surface: () => ({ x: 0, y: 10, z: 0 }),
+    fillBoxSteps: () => [],
+    runSteps: async () => 0,
+    sleep: (ticks) => {
+      settleTicks = ticks;
+      return new Promise((resolve) => { resume = resolve; });
+    },
+  });
+  vm.runInContext(fnSrc("resetBox"), w.ctx);
+  w.pending.set(0, { slot: 0 });
+  const completing = w.ctx.resetPending();
+  await new Promise(setImmediate);
+  assert.deepEqual(w.removedAreas, [0], "the old native loader was asked to go");
+  assert.equal(w.pending.has(0), true, "an uncommitted native removal is not a reusable dungeon");
+  assert.equal(w.ctx.freeSlot(), undefined);
+  assert.ok(settleTicks >= 2, "cross a complete native tick before exposing the slot");
+  resume();
+  await completing;
+  assert.equal(w.pending.size, 0, "the completed reset can now release the slot");
+  assert.equal(w.ctx.freeSlot(), 0);
+});
+
 test("production prepare: a dungeon area that can't load, or an unsafe site, frees the slot, holds the line a minute and starts nobody", async () => {
   for (const mode of ["unloaded", "foreign"]) {
     const w = world({ real: true });

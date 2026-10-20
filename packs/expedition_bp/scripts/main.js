@@ -1056,6 +1056,8 @@ async function resetBox(rec) {
   const failed = await runSteps(fillBoxSteps(dim, o, size, top, "minecraft:deepslate", true));
   if (failed) return false;
   removeArea(rec.slot);
+  // Native loader removal must settle before another run can reuse this slot.
+  await sleep(2);
   return true;
 }
 

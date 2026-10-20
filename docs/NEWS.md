@@ -22,7 +22,7 @@ entries below as a changelog.
 - Realm Mail limits how many unread letters one sender can leave you (senderUnreadCap, default 5). Party chat can be muted; it covers /realm:party_chat and the party form only.
 - Crowns: /realm:crowns_audit shows the newest 50 of the last 200 pays and gives, in UTC. A daily pay limit (dailyPayLimit, default 250000) caps what each player can pay in a UTC day.
 - Nicknames: Admin, Owner and Server are reserved (reservedNames). Online operators reserve their gamertag automatically; an operator who has never joined needs reservedGamertags.
-- Expeditions: the chat line announcing a clear can start at a chosen level (announceFromLevel, default 0). Forgetting an expedition removes its parcel structures; player stash structures are kept, because offline owners cannot be listed. Saves wait for /reload.
+- Expeditions: the chat line announcing a clear can start at a chosen level (announceFromLevel, default 0). Queued parties wait for a dungeon's reset loader to close before starting. Forgetting an expedition removes its parcel structures; player stash structures are kept, because offline owners cannot be listed. Saves wait for /reload.
 - Essentials+ tips no longer come back by themselves on a Realm that never saved its tip list; /realm:news_tips adds them back.
 - The Parties migration cannot be rolled back.
 - Operators see the setup reminder once.
