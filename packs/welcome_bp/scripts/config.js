@@ -14,37 +14,12 @@
 
 export const DEFAULTS = {
   /** Popup title bar. */
-  title: "§l§6Welcome to the Realm!",
+  title: "§l§6Welcome!",
 
-  /** Popup body text. */
-  body:
-    "Hey §b{player}§r, glad you're here! §7({online} online)§r\n\n" +
-    "§l§6== The Story ==§r\n" +
-    "A sleepy harbor town keeps an old secret. The drowned bell is ringing again, the stars are wrong, " +
-    "and the townsfolk need a hero. Tap §bOld Tobin§r or §bMara§r in town to begin " +
-    "§eThe Lantern and the Hollow§r, then follow the tracker on the right of your screen. " +
-    "§b/realm:saga§r lists your quests.\n\n" +
-    "§l§6== Adventure ==§r\n" +
-    "§7-§r Expeditions, Champions and the Bounty Board (§b/realm:expedition§r, §b/realm:bounty§r)\n" +
-    "§7-§r Wanderers, treasure maps and relics out in the wilds\n" +
-    "§7-§r Skills, guilds and titles that grow as you play (§b/realm:skills§r)\n\n" +
-    "§l§6== Life in Town ==§r\n" +
-    "§7-§r Earn §eCrowns§r and spend them when the merchant caravan visits (§b/realm:crowns§r)\n" +
-    "§7-§r Daily quests, town projects, the kitchen and better fishing\n" +
-    "§7-§r Waystones for travel, land claims to keep your builds safe (§b/realm:claim§r)\n\n" +
-    "§l§6== Sky and Seasons ==§r\n" +
-    "§7-§r Storms, tornadoes, rainbows, meteors, blood moons and festivals (§b/realm:calendar§r)\n\n" +
-    "§l§6== Handy ==§r\n" +
-    "§b/realm:help§r  everything this realm adds\n" +
-    "§b/realm:prefs§r  your own settings (HUD, minimap, popups)\n" +
-    "§b/realm:party§r  team up with friends\n\n" +
-    "§l§6== Rules ==§r\n" +
-    "§7-§r Be kind, no griefing\n" +
-    "§7-§r Ask before building near someone else\n" +
-    "§7-§r Have fun",
-
+  /** Popup body text. Empty here: the default is built from the installed packs (see WELCOME below and main.js). */
+  body: "",
   /** Text on the close button. */
-  button: "§lLet's go!",
+  button: "§lClose",
 
   /** true = show only once per player (until the message is edited); false = every join. */
   showOnce: false,
@@ -60,17 +35,22 @@ export const DEFAULTS = {
 };
 
 /**
- * What a server that is not this Realm sees until an operator edits the message: one line per installed pack
- * (pack folder -> line). It names no town, character, location or rule. The built-in text above is kept for
- * worlds that already ran it (see welcome:profile in main.js).
+ * The default welcome every world gets, the Realm included, until an operator saves their own. It names only
+ * what the installed packs (pack folder -> line) really add, and no spoilers: nothing past the first day of the story.
  */
 export const GENERIC = {
   title: "§l§6Welcome!",
-  intro: "Hey §b{player}§r, glad you're here! §7({online} online)§r",
-  closing: "§b/realm:help§r  everything this server adds\n§7An operator can change this message with §b/realm:welcome_edit§r.",
+  heading: { world: "The World", features: "What You Can Do", next: "Where To Go Next" },
+  greeting: "Hey §b{player}§r, glad you're here! §7({online} online)§r",
+  /** With Story Questlines: the story's first day (docs/STORY_BIBLE.md, section 1). */
+  story:
+    "A sleepy harbor town keeps an old secret. The harbor bell sank into the sea forty winters ago, yet lately it has been heard ringing again, and the stars look wrong.",
+  /** With Story Questlines and Townsfolk: who starts it (the two prologue stories). */
+  storyStart: "Tap §bOld Tobin§r or §bMara§r in town to begin §eThe Lantern and the Hollow§r.",
+  /** Without Story Questlines. */
+  noStory: "A world to explore, build and play in together.",
   /** @type {Record<string, string>} */
   lines: {
-    saga_bp: "Stories and quests to follow (§b/realm:saga§r)",
     quests_bp: "Daily quests (§b/realm:quests§r)",
     expedition_bp: "Expeditions (§b/realm:expedition§r)",
     bounty_bp: "A bounty board (§b/realm:bounty§r)",
@@ -83,6 +63,22 @@ export const GENERIC = {
     map_bp: "A minimap (§b/realm:map§r)",
     stats_bp: "Your play stats (§b/realm:stats§r)",
     journal_bp: "A journal of what you have found (§b/realm:journal§r)",
-    settings_bp: "Your own settings (§b/realm:prefs§r)",
   },
+  /** @type {Record<string, string>} */
+  next: {
+    help_bp: "§b/realm:help§r lists everything this server adds.",
+    settings_bp: "§b/realm:prefs§r holds your own settings, this popup included.",
+    saga_bp: "§b/realm:saga§r opens your story log: quests, hints and the codex.",
+  },
+  operators: "Operators: §b/realm:welcome_edit§r changes this message.",
+};
+
+/**
+ * The Realm's old saved welcome, replaced once by the default above (welcome:migrated in main.js): only a saved
+ * body that has this exact sentence goes (color codes ignored); its title and button go only when they are still the old built-in ones.
+ */
+export const LEGACY_REALM = {
+  sentence: "Tap Old Tobin or Mara in town to begin",
+  title: "§l§6Welcome to the Realm!",
+  button: "§lLet's go!",
 };

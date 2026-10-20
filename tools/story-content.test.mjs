@@ -1,5 +1,5 @@
 // W7 O38/O40 follow-up: the real story data must pass the O38 content rules with no allowlist at all,
-// except the four O64 rewards the owner has not decided. These tests read the shipped story files
+// except the four O64 finale rewards the owner approved. These tests read the shipped story files
 // through check-stories' exported validator, so a new partial color family or an interact step that
 // players can no longer finish fails here, not in a fixture.
 import { test } from "node:test";
@@ -15,8 +15,8 @@ const { FAVORS, WANDERERS, WANDER_TEMPLATES } = await import(pathToFileURL(join(
 const mod = await import("./check-stories.mjs");
 const live = await mod.liveContentFindings(root, { STORIES, FAVORS, WANDERERS, WANDER_TEMPLATES, NPC_NAMES });
 
-/** Rewards the owner has not decided (O64): the checker warns, the amounts stay. */
-const OWNER_PENDING = [
+/** Exact finale exceptions approved by the owner (O64): the amounts stay. */
+const APPROVED_FINALES = [
   "reward-scale act5_lantern/dawn_relight",
   "reward-scale act5_lantern/herald",
   "reward-scale act5_lantern/choice",
@@ -36,22 +36,22 @@ function objectiveAt(at) {
   return { story, chapter, objective };
 }
 
-test("live story data has no O38 finding except the four owner-pending rewards", () => {
+test("live story data has no O38 finding except the four approved finale rewards", () => {
   const seen = live.findings.map((/** @type {any} */ f) => `${f.code} ${f.at}`).sort();
-  assert.deepEqual(seen, [...OWNER_PENDING].sort(), live.findings.map((/** @type {any} */ f) => `${f.code} ${f.at}: ${f.message}`).join("\n"));
+  assert.deepEqual(seen, [...APPROVED_FINALES].sort(), live.findings.map((/** @type {any} */ f) => `${f.code} ${f.at}: ${f.message}`).join("\n"));
 });
 
-test("the allowlist keeps only the four owner-pending rewards, and each still fires", () => {
+test("the allowlist keeps only the four approved finale rewards, and each still fires", () => {
   const raw = JSON.parse(readFileSync(join(root, "tools", "check-stories.allow.json"), "utf8"));
   const rows = (raw.entries ?? []).map((/** @type {any} */ e) => `${e.code} ${e.at}`).sort();
-  assert.deepEqual(rows, [...OWNER_PENDING].sort());
+  assert.deepEqual(rows, [...APPROVED_FINALES].sort());
   for (const entry of raw.entries) {
-    assert.match(entry.reason, /OWNER-PENDING O64/, entry.at);
+    assert.match(entry.reason, /Approved O64 finale exception/, entry.at);
     assert.ok(live.findings.some((/** @type {any} */ f) => f.code === entry.code && f.at === entry.at), `${entry.at} no longer fires: remove it`);
   }
 });
 
-test("owner-pending rewards keep their shipped amounts", () => {
+test("approved finale rewards keep their shipped amounts", () => {
   const reward = (/** @type {string} */ story, /** @type {string} */ id) => STORIES.find((/** @type {any} */ s) => s.id === story).chapters.find((/** @type {any} */ c) => c.id === id).reward;
   const dawn = reward("act5_lantern", "dawn_relight");
   assert.equal(dawn.levels, 10);

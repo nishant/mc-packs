@@ -641,7 +641,7 @@ export const STORIES = [
               adds: { mobs: ["minecraft:vex", "minecraft:phantom"], count: 6 },
             },
           },
-          { type: "defeat", label: "Defeat 4 of its vexes and phantoms", mobs: ["minecraft:vex", "minecraft:phantom"], count: 4, place: "seal_sky", radius: 48 },
+          { type: "defeat", label: "Defeat 4 of its vexes and phantoms", mobs: ["minecraft:vex", "minecraft:phantom"], count: 4, place: "seal_sky", radius: 48, spawn: { count: 2, every: 15, warn: "Vexes and phantoms peel off the Lantern Thief's shadow and dive at you." } },
         ],
         outro: [
           "The last block of glass clicks into place and the ring is whole. The Lantern Thief's stolen light pours out of it as it falls, scattering like sparks, and every one of those sparks drifts back toward the ring.",
@@ -859,7 +859,7 @@ export const STORIES = [
               { dx: 3, dz: 6, text: "A Choir camp, left in a hurry: bedrolls, a cold fire, and a child's drawing of the inn with a gray figure standing on its roof. Underneath, in careful letters: THE KEEPER WILL COME HOME." },
             ],
           },
-          { type: "defeat", label: "Drive the Gray Choir from the gate: defeat 12", mobs: ["minecraft:pillager", "minecraft:vindicator"], count: 12, place: "hollow_gate", radius: 48 },
+          { type: "defeat", label: "Drive the Gray Choir from the gate: defeat 12", mobs: ["minecraft:pillager", "minecraft:vindicator"], count: 12, place: "hollow_gate", radius: 48, spawn: { count: 4, every: 20, warn: "The Gray Choir holds the gate. They raise their crossbows." } },
         ],
         outro: [
           "When the last of the Choir runs, the soul fire in the pit flares tall and blue, and a voice rises out of the dark. Everyone in town hears it at once: Bea in the kitchen, Reyes on the wall, Tobin on the dock, Wren in the hay.",

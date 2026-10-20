@@ -9,6 +9,7 @@ import { parseArgs } from "node:util";
 const { values } = parseArgs({ options: {
   keep: { type: "boolean", default: false },
   log: { type: "string" },
+  port: { type: "string" },
 } });
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const cache = process.env.BDS_HARNESS_CACHE || os.tmpdir();
@@ -23,6 +24,7 @@ try {
     path.join(root, "tools", "test-bds", "run.mjs"), "--quiet", "--strict", "--flat",
     "--packs", temp, "--only", "build_bp,build_rp", "--timeout", "300",
     "--scenario", path.join(root, "tools", "test-bds", "examples", "build-beds.js"),
+    ...(values.port ? ["--prop", `server-port=${Number(values.port)}`, "--prop", `server-portv6=${Number(values.port) + 1}`] : []),
     ...(values.keep ? ["--keep"] : []),
     ...(values.log ? ["--log", path.resolve(values.log)] : []),
   ], { cwd: root, stdio: "inherit", env: process.env });
