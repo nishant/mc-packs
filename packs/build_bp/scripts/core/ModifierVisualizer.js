@@ -4,7 +4,7 @@ import { getState, getMirrorState, getRadialState, getArrayState } from "./Playe
 import { idleSkip, allPlayers } from "../utils/Items.js";
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
-import { beginVisualizationTick, forgetHolder, isVisualizationHolder, visualizationIdle } from "../utils/tool-gate.js";
+import { beginVisualizationTick, markHolderDirty, visualizationHolders, visualizationIdle } from "../utils/tool-gate.js";
 
 const OFFSET   = 0.525;
 const VIEW_CLIP = 24;
@@ -131,11 +131,9 @@ export function startModifierVisualizerLoop() {
 
     system.runInterval(() => {
         if (visualizationIdle()) return;
-        const all = allPlayers();
-        if (!beginVisualizationTick(all, holdsBuildTool)) return;
-        for (const player of all) {
-            if (!isVisualizationHolder(player.id)) continue;
-            if (!holdsBuildTool(player)) { forgetHolder(player.id); continue; }
+        if (!beginVisualizationTick(allPlayers(), holdsBuildTool, system.currentTick)) return;
+        for (const player of visualizationHolders()) {
+            if (!holdsBuildTool(player)) { markHolderDirty(player.id); continue; }
             try {
                 const mirror = getMirrorState(player);
                 const radial = getRadialState(player);
@@ -157,14 +155,13 @@ export function startModifierVisualizerLoop() {
     const mirrorClock = createIdleClock();
     system.runInterval(() => {
         if (visualizationIdle()) return;
-        const all = allPlayers();
-        if (!beginVisualizationTick(all, holdsBuildTool)) return;
+        if (!beginVisualizationTick(allPlayers(), holdsBuildTool, system.currentTick)) return;
         const phase = mirrorClock.tick();
-        for (let i = 0; i < all.length; i++) {
-            const player = all[i];
-            if (!isVisualizationHolder(player.id)) continue;
+        const holders = visualizationHolders();
+        for (let i = 0; i < holders.length; i++) {
+            const player = holders[i];
             if (idleSkip(player, i, mirrorBusy, phase)) continue;
-            if (!holdsBuildTool(player)) { forgetHolder(player.id); mirrorBusy.delete(player); continue; }
+            if (!holdsBuildTool(player)) { markHolderDirty(player.id); mirrorBusy.delete(player); continue; }
             try {
                 const mirror = getMirrorState(player);
                 if (!mirror.enabled || !(mirror.axisX || mirror.axisZ)) { mirrorBusy.delete(player); continue; }

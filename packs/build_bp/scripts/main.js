@@ -22,7 +22,7 @@ import { startHoldWheel, bookPressed, cleanupHoldWheel } from "./core/HoldWheel.
 import { startPanelLightCleanup } from "./core/PanelLight.js";
 import { startGuideBook, onTutorialBookUse, cleanupGuideBook, changeBookLanguage } from "./core/GuideBook.js";
 import { loadSlot, loadSlotMeta, AUTO_SLOT } from "./utils/ClipboardStore.js";
-import { getState, setMode, setAnchor, setSecondAnchor, clearAnchor, clearClipboard, removeState, addWaypoint, getWaypoints } from "./core/PlayerState.js";
+import { getState, setMode, setAnchor, setSecondAnchor, clearAnchor, clearClipboard, removeState, addWaypoint, getWaypoints, anchoredPlayers, buildingPlayers } from "./core/PlayerState.js";
 import { executePaste } from "./core/Clipboard.js";
 import { getModeHandler, MODE_LIST } from "./modes/ModeRegistry.js";
 import { placeBlocks, ALWAYS_REPLACEABLE, UNPLACEABLE } from "./core/BlockPlacer.js";
@@ -41,8 +41,9 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "./utils/Items.js";
-import { createIdleClock } from "./utils/idle-cadence.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, allPlayers, buildingBookHands, tutorialBookHands, checkSlot, handKnown, handTypeId, markHandDirty, refreshHand } from "./utils/Items.js";
+import { createIdleClock, idleDue } from "./utils/idle-cadence.js";
+import { visualizationHolders } from "./utils/tool-gate.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 import { bedPartnerPos, dropIncompleteBeds, expandDestroyForClaims, expandForClaims, isBedType } from "./core/beds.js";
 import { onScriptEvent } from "./script-events.js";
@@ -195,11 +196,13 @@ world.afterEvents.playerSpawn.subscribe(ev => {
 function yawOf(player) {
     try { return player.getRotation().y; } catch { return 0; }
 }
-function readPlaced(player, pos) {
+/** What a destroy would break at pos: the type, and the states only for a bed (the only block that needs them). */
+export function readPlaced(player, pos) {
     try {
         const block = player.dimension.getBlock(pos);
         if (!block) return null;
-        return { typeId: block.typeId, states: block.permutation.getAllStates() };
+        const typeId = block.typeId;
+        return isBedType(typeId) ? { typeId, states: block.permutation.getAllStates() } : { typeId };
     } catch { return null; }
 }
 export async function filterBuildPositions(player, positions, typeId, blockStates, isDestroy) {
@@ -209,14 +212,15 @@ export async function filterBuildPositions(player, positions, typeId, blockState
     const filtered = await filterAllowedPositionsAsync(player, player.dimension.id, ready, true);
     return dropIncompleteBeds(filtered ?? []);
 }
-async function placeAir(player, target, typeId, blockStates) {
+export async function placeAir(player, target, typeId, blockStates) {
     if (!isBedType(typeId)) return placeBlocks(player, [target], target, typeId, blockStates, { immediate: true });
     const kept = await filterBuildPositions(player, [target], typeId, blockStates, false);
     if (!kept.length) return 0;
     return placeBlocks(player, kept, target, typeId, blockStates, { immediate: true });
 }
-function confirmPlacement(player, fallbackTarget) {
+export function confirmPlacement(player, fallbackTarget) {
     const state = getState(player);
+    if (dropAnchorElsewhere(player, state)) return;
     if (state.mode === "disable" || !state.anchor || !state.blockTypeId) return;
     const anchor = { x: state.anchor.x, y: state.anchor.y, z: state.anchor.z };
     const typeId = state.blockTypeId;
@@ -317,6 +321,32 @@ function confirmPlacement(player, fallbackTarget) {
         }
     });
 }
+/**
+ * F8: a build anchor stays while the player holds something else (a sword, food), it is just not drawn. Starting over
+ * with a different block or tool replaces it: another block on a block or destroy anchor, or a digging tool on a block
+ * anchor. Changing the mode clears it too. Returns true when it was replaced.
+ */
+// An anchor set in another dimension is never built from: a shape built here from those coordinates would land in the
+// wrong world and charge the player for it. The preview drops it too, but not while the hand holds something else.
+export function dropAnchorElsewhere(player, state) {
+    const dimId = state.anchor?.dimensionId;
+    if (!dimId || dimId === player.dimension.id) return false;
+    clearAnchor(player);
+    clearPreviewCache(player.id);
+    return true;
+}
+function replaceStaleAnchor(player, state, typeId) {
+    if (dropAnchorElsewhere(player, state)) return true;
+    if (!state.anchor || !typeId || state.mode === "copy_paste") return false;
+    const destroyAnchor = state.blockTypeId === "eb:destroy";
+    const stale = isDiggingTool(typeId)
+        ? !destroyAnchor
+        : isValidBlock(typeId) && typeId !== state.blockTypeId;
+    if (!stale) return false;
+    clearAnchor(player);
+    clearPreviewCache(player.id);
+    return true;
+}
 const DIR_OFFSET = {
     Up: { x: 0, y: 1, z: 0 },
     Down: { x: 0, y: -1, z: 0 },
@@ -338,6 +368,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
     const state = getState(player);
     if (state.mode === "disable") return;
     if (!hasRequiredTag(player)) return;
+    dropAnchorElsewhere(player, state);
     const off = DIR_OFFSET[ev.blockFace] ?? { x: 0, y: 1, z: 0 };
     const loc = ev.block.location;
     const facePos = { x: loc.x + off.x, y: loc.y + off.y, z: loc.z + off.z };
@@ -403,6 +434,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
         system.run(() => showCopyCutPrompt(player, corner1, corner2));
         return;
     }
+    replaceStaleAnchor(player, state, item?.typeId);
     if (isDiggingTool(item?.typeId)) {
         if (state.mode === "air_build") {
             if (!state.anchor) {
@@ -530,6 +562,7 @@ world.afterEvents.itemUse.subscribe(ev => {
     }
     const state = getState(player);
     if (!hasRequiredTag(player)) return;
+    dropAnchorElsewhere(player, state);
     if (state.mode === "air_build") {
         if (!item) return;
         if (!isValidBlock(item.typeId)) return;
@@ -619,6 +652,8 @@ world.afterEvents.itemUse.subscribe(ev => {
         system.run(() => showCopyCutPrompt(player, airCorner1, airCorner2));
         return;
     }
+    // In the air a new anchor needs Infinite Reach, so only then does a different block or tool replace the old one.
+    if (state.mode !== "disable" && state.mode !== "air_build" && getInfiniteReach(player)) replaceStaleAnchor(player, state, item?.typeId);
     if (isDiggingTool(item?.typeId) && state.mode !== "disable") {
         if (!state.anchor) {
             if (!getAllowDestroy()) {
@@ -782,6 +817,9 @@ try {
     swingSupported = true;
 } catch {
 }
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => {
+    if (player?.isValid && anchoredPlayers().has(player.id)) dropAnchorElsewhere(player, getState(player));
+});
 world.afterEvents.playerLeave.subscribe(ev => {
     removeState(ev.playerId);
     removePlayerBuildSpeed(ev.playerId);
@@ -797,6 +835,8 @@ world.afterEvents.playerLeave.subscribe(ev => {
     lastSneakPressMs.delete(ev.playerId);
     savedModeBeforeToggle.delete(ev.playerId);
     selectionFovMap.delete(ev.playerId);
+    zoomedPlayers.delete(ev.playerId);
+    sweepSlot.delete(ev.playerId);
     cleanupActionBar(ev.playerId);
     cleanupGuideBook(ev.playerId);
     cleanupCoach(ev.playerId);
@@ -824,13 +864,24 @@ system.run(() => {
     }
 });
 
+/** player id -> player whose camera is zoomed for a selection (so it can be cleared when the anchor goes) */
+const zoomedPlayers = new Map();
 system.runInterval(() => {
-    for (const player of allPlayers()) {
+    // Only players with an anchor can be selecting, plus those still zoomed from one.
+    const anchored = anchoredPlayers();
+    if (anchored.size === 0 && zoomedPlayers.size === 0) return;
+    const looked = anchored.size && zoomedPlayers.size ? new Map([...zoomedPlayers, ...anchored]) : anchored.size ? anchored : zoomedPlayers;
+    for (const player of [...looked.values()]) {
         try {
+            if (player.isValid === false) { zoomedPlayers.delete(player.id); continue; }
             const state = getState(player);
-            const selecting = state.mode !== "disable" && state.mode !== "copy_paste" && !!state.anchor && getFovZoomEnabled(player);
+            // Zoom only while the anchor is drawn: an anchor kept while holding a sword or food (F8) does not zoom.
+            const typeId = state.anchor ? handTypeId(player) : null;
+            const drawn = state.blockTypeId === "eb:destroy" ? isDiggingTool(typeId) : !!typeId && typeId === state.blockTypeId;
+            const selecting = state.mode !== "disable" && state.mode !== "copy_paste" && !!state.anchor && drawn && getFovZoomEnabled(player);
 
             if (!selecting) {
+                zoomedPlayers.delete(player.id);
                 if (selectionFovMap.has(player.id)) {
                     selectionFovMap.delete(player.id);
                     player.runCommand("camera @s clear");
@@ -855,13 +906,15 @@ system.runInterval(() => {
             if (selectionFovMap.get(player.id) === fov) continue;
             const wasZooming = selectionFovMap.has(player.id);
             selectionFovMap.set(player.id, fov);
+            zoomedPlayers.set(player.id, player);
             if (!wasZooming) try { player.addTag("eb:zooming"); } catch {}
             player.runCommand(`camera @s fov_set ${fov} 0.15 linear`);
         } catch { }
     }
 }, 2);
 system.runInterval(() => {
-    for (const player of allPlayers()) {
+    // Only Building Book holders (kept from the hand events): nobody else's inventory is read.
+    for (const player of [...buildingBookHands().values()]) {
         try {
             const inv = player.getComponent("minecraft:inventory")?.container;
             if (!inv) continue;
@@ -875,19 +928,13 @@ system.runInterval(() => {
         } catch { }
     }
 }, 20);
-/** Players holding the Building Book: their sneaks are watched every tick, everyone else's hand every few ticks. */
-const sneakBusy = new WeakSet();
-const sneakClock = createIdleClock();
+/** Players holding the Building Book (kept from the hand events): their sneaks are watched every tick, nobody else's. */
 system.runInterval(() => {
-    const all = allPlayers();
-    const phase = sneakClock.tick();
-    for (let i = 0; i < all.length; i++) {
-        const player = all[i];
-        if (idleSkip(player, i, sneakBusy, phase)) continue;
+    const holders = buildingBookHands();
+    if (prevSneakState.size) for (const id of [...prevSneakState.keys()]) if (!holders.has(id)) prevSneakState.delete(id);
+    if (holders.size === 0) return;
+    for (const player of [...holders.values()]) {
         try {
-            const item = heldItemCached(player, IDLE_EVERY);
-            if (!isBook(item)) { sneakBusy.delete(player); prevSneakState.delete(player.id); continue; }
-            sneakBusy.add(player);
             const isSneaking  = player.isSneaking;
             const wasSneaking = prevSneakState.get(player.id) ?? false;
             prevSneakState.set(player.id, isSneaking);
@@ -917,6 +964,47 @@ system.runInterval(() => {
                 lastSneakPressMs.set(player.id, now);
             }
         } catch { }
+    }
+}, 1);
+
+// Backstops for a missed hand event. Every tick, players who are building (a mode on, a tool or a book in hand) have
+// their hotbar slot compared with the one their hand was read in; everyone else every SLOT_WATCH_TICKS. Every
+// HAND_SWEEP_TICKS the hands of a fifth of the players are read again (spread over the runs, so each about every 5
+// seconds) for an item change in the slot that sent no event. Players that came without a spawn event are picked up too.
+const SLOT_WATCH_TICKS = 10;
+const HAND_SWEEP_TICKS = 20;
+const handClock = createIdleClock();
+/** player id -> a small hash, so the sweep spreads players by who they are, not by their place in the list (C21) */
+const sweepSlot = new Map();
+function slotOf(id) {
+    let n = sweepSlot.get(id);
+    if (n === undefined) {
+        n = 0;
+        for (let i = 0; i < id.length; i++) n = (n * 31 + id.charCodeAt(i)) >>> 0;
+        sweepSlot.set(id, n);
+    }
+    return n;
+}
+let handTicks = 0;
+system.runInterval(() => {
+    handTicks++;
+    if (handTicks % SLOT_WATCH_TICKS !== 0) {
+        for (const group of [buildingPlayers(), buildingBookHands(), tutorialBookHands()]) {
+            if (group.size) for (const player of [...group.values()]) { try { checkSlot(player); } catch {} }
+        }
+        for (const player of visualizationHolders()) { try { checkSlot(player); } catch {} }
+        return;
+    }
+    const all = allPlayers();
+    const sweep = handTicks % HAND_SWEEP_TICKS === 0;
+    const phase = sweep ? handClock.tick() : 0;
+    for (let i = 0; i < all.length; i++) {
+        const player = all[i];
+        try {
+            if (!handKnown(player.id)) markHandDirty(player);
+            else if (sweep && idleDue(slotOf(player.id), phase, false, false)) refreshHand(player);
+            else checkSlot(player);
+        } catch {}
     }
 }, 1);
 
