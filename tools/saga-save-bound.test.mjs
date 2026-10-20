@@ -132,9 +132,13 @@ test("main.js keeps checkStories in worldLoad and subscribes entityLoad at the t
   assert.match(main, /^world\.afterEvents\.entityLoad\.subscribe\(\(e\) => sweepLoadedChampion\(e\.entity\)\);/m);
 });
 
-const champion = runInNewContext(`${slice(objectives, "const sessionChampions", "/** Every dimension's")}\n({ sessionChampions, staleChampion, trackChampion })`, {
+// The session list is champions-session.js as it ships; staleChampion and the sweep come from objectives.js.
+const session = await import(new URL("../packs/saga_bp/scripts/champions-session.js", import.meta.url).href);
+const sliced = runInNewContext(`${slice(objectives, "/** A tagged champion that this session did not spawn", "/** Every dimension's")}\n({ staleChampion })`, {
   CHAMPION_TAG: "saga:champion",
+  sessionChampion: session.sessionChampion,
 });
+const champion = { staleChampion: sliced.staleChampion, trackChampion: (e) => session.trackChampion(e.id) };
 const ent = (id, tags) => ({ id, hasTag: (t) => tags.includes(t) });
 
 test("a saga champion loaded later that this session did not spawn is stale; ours and other entities are not", () => {
