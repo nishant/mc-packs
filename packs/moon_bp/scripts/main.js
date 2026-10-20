@@ -531,7 +531,10 @@ let playerMade;
 let madeJob;
 const PLAYER_MADE =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch(?!flower)|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|bricks|ladder|rail|lever|button|pressure_plate|hopper|anvil|enchanting_table|loom|cartography|fletching|smithing|stonecutter|grindstone|composter|cauldron|campfire|jukebox|noteblock|banner|bell|lectern|scaffolding|piston|redstone_lamp|dispenser|dropper|observer|shulker_box|beacon|flower_pot|candle|stripped|hay_block|smooth_stone|polished|sea_lantern|glowstone|shroomlight|froglight|end_rod/;
-/** Block types whose id is read per job step: the whole list in one go took about 40 ms (a one-off hitch at load). */
+/**
+ * Block types whose id is read per job step. Building the whole list in one runTimeout was a one-off 40-45 ms hitch at
+ * load; whether BlockTypes.getAll() (still one step) or the id reads cost most of it is not measured yet.
+ */
 const MADE_PER_STEP = 64;
 
 /** Builds `playerMade` in steps: the game's block list, then its ids a slice at a time. */
