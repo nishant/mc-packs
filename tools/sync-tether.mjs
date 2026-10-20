@@ -16,6 +16,7 @@ const CONSUMERS = {
   wander_bp: ["main.js"],
   caravan_bp: ["main.js"],
   npc_bp: ["main.js"],
+  saga_bp: ["actors.js"],
 };
 
 const problems = [];
