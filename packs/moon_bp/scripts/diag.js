@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "moon_bp";
-const VERSION = "1.2.12";
+const VERSION = "1.2.13";
 const NAME = "Blood Moon & Harvest Moon";
 /** @type {string[]} */
 const PREFIXES = ["moon"];
