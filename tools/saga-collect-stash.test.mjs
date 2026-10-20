@@ -1,9 +1,11 @@
 // A collect step must count what Expansive Inventory routed to a saved page (stash_bp, realm:stash_count), while
-// countItem, which deliveries use, keeps reading only the live inventory. Saga's production functions run in a vm.
+// countItem, which deliveries use, keeps reading only the live inventory. Saga's production functions run in a vm,
+// and the bridge itself is stash-bridge.js, imported as it ships.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import { createStashBridge } from "../packs/saga_bp/scripts/stash-bridge.js";
 
 const objectivesSource = readFileSync(new URL("../packs/saga_bp/scripts/objectives.js", import.meta.url), "utf8");
 const dataSource = readFileSync(new URL("../packs/saga_bp/scripts/data.js", import.meta.url), "utf8");
@@ -70,9 +72,18 @@ function fixture(obj) {
     productionFunction(objectivesSource, "bump"),
     productionFunction(objectivesSource, "tickPlayer"),
   ].join("\n");
-  // The bridge (when it exists) lives next to countItem: its state and functions are loaded from the real file.
-  const bridge = [...objectivesSource.matchAll(/^\/\/ stash-bridge:begin\r?\n([\s\S]*?)^\/\/ stash-bridge:end/gm)].map((m) => m[1].replace(/^export /gm, "")).join("\n");
-  const engine = vm.runInNewContext(`${functions}\n${bridge}\n;({ tickPlayer, countItem, reply: typeof stashCountReply === "function" ? stashCountReply : undefined, changed: typeof stashChanged === "function" ? stashChanged : undefined, forget: typeof stashForget === "function" ? stashForget : undefined });`, context);
+  const sandbox = vm.createContext(context);
+  const found = vm.runInContext(`${functions}\n;({ tickPlayer, countItem, same });`, sandbox);
+  // The production bridge, wired the way objectives.js wires it; tickPlayer finds its collectCount in the context.
+  const bridge = createStashBridge({
+    system: context.system,
+    send: context.send,
+    countItem: found.countItem,
+    same: found.same,
+    changed: (pid) => context.invChanged.add(pid),
+  });
+  context.collectCount = bridge.collectCount;
+  const engine = { tickPlayer: found.tickPlayer, countItem: found.countItem, reply: bridge.stashCountReply, changed: bridge.stashChanged, forget: bridge.stashForget };
   const stack = (typeId, amount, nameTag, lore = []) => ({ typeId, amount, nameTag, getLore: () => lore });
   return {
     st,
@@ -265,4 +276,13 @@ test("F6: the bridge forgets a player who left", () => {
   f.hold(f.stack("minecraft:amethyst_shard", 2)); // they come back: counted again
   f.tick();
   assert.equal(f.asks(), before + 1, "nothing cached for them after they left: the next count asks again");
+});
+
+test("wiring: objectives.js makes the one bridge from stash-bridge.js and marks the player's inventory changed (F24)", () => {
+  const src = objectivesSource.replace(/\r\n/g, "\n");
+  assert.match(src, /^import \{ createStashBridge \} from "\.\/stash-bridge\.js";$/m);
+  assert.match(src, /const \{ collectCount, stashCountReply, stashChanged, stashForget \} = createStashBridge\(\{\n {2}system,\n {2}send,\n {2}countItem,\n {2}same,\n {2}changed: \(pid\) => invChanged\.add\(pid\),\n\}\);/);
+  assert.match(src, /if \(id === "realm:stash_count"\) stashCountReply\(message\);\n\s*else if \(id === "realm:stash_changed"\) stashChanged\(message\);/);
+  assert.match(src, /stashForget\(pid\);/);
+  assert.doesNotMatch(src, /stash-bridge:begin|stash-bridge:end|^const stashRows/m, "no code between test markers, no second copy");
 });
