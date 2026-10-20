@@ -66,6 +66,11 @@ export default async function (t) {
     sys.sendScriptEvent("realm:place_ping", "{}");
     await t.waitUntil(() => of("realm:place_ready", (m) => m.wid === "hob" && m.state === "built").length > 0, { timeout: 200, message: "Hob's camp still built after the restart" });
     const camp = of("realm:place_ready", (m) => m.wid === "hob" && m.state === "built").at(-1);
+    // Sam moved the camp near where he met Hob, about 150 blocks from X, Z. The phase-1 ticking areas are removed at
+    // the restart and a simulated player loads no chunks, so nothing loaded it: the upkeep only spawns Hob on a loaded
+    // spot. Load it, as a real player walking there would.
+    t.log("camp after the restart:", JSON.stringify(camp));
+    await t.loadArea(camp.x, camp.z, { radius: 2 });
     p.teleport({ x: camp.x + 3, y: camp.y + 1, z: camp.z });
     await t.waitUntil(() => ents("wander:c:hob").length === 1, { timeout: 400, message: "Hob is at his camp after the restart" });
     t.pass("phase 2");

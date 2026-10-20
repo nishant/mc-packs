@@ -3,6 +3,7 @@
 import { GameMode, system, world } from "@minecraft/server";
 import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
 import { spawnFresh } from "./spawn.js";
+import { createFallWatch, createSnapGuard, floorGone, freeSpotNear, settledBelow, standable } from "./tether.js";
 import { DIMENSIONS, dist3, hash } from "./util.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
@@ -38,6 +39,7 @@ const nameLabels = createNameLabels({
  * @property {"meet" | "escort" | "ward" | "guard" | "lead" | "add"} role
  * @property {boolean} invul
  * @property {Vector3} [anchor] kept here (teleported back when it strays)
+ * @property {Vector3} [orig] its own spot while the floor under it is gone (anchor is where it landed meanwhile)
  * @property {string} marker unique invisible format-code marker identifying this actor across transformations
  * @property {string} dim
  * @property {number} born tick
@@ -135,6 +137,8 @@ function poof(ent) {
 export function removeActor(id, effect = false) {
   const a = actors.get(id);
   actors.delete(id);
+  anchorGuard.forget(id);
+  anchorFall.forget(id);
   nameLabels.removeFor(id);
   if (!a) return;
   try {
@@ -194,12 +198,25 @@ export function actorsOf(owner, key, role) {
 /** Is this entity one of ours (and alive)? @param {Entity} ent */
 export const actorOf = (ent) => actors.get(ent.id);
 
-/** Keeps anchored actors at their spot and invulnerable ones at full health; drops entries of entities that are gone. */
+/** Put-backs of anchored actors: the first at once, then a wait that doubles while they keep coming (tether.js). */
+const anchorGuard = createSnapGuard({ cooldown: 40, maxCooldown: 600 });
+/** Anchored actors dropping from their spot (waited for), told from ones floating in water or hanging below it (tether.js). */
+const anchorFall = createFallWatch();
+
+/**
+ * Keeps anchored actors at their spot and invulnerable ones at full health; drops entries of entities that are gone.
+ * An anchored actor that dropped straight down from its spot (spawned over a hole, or its floor broken) gets a new spot
+ * where it landed: putting it back up would let it fall again every second; once that floor is back, it goes back up
+ * to its own spot. One pushed off again and again waits a little longer each time before it is put back.
+ */
 export function tendActors() {
+  const now = system.currentTick;
   for (const [id, a] of [...actors]) {
     try {
       if (!a.ent.isValid) {
         actors.delete(id); // unloaded or dead: the scene spawns a new one when needed
+        anchorGuard.forget(id);
+        anchorFall.forget(id);
         dressing.delete(id);
         nameLabels.removeFor(id);
         continue;
@@ -209,7 +226,29 @@ export function tendActors() {
         if (dressed(a.ent, look)) dressing.delete(id);
         else dress(a.ent, look);
       }
-      if (a.anchor && dist3(a.ent.location, a.anchor) > 2) a.ent.teleport(a.anchor);
+      if (a.orig && standable(a.ent.dimension, a.orig)) {
+        a.anchor = a.orig;
+        a.orig = undefined;
+        a.ent.teleport(a.anchor);
+      } else if (a.anchor && dist3(a.ent.location, a.anchor) > 2) {
+        const l = a.ent.location;
+        if (anchorFall.falling(a.ent, id, a.anchor, now)) {
+          // still falling: wait until it lands
+        } else if (settledBelow(a.ent, a.anchor)) {
+          a.orig ??= a.anchor;
+          a.anchor = { x: l.x, y: l.y, z: l.z };
+        } else if (anchorGuard.allow(id, now)) {
+          // Its floor is gone and it didn't land under its spot (it floats in water, or hangs somewhere): a free spot
+          // next to it until the floor is back, instead of dropping it in again.
+          const spot = floorGone(a.ent.dimension, a.anchor) ? freeSpotNear(a.ent.dimension, a.anchor, 3) : undefined;
+          if (spot) {
+            a.orig ??= a.anchor;
+            a.anchor = spot;
+          }
+          a.ent.teleport(a.anchor);
+          anchorGuard.snapped(id, now);
+        }
+      }
       if (a.invul) {
         const hp = a.ent.getComponent("minecraft:health");
         if (hp && hp.currentValue < hp.effectiveMax) hp.resetToMaxValue();

@@ -20,6 +20,7 @@ import { CONFIG } from "./config.js";
 import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, LOOKS, NAMED, NAMED_GREETINGS, SAILOR_LOOK } from "./lines.js";
 import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get, getFor } from "./settings.js";
+import { createTether } from "./tether.js";
 import { allZones, pingZones } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -58,8 +59,10 @@ const nameLabels = createNameLabels({
 });
 
 const LOOP_TICKS = 20; // upkeep: timers, camps, sparkles, keep ghosts in place
-const TETHER_TICKS = 10; // walkers: back home past TETHER_MAX, out of water, lava or a hole; protection re-applied
-const TETHER_MAX = 12;
+const TETHER_TICKS = 10; // walkers: steered home past their soft radius; out of water, lava, a hole or past TETHER_MAX: put back; protection re-applied
+const TETHER_MAX = 12; // the last resort: farther than this from home, a walker is teleported back (near home, with a cooldown)
+const CAMP_SOFT = 3; // a camp's wanderer stays about this close to the camp: past it, slowed and turned back
+const ROAD_SOFT = 6; // a wanderer on the road strolls this far from their spot before being turned back
 const HOLE_DROP = 3; // this far below home...
 const HOLE_CHECKS = 6; // ...for this many checks in a row (3 s): stuck in a hole
 const RESPAWNS = 5; // a wanderer on the road whose entity vanished nearby comes back this often at most
@@ -842,30 +845,24 @@ function dress(ent, look) {
 /** Dressed as they should be? The event's job is a type family ("become_sheperd" sets "shepherd"). @param {Entity} ent @param {string} look */
 const dressed = (ent, look) => ent.matches({ families: [look.replace("minecraft:become_", "").replace("sheperd", "shepherd")] });
 
-/** Checks in a row each walker has been down a hole. @type {Map<string, number>} */
-const lowFor = new Map();
+// Walkers stroll with the vanilla AI. Teleporting them home whenever they passed the limit looped on open ground (out
+// 12 blocks, snapped back, out again: F42), so they are steered instead: past their soft radius they are slowed and
+// pushed home until they are back inside (tether.js). The teleport is the last resort (water, lava, a hole, or past
+// TETHER_MAX), to a free spot near home, with a cooldown that grows while it keeps happening.
+const campTether = createTether({ soft: CAMP_SOFT, hard: TETHER_MAX, holeDrop: HOLE_DROP, holeChecks: HOLE_CHECKS });
+const roadTether = createTether({ soft: ROAD_SOFT, hard: TETHER_MAX, holeDrop: HOLE_DROP, holeChecks: HOLE_CHECKS });
+/** Walkers someone is talking to (they stand still, slowed, while the form is open): not steered meanwhile. @type {Set<string>} */
+const talking = new Set();
 
-/** Walkers (villagers, traders) stroll with the vanilla AI; past TETHER_MAX from home, in water or lava or stuck down a hole, they're put back. @param {Entity} ent @param {{ x: number, y: number, z: number }} home */
-function tether(ent, home) {
+/** One walker's check: its look, its tether, its protection. @param {Entity} ent @param {{ x: number, y: number, z: number }} home @param {import("./tether.js").Tether} t */
+function tether(ent, home, t) {
   try {
     const look = dressing.get(ent.id);
     if (look) {
       if (dressed(ent, look)) dressing.delete(ent.id);
       else dress(ent, look);
     }
-    const l = ent.location;
-    let back = dist3(l, home) > TETHER_MAX || ent.isInWater;
-    if (!back) back = !!blockAt(ent.dimension, l)?.typeId.includes("lava");
-    if (!back && l.y < home.y - HOLE_DROP) {
-      const n = (lowFor.get(ent.id) ?? 0) + 1;
-      lowFor.set(ent.id, n);
-      back = n >= HOLE_CHECKS;
-    } else lowFor.delete(ent.id);
-    if (back) {
-      lowFor.delete(ent.id);
-      ent.teleport(home);
-      ent.clearVelocity();
-    }
+    if (!talking.has(ent.id)) t.check(ent, home, system.currentTick);
     protect(ent);
   } catch {
     // unloaded
@@ -876,12 +873,12 @@ function tetherAll() {
   if (!ready) return;
   for (const rec of Object.values(live)) {
     const ent = entityById(rec.e);
-    if (ent && WALKERS.has(ent.typeId)) tether(ent, rec);
+    if (ent && WALKERS.has(ent.typeId)) tether(ent, rec, roadTether);
     else if (ent && ent.typeId === GHOST) protect(ent);
   }
   for (const c of Object.values(camps)) {
     const ent = entityById(c.e);
-    if (ent && WALKERS.has(ent.typeId)) tether(ent, c);
+    if (ent && WALKERS.has(ent.typeId)) tether(ent, c, campTether);
     else if (ent && ent.typeId === GHOST) protect(ent);
   }
 }
@@ -1020,8 +1017,12 @@ async function tapped(player, ent) {
   busy.add(player.id);
   // A walker stands still while you talk (30 s at most).
   const walker = WALKERS.has(ent.typeId);
+  const entId = ent.id;
   try {
-    if (walker) ent.addEffect("slowness", 600, { amplifier: 255, showParticles: false });
+    if (walker) {
+      talking.add(entId);
+      ent.addEffect("slowness", 600, { amplifier: 255, showParticles: false });
+    }
   } catch {
     // unloaded
   }
@@ -1070,6 +1071,7 @@ async function tapped(player, ent) {
     }
   } finally {
     busy.delete(player.id);
+    talking.delete(entId);
     try {
       if (walker && ent.isValid) ent.removeEffect("slowness");
     } catch {
@@ -1109,6 +1111,7 @@ async function accuseForm(player, wid) {
 // ---------------------------------------------------------------------------
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return; // another pack (Land Claims) refused this tap: in the bundle it is still delivered here
   const { player, target } = ev;
   try {
     if (!target.hasTag(OWNER_TAG) || target.typeId === LABEL_TYPE) return;
@@ -1127,7 +1130,9 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
  * by the next upkeep if their player is near, else they've left (`again`). @param {string} id
  */
 function lost(id) {
-  lowFor.delete(id);
+  campTether.forget(id);
+  roadTether.forget(id);
+  talking.delete(id);
   dressing.delete(id);
   for (const c of Object.values(camps)) if (c.e === id) delete c.e;
 }
@@ -1161,20 +1166,25 @@ function ourNames() {
   return out;
 }
 
-/** True when a transformed entity carries the unique per-wanderer format-code marker of one of our road or camp wanderers whose entity just turned. @param {Entity} entity */
+/**
+ * True when a transformed entity carries the unique per-wanderer format-code marker of one of our road or camp
+ * wanderers. The marker is unique to that wanderer, so a witch or zombie villager wearing it is always theirs, even when
+ * `again` already spawned the wanderer anew in the tick between the lightning and this check (that race left a named
+ * witch standing: wander-walk's "no named witch left"). @param {Entity} entity
+ */
 function isOurTurnedWanderer(entity) {
   const name = entity.nameTag;
   if (!name || name === SUPPRESSED_NAME || name === `${SUPPRESSED_NAME}§r`) return false;
   if (ourNames().has(name) && !isSuppressedName(name)) return true;
   const dimId = entity.dimension.id;
   for (const rec of Object.values(live)) {
-    if (rec.d !== dimId || (rec.e && entityById(rec.e))) continue;
+    if (rec.d !== dimId) continue;
     const key = `road:${rec.w}`;
     const m = wandererMarker(key);
     if (matchesHiddenMarker(name, m, wandererLabel(rec.w, rec.n))) return true;
   }
   for (const [wid, c] of Object.entries(camps)) {
-    if (c.d !== dimId || (c.e && entityById(c.e))) continue;
+    if (c.d !== dimId) continue;
     const n = NAMED_BY_ID.get(wid);
     const key = `camp:${wid}`;
     const m = wandererMarker(key);
@@ -1409,6 +1419,11 @@ function debug(msg) {
   const player = typeof msg.player === "string" ? world.getAllPlayers().find((p) => p.id === msg.player || p.name === msg.player) : undefined;
   if (msg.action === "state") {
     console.warn(`[wander] live ${JSON.stringify(live)} camps ${JSON.stringify(camps)} states ${JSON.stringify([...states])}`);
+    return;
+  }
+  if (msg.action === "tether") {
+    // The tether counters (test scenarios): last-resort teleports and steering starts, at camps and on the road.
+    send("realm:wander_tether", { camp: campTether.stats(), road: roadTether.stats() });
     return;
   }
   if (!player) return;
