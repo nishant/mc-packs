@@ -382,7 +382,10 @@ export function* scanTown(input) {
     return yield* decide(valid, waitDist);
   }
 
-  /** The best valid candidates, checked block by block; or wait, or none. @param {Candidate[]} valid @param {number} waitDist */
+  /**
+   * The best valid candidates, checked block by block; or wait, or none. @param {Candidate[]} valid @param {number} waitDist
+   * @returns {Generator<ScanRequest, { spot: AutoSpot, region: Rect } | "wait" | undefined, any>}
+   */
   function* decide(valid, waitDist) {
     valid.sort((a, b) => compareKeys(a.key, b.key));
     if (valid.length && !input.final && waitDist < valid[0].dist + SCAN.past) return "wait";
@@ -473,7 +476,10 @@ export function* scanTown(input) {
     return pick.replace(/^minecraft:/, "");
   }
 
-  /** A finalist, block by block: under every cut column's new top, 2 natural solid blocks; claims if there may be more. @param {Candidate} c */
+  /**
+   * A finalist, block by block: under every cut column's new top, 2 natural solid blocks; claims if there may be more.
+   * @param {Candidate} c @returns {Generator<ScanRequest, boolean, any>}
+   */
   function* deepCheck(c) {
     for (const cut of c.cuts)
       for (const y of [cut.t - 1, cut.t - 2]) {

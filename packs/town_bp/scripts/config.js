@@ -24,6 +24,19 @@ export const CONFIG = {
    */
   townMayors: true,
 
+  /**
+   * Towns pick a spot for each project themselves (while a player is in the town), on natural ground near the center,
+   * never touching a man-made block, and level it gently where a build needs it. Spots operators set are kept and
+   * never leveled. Disabled: operators set every spot, as before.
+   */
+  autoSpots: true,
+
+  /** Most blocks an automatically picked spot's natural ground is cut down or filled up (0 to 3; 0 never levels). */
+  levelDepth: 3,
+
+  /** Seconds the outline of a build at an automatically picked spot is shown to players within 32 blocks before it goes up (0 to 15). */
+  outlineSeconds: 5,
+
   /** First names for new towns' mayors ("Mayor Alda"), each used once; when all are taken, "Mayor <Town>". */
   mayorNames: ["Alda", "Corwin", "Fenna", "Garrick", "Halden", "Imogen", "Joss", "Kestrel", "Linnea", "Marten", "Nessa", "Oswin", "Perrin", "Rowena", "Sorrel", "Thea", "Ulla", "Verity", "Wendell", "Ysolde"],
 

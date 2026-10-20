@@ -21,8 +21,8 @@ import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
 import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, toWorld } from "./designs.js";
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
-import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts } from "./placed.js";
-import { NATURAL } from "./sites.js";
+import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
+import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
@@ -42,16 +42,21 @@ const NEAR_SPOT = 64; // a waiting build goes up when a player is this close to 
 /**
  * f: 0 south, 1 west, 2 north, 3 east (the way the build faces). Once built: snap 1 when the ground under it was saved as
  * the structure snapId(town, project) before building, and b the box it covers [x1, y1, z1, x2, y2, z2]; old 1 when it was
- * built before snapshots existed (so what's there is never saved as the ground).
- * @typedef {{ x: number, y: number, z: number, f: number, snap?: number, b?: number[], old?: number }} Spot
+ * built before snapshots existed (so what's there is never saved as the ground). A spot picked automatically (sites.js)
+ * has a: 1, its grading plan lv (sites.js encodePlan, over the footprint plus a 2-block apron), lt the block a fill gets
+ * on top ("grass_block"), and bs: 1 while its build has started but isn't finished (it resumes after a restart).
+ * @typedef {{ x: number, y: number, z: number, f: number, snap?: number, b?: number[], old?: number, a?: number, lv?: string, lt?: string, bs?: number }} Spot
  */
 /**
  * prot: 0 when "Protect from world events" is Disabled (missing means Enabled). v: 2 once the town has a mayor `m`
  * ("bram", or "mayor:<id>" named `mn`; mayors.js); records saved before mayors (v1) have neither and still read.
  */
 /**
- * plf: 1 once the town's placed-block cells (placed.js) were full: it never levels ground again.
- * @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string, plf?: number }} Town
+ * plf: 1 once the town's placed-block cells (placed.js) were full: it never levels ground again. Automatic spots:
+ * scan the projects still to get a spot (picked while a player is in the town), nos those with no good spot (an
+ * operator sets one), rt those whose spot failed its last check once (a second failure goes to nos), as: 1 once the
+ * town's projects were queued for automatic spots (towns from before this version get it on the first check).
+ * @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string, plf?: number, scan?: string[], nos?: string[], rt?: string[], as?: number }} Town
  */
 /** @typedef {{ min: Vector3, max: Vector3 }} Box inclusive block corners */
 /** @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number }} Progress */
@@ -124,12 +129,22 @@ function allTowns() {
     for (const key of world.getDynamicPropertyIds()) {
       if (!key.startsWith(TOWN_PREFIX)) continue;
       const t = readJson(key);
-      if (t && typeof t.id === "string" && typeof t.x === "number") map.set(t.id, readMayor({ ...t, spots: t.spots ?? {}, lvl: t.lvl ?? 1 }));
+      if (t && typeof t.id === "string" && typeof t.x === "number") map.set(t.id, readSites(readMayor({ ...t, spots: t.spots ?? {}, lvl: t.lvl ?? 1 })));
     }
   } catch {
     return map; // the world isn't loaded yet: read again next time
   }
   return (towns = map);
+}
+
+/** Project id lists of a saved town, cleaned: known projects only, each once; empty lists dropped. @param {any} t */
+function readSites(t) {
+  for (const k of ["scan", "nos", "rt"]) {
+    const list = Array.isArray(t[k]) ? [...new Set(t[k].filter((/** @type {unknown} */ x) => typeof x === "string" && byId.has(x)))] : [];
+    if (list.length) t[k] = list;
+    else delete t[k];
+  }
+  return t;
 }
 
 /** @param {Town} t */
@@ -434,6 +449,7 @@ function levelUp(t) {
     raised = true;
   }
   if (!raised) return;
+  queueScan(t, projectsAt(t.lvl).map((p) => p.id));
   saveTown(t);
   const title = `${t.n} is now a ${levelName(t.lvl)} (level ${t.lvl})`;
   const next = projectsAt(t.lvl);
@@ -508,9 +524,14 @@ function build(t, p, fresh) {
   if (!pr.done || pr.built) return false;
   const s = t.spots[p.id];
   if (!s) {
-    if (fresh) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} is finished. Stand where it should go, facing the way it should face, and run /realm:town_spot ${p.id}`);
+    if (fresh) {
+      if (get("autoSpots") === true && t.scan?.includes(p.id)) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} is finished: its spot is picked automatically when a player is in the town.`);
+      else tellOps(`§e[Town Projects] ${t.n}'s ${p.name} is finished${t.nos?.includes(p.id) ? " but no good spot was found for it" : ""}. Stand where it should go, facing the way it should face, and run /realm:town_spot ${p.id}`);
+    }
     return false;
   }
+  // A spot picked automatically: leveled and built a few blocks a tick, after its outline is shown (autoBuild).
+  if (s.a) return queueAutoBuild(t, p);
   const waiting = () => {
     if (fresh) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} will be built when someone is near its spot (${s.x}, ${s.y}, ${s.z}).`);
     return false;
@@ -548,6 +569,12 @@ function build(t, p, fresh) {
   }
   pr.built = 1;
   saveProgress(t, p, pr);
+  announceBuilt(t, p, s, dim, placed, skipped);
+  return true;
+}
+
+/** @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim @param {number} placed @param {number} skipped */
+function announceBuilt(t, p, s, dim, placed, skipped) {
   const where = `${s.x}, ${s.y}, ${s.z}`;
   const msg = `§a${t.n}'s new ${p.name} is built at ${where}.`;
   if (get("announce") === true) world.sendMessage(msg);
@@ -555,7 +582,6 @@ function build(t, p, fresh) {
   if (skipped) tellOps(`§7[Town Projects] ${skipped} block${skipped === 1 ? " was" : "s were"} left out of the ${p.name} because something else was in the way. Builds only replace air, plants, grass and dirt (and water for a dock).`);
   if (placed && get("fireworks") === true) fireworks(dim, toWorld(s, 0, 1, 2));
   if (p.build === "notice_board") system.runTimeout(() => refreshBoard(t), 2);
-  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -629,7 +655,7 @@ function deleteStructure(id) {
 
 /**
  * Saves the ground a build will cover, before it's built.
- * @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim @param {Box} box
+ * @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim @param {Box} box @returns {boolean}
  */
 function snapshot(t, p, s, dim, box) {
   const id = snapId(t, p);
@@ -639,8 +665,10 @@ function snapshot(t, p, s, dim, box) {
     s.snap = 1;
     s.b = boxArray(box);
     saveTown(t);
+    return true;
   } catch (e) {
     console.warn(`[town] snapshot ${id}: ${e}`);
+    return false;
   }
 }
 
@@ -665,7 +693,10 @@ function unbuild(t, p, s, keep = false) {
   const st = s.snap ? savedStructure(id) : undefined;
   try {
     if (st) {
-      restoreGround(dim, st, box, buildKinds(p));
+      const kinds = buildKinds(p);
+      // Leveling filled with dirt and the surrounding top block: those go back too.
+      if (s.a) for (const k of ["minecraft:dirt", fillTop(s)]) kinds.add(k);
+      restoreGround(dim, st, box, kinds);
       if (!keep) deleteStructure(id);
     } else clearBuild(dim, p, s, box);
   } catch (e) {
@@ -710,17 +741,23 @@ function buildKinds(p) {
  */
 function restoreGround(dim, st, box, kinds) {
   const air = perm("minecraft:air");
-  for (let y = box.min.y; y <= box.max.y; y++)
-    for (let x = box.min.x; x <= box.max.x; x++)
-      for (let z = box.min.z; z <= box.max.z; z++) {
-        const b = dim.getBlock({ x, y, z });
-        if (!b) continue;
-        const want = st.getBlockPermutation({ x: x - box.min.x, y: y - box.min.y, z: z - box.min.z }) ?? air;
-        if (want.type.id === "minecraft:structure_void") continue;
-        if (b.permutation.matches(want.type.id, want.getAllStates())) continue;
-        if (!b.isAir && !b.isLiquid && !kinds.has(b.typeId)) continue; // someone's own block
-        b.setPermutation(want);
-      }
+  // Twice: first what becomes air, top down (so nothing left above falls), then the rest, bottom up (so sand and
+  // gravel always land on what holds them).
+  for (const pass of [0, 1])
+    for (let k = 0; k <= box.max.y - box.min.y; k++) {
+      const y = pass === 0 ? box.max.y - k : box.min.y + k;
+      for (let x = box.min.x; x <= box.max.x; x++)
+        for (let z = box.min.z; z <= box.max.z; z++) {
+          const want = st.getBlockPermutation({ x: x - box.min.x, y: y - box.min.y, z: z - box.min.z }) ?? air;
+          if ((want.type.id === "minecraft:air") !== (pass === 0)) continue;
+          if (want.type.id === "minecraft:structure_void") continue;
+          const b = dim.getBlock({ x, y, z });
+          if (!b) continue;
+          if (b.permutation.matches(want.type.id, want.getAllStates())) continue;
+          if (!b.isAir && !b.isLiquid && !kinds.has(b.typeId)) continue; // someone's own block
+          b.setPermutation(want);
+        }
+    }
 }
 
 /**
@@ -778,15 +815,29 @@ const keyOf = (v) => `${v.x},${v.y},${v.z}`;
  * @returns {{ placed: number, skipped: number } | undefined}
  */
 function placeDesign(dim, s, p) {
+  const out = { placed: 0, skipped: 0 };
+  const steps = placeDesignSteps(dim, s, p, false, out);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value ? out : undefined;
+}
+
+/**
+ * placeDesign a block at a time: yields after each block it changes (the build job spreads them over ticks), returns
+ * false (changing nothing) when a block isn't loaded. `auto` (a spot picked automatically): "ground" places may also
+ * replace the natural ground they sit in (sand, gravel, stone), which the spot's snapshot keeps.
+ * @param {Dimension} dim @param {Spot} s @param {Project} p @param {boolean} auto @param {{ placed: number, skipped: number }} out
+ * @returns {Generator<void, boolean, void>}
+ */
+function* placeDesignSteps(dim, s, p, auto, out) {
   const fwd = FORWARD[s.f] ?? FORWARD[0];
   const { min, max } = dim.heightRange;
   /** @type {{ pl: Place, loc: Vector3, block: import("@minecraft/server").Block }[]} */
   const items = [];
-  let skipped = 0;
   for (const pl of design(p.build)) {
     const loc = toWorld(s, pl.x, pl.y, pl.z);
     if (loc.y < min || loc.y >= max) {
-      skipped++;
+      out.skipped++;
       continue;
     }
     let block;
@@ -795,26 +846,30 @@ function placeDesign(dim, s, p) {
     } catch {
       block = undefined;
     }
-    if (!block) return undefined; // not loaded
+    if (!block) return false; // not loaded
     items.push({ pl, loc, block });
+    yield; // reads only: nothing has changed yet
   }
+  /** @param {string} type @param {Mode} mode */
+  const replaceable = (type, mode) => canReplace(type, mode) || (auto && mode === "ground" && NATURAL.has(type));
   /** @param {Place} pl */
   const optional = (pl) => isOptional(p, pl);
   /** @param {Place} pl */
   const later = (pl) => pl.block === "minecraft:water" || pl.block === "minecraft:waterlily";
-  let placed = 0;
   /** @param {{ pl: Place, block: import("@minecraft/server").Block }} it */
   const put = (it) => {
     const states = it.pl.block === "minecraft:wall_sign" ? { facing_direction: wallFacing({ x: -fwd.x, z: -fwd.z }) } : it.pl.states;
     it.block.setPermutation(perm(it.pl.block, states));
-    placed++;
+    out.placed++;
   };
   // 1. Everything but water and lily pads, supports first. A block that's already there (a rebuild) stays.
   for (const it of items) {
-    if (later(it.pl) || it.block.typeId === it.pl.block) continue;
-    if (!canReplace(it.block.typeId, it.pl.mode)) {
+    if (later(it.pl)) continue;
+    yield;
+    if (it.block.typeId === it.pl.block) continue;
+    if (!replaceable(it.block.typeId, it.pl.mode)) {
       // A cobblestone floor under a well, or posts under a dock, are only needed where it's open.
-      if (!optional(it.pl)) skipped++;
+      if (!optional(it.pl)) out.skipped++;
       continue;
     }
     put(it);
@@ -822,7 +877,7 @@ function placeDesign(dim, s, p) {
   // 2. Water, only where it can't spill.
   const water = items.filter((it) => it.pl.block === "minecraft:water" && it.block.typeId !== "minecraft:water");
   const wetAlready = new Set(items.filter((it) => it.pl.block === "minecraft:water" && it.block.typeId === "minecraft:water").map((it) => keyOf(it.loc)));
-  const want = new Map(water.filter((it) => canReplace(it.block.typeId, it.pl.mode)).map((it) => [keyOf(it.loc), it]));
+  const want = new Map(water.filter((it) => replaceable(it.block.typeId, it.pl.mode)).map((it) => [keyOf(it.loc), it]));
   /** @param {Vector3} at */
   const holds = (at) => {
     if (want.has(keyOf(at))) return true;
@@ -843,16 +898,21 @@ function placeDesign(dim, s, p) {
       changed = true;
     }
   }
-  skipped += water.length - want.size;
-  for (const it of want.values()) put(it);
+  out.skipped += water.length - want.size;
+  for (const it of want.values()) {
+    put(it);
+    yield;
+  }
   // 3. Lily pads on the water just placed.
   for (const it of items) {
     if (it.pl.block !== "minecraft:waterlily" || it.block.typeId === it.pl.block) continue;
     const below = keyOf({ x: it.loc.x, y: it.loc.y - 1, z: it.loc.z });
-    if ((want.has(below) || wetAlready.has(below)) && canReplace(it.block.typeId, it.pl.mode)) put(it);
-    else skipped++;
+    if ((want.has(below) || wetAlready.has(below)) && replaceable(it.block.typeId, it.pl.mode)) {
+      put(it);
+      yield;
+    } else out.skipped++;
   }
-  return { placed, skipped };
+  return true;
 }
 
 /** @param {Dimension} dim @param {Vector3} at */
@@ -915,6 +975,7 @@ system.runInterval(() => {
     const players = world.getAllPlayers();
     if (!players.length) return;
     mayorCheck(players);
+    autoTick(players);
     for (const t of allTowns().values()) {
       for (const p of PROJECTS) {
         const s = t.spots[p.id];
@@ -968,10 +1029,14 @@ function bar(percent) {
   return `§a${"|".repeat(filled)}§8${"|".repeat(20 - filled)}§r`;
 }
 
+/** Why a finished project has no spot yet. @param {Town} t @param {Project} p */
+const spotWait = (t, p) =>
+  t.nos?.includes(p.id) ? "§7(no good spot was found: an operator can set one)" : get("autoSpots") === true && t.scan?.includes(p.id) ? "§7(a spot is being picked)" : "§7(waiting for an operator to pick its spot)";
+
 /** @param {Town} t @param {Project} p */
 function projectLine(t, p) {
   const pr = progressOf(t, p);
-  if (pr.done) return `§a[Done] ${p.name}§r ${pr.built ? "§7(built)" : t.spots[p.id] ? "§7(waiting for someone nearby to be built)" : "§7(waiting for an operator to pick its spot)"}`;
+  if (pr.done) return `§a[Done] ${p.name}§r ${pr.built ? "§7(built)" : t.spots[p.id]?.bs ? "§7(being built)" : t.spots[p.id] ? "§7(waiting for someone nearby to be built)" : spotWait(t, p)}`;
   return `§e${p.name}§r\n${bar(pct(p, pr))} §f${pct(p, pr)} percent`;
 }
 
@@ -991,6 +1056,7 @@ async function townMenu(player, townId, canDeliver) {
     t.lvl >= MAX_LEVEL || !open.length
       ? "Every project is done. Thank you, everyone!"
       : `Finish these to make ${t.n} a ${levelName(t.lvl + 1)}:\n\n${open.map((p) => projectLine(t, p)).join("\n\n")}`,
+    ...(t.nos ?? []).flatMap((id) => (byId.has(id) ? [`§eNo good spot was found for the ${byId.get(id)?.name}: an operator can set one (Set a project spot).§r`] : [])),
     canDeliver ? "Pick a project to see what it needs and deliver from your inventory." : `Deliver materials through ${mayorName(t)}.`,
   ].join("\n\n");
   /** @type {{ text: string, run: () => unknown }[]} */
@@ -1104,6 +1170,7 @@ async function mainMenu(player) {
   else if (near) lines.push(`The nearest town is §l${near.n}§r, ${Math.round(Math.hypot(player.location.x - near.x, player.location.z - near.z))} blocks away.`);
   else lines.push(`There are no towns yet.${op ? " Stand in the middle of one and add it." : ""}`);
   if (op && here) lines.push(`§7Protect from world events: ${isProtected(here) ? "§aEnabled" : "§cDisabled"}`);
+  if (op && here?.nos?.length) lines.push(`§eNo good spot was found for ${here.nos.map((id) => byId.get(id)?.name ?? id).join(", ")}: set one (Set a project spot) or try Find spots again.`);
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [];
   if (near) {
@@ -1117,6 +1184,14 @@ async function mainMenu(player) {
     else {
       actions.push({ text: "§4Set a project spot\n§8Operators: with a preview", run: () => pickProject(player, here.id, "spot") });
       if (Object.keys(here.spots).length) actions.push({ text: "§4Manage spots\n§8Operators: remove, rebuild, relocate", run: () => pickProject(player, here.id, "manage") });
+      if (get("autoSpots") === true)
+        actions.push({
+          text: `§4Find spots again\n§8Operators: ${here.nos?.length ? `${here.nos.length} without a good spot` : "pick spots automatically"}`,
+          run: () => {
+            const t = allTowns().get(here.id);
+            if (t && player.isValid && stillOp(player)) findSpotsAgain(t, (m) => player.sendMessage(m));
+          },
+        });
       actions.push({ text: `§4Mayor\n§8Operators: ${here.m === BRAM ? "Mayor Bram, move" : here.m ? `${mayorName(here)}, move or rename` : "none yet"}`, run: () => mayorMenu(player, here.id) });
       actions.push({ text: `§4Protect from world events\n§8Operators: ${isProtected(here) ? "Enabled" : "Disabled"}`, run: () => protectForm(player, here.id) });
       actions.push({ text: "§4Remove town\n§8Operators", run: () => removeTown(player) });
@@ -1181,7 +1256,9 @@ function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
     spots: {},
     by: player.name,
     at: Date.now(),
+    as: 1,
   };
+  queueScan(t, projectsAt(1).map((p) => p.id)); // automatic spots, picked while a player is in the town
   // Its own mayor (Townsfolk): Mayor Bram for the realm's first town, else a new one standing here.
   const mayors = get("townMayors") === true;
   if (mayors) Object.assign(t, { v: 2 }, newTownMayor([...allTowns().values()], t.id, t.n, CONFIG.mayorNames));
@@ -1196,7 +1273,7 @@ function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
       ? "Its mayor is Mayor Bram (Townsfolk): wherever he lives, he takes deliveries for it."
       : `Its mayor, ${t.mn}, stands here (Townsfolk) and takes deliveries for it; move or rename them in /realm:town.`;
   tell(
-    `§aTown ${name} added here (${t.x}, ${t.z}), a ${levelName(t.lvl)}. ${first.length ? `Its first projects: ${first.map((p) => p.name).join(", ")}.` : ""} §7${who} Set where each project is built from /realm:town or with /realm:town_spot <project>. World events don't break blocks here (Protect from world events is Enabled).`,
+    `§aTown ${name} added here (${t.x}, ${t.z}), a ${levelName(t.lvl)}. ${first.length ? `Its first projects: ${first.map((p) => p.name).join(", ")}.` : ""} §7${who} ${get("autoSpots") === true ? "The town picks a spot for each project in the next minute or so (you can still set or move one from /realm:town)." : "Set where each project is built from /realm:town or with /realm:town_spot <project>."} World events don't break blocks here (Protect from world events is Enabled).`,
   );
   if (get("announce") === true) world.sendMessage(`§6A new town: §e${name}§6! Bring materials to its mayor to build it up. /realm:town`);
 }
@@ -1239,7 +1316,8 @@ async function pickProject(player, townId, mode) {
   const actions = list.map((p) => {
     const s = t.spots[p.id];
     const pr = progressOf(t, p);
-    const state = pr.built && s ? `built at ${s.x}, ${s.y}, ${s.z}` : s ? `spot at ${s.x}, ${s.y}, ${s.z}` : pr.done ? "finished, no spot yet" : "no spot yet";
+    const auto = s?.a ? " (picked)" : "";
+    const state = pr.built && s ? `built at ${s.x}, ${s.y}, ${s.z}${auto}` : s ? `spot at ${s.x}, ${s.y}, ${s.z}${auto}` : t.nos?.includes(p.id) ? "no good spot found" : pr.done ? "finished, no spot yet" : "no spot yet";
     return { text: `${p.name}\n§8${state}`, run: () => (mode === "manage" ? manageSpot(player, t.id, p.id) : previewSpot(player, t.id, p.id)) };
   });
   actions.push({ text: "Back", run: () => mainMenu(player) });
@@ -1264,6 +1342,7 @@ async function manageSpot(player, townId, projectId) {
     `Spot: ${spotText(s)}`,
     pr.built ? "Built." : pr.done ? "Finished, waiting to be built." : `Not finished yet (${pct(p, pr)} percent): it's built here when it is.`,
     legacy ? "§eBuilt before the ground was saved: removing or moving it clears its own blocks instead of restoring the ground." : "",
+    s.a ? `Picked automatically${s.lv ? ": the ground around it is leveled (natural ground only, at most 3 blocks) when it's built, and Remove spot puts it back" : ""}. A spot you set instead is kept and never leveled.` : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -1314,7 +1393,9 @@ async function confirmRebuild(player, townId, projectId) {
 function applySpot(t, p, s, tell) {
   const pr = progressOf(t, p);
   const old = t.spots[p.id];
-  const moving = pr.built === 1;
+  cancelAutoBuild(`${t.id}:${p.id}`);
+  // A build stopped half way (bs) is taken away like a finished one.
+  const moving = pr.built === 1 || old?.bs === 1;
   if (moving && old) {
     const why = unbuild(t, p, old);
     if (why) {
@@ -1322,11 +1403,12 @@ function applySpot(t, p, s, tell) {
       return false;
     }
   } else if (old?.snap) deleteStructure(snapId(t, p));
-  if (moving) {
+  if (moving && pr.built) {
     pr.built = 0;
     saveProgress(t, p, pr);
   }
   t.spots[p.id] = { x: s.x, y: s.y, z: s.z, f: s.f };
+  dropFrom(t, p.id); // an operator's spot: kept, never leveled (D5)
   saveTown(t);
   tell(`§a${t.n}'s ${p.name} ${moving ? "was taken away from its old spot and goes" : "will be built"} at ${spotText(s)}. §7${spotHint(p)}`);
   if (pr.done) build(t, p, true);
@@ -1338,12 +1420,15 @@ function removeSpot(t, p, tell) {
   const s = t.spots[p.id];
   if (!s) return tell(`§e${t.n}'s ${p.name} has no spot.`);
   const pr = progressOf(t, p);
-  const wasBuilt = pr.built === 1;
+  cancelAutoBuild(`${t.id}:${p.id}`);
+  const wasBuilt = pr.built === 1 || s.bs === 1;
   if (wasBuilt) {
     const why = unbuild(t, p, s);
     if (why) return tell(`§cThe ${p.name} couldn't be removed: ${why}.`);
-    pr.built = 0;
-    saveProgress(t, p, pr);
+    if (pr.built) {
+      pr.built = 0;
+      saveProgress(t, p, pr);
+    }
   } else if (s.snap) deleteStructure(snapId(t, p));
   delete t.spots[p.id];
   saveTown(t);
@@ -1606,6 +1691,8 @@ function deleteTown(t) {
   allTowns().delete(t.id);
   world.setDynamicProperty(TOWN_PREFIX + t.id, undefined);
   placedCells.delete(t.id);
+  if (scanJob?.town === t.id) scanJob = undefined;
+  for (const p of PROJECTS) cancelAutoBuild(`${t.id}:${p.id}`);
   for (let k = 0; k < 2; k++) world.setDynamicProperty(`${PLACED_PREFIX}${t.id}:${k}`, undefined);
   // Its own mayor goes with it (Mayor Bram stays where he lives).
   if (isTownMayorId(t.m)) send("realm:npc_mayor", { op: "remove", id: t.m });
@@ -1690,6 +1777,7 @@ world.afterEvents.worldLoad.subscribe(() =>
       console.warn(`[town] mayors: ${e}`);
     }
     send("realm:npc_places_ping", {});
+    send("realm:place_ping", {}); // story places: automatic spots keep away from them
   }, 100),
 );
 onScriptEvent(
@@ -1707,6 +1795,611 @@ onScriptEvent(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Automatic spots (F37, sites.js): a town picks a spot for each project without one, while a player is in it (D10:
+// no ticking areas), one town at a time, a few column reads a tick. Spots operators set are kept and never leveled
+// (D5). A finished project at an automatic spot shows its outline to players nearby, is checked block by block again,
+// saved (its region and depth, so Remove spot puts the terrain back), then leveled and built a few blocks a tick.
+// ---------------------------------------------------------------------------
+
+const SCAN_READS_TICK = 12; // column (or block) reads a tick
+const SCAN_STEPS_TICK = 4000; // candidate steps a tick, so the scan's own work stays small too
+const SCAN_FINAL_AFTER = 3; // scans that waited for unloaded ground; then the best known spot is taken
+const CHECK_TICK = 32; // block reads a tick while a spot is checked (2 native calls each)
+const APPLY_TICK = 48; // steps a tick while it is built: one block read, and at most one change, each
+const CLAIMS_WAIT = 20; // ticks to wait for Land Claims (no answer: it isn't installed)
+const OUTLINE_NEAR = 32;
+const POST_KEEP = 6; // blocks from a townsfolk's post (their house)
+const MAYOR_KEEP = 4;
+const PLACE_KEEP = 16; // blocks from a story place (its prefab is built later)
+
+/** @typedef {import("./sites.js").ScanRequest} ScanRequest */
+
+/** Adds projects without a spot to the town's scan list (saved with the town by the caller). @param {Town} t @param {string[]} ids */
+function queueScan(t, ids) {
+  const list = new Set(t.scan ?? []);
+  for (const id of ids) if (!t.spots[id] && byId.has(id)) list.add(id);
+  if (list.size) t.scan = [...list];
+  else delete t.scan;
+}
+
+/** @param {Town} t @param {string} id */
+function dropFrom(t, id) {
+  for (const k of /** @type {const} */ (["scan", "nos", "rt"])) {
+    const list = t[k]?.filter((x) => x !== id);
+    if (list?.length) t[k] = list;
+    else delete t[k];
+  }
+}
+
+/** The block a fill gets on top at a spot: its saved `lt` when it is natural ground, else grass. @param {Spot} s */
+function fillTop(s) {
+  const id = typeof s.lt === "string" && /^[a-z_]{1,40}$/.test(s.lt) ? `minecraft:${s.lt}` : "";
+  return NATURAL.has(id) && id !== "minecraft:snow_layer" ? id : "minecraft:grass_block";
+}
+
+/** @param {Player[]} players @param {Town} t */
+const playerIn = (players, t) => players.some((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= get("townRadius"));
+
+/** Story places (Story Questlines' realm:place_ready, asked with realm:place_ping at load), name -> where. @type {Map<string, { dim: string, x: number, z: number }>} */
+const storyPlaces = new Map();
+/** Land Claims answers waiting, by request id. @type {Map<string, (claims: { x1: number, z1: number, x2: number, z2: number }[]) => void>} */
+const claimAsks = new Map();
+let askSeq = 0;
+
+/** Asks Land Claims which claims overlap a box (every claim: player ""). @param {string} dim @param {import("./sites.js").Rect} r @param {(claims: { x1: number, z1: number, x2: number, z2: number }[]) => void} fn */
+function askClaims(dim, r, fn) {
+  const id = `town_${++askSeq}`;
+  claimAsks.set(id, fn);
+  send("realm:claims_check", { id, player: "", dim, x1: r.x1, z1: r.z1, x2: r.x2, z2: r.z2 });
+  return id;
+}
+
+/** @param {Dimension} dim @param {number} x @param {number} y @param {number} z @returns {import("./sites.js").BlockInfo | undefined} */
+function blockInfo(dim, x, y, z) {
+  try {
+    const b = dim.getBlock({ x, y, z });
+    if (!b) return undefined;
+    const id = b.typeId;
+    return isLeaves(id) ? { id, persistent: b.permutation.getState(/** @type {any} */ ("persistent_bit")) === true } : { id };
+  } catch {
+    return undefined; // not loaded (C16)
+  }
+}
+
+/** One column for the scan (sites.js readColumn), unknown where it isn't loaded. @param {Dimension} dim @param {number} x @param {number} z */
+function readCol(dim, x, z) {
+  try {
+    const top = dim.getTopmostBlock({ x, z });
+    if (!top) return UNKNOWN;
+    const topY = top.location.y;
+    if (topY >= dim.heightRange.max - 1) return UNKNOWN; // C16: not ticking
+    const id = top.typeId;
+    const first = isLeaves(id) ? { id, persistent: top.permutation.getState(/** @type {any} */ ("persistent_bit")) === true } : { id };
+    const surface = () => {
+      // getTopmostBlock skips water (C15): the first block from above, water included.
+      try {
+        const w = dim.getBlockBelow({ x, y: Math.min(dim.heightRange.max - 1, topY + 64), z }, { includeLiquidBlocks: true, maxDistance: 80 });
+        return w && w.isLiquid ? w.location.y : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    return readColumn(topY, (y) => (y === topY ? first : blockInfo(dim, x, y, z)), surface);
+  } catch {
+    return UNKNOWN;
+  }
+}
+
+/**
+ * The scan in progress: the town, sites.js's generator, the request it waits on, and a Land Claims question.
+ * @type {{ town: string, dim?: Dimension, gen?: Generator<ScanRequest, any, any>, pending?: ScanRequest, answer?: any, claims?: { x1: number, z1: number, x2: number, z2: number }[], ask?: { id: string, until: number } } | undefined}
+ */
+let scanJob;
+/** Scans that waited for unloaded ground, by town, this session. @type {Map<string, number>} */
+const scanWaits = new Map();
+
+/** @param {Town} t */
+function startScan(t) {
+  const r = get("townRadius");
+  const job = { town: t.id, ask: { id: "", until: system.currentTick + CLAIMS_WAIT } };
+  job.ask.id = askClaims(t.dim, { x1: t.x - r, z1: t.z - r, x2: t.x + r, z2: t.z + r }, (claims) => {
+    /** @type {any} */ (job).claims = claims;
+  });
+  scanJob = job;
+  ensureJobs();
+}
+
+/** What the scan needs to know about the town and what's around it. @param {Town} t @param {{ x1: number, z1: number, x2: number, z2: number }[]} claims @returns {import("./sites.js").ScanInput} */
+function scanInput(t, claims) {
+  const ids = (t.scan ?? []).filter((id) => !t.spots[id]);
+  /** @type {import("./sites.js").Rect[]} */
+  const taken = [];
+  for (const o of allTowns().values()) {
+    if (o.dim !== t.dim) continue;
+    for (const [id, s] of Object.entries(o.spots)) {
+      const p = byId.get(id);
+      if (p) taken.push(regionOf(rectOf(footprint(p, s))));
+    }
+  }
+  /** @type {{ x: number, z: number, r: number }[]} */
+  const posts = [];
+  for (const [id, at] of places ?? []) if (dimId(at.dim) === t.dim) posts.push({ x: at.x, z: at.z, r: id === t.m ? MAYOR_KEEP : POST_KEEP });
+  for (const at of storyPlaces.values()) if (dimId(at.dim) === t.dim) posts.push({ x: at.x, z: at.z, r: PLACE_KEEP });
+  const depth = t.plf === 1 ? 0 : Math.max(0, Math.min(3, Math.floor(Number(get("levelDepth")) || 0)));
+  return {
+    cx: t.x,
+    cz: t.z,
+    radius: get("townRadius"),
+    depth,
+    projects: ids.map((id) => {
+      const p = /** @type {Project} */ (byId.get(id));
+      return { id, well: p.build === "well", dock: p.build === "dock", box: (/** @type {{ x: number, y: number, z: number, f: number }} */ s) => footprint(p, s) };
+    }),
+    taken,
+    pads: Object.values(t.spots).map((s) => s.y - 1),
+    posts,
+    claims,
+    claimsMore: claims.length >= 10,
+    placed: (r, y1, y2) => touches(cellsOf(t), t, r, y1, y2),
+    final: (scanWaits.get(t.id) ?? 0) >= SCAN_FINAL_AFTER,
+  };
+}
+
+/** A tick of the scan: up to SCAN_READS_TICK reads. */
+function stepScan() {
+  const job = scanJob;
+  if (!job) return;
+  const t = allTowns().get(job.town);
+  if (!t || get("autoSpots") !== true || !playerIn(world.getAllPlayers(), t)) {
+    scanJob = undefined; // t.scan stays: it starts again when a player is in the town
+    return;
+  }
+  if (job.ask) {
+    if (!job.gen ? job.claims === undefined : job.answer === undefined) {
+      if (system.currentTick <= job.ask.until) return;
+      claimAsks.delete(job.ask.id);
+      if (!job.gen) job.claims = []; // no Land Claims
+      else job.answer = 0;
+    }
+    job.ask = undefined;
+  }
+  if (!job.gen) {
+    job.dim = world.getDimension(t.dim);
+    job.gen = scanTown(scanInput(t, job.claims ?? []));
+  }
+  const dim = /** @type {Dimension} */ (job.dim);
+  let reads = 0;
+  for (let steps = 0; steps < SCAN_STEPS_TICK; steps++) {
+    let q = job.pending;
+    if (!q) {
+      const r = job.gen.next(job.answer);
+      job.answer = undefined;
+      if (r.done) return finishScan(t, r.value);
+      q = r.value;
+    }
+    if (q[0] === "claims") {
+      job.pending = undefined;
+      const [, x1, z1, x2, z2] = /** @type {["claims", number, number, number, number]} */ (q);
+      const ask = { id: "", until: system.currentTick + CLAIMS_WAIT };
+      ask.id = askClaims(t.dim, { x1, z1, x2, z2 }, (claims) => {
+        if (scanJob === job && job.ask === ask) job.answer = claims.length;
+      });
+      job.ask = ask;
+      return;
+    }
+    if (reads >= SCAN_READS_TICK) {
+      job.pending = q;
+      return;
+    }
+    reads++;
+    job.pending = undefined;
+    const [kind, a, b, c] = /** @type {[string, number, number, number]} */ (q);
+    job.answer = kind === "c" ? readCol(dim, a, b) : blockInfo(dim, a, b, c);
+  }
+}
+
+/** @param {Town} t0 @param {{ picks: { id: string, spot: Spot }[], nos: string[], wait: string[] }} res */
+function finishScan(t0, res) {
+  scanJob = undefined;
+  const t = allTowns().get(t0.id);
+  if (!t) return;
+  /** @type {string[]} */
+  const got = [];
+  for (const { id, spot } of res.picks) {
+    const p = byId.get(id);
+    if (!p || t.spots[id]) continue;
+    // An operator set a spot meanwhile, in the way: pick again next time.
+    const region = regionOf(rectOf(footprint(p, spot)));
+    if (Object.entries(t.spots).some(([o, s]) => byId.has(o) && overlaps(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(o)), s))), region))) continue;
+    t.spots[id] = spot;
+    // Off the lists, except rt: a second failed check still goes to "no good spot".
+    t.scan = t.scan?.filter((x) => x !== id);
+    t.nos = t.nos?.filter((x) => x !== id);
+    got.push(p.name);
+  }
+  for (const id of res.nos) {
+    const p = byId.get(id);
+    if (!p) continue;
+    t.scan = t.scan?.filter((x) => x !== id);
+    t.nos = [...new Set([...(t.nos ?? []), id])];
+    tellOps(`§e[Town Projects] No good spot was found for ${t.n}'s ${p.name}: an operator can set one (Set a project spot in /realm:town).`);
+  }
+  if (!t.scan?.length) delete t.scan;
+  if (!t.nos?.length) delete t.nos;
+  if (res.wait.length) scanWaits.set(t.id, (scanWaits.get(t.id) ?? 0) + 1);
+  else scanWaits.delete(t.id);
+  saveTown(t);
+  if (got.length) console.warn(`[town] ${t.n}: spots picked for ${got.join(", ")}`);
+  // Finished projects that just got a spot go up when someone is near (the build check), or now.
+  for (const { id } of res.picks) {
+    const p = byId.get(id);
+    if (p && t.spots[id]?.a && progressOf(t, p).done && !progressOf(t, p).built) build(t, p, false);
+  }
+}
+
+/** Operators: forget "no good spot" and pick spots again for every project up to the town's level that has none. @param {Town} t @param {(msg: string) => void} tell */
+function findSpotsAgain(t, tell) {
+  delete t.nos;
+  delete t.rt;
+  queueScan(t, PROJECTS.filter((p) => p.level <= t.lvl && !progressOf(t, p).built).map((p) => p.id));
+  scanWaits.delete(t.id);
+  saveTown(t);
+  if (get("autoSpots") !== true) return tell("§ePick project spots automatically (autoSpots) is Disabled in /realm:config.");
+  tell(t.scan?.length ? `§a${t.n} looks for spots again for ${t.scan.map((id) => byId.get(id)?.name ?? id).join(", ")}, a few blocks at a time while a player is in the town.` : `§7Every project of ${t.n} up to its level has a spot.`);
+}
+
+// --- Building at an automatic spot ---
+
+/**
+ * The geometry of an automatic spot: its footprint, region (footprint plus 2), pad (ground height), the y range the
+ * check and the snapshot cover, and its grading plan (changed columns only).
+ * @param {Project} p @param {Spot} s
+ */
+function autoGeometry(p, s) {
+  const fpBox = footprint(p, s);
+  const fp = rectOf(fpBox);
+  const region = regionOf(fp);
+  const pad = s.y - 1;
+  const plan = s.lv === undefined ? [] : (decodePlan(s.lv, region, pad) ?? []);
+  return { fpBox, fp, region, pad, plan, dock: p.build === "dock", y1: Math.min(fpBox.min.y, pad - 5), y2: Math.max(fpBox.max.y, pad + 5) + 1 };
+}
+/** @typedef {ReturnType<typeof autoGeometry>} Geometry */
+
+/**
+ * The build in progress (one at a time) and the queue of others, "town:project".
+ * @type {{ key: string, town: string, project: string, phase: "outline" | "check" | "standing" | "claims" | "apply", start: number, until?: number, said?: number, gen?: Generator<any, any, any>, ask?: { id: string, until: number }, claims?: number, out?: { placed: number, skipped: number }, changes?: number } | undefined}
+ */
+let buildJob;
+/** @type {string[]} */
+const buildQueue = [];
+/** realm:town_test "build_pause" (scenarios): a build stops after this many block changes, as if the server stopped. */
+let testPauseAfter = 0;
+let testPaused = false;
+
+/** @param {Town} t @param {Project} p @returns {boolean} */
+function queueAutoBuild(t, p) {
+  if (testPaused) return false;
+  const key = `${t.id}:${p.id}`;
+  if (buildJob?.key !== key && !buildQueue.includes(key)) buildQueue.push(key);
+  ensureJobs();
+  return true;
+}
+
+/** @param {string} key */
+function cancelAutoBuild(key) {
+  if (buildJob?.key === key) buildJob = undefined;
+  const i = buildQueue.indexOf(key);
+  if (i >= 0) buildQueue.splice(i, 1);
+}
+
+/** Players within OUTLINE_NEAR of a spot. @param {Town} t @param {Spot} s */
+const playersNear = (t, s) => world.getAllPlayers().filter((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - s.x, pl.location.z - s.z) <= OUTLINE_NEAR);
+
+/**
+ * Checks the region block by block before anything changes (yields after each read): every block natural, air, wild
+ * plants or (for a dock) water; under every column the plan cuts, 2 natural solid blocks; the ground where the plan
+ * says. Returns undefined when it may be built, "unloaded", or why not.
+ * @param {Dimension} dim @param {Town} t @param {Geometry} geo @returns {Generator<void, string | undefined, void>}
+ */
+function* checkRegion(dim, t, geo) {
+  const { region, plan, dock } = geo;
+  const { min, max } = dim.heightRange;
+  const y1 = Math.max(min, geo.y1);
+  const y2 = Math.min(max - 1, geo.y2);
+  if (touches(cellsOf(t), t, region, y1, y2)) return "a player placed blocks there";
+  const target = new Map(plan.map((c) => [`${c.x},${c.z}`, c.t]));
+  for (let x = region.x1; x <= region.x2; x++)
+    for (let z = region.z1; z <= region.z2; z++) {
+      /** @type {number | undefined} */
+      let ground;
+      /** @type {Map<number, string>} */
+      const ids = new Map();
+      for (let y = y2; y >= y1; y--) {
+        const b = blockInfo(dim, x, y, z);
+        if (!b) return "unloaded";
+        if (!allowedInRegion(b, dock)) return `${itemName(b.id)} at ${x}, ${y}, ${z}`;
+        if (ground === undefined && UNDER.has(b.id)) ground = y;
+        ids.set(y, b.id);
+        yield;
+      }
+      const to = target.get(`${x},${z}`);
+      if (to === undefined) continue;
+      if (ground === undefined || Math.abs(to - ground) > 3) return `the ground changed at ${x}, ${z}`;
+      if (to < ground) for (const y of [to - 1, to - 2]) if (!UNDER.has(ids.get(y) ?? "")) return `an opening under ${x}, ${to}, ${z}`;
+    }
+  return undefined;
+}
+
+/**
+ * Levels the ground the plan says (cuts top down, fills bottom up, only natural blocks and wild plants change), then
+ * places the build; yields after each block it reads or changes. Applying it again changes nothing. Returns false when a
+ * block isn't loaded (nothing was changed by that step).
+ * @param {Dimension} dim @param {Project} p @param {Spot} s @param {Geometry} geo @param {{ placed: number, skipped: number }} out
+ * @returns {Generator<void, boolean, void>}
+ */
+function* applyBuild(dim, p, s, geo, out) {
+  const air = perm("minecraft:air");
+  const dirt = perm("minecraft:dirt");
+  const topId = fillTop(s);
+  const top = perm(topId);
+  /** @param {number} x @param {number} y @param {number} z */
+  const at = (x, y, z) => {
+    const b = dim.getBlock({ x, y, z });
+    if (!b) throw new Error("unloaded");
+    return b;
+  };
+  try {
+    for (const c of geo.plan) {
+      // Down to the new top: natural ground and wild plants above it go, top down.
+      for (let y = c.t + 5; y > c.t; y--) {
+        const b = at(c.x, y, c.z);
+        if (NATURAL.has(b.typeId) || WILD.has(b.typeId)) b.setPermutation(air);
+        yield;
+      }
+      // Up to it: the open blocks right under the new top become dirt, bottom up (never into a cave below).
+      /** @type {import("@minecraft/server").Block[]} */
+      const open = [];
+      for (let y = c.t - 1; y >= c.t - 3; y--) {
+        const b = at(c.x, y, c.z);
+        yield;
+        if (!(b.isAir || WILD.has(b.typeId))) break;
+        open.unshift(b);
+      }
+      for (const b of open) {
+        b.setPermutation(dirt);
+        yield;
+      }
+      // The new top: the surrounding top block on a fill, grass again on dirt a cut laid bare.
+      const b = at(c.x, c.t, c.z);
+      if (b.isAir || WILD.has(b.typeId) || (b.typeId === "minecraft:dirt" && topId === "minecraft:grass_block")) b.setPermutation(top);
+      yield;
+    }
+  } catch {
+    return false;
+  }
+  const structure = p.structure ? savedStructure(p.structure) : undefined;
+  if (structure) {
+    const rotation = [StructureRotation.None, StructureRotation.Rotate90, StructureRotation.Rotate180, StructureRotation.Rotate270][s.f] ?? StructureRotation.None;
+    world.structureManager.place(structure, dim, { x: s.x, y: s.y, z: s.z }, { rotation, includeEntities: false });
+    out.placed++;
+    return true;
+  }
+  return yield* placeDesignSteps(dim, s, p, true, out);
+}
+
+/** Is a player inside the build's volume? @param {Town} t @param {Geometry} geo */
+const playersOn = (t, geo) =>
+  world.getAllPlayers().filter((pl) => {
+    if (pl.dimension.id !== t.dim) return false;
+    const { x, y, z } = pl.location;
+    return x >= geo.fp.x1 && x < geo.fp.x2 + 1 && z >= geo.fp.z1 && z < geo.fp.z2 + 1 && y >= geo.pad - 1 && y <= geo.fpBox.max.y + 2;
+  });
+
+/**
+ * The spot failed its check: forget it and look once more; a second failure lists it under "no good spot".
+ * @param {Town} t @param {Project} p @param {string} why
+ */
+function respot(t, p, why) {
+  buildJob = undefined;
+  const s = t.spots[p.id];
+  if (s?.snap && !s.bs) deleteStructure(snapId(t, p));
+  delete t.spots[p.id];
+  const again = !t.rt?.includes(p.id);
+  dropFrom(t, p.id);
+  if (again) {
+    t.rt = [...(t.rt ?? []), p.id];
+    queueScan(t, [p.id]);
+    tellOps(`§e[Town Projects] ${t.n}'s ${p.name} can't go up at its spot (${why}): picking another.`);
+  } else {
+    t.nos = [...(t.nos ?? []), p.id];
+    tellOps(`§e[Town Projects] No good spot was found for ${t.n}'s ${p.name} (${why}): an operator can set one (Set a project spot in /realm:town).`);
+  }
+  saveTown(t);
+}
+
+/** A tick of the build in progress. */
+function stepBuild() {
+  if (!buildJob) {
+    const key = buildQueue.shift();
+    if (!key) return;
+    const [town, project] = key.split(":");
+    const t = allTowns().get(town);
+    const p = byId.get(project);
+    const s = t && p ? t.spots[p.id] : undefined;
+    if (!t || !p || !s?.a) return;
+    const pr = progressOf(t, p);
+    if (!pr.done || pr.built) return;
+    const outline = Math.max(0, Math.min(15, Math.floor(Number(get("outlineSeconds")) || 0)));
+    buildJob = { key, town, project, phase: s.bs ? "apply" : outline > 0 ? "outline" : "check", start: system.currentTick, until: system.currentTick + outline * 20 };
+  }
+  const job = buildJob;
+  const t = allTowns().get(job.town);
+  const p = byId.get(job.project);
+  const s = t && p ? t.spots[p.id] : undefined;
+  if (!t || !p || !s?.a || progressOf(t, p).built) {
+    buildJob = undefined;
+    return;
+  }
+  const dim = world.getDimension(t.dim);
+  const geo = autoGeometry(p, s);
+  const now = system.currentTick;
+  switch (job.phase) {
+    case "outline": {
+      const near = playersNear(t, s);
+      if (now === job.start) {
+        const secs = Math.round(((job.until ?? now) - now) / 20);
+        for (const pl of near) pl.sendMessage(`§e${t.n}'s ${p.name} goes up here in ${secs} second${secs === 1 ? "" : "s"}.`);
+      }
+      if ((now - job.start) % 10 === 0) for (const pl of near) drawPreview(pl, { p, s });
+      if (now >= (job.until ?? now)) job.phase = "check";
+      return;
+    }
+    case "check": {
+      job.gen ??= checkRegion(dim, t, geo);
+      for (let i = 0; i < CHECK_TICK; i++) {
+        const r = job.gen.next();
+        if (!r.done) continue;
+        job.gen = undefined;
+        if (r.value === "unloaded") buildJob = undefined; // again when a player is near
+        else if (r.value) respot(t, p, r.value);
+        else job.phase = "standing";
+        return;
+      }
+      return;
+    }
+    case "standing": {
+      const on = playersOn(t, geo);
+      if (on.length) {
+        if (now - (job.said ?? -1000) >= 200) {
+          job.said = now;
+          for (const pl of on) pl.sendMessage(`§eStep off the spot: ${t.n}'s ${p.name} goes up here.`);
+        }
+        return;
+      }
+      job.phase = "claims";
+      const ask = { id: "", until: now + CLAIMS_WAIT };
+      ask.id = askClaims(t.dim, geo.region, (claims) => {
+        if (buildJob === job && job.ask === ask) job.claims = claims.length;
+      });
+      job.ask = ask;
+      return;
+    }
+    case "claims": {
+      if (job.claims === undefined && now <= (job.ask?.until ?? 0)) return;
+      if (job.ask) claimAsks.delete(job.ask.id);
+      if ((job.claims ?? 0) > 0) return respot(t, p, "a land claim");
+      // Saved first: the region and its depth, so Remove spot puts the terrain back; then bs, so a restart resumes.
+      if (!s.snap && !s.old) {
+        const box = clampBox({ min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, dim);
+        if (!snapshot(t, p, s, dim, box)) {
+          buildJob = undefined;
+          return;
+        }
+      }
+      s.bs = 1;
+      saveTown(t);
+      job.phase = "apply";
+      return;
+    }
+    case "apply": {
+      job.out ??= { placed: 0, skipped: 0 };
+      job.gen ??= applyBuild(dim, p, s, geo, job.out);
+      try {
+        for (let i = 0; i < APPLY_TICK; i++) {
+          if (testPauseAfter > 0 && (job.changes = (job.changes ?? 0) + 1) > testPauseAfter) {
+            testPaused = true;
+            buildJob = undefined;
+            console.warn(`[town_test] build of ${job.key} paused after ${testPauseAfter} changes`);
+            return;
+          }
+          const r = job.gen.next();
+          if (!r.done) continue;
+          buildJob = undefined;
+          if (!r.value) return; // unloaded: resumes from bs when a player is near
+          const pr = progressOf(t, p);
+          pr.built = 1;
+          saveProgress(t, p, pr);
+          delete s.bs;
+          dropFrom(t, p.id);
+          saveTown(t);
+          announceBuilt(t, p, s, dim, job.out.placed, job.out.skipped);
+          return;
+        }
+      } catch (e) {
+        console.warn(`[town] build ${job.key}: ${e}`); // a chunk unloaded mid-way: it resumes (bs: 1)
+        buildJob = undefined;
+      }
+      return;
+    }
+  }
+}
+
+/** Runs the scan and the build a tick at a time while there is work; idle, nothing runs. */
+let jobTicker = /** @type {number | undefined} */ (undefined);
+function ensureJobs() {
+  if (jobTicker !== undefined) return;
+  jobTicker = system.runInterval(() => {
+    try {
+      stepScan();
+    } catch (e) {
+      console.warn(`[town] scan: ${e}`);
+      scanJob = undefined;
+    }
+    try {
+      stepBuild();
+    } catch (e) {
+      console.warn(`[town] build: ${e}`);
+      buildJob = undefined;
+    }
+    if (!scanJob && !buildJob && !buildQueue.length && jobTicker !== undefined) {
+      system.clearRun(jobTicker);
+      jobTicker = undefined;
+    }
+  }, 1);
+}
+
+/**
+ * On the build check (every 100 ticks): towns from before automatic spots queue their projects once (the current
+ * level's and finished ones without a spot), and a town with projects to place is scanned while a player is in it.
+ * @param {Player[]} players
+ */
+function autoTick(players) {
+  if (!towns) return;
+  for (const t of allTowns().values()) {
+    if (t.as === 1) continue;
+    queueScan(t, [...projectsAt(t.lvl), ...PROJECTS.filter((p) => progressOf(t, p).done && !progressOf(t, p).built)].map((p) => p.id));
+    t.as = 1;
+    saveTown(t);
+  }
+  if (get("autoSpots") !== true || scanJob) return;
+  const t = [...allTowns().values()].find((x) => x.scan?.length && playerIn(players, x));
+  if (t) startScan(t);
+}
+
+onScriptEvent(["realm:place_ready", "realm:claims_check_result"], ({ id, message }) => {
+  if (id !== "realm:place_ready" && id !== "realm:claims_check_result") return;
+  /** @type {any} */
+  let m;
+  try {
+    m = JSON.parse(message);
+  } catch {
+    return;
+  }
+  if (!m || typeof m !== "object") return;
+  if (id === "realm:claims_check_result") {
+    const fn = typeof m.id === "string" ? claimAsks.get(m.id) : undefined;
+    if (!fn) return;
+    claimAsks.delete(m.id);
+    const claims = Array.isArray(m.claims) ? m.claims.filter((/** @type {any} */ c) => c && [c.x1, c.z1, c.x2, c.z2].every(Number.isFinite)).slice(0, 10) : [];
+    fn(claims.map((/** @type {any} */ c) => ({ x1: Math.min(c.x1, c.x2), z1: Math.min(c.z1, c.z2), x2: Math.max(c.x1, c.x2), z2: Math.max(c.z1, c.z2) })));
+    return;
+  }
+  if (typeof m.name !== "string") return;
+  if (m.state === "removed") storyPlaces.delete(m.name);
+  else if (typeof m.dim === "string" && Number.isFinite(m.x) && Number.isFinite(m.z) && (storyPlaces.size < 200 || storyPlaces.has(m.name))) storyPlaces.set(m.name, { dim: m.dim, x: m.x, z: m.z });
+});
 
 // ---------------------------------------------------------------------------
 // Placed blocks (placed.js): natural-kind blocks players place in a town look like the ground, so the town keeps
@@ -1805,7 +2498,7 @@ system.runInterval(() => {
 
 // ---------------------------------------------------------------------------
 // Scenario tests (BDS harness): the operator actions without forms. Only from the server console or an operator.
-//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump|mayor_move|mayor_rename|remove_town|v1", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?}
+//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump|mayor_move|mayor_rename|remove_town|v1|scan|build_pause", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?, "after"?}
 // ---------------------------------------------------------------------------
 
 onScriptEvent(
@@ -1836,7 +2529,17 @@ onScriptEvent(
       }
       if (m.action === "zones") return broadcastZones();
       if (!t) return tell("no town");
-      if (m.action === "dump") return tell(JSON.stringify({ town: t, progress: PROJECTS.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null }));
+      if (m.action === "dump")
+        return tell(JSON.stringify({ town: t, progress: PROJECTS.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
+      if (m.action === "scan") {
+        findSpotsAgain(t, tell);
+        if (!scanJob && get("autoSpots") === true && t.scan?.length) startScan(t);
+        return;
+      }
+      if (m.action === "build_pause") {
+        testPauseAfter = Math.max(0, Math.floor(Number(m.after) || 0));
+        return tell(`builds pause after ${testPauseAfter} changes until the next load`);
+      }
       if (m.action === "v1") {
         // Makes every town look saved before mayors (and forgets their own mayors), until the next load.
         migrationHeld = true;
@@ -2111,7 +2814,8 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
       for (const t of allTowns().values())
         for (const p of PROJECTS) {
           const pr = progressOf(t, p);
-          if (pr.done && !pr.built && !t.spots[p.id]) player.sendMessage(`§e[Town Projects] ${t.n}'s ${p.name} is finished but has no spot: stand there and run /realm:town_spot ${p.id}`);
+          if (!pr.done || pr.built || t.spots[p.id] || (get("autoSpots") === true && t.scan?.includes(p.id))) continue;
+          player.sendMessage(`§e[Town Projects] ${t.n}'s ${p.name} is finished but has no spot${t.nos?.includes(p.id) ? " (no good spot was found)" : ""}: stand there and run /realm:town_spot ${p.id}`);
         }
     } catch (e) {
       console.warn(`[town] join: ${e}`);

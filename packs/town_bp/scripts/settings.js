@@ -17,6 +17,9 @@ const OPTIONS = [
   { key: "townRadius", type: "int", scope: "world", label: "Town radius (blocks)", help: "How close to a town's center its mayor and commands work", min: 32, max: 256, step: 16 },
   { key: "repPerProject", type: "int", scope: "world", label: "Guild reputation per finished project", min: 0, max: 100, step: 5 },
   { key: "townMayors", type: "bool", scope: "world", label: "A mayor for each town", help: "Townsfolk: each town gets its own mayor NPC" },
+  { key: "autoSpots", type: "bool", scope: "world", label: "Pick project spots automatically", help: "Spots operators set are kept and never leveled" },
+  { key: "levelDepth", type: "int", scope: "world", label: "Most blocks a picked spot's ground is leveled", help: "Natural ground only, cut or filled; 0 never levels", min: 0, max: 3, step: 1 },
+  { key: "outlineSeconds", type: "int", scope: "world", label: "Outline shown before a build (seconds)", help: "To players within 32 blocks; 0 shows none", min: 0, max: 15, step: 1 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

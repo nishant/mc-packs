@@ -34,7 +34,7 @@ reads; a record is upgraded in memory on read and written back only when somethi
 
 | Key | Shape | Bound |
 |---|---|---|
-| `town:t:<id>` (existing) | adds `v: 2`, `m` (mayor npc id: `"bram"` or `"mayor:<id>"`), `mn` (the mayor's name for `mayor:<id>`), `scan?: 1` (spots still to pick), `log?: [day, text][]` (the town's story), `nos?: string[]` (projects with no valid automatic spot) | `log` 12 entries, text 60 chars; whole record checked under `PROP_LIMIT` (30,000) |
+| `town:t:<id>` (existing) | adds `v: 2`, `m` (mayor npc id: `"bram"` or `"mayor:<id>"`), `mn` (the mayor's name for `mayor:<id>`), `scan?: string[]` (projects still to get a spot, D22), `rt?: string[]` (spot failed its check once), `as?: 1` (projects queued once), `plf?: 1` (placed cells full), `log?: [day, text][]` (the town's story), `nos?: string[]` (projects with no valid automatic spot) | `log` 12 entries, text 60 chars; whole record checked under `PROP_LIMIT` (30,000) |
 | Spot (inside the town) | adds `a?: 1` (picked automatically), `lv?: string` (grading plan, below), `bs?: 1` (build started, not finished) | `lv` at most (w+4) x (d+4) chars: 15 x 17 = 255 for a house |
 | `town:p:<town>:<work>` (existing shape) | town works (`house_1`..`house_10`, `pen`) reuse the progress record with `done: 1`, no `got`/`c` | 11 per town |
 | `town:r:<town>` (new) | `{ n: next resident number, r: [{ i, n, h, e?, p, d? }], new: string[] }`: resident number, name, home (work id or `"well"`), entity id, profession look, `d` = absolute time (ticks) a replacement is due | `r` at most `residentCapTown` (10), `new` 3 names |
@@ -121,7 +121,7 @@ snapshot keeps it through respawns. Shipping skin structures in the pack is poss
 ### 4.1 When
 
 - A town is added, or reaches a new level: the projects of that level (and town works due at it) without a spot are
-  queued for a scan (`t.scan = 1`, saved).
+  queued for a scan (their ids in `t.scan`, saved; D22).
 - Existing towns: on the first scan after the update, projects of the current level and finished projects without a
   spot. Spots operators set are never moved.
 - The scan runs only while a player is within `townRadius` of the town (its chunks are loaded); otherwise
@@ -197,8 +197,8 @@ For a candidate with footprint ground heights `g`:
 - Try `pad` = the median of the footprint's `g`, then `pad - 1`, `pad + 1`. Per footprint column the target is
   `pad`; per apron column at Chebyshev distance `d` (1 or 2) from the footprint, `t = pad + clamp(g - pad, -d, d)`.
 - Reject the pad if any column needs more than `levelDepth` (default 3) cut or fill, if any step between two
-  neighboring columns (4-neighbors, where at least one is in the apron, the outside ring counted at its natural
-  height) is more than 1, or if a cut column is next to water or lava at or above its new top (it would flow in).
+  neighboring columns (4-neighbors, where at least one is in the region and at least one changes, D20; the outside
+  ring counted at its natural height) is more than 1, or if a cut column is next to water or lava at or above its new top (it would flow in).
 - Cutting removes natural blocks from the old top down to `t + 1` and needs the 2 blocks under the new top to be
   natural and solid (no opening into a cave or a basement). Filling puts dirt up to `t - 1` and the surrounding top
   block on top (grass on grass, sand on sand, podzol on podzol), never a gravity block under air.
@@ -214,7 +214,8 @@ center. Each candidate gets the key, compared in order:
 2. 0 when already level (no column moves), else 1;
 3. height variety: how many already picked spots in the town have a pad within 1 of this one (fewer first), so a
    hillside town ends up with projects on different height levels;
-4. distance from the center (the well's counts 4 times, so it stays near the center).
+4. distance from the center. Distance also adds a bucket to item 1 every 48 blocks, every 12 for the well ("the
+   well's counts 4 times", D21), so the well stays near the center.
 
 The scan walks the rings outward and stops for a project once it has 6 valid candidates and the next ring is 16
 blocks farther than the best one. The best 3 are validated by block reads (4.7); the first that passes is the spot.
@@ -402,6 +403,9 @@ npc_bp's `mayors.js`, with no `@minecraft` import):
 - `tools/town-residents.test.mjs`: slots per level (2 only with the well), world cap priority, replacement due in
   ticks, census reconcile (missing twice, duplicates untagged).
 - `tools/town-placed.test.mjs`: cell packing, the 5,000 bound, `plf`.
+- `tools/town-autobuild.test.mjs`: main.js's own column reader, region check, build job and restore on a fake
+  hillside: the plan's heights in the world, nothing outside the region changed, a second run changes nothing, an
+  interrupted build resumed equals an uninterrupted one, nothing falls (sand), the region restores exactly.
 - `tools/npc-mayors.test.mjs`: `folkOf` for a mayor, skin key, load keeps listed mayors and drops unlisted ones only
   after a complete list.
 
@@ -478,3 +482,14 @@ behavior, versions bumped and `node tools/sync-diag.mjs` run. The lead runs `hel
 | D17 | A corrupt `npc:mayors` keeps every `mayor:` post and entity (the audit leaves them) until Town Projects sets them again | Never remove NPCs on unreadable data (like `loadFailed` for `npc:list`) |
 | D18 | Mayors are left out of `/realm:npc_houses` and `/realm:npc_add`; they appear in Who lives here, `/realm:npc_list` and the Minimap | A mayor belongs to its town, not to the village around the operator |
 | D19 | A town added while older towns still wait for migration takes Bram only when there are no towns at all | Bram's town among the old ones is decided by his post, not by the order of a later add |
+| D20 | The step rule checks pairs of neighboring columns where at least one changes; a natural step between two untouched columns stays | It's nature, not ours; checking it too would reject most natural hillsides |
+| D21 | Distance adds one leveling bucket every 48 blocks (every 12 for the well) before "already level" and height variety | Gives "the well's distance counts 4 times" a meaning (a pure last tiebreak scaled by 4 orders nothing) and prefers flat ground near the center |
+| D22 | `t.scan` is the list of project ids to place, not `1`; `as: 1` marks a town queued once; Remove spot never queues | An operator's Remove spot isn't undone by the next scan; towns from before this version are queued exactly once |
+| D23 | Builds at operator spots stay one-tick builds as before; only automatic spots use the budgeted job (48 changes a tick) | D5: operator spots behave as today; their footprints are small and checked by the preview |
+| D24 | A resumed build (`bs: 1`) skips the outline and the block check | The region was checked before its first block; cuts remove only natural blocks, fills fill only air and wild plants, and the design only replaces what `canReplace` allows, so nothing man-made is touched even when someone built there meanwhile |
+| D25 | At automatic spots, a design's `ground` places may also replace natural ground (sand, gravel, stone under a well or garden) | A desert well would otherwise be a ring on sand; the snapshot keeps the ground and Remove spot puts it back |
+| D26 | `restoreGround` runs in two passes for every snapshot: what becomes air top down, then the rest bottom up | No sand or gravel falls while a region is put back; older snapshots restore the same blocks as before |
+| D27 | After 3 scans of a town that waited on unloaded ground in one session, the scan takes the best spot it knows | A corner of the town that never loads can't stall its projects forever |
+| D28 | The dock's shore is found from water columns on the rings, walking up to 4 blocks toward the center; the deck faces the water first, then the two sides | Rings every 3 blocks rarely land exactly on the shoreline |
+| D29 | A failed check (someone built on the spot, a claim) forgets the spot and scans once more (`rt`); a second failure goes to `nos` | The "one rescan" of 4.7 has to survive a restart |
+| D30 | `realm:blocks_placed` takes `{ dim, box: [x1, y1, z1, x2, y2, z2] }` or the six fields; a box over 5,000 cells marks the town full at once | Both shapes were named (the task and 4.3); a huge fill can't be stored cell by cell |
