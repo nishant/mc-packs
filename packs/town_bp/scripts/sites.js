@@ -272,7 +272,9 @@ export function compareKeys(a, b) {
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ id: string, well?: boolean, dock?: boolean, box: (s: { x: number, y: number, z: number, f: number }) => Box }} ScanProject
+ * @typedef {{ id: string, well?: boolean, dock?: boolean, near?: { x: number, z: number }, box: (s: { x: number, y: number, z: number, f: number }) => Box }} ScanProject
+ * `near`: look around this point instead of the center (the garden pen beside its garden), from SCAN.minNear to
+ * SCAN.maxNear blocks away, nearest first; the build still faces the town's center and stays inside the town.
  * @typedef {{ x: number, y: number, z: number, f: number, a: 1, lv?: string, lt?: string }} AutoSpot
  * @typedef {{
  *   cx: number, cz: number, radius: number, depth: number, projects: ScanProject[],
@@ -286,7 +288,7 @@ export function compareKeys(a, b) {
  * @typedef {{ x: number, z: number, f: number, pad: number, vol: number, lv?: string, lt?: string, dist: number, key: number[], region: Rect, cuts: { x: number, z: number, t: number }[] }} Candidate
  */
 
-export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3 };
+export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear: 9, maxNear: 30, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3 };
 
 /**
  * Picks a spot for each project, one after another (the well first), reading columns as it goes (yield). Returns
@@ -341,16 +343,16 @@ export function* scanTown(input) {
     return undefined;
   }
 
-  /** Candidate positions ring by ring: [x, z, ring radius]. @param {number} r */
-  function ring(r) {
+  /** Candidate positions on a ring of radius r around (ox, oz): [x, z]. @param {number} r @param {number} [ox] @param {number} [oz] */
+  function ring(r, ox = input.cx, oz = input.cz) {
     const n = Math.max(8, Math.round((2 * Math.PI * r) / SCAN.arcStep));
     /** @type {[number, number][]} */
     const out = [];
     const seen = new Set();
     for (let i = 0; i < n; i++) {
       const a = (i * 2 * Math.PI) / n;
-      const x = Math.round(input.cx + r * Math.cos(a));
-      const z = Math.round(input.cz + r * Math.sin(a));
+      const x = Math.round(ox + r * Math.cos(a));
+      const z = Math.round(oz + r * Math.sin(a));
       const k = `${x},${z}`;
       if (seen.has(k)) continue;
       seen.add(k);
@@ -369,12 +371,14 @@ export function* scanTown(input) {
     /** @type {Candidate[]} */
     const valid = [];
     let waitDist = Infinity;
-    const rMax = input.radius - SCAN.edge;
-    for (let r = p.well ? SCAN.minWell : SCAN.minOther; r <= rMax; r += SCAN.ringStep) {
-      for (const [x, z] of ring(r)) {
+    const o = p.near ?? { x: input.cx, z: input.cz };
+    const rMax = p.near ? SCAN.maxNear : input.radius - SCAN.edge;
+    for (let r = p.near ? SCAN.minNear : p.well ? SCAN.minWell : SCAN.minOther; r <= rMax; r += SCAN.ringStep) {
+      for (const [x, z] of ring(r, o.x, o.z)) {
+        if (x === input.cx && z === input.cz) continue;
         const f = facingOut(x - input.cx, z - input.cz);
-        const res = yield* evalBuild(p, x, z, f);
-        if (res === "wait") waitDist = Math.min(waitDist, Math.hypot(x - input.cx, z - input.cz));
+        const res = yield* evalBuild(p, x, z, f, o);
+        if (res === "wait") waitDist = Math.min(waitDist, Math.hypot(x - o.x, z - o.z));
         else if (res) valid.push(...res);
       }
       if (valid.length >= SCAN.enough && r + SCAN.ringStep > best(valid).dist + SCAN.past) break;
@@ -404,9 +408,10 @@ export function* scanTown(input) {
 
   /**
    * One position: undefined (rejected), "wait" (a column isn't loaded) or the valid pads there.
-   * @param {ScanProject} p @param {number} x @param {number} z @param {number} f @returns {Generator<ScanRequest, Candidate[] | "wait" | undefined, any>}
+   * `o`: where distance is measured from (the center, or the project's `near`).
+   * @param {ScanProject} p @param {number} x @param {number} z @param {number} f @param {{ x: number, z: number }} o @returns {Generator<ScanRequest, Candidate[] | "wait" | undefined, any>}
    */
-  function* evalBuild(p, x, z, f) {
+  function* evalBuild(p, x, z, f, o) {
     const fp = rectOf(p.box({ x, y: 0, z, f }));
     const region = regionOf(fp);
     if (blockedWithoutReads(region)) return undefined;
@@ -432,7 +437,7 @@ export function* scanTown(input) {
     const gs = [];
     for (let i = fp.x1; i <= fp.x2; i++) for (let j = fp.z1; j <= fp.z2; j++) gs.push(/** @type {number} */ (known(i, j).g));
     const m = median(gs);
-    const dist = Math.hypot(x - input.cx, z - input.cz);
+    const dist = Math.hypot(x - o.x, z - o.z);
     /** @type {Candidate[]} */
     const out = [];
     for (const pad of [m, m - 1, m + 1]) {

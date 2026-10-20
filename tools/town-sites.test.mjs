@@ -7,7 +7,7 @@ import { MinecraftBlockTypes } from "@minecraft/vanilla-data";
 import { FORWARD, designFootprint } from "../packs/town_bp/scripts/designs.js";
 import {
   NATURAL, UNDER, WILD, WATERY, allowedInRegion, compareKeys, decodePlan, distTo, encodePlan, facingOut, gradePlan, isLeaves, isLog, median,
-  readColumn, regionOf, rectOf, scanTown, scoreKey, UNKNOWN,
+  readColumn, regionOf, rectOf, scanTown, scoreKey, UNKNOWN, SCAN, overlaps,
 } from "../packs/town_bp/scripts/sites.js";
 
 const ids = new Set(Object.values(MinecraftBlockTypes));
@@ -319,4 +319,24 @@ test("scan: the dock goes on the shore nearest the center, facing the water, wit
   const fp = rectOf(dock.box(s));
   for (let x = fp.x1; x <= fp.x2; x++) for (let z = fp.z1; z <= fp.z2; z++) assert.equal(shore(x, z).k, "W");
   assert.deepEqual(run({ ...base, projects: [dock] }, worldOf(() => 64)).nos, ["dock"], "no water: no dock spot");
+});
+
+test("scan: a project with `near` (the garden pen) goes beside that point, not near the center, still facing the center", () => {
+  const flat = worldOf(() => 64);
+  const garden = { x: 30, z: 0 };
+  const gardenRegion = regionOf(rectOf(designFootprint("garden", { x: 27, y: 65, z: 0, f: 3 })));
+  const pen = { id: "pen", near: garden, box: box("pen") };
+  const res = run({ ...base, projects: [pen], taken: [gardenRegion] }, flat);
+  assert.deepEqual(res.nos, []);
+  const s = res.picks[0].spot;
+  const d = Math.hypot(s.x - garden.x, s.z - garden.z);
+  assert.ok(d >= SCAN.minNear && d <= SCAN.minNear + SCAN.ringStep * 2, `beside the garden (${s.x}, ${s.z}, ${d.toFixed(1)} away)`);
+  assert.ok(!overlaps(regionOf(rectOf(designFootprint("pen", s))), gardenRegion), "not over the garden");
+  assert.ok(FORWARD[s.f].x * s.x + FORWARD[s.f].z * s.z > 0, "it faces the center");
+  // Without near, the same pen goes near the center instead.
+  const plain = run({ ...base, projects: [{ id: "pen", box: box("pen") }], taken: [gardenRegion] }, flat).picks[0].spot;
+  assert.ok(Math.hypot(plain.x, plain.z) <= SCAN.minOther + SCAN.ringStep, `near the center without it (${plain.x}, ${plain.z})`);
+  // Nothing beside the point (all of it man-made): no spot, rather than one far away.
+  const built = (x, z) => (Math.hypot(x - garden.x, z - garden.z) <= SCAN.maxNear + 8 ? { k: "M" } : flat(x, z));
+  assert.deepEqual(run({ ...base, projects: [pen] }, built).nos, ["pen"]);
 });
