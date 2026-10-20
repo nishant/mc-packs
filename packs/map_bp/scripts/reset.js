@@ -1,7 +1,7 @@
 // /realm:map_reset: the operator's reset of every player's destination and marked spots, online now and offline
 // players once on their next join. The world keeps a generation number; each player keeps the generation they were
 // reset at, so a reset is applied once and data saved after it is never cleared by it.
-export const WORLD_GEN = "map:reset"; // world: monotonic reset marker
+export const WORLD_GEN = "map:reset"; // world: the reset generation, max(previous + 1, Unix seconds); not a count
 export const PLAYER_GEN = "map:gen"; // player: the generation this player was reset at
 export const CLEARED = ["map:wp", "map:marks"]; // player: what a reset clears; nothing else is touched
 

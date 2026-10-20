@@ -96,7 +96,7 @@ From two weeks of history (728 commits, 161 of them fixes): the same classes cam
 | C26 | Pets | `tameable` | `minecraft:is_tamed`, not `tameable.isTamed` |
 | C27 | Time | `Date.now()` for durations | In-game durations in game ticks or time of day |
 | C28 | Process | (process) | Integration review before the first publish; before/after for visual and perf changes; a BDS scenario that fails before the fix |
-| C29 | Script event listeners | `scriptEventReceive.subscribe` | `onScriptEvent` / `offScriptEvent` from the pack's `script-events.js`; one native listener per pack, canonical source and copies checked by `sync-events --check` |
+| C29 | Script event listeners | `scriptEventReceive.subscribe` | `onScriptEvent` / `offScriptEvent` from the pack's `script-events.js`; one native listener per pack, canonical source and copies checked by `sync-events --check`; a handler's own `id !==` guards must let through every id it registers (`check-event-guards`) |
 
 ## Audit pass (October 2026: every pack for public servers)
 
