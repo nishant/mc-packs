@@ -82,8 +82,10 @@ test("expedition-queue-rejoin: the probe is appended in the pack's module scope 
     assert.ok(text.startsWith(shipped), "the shipped code is kept as it is");
     assert.match(text.slice(shipped.length), /ExpQueueProbeSource\.Server/, "console only");
     assert.match(text.slice(shipped.length), /namespaces: \["harness"\]/);
-    for (const name of [/^const queue = \[\];/m, /^function queueRejoined\(/m, /^const PROP_QUEUE = "expedition:queue";/m])
-      assert.match(shipped, name, `the pack still defines ${name} (the probe reads it)`);
+    // The line lives in queue.js; main.js brings queue and queueRejoined into its module scope from createQueue.
+    assert.match(shipped, /^const \{ queue,[^}]*\bqueueRejoined\b[^}]*\} = createQueue\(\{/m, "main.js still names queue and queueRejoined (the probe reads them)");
+    const queueJs = fs.readFileSync(path.join(ROOT, "packs", "expedition_bp", "scripts", "queue.js"), "utf8");
+    assert.match(queueJs, /^export const PROP_QUEUE = "expedition:queue";/m, "the line is still saved where the probe reads it");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
