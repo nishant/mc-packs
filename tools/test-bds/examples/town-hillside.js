@@ -13,7 +13,8 @@ export default async function (t) {
   for (let x = -R; x <= R; x += 4) {
     const h = Math.floor((x + R) / 4);
     if (h <= 0) continue;
-    t.assert(t.server(`/fill ${x} ${G} ${-R} ${Math.min(R, x + 3)} ${G + h - 1} ${R} dirt`).ok, `terrace ${x}`);
+    // loadArea waits for each area's center chunk only: the edges of the hill can take a few more ticks to load.
+    await t.waitUntil(() => t.server(`/fill ${x} ${G} ${-R} ${Math.min(R, x + 3)} ${G + h - 1} ${R} dirt`).ok, { timeout: 400, interval: 10, message: `terrace ${x}` });
     t.server(`/fill ${x} ${G + h} ${-R} ${Math.min(R, x + 3)} ${G + h} ${R} grass_block`);
   }
   await t.wait(20);
