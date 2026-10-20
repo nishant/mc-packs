@@ -451,6 +451,9 @@ export const STORIES = [
         title: "Song in the Dark",
         npc: "wren",
         end: "hollis",
+        // The light leads to the ring, you creep in, then you hear the Cantor (before 1.16.12 the vision played as soon
+        // as anyone came within 16 blocks of the ring, sneaking or not).
+        sequential: true,
         intro: [
           `§eWren§r grabs your sleeve with both hands, out of breath, hay in her hair.\n\n${W}You have to come, you have to come right now, okay, so I was up with Biscuit because Biscuit's the new foal and she had a tummy ache, and I looked out of the stable door and Brother Hollis walked RIGHT PAST.`,
           `${W}In his nightshirt! With no shoes! And his eyes were open but he wasn't looking at anything, and I said hi Brother Hollis, really loud, and he didn't even blink, and he was humming. Humming the skipping song. Slow, slow, quick.`,
@@ -472,7 +475,9 @@ export const STORIES = [
             place: "choir_ring",
             radius: 48,
             guards: { mob: "minecraft:vindicator", count: 4, name: "Gray Choir watcher" },
-            goal: { dx: 0, dz: 8 },
+            // Anywhere inside the standing stones (they stand 6 blocks out): walking into the ring is the goal.
+            goal: { dx: 0, dz: 0 },
+            goalRadius: 7,
             detect: 14,
             detectSneak: 5,
             onSpotted: "reset",

@@ -1747,7 +1747,7 @@ let run = 0;
  * Scene kinds a party shares: one scene (one set of characters, guards, story mobs, one wisp) per place and step while
  * anyone in the party there still needs the step. The rest (clues, riddles, block scans) stay each player's own.
  */
-const SHARED = new Set(["defeat"]);
+const SHARED = new Set(["defeat", "stealth"]);
 
 /**
  * Does a party play this entry's chapter together (its scenes shared)? The main story with the party story on, side and
@@ -1853,6 +1853,7 @@ function dropScene(owner, key, effect = false) {
   const s = scenes.get(sk(owner, key));
   if (s?.data) s.data.interactJob = undefined; // its background scan stops
   scenes.delete(sk(owner, key));
+  if (s) patrols.delete(s);
   removeActors({ owner, key }, effect);
   // The animals fed or tamed for it count again next time (the same daily favor on a later day, a reset chapter).
   tended.delete(`${owner}|${key}`);
@@ -1879,6 +1880,7 @@ export function endScenesOf(pid) {
     if (s.pid === pid) {
       if (s.data) s.data.interactJob = undefined;
       scenes.delete(sk(s.pid, s.key));
+      patrols.delete(s);
     } else if (s.members.delete(pid) && !stillNeeded(s)) dropScene(s.pid, s.key);
   }
   removeActors({ owner: pid });
@@ -2103,7 +2105,11 @@ function disguised(player, d) {
   }
 }
 
-/** The stealth area's center and goal. @param {Objective} obj */
+/**
+ * The stealth area's center and goal, and how close to the goal counts (`goalRadius`, at least 2.5 blocks).
+ * @param {Objective} obj
+ * @returns {{ loc: Exclude<ReturnType<typeof locate>, string | undefined>, center: Vector3, goal: { x: number, y?: number, z: number }, reach: number } | undefined}
+ */
 function stealthSpots(obj) {
   const loc = locate(obj);
   if (!loc || typeof loc === "string" || loc.pending) return undefined;
@@ -2115,36 +2121,71 @@ function stealthSpots(obj) {
     const g = obj.place ? placeSpot(obj.place, { x: obj.goal.dx, z: obj.goal.dz }) : { x: loc.x + obj.goal.dx, z: loc.z + obj.goal.dz };
     if (g) goal = { x: g.x, y: center.y, z: g.z };
   }
-  return { loc, center, goal };
+  return { loc, center, goal, reach: Math.max(2.5, obj.goalRadius ?? 2.5) };
 }
 
-/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+/** Is a point at a stealth step's goal? @param {Vector3} p @param {{ goal: { x: number, y?: number, z: number }, reach: number }} sp */
+const atGoal = (p, sp) => across(p, sp.goal) <= sp.reach && (sp.goal.y === undefined || Math.abs(p.y - sp.goal.y) < 4);
+
+/** Close enough to a stealth area for its guards to stand there (and see the player)? @param {Player} p @param {{ loc: { dim: string }, center: Vector3 }} sp @param {number} r */
+const nearStealth = (p, sp, r) => p.dimension.id === sp.loc.dim && across(p.location, sp.center) <= r + 32;
+
+/** Stealth scenes whose guards are walking their rounds (patrol() moves them every tick). @type {Set<SceneState>} */
+const patrols = new Set();
+/** Blocks a guard walks per tick (0.35 per 5 ticks, as before, but in even steps). */
+const PATROL_STEP = 0.07;
+/** Ticks a guard stops to look out over the area before walking back. */
+const PATROL_PAUSE = 40;
+
+/**
+ * A stealth step: guards walk their rounds around the place and send back anyone they see; reaching the goal finishes
+ * it. In a party that plays the chapter together it's one scene for everyone there: one set of guards (posted while
+ * anyone who still needs the step is near), and party mates helping with it (a party quest) are part of it too. The
+ * guards see them and send them back like anyone else, but only those who need the step finish it at the goal.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
 function stealthTick(player, e, i, obj) {
-  const s = sceneFor(player, e, i, "stealth");
+  stealthScene(player, sceneFor(player, e, i, "stealth"), obj);
+}
+
+/** A party mate helping with a stealth step joins the party's scene while it runs. @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function stealthHelp(player, e, i, obj) {
+  const s = joinScene(player, e, i, "stealth");
+  if (s) stealthScene(player, s, obj);
+}
+
+/** @param {Player} player @param {SceneState} s @param {Objective} obj */
+function stealthScene(player, s, obj) {
   const sp = stealthSpots(obj);
   if (!sp) return;
+  s.data.sp = sp;
   const r = radiusOf(obj);
-  const near = player.dimension.id === sp.loc.dim && across(player.location, sp.center) <= r + 32;
-  if (!near) {
+  const here = nearStealth(player, sp, r);
+  if (here && guidesOn(player)) drawStandingPad(player, player.dimension, sp.goal.x, sp.goal.y ?? sp.center.y, sp.goal.z, COLOR_GOLD, sp.reach > 2.5 ? sp.reach : 0);
+  if (here && s.data.guards?.length) tellGuards(s, player, obj);
+  // The rest once a second per scene, however many are in it.
+  if (s.data.checked === run) return;
+  s.data.checked = run;
+  if (!membersOf(s, true).some(({ p }) => nearStealth(p, sp, r))) {
     if (s.data.guards) {
-      removeActors({ owner: player.id, key: s.key });
+      removeActors({ owner: s.pid, key: s.key });
       delete s.data.guards;
+      patrols.delete(s);
     }
     return;
   }
-  if (guidesOn(player)) drawStandingPad(player, player.dimension, sp.goal.x, sp.goal.y ?? sp.center.y, sp.goal.z, COLOR_GOLD, 0);
   if (s.data.guards && s.data.guards.some((/** @type {any} */ g) => g.ent.isValid)) return;
   // Post the guards.
   const g = obj.guards ?? { mob: "minecraft:pillager", count: 2 };
   const n = Math.max(1, Math.min(8, g.count ?? 2));
-  const dim = player.dimension;
-  removeActors({ owner: player.id, key: s.key });
+  const dim = world.getDimension(sp.loc.dim);
+  removeActors({ owner: s.pid, key: s.key });
   s.data.guards = [];
+  const deep = SWIMMERS.has(g.mob);
   for (let k = 0; k < n; k++) {
     let gr = Math.max(3, r * (0.35 + (0.55 * (k + 0.5)) / n));
     const ang = (2 * Math.PI * k) / n + Math.random() * 0.5;
     // Rounds where a guard can stand: smaller ones when the place is a room in the rock.
-    const deep = SWIMMERS.has(g.mob);
     let y = groundAt(dim, sp.center.x + Math.cos(ang) * gr, sp.center.z + Math.sin(ang) * gr, sp.center.y, true, deep);
     while (y === undefined && gr > 3) {
       gr = Math.max(3, gr * 0.75);
@@ -2153,67 +2194,111 @@ function stealthTick(player, e, i, obj) {
     const x = sp.center.x + Math.cos(ang) * gr;
     const z = sp.center.z + Math.sin(ang) * gr;
     y ??= groundAt(dim, x, z, sp.center.y, false, deep) ?? sp.center.y;
-    const ent = spawnActor(dim, g.mob, { x, y, z }, { owner: player.id, key: s.key, role: "guard", name: g.name ? `§c${g.name}` : undefined, invul: true });
+    const ent = spawnActor(dim, g.mob, { x, y, z }, { owner: s.pid, key: s.key, role: "guard", name: g.name ? `§c${g.name}` : undefined, invul: true });
     if (ent && CHOIR.has(s.key)) ent.addTag("saga:choir");
-    if (ent) s.data.guards.push({ ent, r: gr, ang, dir: k % 2 ? 1 : -1, yaw: 0, y, pause: 0, flipAt: system.currentTick + 200 + Math.floor(Math.random() * 300) });
+    if (ent) s.data.guards.push({ ent, r: gr, ang, dir: k % 2 ? 1 : -1, yaw: 0, y, col: `${Math.floor(x)},${Math.floor(z)}`, pause: 0, flipAt: system.currentTick + 200 + Math.floor(Math.random() * 300) });
   }
+  if (s.data.guards.length) patrols.add(s);
   s.data.grace = system.currentTick + 40;
-  if (!s.data.told) {
-    s.data.told = true;
-    const goal = obj.goal ? "reach the spot the tracker shows" : "reach the middle";
-    player.sendMessage(`§e[Story] Guards! Sneak (hold sneak) and stay out of their sight to ${goal}. They see you up to ${obj.detect ?? 10} blocks away, ${obj.detectSneak ?? 4} when you sneak${obj.disguise ? ` or wear a ${itemName(obj.disguise.item)}` : ""}, and only in front of them.`);
+  for (const { p } of membersOf(s)) if (nearStealth(p, sp, r)) tellGuards(s, p, obj);
+}
+
+/** Tells a player in the scene about the guards, once. @param {SceneState} s @param {Player} p @param {Objective} obj */
+function tellGuards(s, p, obj) {
+  /** @type {Set<string>} */
+  const told = (s.data.told ??= new Set());
+  if (told.has(p.id)) return;
+  told.add(p.id);
+  const goal = obj.goal ? "reach the spot the tracker shows" : "reach the middle";
+  p.sendMessage(`§e[Story] Guards! Sneak (hold sneak) and stay out of their sight to ${goal}. They see you up to ${obj.detect ?? 10} blocks away, ${obj.detectSneak ?? 4} when you sneak${obj.disguise ? ` or wear a ${itemName(obj.disguise.item)}` : ""}, and only in front of them.`);
+}
+
+/**
+ * Guards walk their rounds, a short even step every tick. They are frozen (they can't walk by themselves) and every
+ * tick puts them where their round says, facing the way they walk: the vanilla AI never gets a tick to turn or nudge
+ * one, so none jumps back to its round (they used to be moved 0.35 blocks every 5 ticks, and drifted in between).
+ * The ground under a guard is looked up only when it steps onto a new block.
+ */
+function patrol() {
+  if (!patrols.size) return;
+  const now = system.currentTick;
+  for (const s of patrols) {
+    const sp = s.data.sp;
+    if (scenes.get(sk(s.pid, s.key)) !== s || !s.data.guards?.length || !sp) {
+      patrols.delete(s);
+      continue;
+    }
+    const deep = SWIMMERS.has(s.e.chapter.objectives[s.i]?.guards?.mob ?? "");
+    /** @type {Dimension | undefined} */
+    let dim;
+    for (const gd of s.data.guards) {
+      try {
+        if (!gd.ent.isValid) continue;
+        let yaw = gd.yaw;
+        if (gd.pause > 0) {
+          gd.pause--;
+          if (gd.pause === 0) gd.dir = -gd.dir;
+        } else {
+          gd.ang += (PATROL_STEP / gd.r) * gd.dir;
+          const tx = -Math.sin(gd.ang) * gd.dir;
+          const tz = Math.cos(gd.ang) * gd.dir;
+          yaw = (Math.atan2(-tx, tz) * 180) / Math.PI;
+          if (now >= gd.flipAt) {
+            // Stop and look out over the area for two seconds, then walk back the other way.
+            gd.pause = PATROL_PAUSE;
+            gd.flipAt = now + 200 + Math.floor(Math.random() * 300);
+            yaw = (Math.atan2(-Math.cos(gd.ang), Math.sin(gd.ang)) * 180) / Math.PI;
+          }
+        }
+        const x = sp.center.x + Math.cos(gd.ang) * gd.r;
+        const z = sp.center.z + Math.sin(gd.ang) * gd.r;
+        const col = `${Math.floor(x)},${Math.floor(z)}`;
+        if (col !== gd.col) {
+          gd.col = col;
+          dim ??= world.getDimension(sp.loc.dim);
+          gd.y = groundAt(dim, x, z, gd.y, false, deep) ?? gd.y;
+        }
+        gd.yaw = yaw;
+        gd.ent.teleport({ x, y: gd.y, z }, { rotation: { x: 0, y: yaw } });
+      } catch {
+        // unloaded
+      }
+    }
+  }
+}
+system.runInterval(patrol, 1);
+
+/**
+ * Every 5 ticks: whoever in the scene a guard sees is sent back; whoever still needs the step and reaches the goal
+ * finishes it (with or without guards: a place where none could be posted doesn't hold the step up).
+ * @param {SceneState} s
+ */
+function stealthFast(s) {
+  const obj = s.e.chapter.objectives[s.i];
+  const sp = s.data.sp;
+  if (!sp) return;
+  const r = radiusOf(obj);
+  const now = system.currentTick;
+  const guards = s.data.guards ?? [];
+  /** @type {Map<string, number>} */
+  const grace = (s.data.graceOf ??= new Map());
+  for (const { p, m } of membersOf(s)) {
+    if (!nearStealth(p, sp, r) || !counting(p)) continue;
+    const at = p.location;
+    if (m.need && atGoal(at, sp)) {
+      if (bump(p, m.e, s.i, 1) && !stillNeeded(s)) endLater(s, 40);
+      continue;
+    }
+    if (!guards.length || now < (s.data.grace ?? 0) || now < (grace.get(p.id) ?? 0)) continue;
+    const gd = seenBy(guards, p, obj);
+    if (gd) spotted(s, p, gd, sp, obj);
   }
 }
 
-/** Guards walk their rounds and look for the player; reaching the goal finishes it. @param {SceneState} s @param {Player} player */
-function stealthFast(s, player) {
-  const obj = s.e.chapter.objectives[s.i];
-  const guards = s.data.guards;
-  if (!guards?.length) return;
-  const sp = stealthSpots(obj);
-  if (!sp || player.dimension.id !== sp.loc.dim) return;
-  const dim = player.dimension;
-  const now = system.currentTick;
-  for (const gd of guards) {
-    if (!gd.ent.isValid) continue;
-    let yaw = gd.yaw;
-    if (gd.pause > 0) {
-      gd.pause--;
-      if (gd.pause === 0) gd.dir = -gd.dir;
-    } else {
-      gd.ang += (0.35 / gd.r) * gd.dir;
-      const tx = -Math.sin(gd.ang) * gd.dir;
-      const tz = Math.cos(gd.ang) * gd.dir;
-      yaw = (Math.atan2(-tx, tz) * 180) / Math.PI;
-      if (now >= gd.flipAt) {
-        // Stop and look out over the area for two seconds, then walk back the other way.
-        gd.pause = 8;
-        gd.flipAt = now + 200 + Math.floor(Math.random() * 300);
-        yaw = (Math.atan2(-Math.cos(gd.ang), Math.sin(gd.ang)) * 180) / Math.PI;
-      }
-    }
-    const x = sp.center.x + Math.cos(gd.ang) * gd.r;
-    const z = sp.center.z + Math.sin(gd.ang) * gd.r;
-    const y = groundAt(dim, x, z, gd.y, false, SWIMMERS.has(obj.guards?.mob ?? "")) ?? gd.y;
-    gd.y = y;
-    gd.yaw = yaw;
-    try {
-      gd.ent.teleport({ x, y, z }, { rotation: { x: 0, y: yaw } });
-    } catch {
-      // unloaded
-    }
-  }
+/** The first guard who sees the player, if any. @param {any[]} guards @param {Player} player @param {Objective} obj */
+function seenBy(guards, player, obj) {
   const p = player.location;
-  // The goal.
-  if (across(p, sp.goal) <= 2.5 && (sp.goal.y === undefined || Math.abs(p.y - sp.goal.y) < 4)) {
-    if (counting(player)) {
-      s.data.keepUntil = system.currentTick + 50;
-      bump(player, s.e, s.i, 1);
-      system.runTimeout(() => endScene(s.pid, s.key, true), 40);
-    }
-    return;
-  }
-  if (now < (s.data.grace ?? 0) || !counting(player)) return;
+  const dim = player.dimension;
   const hidden = sneaking(player) || disguised(player, obj.disguise);
   const limit = hidden ? obj.detectSneak ?? 4 : obj.detect ?? 10;
   for (const gd of guards) {
@@ -2242,21 +2327,29 @@ function stealthFast(s, player) {
         // can't tell: they see you
       }
     }
-    spotted(s, player, gd, sp, obj);
-    return;
+    return gd;
   }
+  return undefined;
 }
 
-/** @param {SceneState} s @param {Player} player @param {any} gd @param {{ center: Vector3 }} sp @param {Objective} obj */
+/**
+ * A guard saw a player: they are sent back to the edge (or, with `onSpotted: "ambush"`, the guards attack), and the
+ * others in the scene are told. @param {SceneState} s @param {Player} player @param {any} gd @param {{ center: Vector3 }} sp @param {Objective} obj
+ */
 function spotted(s, player, gd, sp, obj) {
   const now = system.currentTick;
-  s.data.grace = now + 60;
+  s.data.graceOf.set(player.id, now + 60);
   const name = obj.guards?.name ?? "A guard";
   player.playSound("raid.horn", { volume: 0.4, pitch: 1.4 });
+  /** @param {string} text */
+  const tellOthers = (text) => {
+    for (const { p } of membersOf(s)) if (p.id !== player.id) p.sendMessage(text);
+  };
   if (obj.onSpotted === "ambush" && now >= (s.data.ambushAt ?? 0)) {
     s.data.ambushAt = now + 600;
     player.sendMessage(`§c[Story] ${name} spotted you! The guards attack. Fight them off, or slip away and try again.`);
-    spawnGroup(player, player.dimension, gd.ent.location, { mobs: [obj.guards?.mob ?? "minecraft:pillager"], count: Math.max(1, obj.guards?.count ?? 2) }, s.key, 2, 4);
+    tellOthers(`§c[Story] ${name} spotted ${player.name}! The guards attack.`);
+    spawnGroup(player, player.dimension, gd.ent.location, { mobs: [obj.guards?.mob ?? "minecraft:pillager"], count: Math.max(1, obj.guards?.count ?? 2) }, s.key, 2, 4, s.pid);
     return;
   }
   // Back to the edge of the area.
@@ -2269,6 +2362,7 @@ function spotted(s, player, gd, sp, obj) {
   const z = sp.center.z + (dz / len) * r;
   const y = groundAt(player.dimension, x, z, sp.center.y) ?? p.y;
   player.sendMessage(`§c[Story] ${name} spotted you! You slip back to the edge before they raise the alarm. Sneak, stay behind them, and try again.`);
+  tellOthers(`§7[Story] ${name} spotted ${player.name}, who slipped back to the edge.`);
   try {
     player.teleport({ x, y, z });
   } catch {
@@ -2730,6 +2824,8 @@ function followFast(s, player) {
 
 /** Players watching a vision, by the claim that holds their busy mark. @type {Map<string, object>} */
 const watching = new Map();
+/** Is the player watching a vision now? (A party mate's finished vision step waits until theirs ends.) @param {string} pid */
+export const watchingVision = (pid) => watching.has(pid);
 /** Dreams waiting for the sleeper to wake. @type {Map<string, VisionScene[]>} */
 const dreams = new Map();
 
@@ -3360,7 +3456,12 @@ export function tickPlayer(player, list) {
   const p = player.location;
   for (const e of list) {
     e.chapter.objectives.forEach((obj, i) => {
-      if (!helps(e, obj) || !active(e, i, saga)) return;
+      if (!helps(e, obj)) {
+        // A party mate helping with a step about the mates themselves is still part of its scene (guards see them).
+        if (obj.type === "stealth" && counts && active(e, i, saga)) stealthHelp(player, e, i, obj);
+        return;
+      }
+      if (!active(e, i, saga)) return;
       try {
         // Timed objectives: progress resets when the time runs out.
         if (obj.within && e.st.x?.[`t${i}`] && Date.now() - e.st.x[`t${i}`] > obj.within * 1000) {
@@ -3538,11 +3639,13 @@ function fast() {
   if (!scenes.size) return;
   for (const s of scenes.values()) {
     if (s.kind !== "stealth" && s.kind !== "follow") continue;
-    const player = online(s.pid);
-    if (!player) continue;
     try {
-      if (s.kind === "stealth") stealthFast(s, player);
-      else followFast(s, player);
+      if (s.kind === "stealth") {
+        stealthFast(s);
+        continue;
+      }
+      const player = online(s.pid);
+      if (player) followFast(s, player);
     } catch (err) {
       console.warn(`[saga] ${s.kind}: ${err}`);
     }
@@ -3582,12 +3685,12 @@ setLostHandler((a) => {
 export function sceneFocus(pid, e, i) {
   const race = raceFocus(pid, e, i);
   if (race) return race;
-  const s = scenes.get(sk(pid, objKey(e, i)));
+  const s = sceneOfPid(pid, objKey(e, i));
   if (!s) return undefined;
   const obj = e.chapter.objectives[i];
   if (s.kind === "follow" && s.data.pos) return { dim: online(pid)?.dimension.id ?? OVERWORLD, ...s.data.pos, label: `the ${obj.wisp ?? "light"}` };
   if (s.kind === "escort") {
-    const [a] = actorsOf(pid, s.key, "escort");
+    const [a] = actorsOf(s.pid, s.key, "escort");
     if (!a?.ent.isValid) return undefined;
     const player = online(pid);
     if (s.state === "wait" || (player && dist3(player.location, a.ent.location) > 24)) return { dim: a.dim, ...a.ent.location, label: obj.who?.name ?? "them" };

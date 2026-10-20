@@ -158,6 +158,7 @@
  * @property {Clue[]} [clues] inspect
  * @property {{ mob: string, count: number, name?: string }} [guards] stealth
  * @property {{ dx: number, dz: number }} [goal] stealth: the spot to reach, from the place
+ * @property {number} [goalRadius] stealth: how close to the goal counts (2.5 blocks; more for a goal that is an area, like the inside of a stone circle)
  * @property {number} [detect] stealth: guards see you this close when you aren't sneaking
  * @property {number} [detectSneak] stealth: ...and this close when you are
  * @property {"reset" | "ambush"} [onSpotted] stealth
