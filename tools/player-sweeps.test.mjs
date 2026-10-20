@@ -323,3 +323,22 @@ test("dolphin: without a loaded tamed dolphin nobody's ride is looked up; with o
   sim.step(40);
   assert.ok(c.most() <= 9, `at most 9 players a tick, got ${c.most()}`);
 });
+
+test("journal: a look reads the player's dimension id once and the world spawn once a round", async () => {
+  const sim = createSim();
+  const w = walkers(sim, 40);
+  let idReads = 0;
+  for (const p of w.players) {
+    const dim = p.dimension;
+    p.dimension = { getTopmostBlock: dim.getTopmostBlock, getBlock: dim.getBlock, get id() { return idReads++, "minecraft:overworld"; } };
+  }
+  await loadReal(sim, "journal_bp");
+  let spawns = 0;
+  sim.server.world.getDefaultSpawnLocation = () => (spawns++, { x: 0, y: 64, z: 0 });
+  sim.step(800);
+  const looks = [...w.perTick.values()].reduce((n, s) => n + s.size, 0);
+  assert.ok(looks >= 40 * 9, `every player looked at every 4 seconds (${looks} looks)`);
+  assert.ok(idReads <= looks, `dimension id reads ${idReads} for ${looks} looks`);
+  assert.ok(spawns <= 11, `world spawn read ${spawns} times in 10 rounds`);
+  assert.ok(w.maxPerTick() <= 4, `at most 4 players a tick, got ${w.maxPerTick()}`);
+});

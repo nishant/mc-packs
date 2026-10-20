@@ -1,6 +1,6 @@
 // Copies tools/spread-shared.js (per-player sweeps spread over their interval) into every pack that
 // takes part, as scripts/spread.js. Packs never import each other, so each keeps its own copy; this keeps
-// the copies the same. A pack takes part by having a scripts/spread.js (and importing it): atlas_bp, quests_bp, milestones_bp, titles_bp, nick_bp, afk_bp, guilds_bp, dolphin_bp.
+// the copies the same. A pack takes part by having a scripts/spread.js (and importing it): afk, atlas, dolphin, guilds, journal, milestones, nick, quests, titles.
 //
 //   node tools/sync-spread.mjs                 refresh every copy
 //   node tools/sync-spread.mjs some_bp ...     also add the file to these packs

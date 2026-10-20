@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { spreadPlayers } from "./spread.js";
 
 // Each player's journal is one player property, "journal:data" -> JSON
 // { e: { page: [entry ids] }, l: { "page:entry": label } (labels of entries not in config.js),
@@ -396,17 +397,18 @@ function weatherOver(player, headroom) {
 /** @param {Player} player @param {import("@minecraft/server").Vector3} spawn the world spawn */
 function explore(player, spawn) {
   const dim = player.dimension;
+  const inDim = dim.id; // read once: each read is a call into the game
   const loc = player.location;
   const x = Math.floor(loc.x), y = Math.floor(loc.y), z = Math.floor(loc.z);
-  const spot = `${dim.id} ${x},${y},${z}`;
+  const spot = `${inDim} ${x},${y},${z}`;
   const last = lastSpot.get(player.id);
   if (last?.spot === spot) {
-    if (dim.id === OVERWORLD) weatherOver(player, last.headroom);
+    if (inDim === OVERWORLD) weatherOver(player, last.headroom);
     return;
   }
-  const dimName = DIMENSIONS[/** @type {keyof DIMENSIONS} */ (dim.id)];
+  const dimName = DIMENSIONS[/** @type {keyof DIMENSIONS} */ (inDim)];
   if (dimName) addEntry(player, "places", dimName);
-  const overworld = dim.id === OVERWORLD;
+  const overworld = inDim === OVERWORLD;
 
   // Heights and distance, kept as numbers too for the Places page.
   const data = dataOf(player);
@@ -452,7 +454,7 @@ function explore(player, spawn) {
   const underId = blockAt(dim, { x, y: y - 1, z })?.typeId;
   const feetId = blockAt(dim, { x, y, z })?.typeId;
   for (const b of biomes) {
-    if (b.dim && b.dim !== dim.id) continue;
+    if (b.dim && b.dim !== inDim) continue;
     if (b.maxY !== undefined && y > b.maxY) continue;
     if (b.minY !== undefined && y < b.minY) continue;
     const hit = b.at === "top" ? topId !== undefined && b.set.has(topId) : (underId !== undefined && b.set.has(underId)) || (feetId !== undefined && b.set.has(feetId));
@@ -492,30 +494,30 @@ function explore(player, spawn) {
   if (overworld) weatherOver(player, headroom);
 }
 
-// Each player every 4 seconds, spread over the 10 runs in between (one in 10 players a run, every 8 ticks), so a full
-// server doesn't look everyone up on the same tick. Each look is a few calls into the game, and so is the list of
-// players: it is read once a round, not every run.
-const SPREAD = 10;
-let turn = 0;
-/** @type {Player[]} */
-let round = [];
-system.runInterval(() => {
-  if (get("enabled") !== true) return;
-  const first = turn++ % SPREAD;
-  if (first === 0) round = world.getAllPlayers();
-  /** @type {import("@minecraft/server").Vector3 | undefined} */
-  let spawn;
-  for (let i = first; i < round.length; i += SPREAD) {
-    const player = round[i];
-    try {
-      if (!player.isValid) continue;
-      spawn ??= world.getDefaultSpawnLocation();
-      explore(player, spawn);
-    } catch (e) {
-      console.warn(`[journal] ${e}`);
+// Each player every 4 seconds, spread over the 10 runs in between (a tenth of the players a run, every 8 ticks;
+// scripts/spread.js keeps each player in their tenth by id), so a full server doesn't look everyone up on the same
+// tick. Each look is a few calls into the game, and so are the list of players and the world spawn: they are read
+// once a round, not every run.
+/** @type {import("@minecraft/server").Vector3 | undefined} */
+let spawn;
+spreadPlayers(system, world, {
+  every: 80,
+  parts: 10,
+  start: () => {
+    spawn = undefined;
+  },
+  visit: (share) => {
+    if (get("enabled") !== true) return;
+    for (const player of share) {
+      try {
+        spawn ??= world.getDefaultSpawnLocation();
+        explore(player, spawn);
+      } catch (e) {
+        console.warn(`[journal] ${e}`);
+      }
     }
-  }
-}, 8);
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Fish: a hook belongs to the player nearest to it when it appears. A catch is an item that appears
