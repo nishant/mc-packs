@@ -1,6 +1,6 @@
 // Chest Finder: the saved index across saves and a restart. Run with
 //   node tools/test-bds/run.mjs --quiet --only find_bp --scenario tools/test-bds/examples/find-index.js --timeout 600
-// Checks (phase 1 private index: the player placed both barrels; phase 2 world-wide mode, see below): a container read (by a search nearby), saved
+// Checks (phase 1 private index: the player placed both chests; phase 2 world-wide mode, see below): a container read (by a search nearby), saved
 // (a player leaving saves), changed, read and saved again is found after a restart with its new contents, from
 // beyond the live scan radius, and a second container saved once is still there.
 // The private index lists only containers the searcher placed or opened, and a simulated player's open fires no
@@ -18,7 +18,7 @@ export default async function (t) {
     const p = await t.player("Opener");
     const at = (dx) => ({ x: Math.floor(p.location.x) + dx, y: Math.floor(p.location.y), z: Math.floor(p.location.z) + 2 });
     const a = at(0), b = at(3);
-    for (const loc of [a, b]) await place(t, p, loc, "minecraft:barrel");
+    for (const loc of [a, b]) await place(t, p, loc, "minecraft:chest");
     const inv = (loc) => dim.getBlock(loc).getComponent("minecraft:inventory").container;
     inv(a).setItem(0, new ItemStack("minecraft:diamond", 3));
     inv(b).setItem(0, new ItemStack("minecraft:emerald", 5));
