@@ -21,6 +21,8 @@ import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
 import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, toWorld } from "./designs.js";
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
+import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts } from "./placed.js";
+import { NATURAL } from "./sites.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
@@ -47,7 +49,10 @@ const NEAR_SPOT = 64; // a waiting build goes up when a player is this close to 
  * prot: 0 when "Protect from world events" is Disabled (missing means Enabled). v: 2 once the town has a mayor `m`
  * ("bram", or "mayor:<id>" named `mn`; mayors.js); records saved before mayors (v1) have neither and still read.
  */
-/** @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string }} Town */
+/**
+ * plf: 1 once the town's placed-block cells (placed.js) were full: it never levels ground again.
+ * @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string, plf?: number }} Town
+ */
 /** @typedef {{ min: Vector3, max: Vector3 }} Box inclusive block corners */
 /** @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number }} Progress */
 /** @typedef {{ cr: number, q: [string, string, string][] }} Owed crowns, and [quest id, label, guild] per finished project */
@@ -1600,6 +1605,8 @@ function deleteTown(t) {
   }
   allTowns().delete(t.id);
   world.setDynamicProperty(TOWN_PREFIX + t.id, undefined);
+  placedCells.delete(t.id);
+  for (let k = 0; k < 2; k++) world.setDynamicProperty(`${PLACED_PREFIX}${t.id}:${k}`, undefined);
   // Its own mayor goes with it (Mayor Bram stays where he lives).
   if (isTownMayorId(t.m)) send("realm:npc_mayor", { op: "remove", id: t.m });
   lastSet.delete(t.id);
@@ -1700,6 +1707,101 @@ onScriptEvent(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Placed blocks (placed.js): natural-kind blocks players place in a town look like the ground, so the town keeps
+// their 4 x 4 x 4 cells in "town:pl:<town>:0" and ":1" (saved at most every 10 s) and never levels there. Other packs
+// that place natural blocks by script report boxes with realm:blocks_placed { dim, box: [x1, y1, z1, x2, y2, z2] }
+// (or x1..z2 as fields).
+// ---------------------------------------------------------------------------
+
+const PLACED_PREFIX = "town:pl:";
+const PLACED_SAVE_TICKS = 200;
+/** Cells by town id, read when first needed. @type {Map<string, import("./placed.js").Cells>} */
+const placedCells = new Map();
+
+/** @param {Town} t @returns {import("./placed.js").Cells | undefined} */
+function cellsOf(t) {
+  let c = placedCells.get(t.id);
+  if (c) return c;
+  try {
+    c = loadCells([0, 1].map((k) => world.getDynamicProperty(`${PLACED_PREFIX}${t.id}:${k}`)), t.plf === 1);
+  } catch {
+    return undefined; // not loaded yet
+  }
+  placedCells.set(t.id, c);
+  return c;
+}
+
+/** @param {Town} t @param {number[]} cells @param {boolean} [tooMany] a box too big to keep: the town is full */
+function markPlaced(t, cells, tooMany = false) {
+  const c = cellsOf(t);
+  if (!c) return;
+  for (const n of cells) addCell(c, n);
+  if (tooMany) c.full = true;
+  if (c.full && t.plf !== 1) {
+    t.plf = 1;
+    saveTown(t);
+    console.warn(`[town] ${t.n}: more than ${MAX_CELLS} places where players put natural blocks; it never levels ground from now on`);
+  }
+}
+
+/** "overworld" and "minecraft:overworld" alike. @param {unknown} d */
+const dimId = (d) => (typeof d === "string" ? (d.startsWith("minecraft:") ? d : `minecraft:${d}`) : "");
+
+world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
+  try {
+    if (!NATURAL.has(block.typeId)) return; // anything else is man-made anyway
+    const { x, y, z } = block.location;
+    const dim = block.dimension.id;
+    const r = get("townRadius");
+    for (const t of allTowns().values()) if (t.dim === dim && Math.hypot(x - t.x, z - t.z) <= r) markPlaced(t, [cellOf(t, x, y, z)]);
+  } catch (e) {
+    console.warn(`[town] placed: ${e}`);
+  }
+});
+
+onScriptEvent("realm:blocks_placed", ({ id, message }) => {
+  if (id !== "realm:blocks_placed") return;
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m !== "object") return;
+    const b = Array.isArray(m.box) ? m.box.map(Number) : [m.x1, m.y1, m.z1, m.x2, m.y2, m.z2].map(Number);
+    if (b.length !== 6 || !b.every(Number.isFinite)) return;
+    const dim = dimId(m.dim);
+    const r = get("townRadius");
+    for (const t of allTowns().values()) {
+      if (t.dim !== dim) continue;
+      // The part of the box inside the town's square.
+      const x1 = Math.max(Math.min(b[0], b[3]), t.x - r);
+      const x2 = Math.min(Math.max(b[0], b[3]), t.x + r);
+      const z1 = Math.max(Math.min(b[2], b[5]), t.z - r);
+      const z2 = Math.min(Math.max(b[2], b[5]), t.z + r);
+      if (x1 > x2 || z1 > z2) continue;
+      const cells = boxCells(t, [x1, b[1], z1, x2, b[4], z2]);
+      markPlaced(t, cells ?? [], !cells);
+    }
+  } catch {
+    // not ours
+  }
+});
+
+system.runInterval(() => {
+  for (const [id, c] of placedCells) {
+    if (!c.dirty) continue;
+    if (!allTowns().has(id)) {
+      placedCells.delete(id);
+      continue;
+    }
+    try {
+      const parts = saveParts(c);
+      parts.forEach((v, k) => world.setDynamicProperty(`${PLACED_PREFIX}${id}:${k}`, v || undefined));
+      c.dirty = false;
+    } catch (e) {
+      console.warn(`[town] placed cells of ${id}: ${e}`);
+    }
+  }
+}, PLACED_SAVE_TICKS);
 
 // ---------------------------------------------------------------------------
 // Scenario tests (BDS harness): the operator actions without forms. Only from the server console or an operator.
