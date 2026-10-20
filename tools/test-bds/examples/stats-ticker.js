@@ -3,6 +3,18 @@
 // Run with: node tools/test-bds/run.mjs --quiet --only stats_bp --scenario tools/test-bds/examples/stats-ticker.js
 export default async function (t) {
   t.echoActionBar = true;
+  let offAck;
+  const onAck = ({ id, message }) => {
+    if (id === "realm:cfg_ack") {
+      const m = JSON.parse(message);
+      if (m.id === "ticker_fixture_off") offAck = m;
+    }
+  };
+  t.system.afterEvents.scriptEventReceive.subscribe(onAck, { namespaces: ["realm"] });
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "ticker_fixture_off", pack: "stats_bp", key: "tickerDefaultOn", value: false }));
+  await t.waitUntil(() => offAck, { timeout: 40, message: "private ticker default-off acknowledgement" });
+  t.system.afterEvents.scriptEventReceive.unsubscribe(onAck);
+  t.assert(offAck.ok === true, "the rank fixture controls its initial ticker state; default-on has separate coverage");
   const a = await t.player("Ann");
   const b = await t.player("Bob", { x: 168, z: 170 });
   t.server("/scoreboard objectives add stats_deaths dummy");
@@ -15,7 +27,9 @@ export default async function (t) {
     // Show only Deaths, every chosen stat on one line, full style.
     t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "m" + p.name, pack: "stats_bp", key: "tickerMode", value: "all", player: p.id }));
     for (const s of ["playtime", "mobkills", "mined", "travelled"]) t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "s" + p.name + s, pack: "stats_bp", key: `tickerShows.${s}`, value: false, player: p.id }));
-    t.cmd(p, "/realm:stats_ticker");
+    const since = t.tick;
+    t.assert(t.cmd(p, "/realm:stats_ticker").ok, "the ticker toggle runs");
+    await t.waitMessage(p, /Stats ticker: Enabled\./, { kind: "chat", timeout: 40, since });
   }
   const [ma, mb] = await Promise.all([t.waitMessage(a, /Deaths/, { kind: "actionbar", timeout: 80 }), t.waitMessage(b, /Deaths/, { kind: "actionbar", timeout: 80 })]);
   t.log("Ann sees:", ma.plain, "| Bob sees:", mb.plain);

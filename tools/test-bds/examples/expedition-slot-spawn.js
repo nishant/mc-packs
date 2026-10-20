@@ -35,7 +35,13 @@ export default async function (t) {
   }
   t.check(!second || second.phase === "none", "no second dungeon under world spawn");
   t.check(t.forms(bob).some((f) => /in progress/i.test(f.body ?? "")) || t.messages(bob).some((m) => /in progress/i.test(m.plain)), "the second party is told an expedition is in progress");
+  const releaseAt = t.tick;
   t.cmd(ann, "/realm:expedition_leave");
+  await t.waitMessage(bob, /dungeon is free now: starting yours/i, { since: releaseAt, timeout: 900 });
+  await t.waitUntil(async () => (await state(t, 0))?.phase === "active", { timeout: 1200, interval: 20, message: "queued Bob starts in the safe first dungeon" });
+  const queuedSecond = await state(t, 1);
+  t.check(!queuedSecond || queuedSecond.phase === "none", "the queued run still never uses the dungeon under world spawn");
+  t.assert(t.cmd(bob, "/realm:expedition_leave").ok, "Bob leaves his automatically started run");
   await t.waitUntil(async () => { const s = await state(t); return s?.runs === 0 && s.pending === 0 ? s : undefined; }, { timeout: 900, interval: 20, message: "reset" });
 }
 // shared helpers (pasted into each scenario: scenarios can't import)
