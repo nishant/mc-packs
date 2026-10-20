@@ -1,5 +1,5 @@
 import "./diag.js";
-import { CommandPermissionLevel, CustomCommandStatus, ItemStack, Player, ScriptEventSource, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, ItemStack, Player, PlayerInventoryType, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./recipes.js";
@@ -7,6 +7,7 @@ import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
 import { settleOwed } from "./settle.js";
+import { DISH_MARK, upgradeDishLore } from "./dish-lore.js";
 
 const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
@@ -232,13 +233,16 @@ function fxLore([id, amp, secs]) {
   return `§9${name} ${ROMAN[amp] ?? amp + 1} (${clock(secs)})`;
 }
 
+/** @param {Dish} d */
+const tierLine = (d) => (d.tier === "rare" ? "§6Rare dish" : "§8Kitchen dish");
+
 /** The lore every serving of a dish has (the same always, so servings stack). @param {Dish} d */
 function dishLore(d) {
   const lines = [`§7${d.blurb}`];
   if (d.roll) lines.push("§dRolls for a surprise");
   else lines.push(...d.effects.map(fxLore));
-  lines.push(d.tier === "rare" ? "§6Rare dish" : "§8Kitchen dish");
-  lines.push(`§8Dish: ${d.name}`); // the mark a renamed dish can't fake: the Story Log's deliveries check it
+  lines.push(tierLine(d));
+  lines.push(`§8Dish: ${d.name}`); // the mark (DISH_MARK) a renamed dish can't fake: the Story Log's deliveries check it
   return lines;
 }
 
@@ -487,8 +491,61 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     } catch (e) {
       console.warn(`[cooking] pending: ${e}`);
     }
+    try {
+      if (player.isValid) upgradeInventory(player);
+    } catch (e) {
+      console.warn(`[cooking] old dishes: ${e}`);
+    }
   }, 100);
 });
+
+// ---------------------------------------------------------------------------
+// Old dishes (before the Dish: lore line) get the current lore, so they stack with new servings
+// ---------------------------------------------------------------------------
+
+/**
+ * Gives an old serving in this slot the current lore. The slot is read again and must still hold a genuine dish;
+ * only the lore changes (same item, amount and name), so nothing can be lost or copied.
+ * @param {Container} inv @param {number} slot @returns {boolean} whether it changed
+ */
+function upgradeSlot(inv, slot) {
+  const s = inv.getItem(slot);
+  const d = dishOf(s);
+  if (!s || !d) return false;
+  const lore = upgradeDishLore(s.getLore(), dishLore(d), tierLine(d));
+  if (!lore) return false;
+  s.setLore(lore);
+  inv.setItem(slot, s);
+  return true;
+}
+
+/** Every old serving in a player's inventory. @param {Player} player */
+function upgradeInventory(player) {
+  const inv = containerOf(player);
+  if (!inv) return;
+  for (let i = 0; i < inv.size; i++) {
+    try {
+      upgradeSlot(inv, i);
+    } catch (e) {
+      console.warn(`[cooking] old dish in slot ${i}: ${e}`);
+    }
+  }
+}
+
+// An old serving picked up, taken from a chest or moved: only the dishes' own food items wake this (filtered natively),
+// and setting the lore wakes it once more for a stack that is already marked, which returns at once.
+world.afterEvents.playerInventoryItemChange.subscribe(
+  ({ player, itemStack, inventoryType, slot }) => {
+    if (inventoryType !== PlayerInventoryType.Inventory || !itemStack?.nameTag || !dishOf(itemStack)) return;
+    try {
+      const inv = containerOf(player);
+      if (inv) upgradeSlot(inv, slot);
+    } catch (e) {
+      console.warn(`[cooking] old dish: ${e}`);
+    }
+  },
+  { includeItems: [...new Set(DISHES.map((d) => d.base))], ignoreQuantityChange: true },
+);
 
 // ---------------------------------------------------------------------------
 // Cooking
