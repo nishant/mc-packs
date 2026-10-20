@@ -57,6 +57,8 @@ export default async function (t) {
 
   if (t.phase === 2) {
     const p = await t.player("Back", { op: true, x: 0, z: 0 });
+    const circles = JSON.parse(String(t.world.getDynamicProperty("test:circles") ?? "[]"));
+    for (const c of circles) await t.loadArea(c[0], c[2], { radius: 1 });
     await t.wait(60);
     const st = await state({ player: p.id });
     t.log("after restart:", JSON.stringify({ siege: st.siege, mobs: st.mobs, restore: st.restore, day: st.day }));
@@ -66,7 +68,6 @@ export default async function (t) {
     for (let i = 0; i < 20 && (await state()).restore > 0; i++) await t.wait(40);
     const st2 = await state();
     t.check(st2.restore === 0, `every circle was put back (${st2.restore} left)`);
-    const circles = JSON.parse(String(t.world.getDynamicProperty("test:circles") ?? "[]"));
     for (const c of circles) {
       const b = t.dimension.getBlock({ x: c[0], y: c[1] - 1, z: c[2] });
       t.check(b && b.typeId !== "minecraft:gray_concrete", `circle floor at ${c[0]}, ${c[2]} restored (${b?.typeId})`);
