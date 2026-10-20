@@ -18,6 +18,8 @@ const root = from ? resolve(from) : join(import.meta.dirname, "..", "..", "..");
 if (existsSync(out)) throw new Error(`fixture output already exists: ${out}`);
 mkdirSync(out, { recursive: true });
 cpSync(join(root, "packs", "milestones_bp"), join(out, "milestones_bp"), { recursive: true });
+// Titles & Trails too: since F32 Milestones sets the flag only once Titles confirms the titles (realm:title_ack).
+cpSync(join(root, "packs", "titles_bp"), join(out, "titles_bp"), { recursive: true });
 appendFileSync(join(out, "milestones_bp", "scripts", "main.js"), `
 // Harness only (tools/test-bds/hooks/milestones-rejoin.mjs); never shipped.
 import { ScriptEventSource as MilestonesProbeSource } from "@minecraft/server";
@@ -45,6 +47,7 @@ system.afterEvents.scriptEventReceive.subscribe(
         dirty.delete(q.from);
         cache = undefined;
         backfilled.delete(player.id);
+        if (typeof unconfirmed !== "undefined") unconfirmed.clear();
         check(player);
       }
       system.sendScriptEvent("harness:milestones_report", JSON.stringify(milestonesProbeReport(q.id, player)));
@@ -55,4 +58,4 @@ system.afterEvents.scriptEventReceive.subscribe(
   { namespaces: ["harness"] },
 );
 `);
-console.log(`wrote ${out} (milestones_bp with the rejoin probe${from ? `, from ${root}` : ""})`);
+console.log(`wrote ${out} (milestones_bp with the rejoin probe, and titles_bp${from ? `, from ${root}` : ""})`);

@@ -156,6 +156,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   pending.delete(playerId);
   backfilled.delete(playerId);
+  unconfirmed.delete(playerId);
   try {
     flush([playerId]);
   } catch (e) {
@@ -229,10 +230,44 @@ function gossip(key, msg) {
   return true;
 }
 
+/**
+ * Top-tier titles sent to the Titles pack this session that it has not confirmed yet (`realm:title_ack`), per player
+ * id. The record's `tf` is set only once every one is confirmed, so a title sent while Titles was missing or turned
+ * off goes out again on the player's next join. @type {Map<string, Set<string>>}
+ */
+const unconfirmed = new Map();
+
+/** Sends one top-tier title and asks Titles to confirm it. @param {string} id @param {string} name */
+function sendTop(id, name) {
+  let set = unconfirmed.get(id);
+  if (!set) unconfirmed.set(id, (set = new Set()));
+  set.add(name);
+  system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: id, title: name, from: "milestones_bp", ack: "milestones_bp" }));
+}
+
+/** Titles' confirmation of one title: `tf` once nothing is left to confirm. @param {{ player?: unknown, title?: unknown, ack?: unknown }} m */
+function confirmTitle(m) {
+  if (!m || m.ack !== "milestones_bp" || typeof m.player !== "string" || typeof m.title !== "string") return;
+  const set = unconfirmed.get(m.player);
+  if (!set || !set.delete(m.title) || set.size) return;
+  unconfirmed.delete(m.player);
+  const r = records().get(m.player);
+  if (r && r.tf !== 1) {
+    r.tf = 1;
+    dirty.add(m.player);
+  }
+}
+
 /** @param {Player} player @param {Milestone} m @param {boolean} quiet already had it when the pack was added: no gossip */
 function topTier(player, m, quiet) {
   const name = title(m, m.tiers.length);
-  system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: name, from: "milestones_bp" }));
+  // A new top tier needs Titles' confirmation too: until then the next join sends every top tier again.
+  const r = recordOf(player);
+  if (r.tf) {
+    delete r.tf;
+    dirty.add(player.id);
+  }
+  sendTop(player.id, name);
   if (!quiet) gossip(`${player.id}:${m.id}`, { kind: "milestone", player: player.id, name: player.name, place: name });
 }
 
@@ -246,12 +281,21 @@ function check(player, objectives) {
   const got = (r.g ??= {});
   if (!backfilled.has(player.id)) {
     backfilled.add(player.id);
-    // Saved on the record (tf), not just this session: old top tiers are sent once, then a later join
-    // does not send them again. A new top tier still goes through topTier below. Unknown fields stay.
+    // Saved on the record (tf), not just this session: once Titles has confirmed every old top tier, a later
+    // join does not send them again. Until it confirms (Titles not installed or turned off), every join sends
+    // them again, which Titles ignores for titles a player has. A new top tier still goes through topTier below.
+    // Unknown fields stay.
     if (!r.tf) {
-      for (const m of milestones) if ((got[m.id] ?? 0) >= m.tiers.length) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: title(m, m.tiers.length), from: "milestones_bp" }));
-      r.tf = 1;
-      dirty.add(player.id);
+      let tops = 0;
+      for (const m of milestones) {
+        if ((got[m.id] ?? 0) < m.tiers.length) continue;
+        sendTop(player.id, title(m, m.tiers.length));
+        tops++;
+      }
+      if (!tops) {
+        r.tf = 1;
+        dirty.add(player.id);
+      }
     }
   }
   /** @type {string[]} */
@@ -506,6 +550,19 @@ onScriptEvent(
       flush();
     } catch (e) {
       console.warn(`[milestones] test: ${e}`);
+    }
+  },
+);
+
+// Titles & Trails confirms each title sent with `ack` (see sendTop).
+onScriptEvent(
+  "realm:title_ack",
+  ({ id, message }) => {
+    if (id !== "realm:title_ack") return;
+    try {
+      confirmTitle(JSON.parse(message));
+    } catch {
+      // not JSON: ignore
     }
   },
 );
