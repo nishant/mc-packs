@@ -102,29 +102,29 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
 ### New items from the re-review
 
-- [ ] (Owner answer, October 20: "it is what it is, if we can improve it go for it". Replace ACCEPTED_EXCEPTION with that wording, keep the 5 ms budget as the goal, and keep improving per W1/F46 where measurements show a gain.) **F56 (high, owner decision, docs) An "owner-accepted 40-player shortfall" the owner never gave** (N1).
+- [x] DONE (14b6158, 303bb12): every ACCEPTED_EXCEPTION is replaced with the owner's answer; the 40-player miss is recorded as open with the 5 ms goal. (Owner answer, October 20: "it is what it is, if we can improve it go for it". Replace ACCEPTED_EXCEPTION with that wording, keep the 5 ms budget as the goal, and keep improving per W1/F46 where measurements show a gain.) **F56 (high, owner decision, docs) An "owner-accepted 40-player shortfall" the owner never gave** (N1).
   - Where: PACKS.md about :6678, SERVER_SETUP.md :164 and :232, WORKING.md :116, OPEN.md :15, perf-tables.md :17.
   - They say "Owner answer (2026-10-19): ACCEPTED_EXCEPTION" for the 40-player whole-bundle miss (7.97 ms/tick
     against 5). None of the owner's recorded answers says this.
   - Ask the owner. Until he answers, record it as "open: over budget at 40 players", not accepted. The Realm
     (10 players, 1-4 online) is under budget as one bundle (4.75 ms at 10).
-- [ ] **F57 (high, process) The soak deferral is recorded as the owner's but was the contributor's** (N2).
+- [ ] PARTIAL, still open (14b6158, 303bb12): the attribution is corrected everywhere (contributor msftMyt); the deferred soaks are run by the release process. **F57 (high, process) The soak deferral is recorded as the owner's but was the contributor's** (N2).
   - The quote "lets skip the soak tests, let nishs claude do that later" refers to Nish in the third person.
     OPEN.md :346 calls it "User-directed"; five other places call it an owner override.
   - Correct the attribution everywhere.
   - Then run the deferred soaks in this session: 15 minutes at 10 and 40 players, 5 minutes at 100, the Realm Bundle
     at 10 and 40, saga quests at 100, the weather workload, and a 60-minute memory soak at 40 (unprofiled).
-- [ ] **F58 (medium, process) OPEN.md marks deferred work as WON'T FIX or DONE** (N3).
+- [x] DONE (303bb12): 18 OPEN.md rows re-marked OPEN with their F-items, explained in "Re-marked honestly (F58, October 20)". **F58 (medium, process) OPEN.md marks deferred work as WON'T FIX or DONE** (N3).
   - Its "Finalize all audit dispositions" table marks O1, O2, O4, O5, O10-O15, O19, O47 and O48 WON'T FIX.
   - It marks O3, O7, O17 and O71 DONE, although open F-items cover them: F5 for O7, F3 for O17, F10/F22 for O3,
     F45 for O71.
   - Re-mark each one honestly: OPEN with its F-item, or DONE with a sha.
   - O11-O16 are the owner's real-client checks (W2): pending on the owner, not won't fix.
-- [ ] **F59 (medium, docs) Internal audit text in the published player docs** (N4).
+- [x] DONE (14b6158, f4d9971): PACKS.md has a plain player Performance section and SERVER_SETUP.md "Latest measurements (October 2026)", with no shas or audit labels. **F59 (medium, docs) Internal audit text in the published player docs** (N4).
   - PACKS.md :6672-6684 is published on mc.nish.software/realm, and it contains commit shas, ACCEPTED_EXCEPTION,
     USER_DEFERRED and "Nish's Claude".
   - Move that to WORKING.md or the audit folder, and keep PACKS.md for players.
-- [ ] **F60 (medium) The NEWS entry "Clear quests and safer inventory pages" was never shown in game** (N5).
+- [x] DONE (e6db86c): the player lines of "Clear quests and safer inventory pages" (stats ticker on by default with a personal switch included) are folded into the new top entry; the auto-store entry is retitled to match its first bullet; operator notes stay out. **F60 (medium) The NEWS entry "Clear quests and safer inventory pages" was never shown in game** (N5).
   - Realm News pops up only the newest entry, so players missed its notes, including the stats ticker now
     defaulting on (F21).
   - Fold its player-relevant lines into the next release's entry.
@@ -132,11 +132,11 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     only from a nearly full page. Fix that. The four O65 notes are operator notes: keep them out of player news
     (the owner acknowledged them, so don't repeat them). Consider letting Realm News show the entries a
     player missed since their last visit.
-- [ ] **F61 (low) saga `defeatSpawnTick` uses `isNight()` instead of `nightMet()`** (N7). A future night fight
+- [x] DONE (32bfbd6): night fights gate on nightMet(); saga-night-spawn.test.mjs fails before and passes after. **F61 (low) saga `defeatSpawnTick` uses `isNight()` instead of `nightMet()`** (N7). A future night fight
   would never spawn its mobs on a world with the daylight cycle stopped. No current story is affected.
-- [ ] **F62 (low) Any story mob counts toward any defeat-with-spawn step** (N8, `objectives.js` :1356), whoever it
+- [x] DONE (260d2da): a story add counts only for its own step and its killer, party scene or party mate; saga-party-fight step 3 fails before and passes after. **F62 (low) Any story mob counts toward any defeat-with-spawn step** (N8, `objectives.js` :1356), whoever it
   was spawned for and wherever it dies. Count only mobs spawned for that player's (or party's) step.
-- [ ] **F63 (low, perf) Each party member gets their own group of story mobs** (N9): 4 mates at the Gray Ring means
+- [x] DONE (be962f3, 87edd82, 229d785): one group of mobs per party, place and step; saga-party-fight (9 alive -> 3) and saga-party-fight-helper fail before and pass after. **F63 (low, perf) Each party member gets their own group of story mobs** (N9): 4 mates at the Gray Ring means
   16 illagers. Use one shared group per place and step for a party, with F47.
 - [ ] **F64 (low) welcome_bp loose ends** (N10-N12):
   - the migration drops an operator-edited body that still contains the old sentence, without keeping a copy
@@ -152,7 +152,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - [ ] **F67 (low, quality) Shipped scripts with CRLF or mixed line endings** (N18). Normalize them to LF, and add a
   check to `npm run check`.
 - [ ] **F68 (low, docs) The `map:reset` docs no longer say what the value is** (N19).
-- [ ] **F69 (high) Root-cause the 3 failing scenarios at 8aa5cf06:** atlas, wander-walk and wander (above). Run them
+- [x] DONE (atlas: 86a28e4, d074d47, 6c96787, bd653ab; wander: 9f5b835; wander-walk: 8a56f9e, 58b4851, b6f227c, b50c8ba): harness ticking-area removal and scenario races (atlas), unloaded camp chunk (wander), a lightning witch bug and fixture deaths (wander-walk); all three pass on the merged tree, no assertion weakened. **F69 (high) Root-cause the 3 failing scenarios at 8aa5cf06:** atlas, wander-walk and wander (above). Run them
   alone first to rule out load. Fix the pack or the scenario, without weakening what it checks.
 
 - [ ] **F70 (high, scope) Finish the plan items that are still open in `../OPEN.md`, not only the F-items.**
@@ -179,10 +179,65 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - the camera and respawn screen after the graveyard fix (O75)
     - the Gray Ring with a party (F47) and wanderers not rubber-banding (F42)
   - Put it on a page or doc the owner can follow. Then fix whatever he reports and record each result in OPEN.md.
-- [ ] **F72 (high, release) Publish what is merged but not live.** Master 8aa5cf06 (#96) was not published to
+- [x] DONE (hosting aa38289): hosting #108 (msftMyt) published #96; every manifest version was live and check-live passed on October 20. **F72 (high, release) Publish what is merged but not live.** Master 8aa5cf06 (#96) was not published to
   hosting when this re-review ran (hosting's last publish was #107). Before the first fix release, check hosting
   `site/packs/packs.json` and run check-live. If #96 isn't live, publish it, either alone first or together with the
   first fixes. The final report names the live bundle versions.
+
+## Decisions made in the fix campaign (October 20)
+
+- tether: The tether steers with the stable minecraft:movement attribute, applyImpulse and setRotation, not with camp fences: no blocks are placed and every camp prefab works.
+- tether: Camp soft radius 3, road 6, hard limit 12: the documented limit and wander-walk's 20-block snap check still hold.
+- tether: Speed comes back only a block inside the soft radius (hysteresis), so it doesn't flip at the edge.
+- tether: Snap guard: the first put-back is immediate, later ones wait 20 ticks doubling to 600 (40 doubling to 600 for npc and saga).
+- tether: A snap never teleports into an unloaded chunk.
+- tether: Finding 1 (lowered post never restored): real, fixed. npc keeps the original post as optional `orig` in npc:list. upgrade() keeps it; npc_add and the house move clear it; undo uses it. saga keeps a.orig in memory. Either goes back as soon as standable(orig) (floor under, body free); the cost is 4 getBlocks per check only while a post is lowered.
+- tether: Finding 2 (water: the 'still falling' wait forever): real, fixed. Shared createFallWatch counts as falling only while off the ground, out of water and lava, getting lower, and for at most 100 ticks. Then, if the floor under the post is gone (floorGone), the post moves to freeSpotNear within 3 (original kept, so finding 1's restore brings it back) under the snap guard.
+- tether: Finding 3 (steering pins a mob against a wall): real, fixed. A wall check makes it a 'stuck' rule, not a plain 'no progress' rule, so a mob hovering at the edge on open ground (in balance with the impulse) is never released. Only no progress for 80 ticks with a wall or fence right ahead toward home triggers a 200-tick rest at its own speed. After 3 rests in a row it takes the last resort. Open-ground BDS is unchanged (0 snaps).
+- tether: Finding 4 (freeSpotNear on roofs or inside pens): real, fixed. Order: rings at home's floor height, then home itself, then a block lower, then a block higher; +/-2 dropped. Every candidate needs a straight walkable line from home (no fence, wall, gate or 2-high block) and no pathfinding, which keeps the cost to snaps only.
+- tether: Finding 5 (no NEWS.md entry): not changed in the branch on purpose. The workstream rules say the integrator writes NEWS.md from newsLines, so the entries are in newsLines below.
+- stash-saga-moon: Finding 1 (help catalog out of date): real, but not fixed here. The workstream rules forbid running help-catalog, gen-news and admin-catalog; the integrator runs help-catalog (which bumps help_bp) once over all workstreams' PACKS.md edits. It is listed in generatorsNeeded.
+- stash-saga-moon: Finding 2 (a used tool counts as missing, so it gets duplicated): real, fixed in 42d4940. A two-pass match: exact kind first, then a loose match by type id for unstackable items only. Loose matches are listed apart as changed and are not exported by default. The operator can choose 'Also export the changed items' after asking the player. Not exporting by default avoids a silent duplicate; the separate list and button avoid a silent loss when the player really lost the original and holds a different item of the same type.
+- stash-saga-moon: Finding 3 (armor and offhand not counted): real, fixed in 47ec90a. Head, Chest, Legs, Feet and Offhand are added to the live set. Mainhand is left out because it is an inventory slot, so it is already counted. An unreadable equippable component counts as nothing worn: the item is exported, so it is kept, not lost.
+- stash-saga-moon: Finding 4 (docs say 'waits while dead'): real docs error. The docs now say it refuses and asks to be run again after respawn (f25ff35). The code keeps refusing: a form waiting on a dead target would go stale, and a re-run is cheap.
+- stash-saga-moon: Finding 5 (no export test for a legacy journal): added test 479e71e. A hand-made 1.8.7 out {d,p} with the old chest half filled: a re-run fills only the empty slots in the old layout, makes no second chest and clears the journal. No code change was needed.
+- stash-saga-moon: Finding 6 (no NEWS entry): the integrator writes NEWS.md from newsLines (workstream rule). The two player-visible lines (Blood Moon shelter, saga collect progress) are in newsLines, plus one for operators about recovery.
+- stash-saga-moon: Fixed two pre-existing bugs in the native recovery scenario instead of weakening its assertions: the potion was in the wrong slot (slot.inventory 3 is container slot 12), and the adapter now throws the injected failure as a string so --strict accepts the pack's expected warning.
+- stash-saga-moon: stash_bp stays at 1.8.8 (already bumped on this branch over base 1.8.7, unreleased), so there is no second bump. check-versions passes.
+- stash-saga-moon: The moon_bp perf result is kept: 0.130 vs 0.115 ms/tick at 1 player, both under the 0.15 budget. The difference comes from the post-shelter phase, where every spot is correctly refused, so each wave uses all its reads. Correctness (no monsters inside shelters) ranks above performance.
+- atlas-docs: F69: fixed the harness (a phase removes its own ticking areas when it asks for a restart) rather than the pack. The chunk stall is BDS behavior and would hit any restart scenario that reuses a spot.
+- atlas-docs: F69: I tested removing a stuck area and adding it again under a new name on BDS. It did not help, so I dropped it.
+- atlas-docs: F69: added the atlas_debug slots cell:[cx,cz] test hook so the scenario can pick kinds and zones before a region's spots are built. Player behavior is unchanged. atlas_bp went from 1.1.8 to 1.1.9, and sync-diag was run.
+- atlas-docs: F69: the fossil dig is now always tested (falling back to the next region), so the scenario is stricter.
+- atlas-docs: Review finding 1 (SERVER_SETUP/PACKS 4.8 ms): real. The table and its bullets are labeled as the Windows BDS 1.26.52.3 matched run, and the 4.8 ms one-context bundle figure is a separate bullet with its own setup (Linux test machine, earlier build, 5-minute window). PACKS.md labels each bullet's run the same way. No shas were added.
+- atlas-docs: Review finding 2 (harness keeps failed areas forever): real. I chose 'retry once, then drop' (keepFailed only for the restart-time removal; the next phase start is the last try and logs 'no more tries ... dropped'). The stable runCommand API returns only successCount and no error text, so a gone area cannot be told apart from a refused one. Checking 'tickingarea list' would need its output text, which runCommand does not give.
+- atlas-docs: Review finding 3 (CRLF to LF hides the test diff): real. The branch is not pushed, so I rewrote its history: the line-ending conversion is now its own commit (86a28e4, empty under --ignore-cr-at-eol), and d074d47 shows only +30 test lines. The tree at the old HEAD is identical (checked with git diff). The old history is kept as local branch backup/atlas-docs-pre-split, and commit hashes changed (6a8fadb->d074d47, 89cfc39->6c96787, 5c67a19->14b6158, 8a0bfc0->303bb12).
+- atlas-docs: F57: attributed the quote to the contributor msftMyt; 'on PR #96' was not added because I could not verify it.
+- atlas-docs: F57/F58: kept historical quotes of the old claims in the review records and only relabeled the live status lines.
+- party: Review finding 1 (helper alone at a defeat with spawn): real, fixed in 229d785. sceneFor now refreshes s.seen for every member, not only those who need the step; s.e still follows only needers. Reason: this restores base behavior, where the helper's own scene kept its group. It also fixes a helper's own interact scene, which was dropped every other run the same way. SOLO kinds are unaffected because helpers only join those through joinScene. Proven by the new BDS saga-party-fight-helper.js.
+- party: Review finding 2 (admin_bp catalog.js stale): real, but left to the integrator by design. The campaign task forbids running help-catalog/admin-catalog in a workstream. admin_bp is already bumped to 1.6.7 and presets.js has the entry. The integrator must run node tools/admin-catalog.mjs (then sync-diag if it bumps again), which is listed in generatorsNeeded.
+- party: Review finding 3 (README row missing /realm:saga_step): real, fixed in 62db3d3.
+- party: Review finding 4 (no NEWS.md entry): not done here by design. The campaign task says the integrator writes NEWS.md from newsLines, which carry the player-facing lines below.
+- party: Review finding 5 (CRLF to LF across the stash-bridge block and two test files): real, fixed in a separate commit, ad37b76. Every line unchanged from base 5422aac has its original ending back, so the diff against base is identical with and without --ignore-cr-at-eol.
+- party: Review finding 6 (partyPlays without installed.ready): real, fixed in 87edd82. partyPlays now returns e.fav === undefined && !e.wv && together(e.story), importing together from party.js, so there is one source of truth. The ESM cycle (party.js imports bump from objectives.js) is safe because both use each other only at runtime. Proven by unit tools/saga-party-plays.test.mjs, which compares the real functions over 96 setting combinations.
+- party: Stealth completion stays shared through party sync (one mate at the goal finishes it for every mate on the party's main chapter). saga-party-story.js #8 asserts this; helpers still can't finish it.
+- party: The scene owner is the party only when party sync applies to that kind of story. Favors, wanderer jobs and heart stories stay per player.
+- party: Shared kinds: stealth, defeat-with-spawn, meet, escort, lead, defend and follow, the ones that put entities or a wisp in the world. Inspect, interact, answer, vision, wait, sleep and wear keep per-player scenes or none.
+- party: Rubber-banding: a deterministic per-tick patrol instead of the tether module, because detection needs exact positions and facing.
+- party: Perf: per-tick patrol only within 32 blocks of scene members, every 4 ticks otherwise; goal ring drawn only within 40 blocks. saga-stealth-perf.js: 1 player 0.67 -> 0.76 ms/tick during a stealth scene; party of 3 0.94 -> 0.95 (4 watchers instead of 12).
+- party: Gray Ring goal changed to the inside of the stone circle (goalRadius 7).
+- party: 'Song in the Dark' made sequential so the Cantor vision comes after the stealth step; saved progress stays compatible.
+- party: Defend, escort and lead party rules as described in F47 (wave credit for close needing mates, escort leader handoff within 8 blocks, one herd sized to the mate furthest from done).
+- party: /realm:saga_step refuses party-quest entries and logs with console.warn.
+- party: Simulated players' runCommand skips the permission check, so the operator-only gate is not asserted in BDS.
+- party: Two existing unit tests had fixture updates for the new data shape, with the same assertions.
+integrator: merged ws/tether, ws/party, ws/stash-saga-moon and ws/atlas-docs with merge commits in that order; the only conflict was saga_bp's version (1.16.12 from party vs 1.16.11 from stash-saga-moon), resolved to the higher 1.16.12 (origin/master 1.16.10).
+integrator: admin_bp stays at 1.6.7 after admin-catalog added realm:saga_step: it is already above origin/master's 1.6.6 and unreleased, so no second bump.
+integrator: help-catalog was run once over all workstreams' PACKS.md edits (help_bp 1.1.76 -> 1.1.77); gen-news bumped news_bp 1.7.79 -> 1.7.80.
+integrator: the Realm News entry has player lines only; the two operator lines (inv_recover, saga_step) stay in PACKS.md and are left out of the news, like the O65 notes.
+integrator: F60's idea of showing every entry a player missed is not done; the missed player lines are folded into this entry under "In case you missed them last time".
+integrator: O7 stays OPEN for the native Blood Moon timing at scale (F57 soaks), though F5 is done.
+integrator: the wander-walk result listed commit fd3b0e2, which is not in ws/tether (a stale hash from a rewrite); it is left out of F69's shas.
 
 ## Blockers and highs
 
@@ -211,7 +266,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     auto-store pass and finds no room.
   - Fix: store free space and partial-stack counts per item in the index, and skip pages that can't take the item.
   - Test: a unit test that counts structure loads.
-- [ ] **F4 (high, duplication) stash_bp: `/realm:inv_recover` duplicates items by design.**
+- [x] DONE (c694e4d, 2ea4a8f, b2b3fd9, 47ec90a, f25ff35, 42d4940, 479e71e, 33db89a, 4661bd2): inv_recover exports only stacks no longer carried (inventory, cursor, armor, offhand); used or changed tools are listed apart and copied only on request; stash-recover-restart and the new stash-recover-worn pass. **F4 (high, duplication) stash_bp: `/realm:inv_recover` duplicates items by design.**
   - Code: `page-store.js` around :470-532.
   - It exports the whole before-image into chests without comparing it to what the player still carries, so
     everything they kept exists twice. A re-run after a partial export refills a chest someone emptied, which
@@ -227,7 +282,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
 ## Mediums
 
-- [ ] **F5 (high) moon_bp: Blood Moon can spawn monsters inside a new shelter.**
+- [x] DONE (6806ec6, 8c06985): the built-cells cache is gone; every spawn spot gets an exact 9x9x9 read; moon-shelter fails before (24 monsters) and passes after (0); moon_bp 0.115 -> 0.130 ms/tick at 1 player. **F5 (high) moon_bp: Blood Moon can spawn monsters inside a new shelter.**
   - Code: `main.js` around :553-636 (`builtCells`, `built()`).
   - The "built here" cache forgets a clear cell only on `playerPlaceBlock`. Shelters built during the night with
     Easy Building (script placement), structures, `/fill` or pistons stay cached as clear, so waves skip the exact
@@ -236,7 +291,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     event from build_bp when it places blocks.
   - Measure: the O7 speed-up was never measured, and near bases it adds work. Keep the cache only if a soak shows
     a gain.
-- [ ] **F6 (medium) saga_bp: collect progress can drop when Expansive Inventory doesn't answer.**
+- [x] DONE (c2cb437): with no answer from stash_bp the collect step counts the live inventory and never drops progress; 3 new unit tests fail before and pass after. **F6 (medium) saga_bp: collect progress can drop when Expansive Inventory doesn't answer.**
   - Code: `objectives.js` around :686-797 (the stash bridge, `collectCount`).
   - If stash_bp can't reply (an unreadable page, or one row too long for a 2048-character message), saga waits
     40 ticks and then treats the stored pages as empty. Because the count is set as an absolute value, progress
@@ -333,10 +388,10 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - `saga-quest-wrap.js`: checks the server's 32-column estimate, not how a client wraps.
 
   Rewrite each so it fails on the old code for the right reason.
-- [ ] **F35 missing tests:** there is no native scenario for the moon cache (F5), the elite changes (O3, O58) or the
+- [ ] PARTIAL, still open (6806ec6, 8c06985): the moon scenario (moon-shelter.js) is in the suite; the elite (O3, O58) and build_bp gate (F7) scenarios remain. **F35 missing tests:** there is no native scenario for the moon cache (F5), the elite changes (O3, O58) or the
   build_bp gate (F7). Add them, with perf numbers where they are performance changes.
 
-- [ ] **F42 (medium, owner report October 19) Wanderers rubber-band: Hob Fairweather walks about 10 steps out of
+- [x] DONE (cfbeb51, 5cc5b0d, 22c4216, f4075a2, 72c9ab7, 570ad6c, ab732bd, de634bc, 87276b5, 2c245d1, 17c5a25): shared tether (tools/tether-shared.js, sync-tether) steers strays home and teleports only as a last resort; wander-tether, caravan-llamas and npc-floor-gone fail before and pass after (0 snaps). **F42 (medium, owner report October 19) Wanderers rubber-band: Hob Fairweather walks about 10 steps out of
   his camp, snaps back, and does it again, over and over.**
   - Code: wander_bp `main.js` `tether()` (around :810-835, `TETHER_MAX = 12` at :60). Walkers (`villager_v2` and
     wandering traders) stroll with the vanilla AI. Past 12 blocks from home (or in water, lava, or down a hole),
@@ -417,7 +472,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   window, 4.27 over the whole run. Use these as the "before" numbers for F2, F7 and F45, and treat calendar and
   wander (failing in both trees) as known failures to fix or explain.
 
-- [ ] **F47 (high, owner report October 19) Party catch-up at the Gray Ring is broken** (Signs in the Sky, "Song in
+- [x] DONE (de5214a, ea44304, 87e04d1, 26ef12f, 8e8357a, c9a1f9b, 62db3d3, ad37b76): one shared party scene per step, Gray Ring goal is the stone circle, Song in the Dark is sequential, new /realm:saga_step; saga-party-stealth and saga-party-scenes fail before and pass after. **F47 (high, owner report October 19) Party catch-up at the Gray Ring is broken** (Signs in the Sky, "Song in
   the Dark": "Creep close to the Gray Ring without being seen", then "Listen to the Cantor"; screenshot
   `../media/gray-ring-party.png`).
   - **What happened:** the owner finished the chapter, then went back with party mates who still needed it. The
