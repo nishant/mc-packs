@@ -19,9 +19,9 @@ export default async function (t) {
   );
   const of = (id, f = () => true, since = 0) => ev.filter((e) => e.id === id && e.tick >= since && f(e.m)).map((e) => e.m);
   const dbg = (m) => sys.sendScriptEvent("realm:atlas_debug", JSON.stringify(m));
-  const state = async (p, action = "state") => {
+  const state = async (p, action = "state", extra = {}) => {
     const since = sys.currentTick;
-    dbg({ player: p.id, action });
+    dbg({ player: p.id, action, ...extra });
     await t.waitUntil(() => of("realm:atlas_state", (m) => m.player === p.id, since).length > 0, { timeout: 40, message: `atlas_state ${action}` });
     return of("realm:atlas_state", (m) => m.player === p.id, since).at(-1);
   };
@@ -74,7 +74,10 @@ export default async function (t) {
   const info = await state(p, "slots");
   t.log(`cell ${info.cell}, slots ${JSON.stringify(info.slots)}`);
   t.assert(info.slots.length >= 2, "2-4 slots per region");
-  const [a, b] = info.slots;
+  // A spot within reach of the spawn point may already be built with its own kind: the shrine goes in a free one.
+  const a = info.slots.find((sl) => sl.s === undefined);
+  t.assert(a, `a spot of the first region is still free (${JSON.stringify(info.slots)})`);
+  const b = info.slots.find((sl) => sl !== a);
 
   dbg({ action: "prefer", key: a.key, kind: "shrine" });
 
@@ -102,6 +105,20 @@ export default async function (t) {
   t.check(of("realm:quest_done", (m) => m.id === `atlas:shrine:${a.key}`).length === 1, "still one quest_done");
   t.check(of("realm:poi", (m) => m.kind === "shrine" && m.dim === "minecraft:overworld" && Math.floor(m.x) === shrine.x && Math.floor(m.z) === shrine.z && typeof m.name === "string").length >= 1, "realm:poi for the shrine, as wander_bp reads it");
 
+  // The next cell to the east: its slots are asked for (and their kinds picked) before anyone walks in, or the
+  // first spots in reach of the arrival point are built at once with their own kind (a world's layout is random).
+  // A tablet (gated text), a cairn (quest_done atlas:cairn:*) and, when the region has a third spot, a fossil dig.
+  const info2 = await state(p, "slots", { cell: [info.cell[0] + 1, info.cell[1]] });
+  t.assert(info2.slots.length >= 2, "slots in the next region");
+  t.assert(info2.slots.every((sl) => sl.s === undefined), `nothing in the next region is built before anyone goes there (${JSON.stringify(info2.slots)})`);
+  const [ta, ca, fo2] = info2.slots;
+  dbg({ action: "prefer", key: ta.key, kind: "tablet" });
+  dbg({ action: "prefer", key: ca.key, kind: "cairn" });
+  // Without a third spot there, the dig goes in the first spot of the region after it, which nobody visits before.
+  const fo = fo2 ?? (await state(p, "slots", { cell: [info.cell[0] + 2, info.cell[1]] })).slots[0];
+  t.assert(fo && fo.s === undefined, `a free spot for the fossil dig (${JSON.stringify(fo)})`);
+  dbg({ action: "prefer", key: fo.key, kind: "fossil" });
+
   // Region banner: walk into the next cell to the east.
   const nx = info.min.x + info.size + 40;
   await t.loadArea(nx, b.z, { radius: 2 });
@@ -112,13 +129,8 @@ export default async function (t) {
   t.check(/^The /.test(title.plain) && /Region \d+ - 0 of \d sites?/.test((title.subtitle ?? "").replace(/§./g, "")), "region banner with name and sites");
   t.check(of("realm:title", (m) => m.player === p.id && m.from === "atlas_bp", sinceB).length >= 1, "title protocol note before the banner");
 
-  // The next cell's slots: a tablet (gated text), a cairn (quest_done atlas:cairn:*), a fossil dig.
-  const info2 = await state(p, "slots");
-  t.assert(info2.slots.length >= 2, "slots in the next region");
-  const [ta, ca, fo] = info2.slots;
-  dbg({ action: "prefer", key: ta.key, kind: "tablet" });
-  dbg({ action: "prefer", key: ca.key, kind: "cairn" });
-  if (fo) dbg({ action: "prefer", key: fo.key, kind: "fossil" });
+  const here = await state(p, "slots");
+  t.check(JSON.stringify(here.cell) === JSON.stringify(info2.cell), `the banner's region is the one asked for (${JSON.stringify(here.cell)})`);
 
   dbg({ player: p.id, action: "tablets", count: 12 }); // tier 1 read: the next is tier 2 (after Act I)
   const tab = await buildAt(p, ta);
@@ -154,22 +166,25 @@ export default async function (t) {
   dbg({ player: p.id, action: "kill", key: ca.key });
   await t.waitUntil(() => of("realm:quest_done", (m) => m.id === `atlas:cairn:${ca.key}` && m.guild === "wardens" && m.pack === "atlas_bp").length === 1, { timeout: 200, message: "quest_done atlas:cairn:* after the keepers fall" });
 
-  if (fo) {
-    const dig = await buildAt(p, fo);
-    p.teleport({ x: dig.x + 0.5, y: dig.y + 1, z: dig.z + 6.5 });
-    const sinceF = t.tick;
-    for (let i = 0; i < 12; i++) dbg({ player: p.id, action: "break", key: fo.key });
-    await t.waitMessage(p, /whole skeleton/, { timeout: 60, since: sinceF });
-    t.check(of("realm:skill_xp", (m) => m.skill === "mining").length === 1, "mining XP for the dig");
-  }
-  // A safe zone over a slot in the region to the south: standing next to it builds nothing.
+  const dig = await buildAt(p, fo);
+  t.check(dig.kind === "fossil", `the dig is a fossil dig (${dig.kind})`);
+  p.teleport({ x: dig.x + 0.5, y: dig.y + 1, z: dig.z + 6.5 });
+  const sinceF = t.tick;
+  for (let i = 0; i < 12; i++) dbg({ player: p.id, action: "break", key: fo.key });
+  await t.waitMessage(p, /whole skeleton/, { timeout: 60, since: sinceF });
+  t.check(of("realm:skill_xp", (m) => m.skill === "mining").length === 1, "mining XP for the dig");
+
+  // A safe zone over a slot in the region to the south: standing next to it builds nothing. The zone is in place
+  // before anyone goes there, so the spot can't be built on the way in.
+  const info3 = await state(p, "slots", { cell: [info2.cell[0], info2.cell[1] + 1] });
+  const zs = info3.slots[0];
+  t.assert(zs && zs.s === undefined, `the spot under the zone is not built yet (${JSON.stringify(zs)})`);
+  sys.sendScriptEvent("realm:zones", JSON.stringify({ src: "zones", part: 1, parts: 1, zones: [{ id: "t", name: "Test", dim: "minecraft:overworld", x: zs.x, z: zs.z + 60, r: 20 }] }));
+  await t.wait(5);
   const sz = info2.min.z + info2.size + 40;
   await t.loadArea(nx, sz, { radius: 2 });
   p.teleport({ x: nx + 0.5, y: -60, z: sz + 0.5 });
   await t.seconds(3);
-  const info3 = await state(p, "slots");
-  const zs = info3.slots[0];
-  sys.sendScriptEvent("realm:zones", JSON.stringify({ src: "zones", part: 1, parts: 1, zones: [{ id: "t", name: "Test", dim: "minecraft:overworld", x: zs.x, z: zs.z + 60, r: 20 }] }));
   await t.loadArea(zs.x, zs.z, { radius: 3 });
   p.teleport({ x: zs.x + 20.5, y: -60, z: zs.z + 0.5 });
   await t.seconds(8);
