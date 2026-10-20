@@ -54,9 +54,110 @@ Severity order:
 4. the living towns feature (F36-F41), after F1-F14
 5. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
 
+## Re-review of the merged release (master 8aa5cf06, October 20)
+
+PR #96 merged as 8aa5cf06, 77 commits after the reviewed aef10dc. When this re-review ran, hosting had not yet
+published it; hosting's last publish was #107. Evidence is in `rereview-8aa5cf06/`:
+- `f-status.md`: every F-item, with its status and current file:line
+- `new-review.md`: a fresh review of the 77 commits, N1-N19
+- `tests.md`: targeted tests
+
+**Gates at 8aa5cf06:** `npm run check`, `npm run build` and `npm run test` (about 988 unit tests) pass. All versions
+are above the published ones. Every `diag.js` VERSION matches its manifest.
+
+**F-item status at 8aa5cf06:**
+- Fixed: F1, F2, F21 and F54 (marked above).
+- Partly fixed:
+  - F14: O30 and O31 pass natively. O27 and O29 are not run, and the owed migrations have no native runs.
+  - F22: no elite errors in soaks, but the guard audit is not done.
+  - F43: see below.
+  - F44: all wired, but not re-run.
+- Mixed: F53. Calendar is fixed; wander, cleanup-keep and guilds-placed-restart are not.
+- Open: everything else, at the current lines in `f-status.md`; most lines moved.
+- Note on F10: the Large server preset is now 80, the same as the default, so it no longer changes Champions.
+
+**F43 now:**
+- Addressed by legitimate fixture corrections: admin-diag-bundle, admin-size-profile, stats-new-name, stats-ticker,
+  find-index, stash-pages. A real pack fix also addressed expedition-pending (9c36e128), and the
+  expedition-slot-spawn scenario is stronger.
+- Still unexplained: wander-walk and atlas.
+
+**Targeted tests at 8aa5cf06** (21 scenarios, one pass, retries cut short):
+- 18 pass, including all the earlier regressions except wander-walk and atlas, the Gray Ring and stealth
+  scenarios, and #97's saga-defeat-spawn.
+- 3 fail and must be root-caused:
+  - atlas: "chunk at 2000,2000 did not load in 400 ticks"; possibly load.
+  - wander-walk: "no form for Tester within 200 ticks", plus "no named witch left" earlier in the run.
+  - wander: "Hob is at his camp after the restart"; check it with F42.
+- Not run: soaks, autostore-perf, the full suite. The fix session runs them.
+
+**Fixtures narrowed by #96 (none dropped the assertion it exists for), to restore or strengthen:**
+- find-index: the restart half now runs with `privateIndex: false`, so the default private index is never checked
+  across a restart. Add that case back.
+- diag-owned-reload: phase 1 now expects 4 keys, which includes `help:orphan` and `mystery:z` only because of F23.
+  Set it back to 3 when F23 is fixed.
+- admin-size-profile: `changes >= 7` instead of exactly 8, and it accepts the Champions preset doing nothing (F10).
+  Pin the exact list after F10 is decided.
+- stash-pages: the Sort button's position is no longer pinned. Fine, as long as tapping the label still runs Sort.
+
+### New items from the re-review
+
+- [ ] **F56 (high, owner decision, docs) An "owner-accepted 40-player shortfall" the owner never gave** (N1).
+  - Where: PACKS.md about :6678, SERVER_SETUP.md :164 and :232, WORKING.md :116, OPEN.md :15, perf-tables.md :17.
+  - They say "Owner answer (2026-10-19): ACCEPTED_EXCEPTION" for the 40-player whole-bundle miss (7.97 ms/tick
+    against 5). None of the owner's recorded answers says this.
+  - Ask the owner. Until he answers, record it as "open: over budget at 40 players", not accepted. The Realm
+    (10 players, 1-4 online) is under budget as one bundle (4.75 ms at 10).
+- [ ] **F57 (high, process) The soak deferral is recorded as the owner's but was the contributor's** (N2).
+  - The quote "lets skip the soak tests, let nishs claude do that later" refers to Nish in the third person.
+    OPEN.md :346 calls it "User-directed"; five other places call it an owner override.
+  - Correct the attribution everywhere.
+  - Then run the deferred soaks in this session: 15 minutes at 10 and 40 players, 5 minutes at 100, the Realm Bundle
+    at 10 and 40, saga quests at 100, the weather workload, and a 60-minute memory soak at 40 (unprofiled).
+- [ ] **F58 (medium, process) OPEN.md marks deferred work as WON'T FIX or DONE** (N3).
+  - Its "Finalize all audit dispositions" table marks O1, O2, O4, O5, O10-O15, O19, O47 and O48 WON'T FIX.
+  - It marks O3, O7, O17 and O71 DONE, although open F-items cover them: F5 for O7, F3 for O17, F10/F22 for O3,
+    F45 for O71.
+  - Re-mark each one honestly: OPEN with its F-item, or DONE with a sha.
+  - O11-O16 are the owner's real-client checks (W2): pending on the owner, not won't fix.
+- [ ] **F59 (medium, docs) Internal audit text in the published player docs** (N4).
+  - PACKS.md :6672-6684 is published on mc.nish.software/realm, and it contains commit shas, ACCEPTED_EXCEPTION,
+    USER_DEFERRED and "Nish's Claude".
+  - Move that to WORKING.md or the audit folder, and keep PACKS.md for players.
+- [ ] **F60 (medium) The NEWS entry "Clear quests and safer inventory pages" was never shown in game** (N5).
+  - Realm News pops up only the newest entry, so players missed its notes, including the stats ticker now
+    defaulting on (F21).
+  - Fold its player-relevant lines into the next release's entry.
+  - N6: the top NEWS entry's title ("Earlier pages...") contradicts its first bullet, since auto-store now routes
+    only from a nearly full page. Fix that. The four O65 notes are operator notes: keep them out of player news
+    (the owner acknowledged them, so don't repeat them). Consider letting Realm News show the entries a
+    player missed since their last visit.
+- [ ] **F61 (low) saga `defeatSpawnTick` uses `isNight()` instead of `nightMet()`** (N7). A future night fight
+  would never spawn its mobs on a world with the daylight cycle stopped. No current story is affected.
+- [ ] **F62 (low) Any story mob counts toward any defeat-with-spawn step** (N8, `objectives.js` :1356), whoever it
+  was spawned for and wherever it dies. Count only mobs spawned for that player's (or party's) step.
+- [ ] **F63 (low, perf) Each party member gets their own group of story mobs** (N9): 4 mates at the Gray Ring means
+  16 illagers. Use one shared group per place and step for a party, with F47.
+- [ ] **F64 (low) welcome_bp loose ends** (N10-N12):
+  - the migration drops an operator-edited body that still contains the old sentence, without keeping a copy
+  - the retired `welcome:profile` key is never deleted
+  - the welcome names Old Tobin and Mara whenever Townsfolk is installed, even with no townsfolk placed
+- [ ] **F65 (low, docs) The O66 wording** (N13, N14).
+  - Hosting's CLAUDE.md still says to hand over the `.mcpack` files. Align it with the owner's answer: report that
+    the site is up to date with the bundle versions; uploading is assumed.
+  - Keep the "the owner uploads to the Realm" sentence out of SERVER_SETUP.md, which is for outside server
+    owners; put it in the maintainers' docs instead.
+- [ ] **F66 (low, tests) Restore the narrowed fixtures listed above** (N15, N16): find-index across a restart with
+  the private index; diag-owned-reload back to 3 after F23; admin-size-profile's exact change list after F10.
+- [ ] **F67 (low, quality) Shipped scripts with CRLF or mixed line endings** (N18). Normalize them to LF, and add a
+  check to `npm run check`.
+- [ ] **F68 (low, docs) The `map:reset` docs no longer say what the value is** (N19).
+- [ ] **F69 (high) Root-cause the 3 failing scenarios at 8aa5cf06:** atlas, wander-walk and wander (above). Run them
+  alone first to rule out load. Fix the pack or the scenario, without weakening what it checks.
+
 ## Blockers and highs
 
-- [ ] **F1 (blocker, item loss) stash_bp: "Fill earlier pages" deletes slot-locked stacks.**
+- [x] (FIXED on master in 4a9e3b85 (unit probe passes; still add a BDS scenario)) **F1 (blocker, item loss) stash_bp: "Fill earlier pages" deletes slot-locked stacks.**
   - Code: `scripts/pages.js` around :1343 and :1385-1390.
   - Trigger: a `lock_in_slot` stack sits in a storage slot of the page being shown, the player uses Fill earlier
     pages, and any other stack moves. Slot-locked records get `n = Number.MAX_SAFE_INTEGER` so nothing merges into
@@ -66,7 +167,7 @@ Severity order:
     `n`.
   - Test: add the case to `tools/stash-pages.test.mjs` (see `stash-fill-locked.probe.test.mjs`; the mock doesn't
     throw, so assert the count is unchanged), plus a BDS scenario with a locked stack on the shown page.
-- [ ] **F2 (high, perf) stash_bp: auto-store is 5x slower per pickup.**
+- [x] (FIXED on master in e7344108 (routes only when the page is nearly full; re-measure with scenarios/autostore-perf.js)) **F2 (high, perf) stash_bp: auto-store is 5x slower per pickup.**
   - Code: `autoStore`, `pages.js` around :1231-1300.
   - Every pickup on page 2 or later is routed to an earlier page with a full commit (3 structure snapshots plus an
     index write); master did that only near a full page. Each route also writes an action bar line, which spams the
@@ -162,7 +263,7 @@ Severity order:
   (`main.js` :361-426). Batch for real, or revert to the simpler code.
 - [ ] **F20 tools:** check-actionbar's allowlist entry `(anonymous)` exempts every anonymous `setActionBar` writer
   in hud_bp and stats_bp main.js. Name the exact functions.
-- [ ] **F21 stats_bp (owner awareness):** players whose "off" choice for the ticker was erased by the old rule
+- [x] (FIXED before the merge (70db7f4d); see also N5: the entry was never shown in game) **F21 stats_bp (owner awareness):** players whose "off" choice for the ticker was erased by the old rule
   (choices equal to the old default weren't saved) will see the ticker again now that it defaults on. Mention it in
   the release news.
 - [ ] **F22 elite_bp:** O58 added `isValid` in only two places, and no soak shows the recurring
@@ -377,7 +478,7 @@ Severity order:
 
   Root-cause each (pack bug or scenario timing). Fix it, or make the scenario robust without weakening what it
   checks. The suite must end with 0 unexplained failures and 0 flakes.
-- [ ] **F54 (high, merge safety) Keep the story fight fix from PR #97 when msftMyt's #96 merges.**
+- [x] (FIXED: #97 survived the merge (saga 1.16.10, news 1.7.79; saga-defeat-spawn passes)) **F54 (high, merge safety) Keep the story fight fix from PR #97 when msftMyt's #96 merges.**
   - #97 (published as Story Questlines 1.16.4 and Realm News 1.7.70, hosting #107) makes story defeat steps spawn
     their own mobs at places mobs never reach by themselves: the Choir ambush at the Haddock farm, the Smugglers'
     Cove, the Gray Ring, the Hollow Gate and three more.
@@ -570,6 +671,16 @@ So nothing is omitted, this maps each source to its items:
 | Owner, October 19-20 | mayor per town, automatic spots, terrain, residents | F36-F41 |
 | Owner, October 19-20 | farm quest mobs | released in #97; protect it when merging #96: F54 |
 | This session | measurement environment | F55 |
+| rereview-8aa5cf06/new-review.md | N1-N5 | F56-F60 |
+| rereview-8aa5cf06/new-review.md | N6 (O65 notes still player bullets in NEWS) | F60 |
+| rereview-8aa5cf06/new-review.md | N7-N9 | F61-F63 |
+| rereview-8aa5cf06/new-review.md | N10-N12 | F64 |
+| rereview-8aa5cf06/new-review.md | N13-N14 | F65 |
+| rereview-8aa5cf06/new-review.md | N15-N16 | F66 |
+| rereview-8aa5cf06/new-review.md | N17 (fixed items not marked) | marked in this file |
+| rereview-8aa5cf06/new-review.md | N18 | F67 |
+| rereview-8aa5cf06/new-review.md | N19 | F68 |
+| rereview-8aa5cf06/tests.md | 3 failing scenarios | F69 |
 
 Tracked elsewhere: the plan's own items O1-O75 (`../OPEN.md`, `../PLAN.md`), including the W2 real-client checks
 (O11-O16), which need the owner on a phone and a PC. The owner's decisions are in `../OPEN.md`. The one still open
