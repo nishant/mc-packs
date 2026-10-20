@@ -568,7 +568,6 @@ function championHurt(champ, attacker) {
   } catch {
     // a sound that doesn't play is fine
   }
-  if (!champ.isValid) return; // removed by the hit's effects (another pack's cleanup in the same tick)
   const name = nameOf(champ);
   champ.nameTag = tagFor(champ, "shielded", name); // the badge turns gray
   for (const p of champ.dimension.getPlayers({ location: champ.location, maxDistance: 24 })) p.sendMessage(`§bThe shield of ${name} breaks!`);
