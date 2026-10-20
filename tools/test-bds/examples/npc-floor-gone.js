@@ -2,7 +2,7 @@
 // her post are dug out. She drops into the hole. Before, she was teleported back up to her post every check and fell
 // again, about every half second, for as long as anyone was near. Now her post moves down to where she landed: for 20
 // seconds, read every tick, she is put back up at most once, and she stands on the floor of the hole. Pushed off her
-// (new) post on even ground, she still goes back to it.
+// (new) post on even ground, she still goes back to it. Once the floor is refilled, she is back on her own post.
 //   node tools/test-bds/run.mjs --quiet --flat --only npc_bp --scenario tools/test-bds/examples/npc-floor-gone.js --timeout 600
 export default async function (t) {
   const p = await t.player("Op", { op: true, gameMode: "creative" });
@@ -50,5 +50,12 @@ export default async function (t) {
     const l = mara()?.location;
     return !!l && Math.hypot(l.x - post.x, l.y - post.y, l.z - post.z) <= 0.5;
   }, { timeout: 100, message: "pushed off her new post, she goes back to it" });
-  t.pass("a post with no floor moves down instead of looping");
+
+  // The builder puts the floor back (she is inside the new blocks): she goes back up onto her own post.
+  t.server(`/fill ${c.x} ${g - 1} ${c.z} ${c.x + 3} ${g} ${c.z} dirt`);
+  await t.waitUntil(() => {
+    const l = mara()?.location;
+    return !!l && Math.hypot(l.x - (c.x + 0.5), l.z - (c.z + 0.5)) <= 0.5 && Math.abs(l.y - c.y) < 0.1;
+  }, { timeout: 100, message: "floor refilled: she is back on her own post" });
+  t.pass("a post with no floor moves down instead of looping, and back up once the floor is refilled");
 }
