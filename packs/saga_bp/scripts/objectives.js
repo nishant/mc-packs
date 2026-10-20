@@ -694,6 +694,9 @@ export function countItem(player, item, name) {
  * Parts of one revision are assembled and used only when complete; a reply of an older revision than the last notice
  * is stale and dropped. countItem is untouched: deliveries and every other reader still see only the live inventory.
  * Without stash_bp nothing answers: after one wait of STASH_WAIT ticks the step counts the live inventory alone.
+ * Once stash_bp has spoken this session (an answer or a notice) it is installed, so a missing answer is a failure
+ * (a page it couldn't read says so with { unknown: true }, or a message was lost), never "nothing saved": the step
+ * then counts the live inventory but never lowers its progress, and asks again every STASH_RETRY ticks.
  * @type {Map<string, { id: string, name?: string, lore?: string[], n: number }[]>}
  */
 const stashRows = new Map();
@@ -705,16 +708,22 @@ const stashParts = new Map();
 const stashRev = new Map();
 /** Ticks to wait for an answer before counting without it. */
 const STASH_WAIT = 40;
+/** Ticks before a step whose answer is missing asks again. */
+const STASH_RETRY = 200;
+/** stash_bp answered or sent a notice this session: it is installed. */
+let stashHeard = false;
 
 /** @param {Player} player @param {Objective} obj */
 const stashKey = (player, obj) => `${player.id}|${obj.item ?? ""}|${obj.name ?? ""}`;
 
 /**
  * What a collect step has: the live inventory plus the saved pages. Undefined while stash_bp's answer is pending,
- * so a count taken between a page move and its answer can't make progress dip.
- * @param {Player} player @param {Objective} obj @returns {number | undefined}
+ * so a count taken between a page move and its answer can't make progress dip. When stash_bp is installed but its
+ * answer is missing, the live count, but never less than the progress the step already has (`had`).
+ * @param {Player} player @param {Objective} obj @param {number} [had] the step's progress now
+ * @returns {number | undefined}
  */
-function collectCount(player, obj) {
+function collectCount(player, obj, had = 0) {
   const live = countItem(player, obj.item, obj.name);
   const key = stashKey(player, obj);
   let rows = stashRows.get(key);
@@ -727,6 +736,15 @@ function collectCount(player, obj) {
       return undefined;
     }
     if (now - asked < STASH_WAIT) return undefined;
+    if (stashHeard) {
+      // Installed but no answer: what the pages hold is unknown, not zero. Keep what the step has; ask again later.
+      if (now - asked >= STASH_RETRY) {
+        stashAsked.set(key, now);
+        stashParts.delete(key);
+        send("realm:stash_count_ask", { player: player.id, item: obj.item, name: obj.name });
+      }
+      return Math.max(live, had);
+    }
     stashAsked.delete(key);
     stashParts.delete(key);
     rows = [];
@@ -745,8 +763,15 @@ function collectCount(player, obj) {
 function stashCountReply(message) {
   try {
     const m = JSON.parse(message);
-    if (!m || typeof m.player !== "string" || !Array.isArray(m.rows)) return;
+    if (!m || typeof m.player !== "string") return;
+    stashHeard = true;
     const key = `${m.player}|${typeof m.item === "string" ? m.item : ""}|${typeof m.name === "string" ? m.name : ""}`;
+    if (m.unknown === true) {
+      // stash_bp couldn't read a page: count without it now (never lowering), and ask again after STASH_RETRY.
+      if (!stashRows.has(key)) stashAsked.set(key, system.currentTick - STASH_WAIT);
+      return;
+    }
+    if (!Array.isArray(m.rows)) return;
     const rev = typeof m.rev === "string" ? m.rev : undefined;
     const known = stashRev.get(m.player);
     if (known !== undefined && rev !== known) return;
@@ -783,12 +808,19 @@ function stashChanged(message) {
   try {
     const m = JSON.parse(message);
     if (!m || typeof m.player !== "string") return;
+    stashHeard = true;
     if (typeof m.rev === "string") stashRev.set(m.player, m.rev);
     for (const map of [stashRows, stashAsked, stashParts]) for (const key of [...map.keys()]) if (key.startsWith(`${m.player}|`)) map.delete(key);
     invChanged.add(m.player);
   } catch {
     // ignored
   }
+}
+
+/** A player left: forget what the bridge knew and asked for them. @param {string} pid */
+function stashForget(pid) {
+  stashRev.delete(pid);
+  for (const map of [stashRows, stashAsked, stashParts]) for (const key of [...map.keys()]) if (key.startsWith(`${pid}|`)) map.delete(key);
 }
 // stash-bridge:end
 
@@ -3629,7 +3661,7 @@ export function tickPlayer(player, list) {
               // Counted again only when the inventory changed (or every 10 seconds, or for a step not counted yet).
               const key = objKey(e, i);
               if (!recount && collectSeen.get(player.id)?.has(key)) break;
-              const have = collectCount(player, obj);
+              const have = collectCount(player, obj, e.st.o?.[i] ?? 0);
               if (have === undefined) break; // stash_bp's answer is pending: counted next second
               collected.push(key);
               bump(player, e, i, have, true);
@@ -3901,6 +3933,7 @@ export function playerGone(pid) {
   askCool.delete(pid);
   dreams.delete(pid);
   invChanged.delete(pid);
+  stashForget(pid);
   collectedAt.delete(pid);
   collectSeen.delete(pid);
   holdUntil.delete(pid);

@@ -1881,9 +1881,14 @@ async function settingsMenu(player) {
   hooks.bar(player, "§aInventory settings saved");
 }
 
+/** At most this many lines of the export list go into the confirm form; the rest are summed up in one line. */
+const RECOVER_LINES = 18;
+
 /**
- * Operator recovery for a stuck inventory journal: the operator confirms what will happen, the summary is read
- * again on submit (the journal may have changed or been cleared meanwhile), and only then is the export run.
+ * Operator recovery for a stuck inventory journal: the operator sees exactly what will be exported (only what the
+ * player no longer carries from the saved before-image) and confirms; the plan is computed again on submit and must be
+ * the same (the player's inventory or the journal may have changed meanwhile), and only then is the export run. The
+ * form is retried while the operator's chat is still closing (UserBusy).
  * @param {Player} operator @param {Player} target
  * @returns {Promise<string>}
  */
@@ -1892,20 +1897,39 @@ export async function recoverInventory(operator, target) {
   if (!alive(operator) || !isOp(operator)) return "Only an operator who is here and healthy can recover an inventory.";
   const first = pendingSummary(target, own);
   if (!first) return `${target.name} has nothing waiting for recovery.`;
+  if (!alive(target)) return `${target.name} is not alive right now; run it again once they have respawned. Nothing changed.`;
+  if (first.error) return `The saved images could not be read, nothing changed (${first.error}).`;
+  /** @param {{ id: string, name: string | undefined, n: number }} l */
+  const line = (l) => `- ${l.n} x ${l.name ? `${l.name} (${pretty(l.id)})` : pretty(l.id)}`;
+  const list = first.lines.slice(0, RECOVER_LINES).map(line);
+  if (first.lines.length > RECOVER_LINES) list.push(`- and ${first.lines.length - RECOVER_LINES} more stacks`);
+  const changed = first.changed.slice(0, RECOVER_LINES).map(line);
+  if (first.changed.length > RECOVER_LINES) changed.push(`- and ${first.changed.length - RECOVER_LINES} more`);
+  let body = first.items
+    ? `${target.name}'s inventory move did not finish. Of the ${first.kept} stacks in their saved before-image, these ${first.items} are no longer in their inventory:\n` +
+      `${list.join("\n")}\n` +
+      `Confirming puts them into ${first.chests} chest(s) on empty floor next to you, then clears the journal. Stacks they still carry (inventory, cursor, armor and offhand) are not copied, and their inventory is not touched. ` +
+      `Anything they dropped or put in a chest since counts as missing: check with them first.` +
+      (first.started ? "\nThis export was already started: only the stacks not yet placed are listed, and it must be finished in the dimension where it began." : "")
+    : `${target.name}'s inventory move did not finish, but they still carry everything in their saved before-image${first.changed.length ? " except the items below" : ""}. Confirming exports nothing and clears the journal.`;
+  if (first.changed.length) {
+    body +=
+      `\n\nThey carry an item of the same type as each of these, but it was used, renamed, enchanted or dyed since, so it may be the same item or a new one:\n` +
+      `${changed.join("\n")}\n` +
+      `These are not exported unless you choose "Also export the changed items" (if they are the same items, that makes a second copy: check with them first).`;
+  }
   const form = new ActionFormData()
     .title("§lRecover inventory")
-    .body(
-      `${target.name}'s inventory move did not finish. Their saved before-image holds ${first.items} stacks.\n` +
-        `Confirming puts those stacks into ${first.chests} chest(s) on empty floor next to you, then clears the journal. ` +
-        `Their current inventory is not touched, so inspect it and back up what matters first: items they still carry will exist twice.` +
-        (first.started ? "\nAn export was already started: it must be finished in the dimension where it began." : "")
-    )
-    .button("§cExport to chests")
-    .button("Cancel");
-  const res = /** @type {any} */ (await form.show(operator));
-  if (res.canceled || res.selection !== 0) return "Canceled, nothing changed.";
-  if (!alive(operator) || !isOp(operator) || !target.isValid) return "The operator or the player is no longer available; nothing was exported. Run it again.";
+    .body(body)
+    .button(first.items ? "§cExport to chests" : "§cClear the journal");
+  if (first.changed.length) form.button(`§cAlso export the changed items (${first.chestsWithChanged} chest(s))`);
+  form.button("Cancel");
+  const res = /** @type {any} */ (await showForm(operator, form, 20));
+  const choices = first.changed.length ? 2 : 1;
+  if (!res || res.canceled || typeof res.selection !== "number" || res.selection >= choices) return "Canceled, nothing changed.";
+  const withChanged = res.selection === 1;
+  if (!alive(operator) || !isOp(operator) || !alive(target)) return "The operator or the player is no longer available; nothing was exported. Run it again.";
   const again = pendingSummary(target, own);
-  if (!again || again.id !== first.id || again.items !== first.items) return "The journal changed while you were deciding; nothing was exported. Run it again.";
-  return exportPending(operator, target, own).message;
+  if (!again || again.key !== first.key) return "The journal or the player's inventory changed while you were deciding; nothing was exported. Run it again.";
+  return exportPending(operator, target, own, withChanged).message;
 }
