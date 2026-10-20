@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "fishing_bp";
-const VERSION = "1.1.13";
+const VERSION = "1.1.14";
 const NAME = "Fishing 2.0";
 /** @type {string[]} */
 const PREFIXES = ["fishing"];
@@ -349,10 +349,13 @@ function ownerOfKey(st, k) {
 /**
  * The owner of a key seen for the first time: the pack using its prefix, else the pack being evaluated, else the
  * pack in the call stack (a bundle's files are scripts/<folder>/...). One stack walk per new prefix at most.
+ * A prefix two packs use or declare (stored as null) is ambiguous: its keys stay unowned, whoever touches them first.
  * @param {State} st @param {string} k @returns {Rec | null}
  */
 function claim(st, k) {
-  const o = st.prefixOwner.get(prefixOf(k)) ?? st.cur ?? owner(st, true, st.packs.size > 1 ? site() : "");
+  const by = st.prefixOwner.get(prefixOf(k));
+  if (by === null) return null;
+  const o = by ?? st.cur ?? owner(st, true, st.packs.size > 1 ? site() : "");
   if (o) learn(st, k, o);
   return o;
 }

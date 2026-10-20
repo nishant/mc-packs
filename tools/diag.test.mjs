@@ -275,6 +275,27 @@ test("a declared namespace collision never guesses the owner of an untouched key
   assert.equal(mc.world.props.get("shared:untouched"), "keep ambiguous data");
 });
 
+test("F23: a key in a namespace two packs declare stays unowned when one of them writes it; an unknown one is the writer's", async () => {
+  const mc = fakeServer();
+  globalThis.__mcFake = mc;
+  delete globalThis.__realmDiag;
+  delete globalThis.__realmDiagWrapped;
+  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  await loadCopy(dir, "a_bp", "1.0.0", ["shared"]);
+  await loadCopy(dir, "b_bp", "1.0.0", ["shared"]);
+  // b's module is the one being evaluated: what it writes now is b's, unless the namespace says otherwise.
+  mc.world.setDynamicProperty("shared:new", "ambiguous");
+  mc.world.setDynamicProperty("mystery:z", "b wrote it");
+  mc.step(1);
+  mc.system.sendScriptEvent("realm:diag_forget", JSON.stringify({ id: "f23", pack: "b_bp", confirm: "FORGET b_bp" }));
+  mc.step(2);
+  assert.equal(mc.world.props.get("shared:new"), "ambiguous", "two packs declare 'shared': nobody owns it, so forgetting b keeps it");
+  assert.equal(mc.world.props.has("mystery:z"), false, "an undeclared namespace belongs to the pack that first wrote it");
+  // Writing it again after b's forget is not blocked either: it was never b's.
+  mc.world.setDynamicProperty("shared:new", "still writable");
+  assert.equal(mc.world.props.get("shared:new"), "still writable");
+});
+
 test("generated diagnostics declare world namespaces, not item-only namespaces", () => {
   for (const [pack, expected] of [
     ["map_bp", ["map"]],

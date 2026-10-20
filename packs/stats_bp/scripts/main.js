@@ -199,15 +199,40 @@ function applySidebar() {
 // Stats ticker: each player's own stats above the hotbar
 // ---------------------------------------------------------------------------
 
-/** Send an unchanged ticker again after this many ticks, so the action bar doesn't fade. */
+/**
+ * Send an unchanged ticker again after this many ticks, so the action bar doesn't fade. A number that changed on the
+ * same stat waits for this too (shown within 2 seconds); a new stat, a setting change or the end of another pack's
+ * note draws at once. Writing the bar is the ticker's biggest cost, so it writes only this often.
+ */
 const REFRESH_TICKS = 40;
+/** Players are spread over the second: each is handled once every 20 ticks, in one of 4 groups 5 ticks apart. */
+const TICKER_GROUPS = 4;
+const TICKER_STEP = 20 / TICKER_GROUPS;
+/**
+ * How long a stat's ranking (every name's score, read from the board) is reused for the ticker's "#2 of 9": the
+ * player's own score is read live and placed against it, so their own rank moves at once and only the others' scores
+ * can be up to 5 seconds old. Reading a board reads every name on it (everyone who ever played).
+ */
+const RANK_TICKS = 100;
 
 /**
- * Per player: the stat it's on, seconds on it, what was last drawn, when, and where ("bar" = the action bar,
- * "hud" = a line under the Coordinates HUD, which owns the bar while it's on).
- * @type {Map<string, { index: number, seconds: number, text: string, at: number, via?: "bar" | "hud" }>}
+ * Per player: the stat it's on, seconds on it, what was last drawn (and for which stat, `head`), when, and where
+ * ("bar" = the action bar, "hud" = a line under the Coordinates HUD, which owns the bar while it's on).
+ * @type {Map<string, { index: number, seconds: number, text: string, head?: string, at: number, via?: "bar" | "hud" }>}
  */
 const tickers = new Map();
+/** player id -> its ticker group (0 to TICKER_GROUPS - 1), from a hash of the id so it never shifts as players come and go. */
+const tickerGroups = new Map();
+/** @param {string} id */
+function groupOf(id) {
+  let g = tickerGroups.get(id);
+  if (g === undefined) {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+    tickerGroups.set(id, (g = (h >>> 0) % TICKER_GROUPS));
+  }
+  return g;
+}
 /** player id -> tick until which another pack's action bar message is left alone (realm:actionbar) */
 const pausedUntil = new Map();
 /** Players who see the Coordinates HUD, from its realm:hud_state, and when it last said so. */
@@ -253,6 +278,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   tickers.delete(playerId);
   pausedUntil.delete(playerId);
   tickerPrefs.delete(playerId);
+  tickerGroups.delete(playerId);
 });
 
 /** @param {unknown} id */
@@ -290,27 +316,74 @@ function prefsOf(player) {
 }
 
 /**
- * The ticker's text for a player, advancing to the next stat when its time is up. "" = nothing to show.
+ * Which stat the player's ticker is on, advancing to the next one when its time is up: a stat id, "all" (every
+ * chosen stat on one line) or "" (none chosen: nothing to show). Reads no scores.
  * @param {Player} player @param {{ index: number, seconds: number }} t
  */
-function tickerText(player, t) {
-  const { shown, lc, vc, full, all, seconds } = prefsOf(player);
+function tickerHead(player, t) {
+  const { shown, all, seconds } = prefsOf(player);
   if (!shown.length) return "";
-  /** @param {Stat} stat */
-  const one = (stat) => {
-    if (!full) return `${lc}${stat.short} ${vc}${fmt(stat, scoreOf(stat.id, player.name))}`;
-    const list = ranked(stat.id);
-    const rank = placeOf(stat.id, player.name) + 1;
-    // A ranked player's score is in the list already (read this tick); an unranked one has 0 or none.
-    const score = rank > 0 ? list[rank - 1].score : scoreOf(stat.id, player.name);
-    return `${lc}${stat.label} ${vc}${fmt(stat, score)}${rank > 0 ? ` ${lc}#${rank} of ${list.length}` : ""}`;
-  };
-  if (all) return shown.map(one).join("§r   ");
+  if (all) return "all";
   if (t.seconds >= seconds) {
     t.seconds = 0;
     t.index++;
   }
-  return one(shown[t.index % shown.length]);
+  return shown[t.index % shown.length].id;
+}
+
+/**
+ * The ticker's text for the stat `head` (from tickerHead). "" = nothing to show.
+ * @param {Player} player @param {string} head
+ */
+function tickerText(player, head) {
+  const { shown, lc, vc, full } = prefsOf(player);
+  /** @param {Stat} stat */
+  const one = (stat) => {
+    const score = scoreOf(stat.id, player.name);
+    if (!full) return `${lc}${stat.short} ${vc}${fmt(stat, score)}`;
+    const { rank, of } = tickerPlace(stat.id, player.name, score);
+    return `${lc}${stat.label} ${vc}${fmt(stat, score)}${rank > 0 ? ` ${lc}#${rank} of ${of}` : ""}`;
+  };
+  if (head === "all") return shown.map(one).join("§r   ");
+  const stat = shown.find((st) => st.id === head);
+  return stat ? one(stat) : "";
+}
+
+/**
+ * The ticker's rankings, reused for RANK_TICKS: per stat, the scores above 0 from highest to lowest, and each name's
+ * score in that list.
+ * @type {Map<string, { tick: number, scores: number[], byName: Map<string, number> }>}
+ */
+const tickerBoards = new Map();
+
+/**
+ * Where `score` (the player's own, read now) places `name` on a stat's board: `rank` 1 = first (ties share a place),
+ * 0 = not on it (a score of 0 or none); `of` = names on it. A binary search, never a walk of the board.
+ * @param {string} id @param {string} name @param {number} score
+ */
+function tickerPlace(id, name, score) {
+  const now = system.currentTick;
+  let b = tickerBoards.get(id);
+  if (!b || now - b.tick >= RANK_TICKS || now < b.tick) {
+    const { list } = rankedInfo(id);
+    /** @type {Map<string, number>} */
+    const byName = new Map();
+    for (const r of list) if (!byName.has(r.name)) byName.set(r.name, r.score);
+    tickerBoards.set(id, (b = { tick: now, scores: list.map((r) => r.score), byName }));
+  }
+  const { scores, byName } = b;
+  // How many saved scores are above `score` (scores run from highest to lowest).
+  let lo = 0;
+  let hi = scores.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (scores[mid] > score) lo = mid + 1;
+    else hi = mid;
+  }
+  const saved = byName.get(name);
+  const above = lo - (saved !== undefined && saved > score ? 1 : 0); // their own older entry is not someone else
+  const of = scores.length - (saved !== undefined ? 1 : 0) + (score > 0 ? 1 : 0);
+  return { rank: score > 0 ? above + 1 : 0, of };
 }
 
 /** @param {Player} player */
@@ -328,9 +401,11 @@ function clearTicker(player, t) {
 
 system.runInterval(() => {
   const now = system.currentTick;
+  const group = Math.floor(now / TICKER_STEP) % TICKER_GROUPS;
   const hudAlive = now - hudHeard < HUD_STALE_TICKS;
   for (const player of world.getAllPlayers()) {
     try {
+      if (groupOf(player.id) !== group) continue; // its turn comes in another tick of this second
       let t = tickers.get(player.id);
       if (!tickerOn(player)) {
         if (t) {
@@ -341,25 +416,27 @@ system.runInterval(() => {
       }
       if (!t) tickers.set(player.id, (t = { index: 0, seconds: 0, text: "", at: -Infinity }));
       t.seconds++;
-      const text = tickerText(player, t);
       /** @type {"bar" | "hud"} */
       const via = hudAlive && hudPlayers.has(player.id) ? "hud" : "bar";
       if (t.via === "hud" && via === "bar") toHud(player.id, ""); // the HUD went off: its line goes too
-      const same = text === t.text && via === t.via;
-      if (same && (!text || now - t.at < REFRESH_TICKS)) continue; // nothing new (and an empty ticker isn't resent)
+      if (via === "bar" && (pausedUntil.get(player.id) ?? 0) > now) continue; // another pack's message is on the bar
+      const head = tickerHead(player, t);
+      // The same stat in the same place, drawn less than REFRESH_TICKS ago: unchanged, or only its number moved,
+      // which shows with the next refresh. Nothing is read or written for it this second.
+      if (head === t.head && via === t.via && now - t.at < REFRESH_TICKS) continue;
+      const text = head ? tickerText(player, head) : "";
+      if (!text && !t.text) continue; // nothing to show, and nothing of ours to take off
       if (via === "hud") toHud(player.id, text);
-      else {
-        if ((pausedUntil.get(player.id) ?? 0) > now) continue; // another pack's message is on the bar
-        player.onScreenDisplay.setActionBar(text);
-      }
+      else player.onScreenDisplay.setActionBar(text);
       t.text = text;
+      t.head = head;
       t.via = via;
       t.at = now;
     } catch (e) {
       console.warn(`[stats] ticker: ${e}`);
     }
   }
-}, 20);
+}, TICKER_STEP);
 
 onScriptEvent(
   ["realm:actionbar", "realm:hud_state"],
@@ -430,7 +507,8 @@ const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel
  * (every read is a call into the game), and `rank` finds a name's place without walking the list: on a big server the
  * boards hold everyone who ever played, and walking them for each ticker cost about 16 ms a second with 40 players
  * and 1,000 names.
- * @type {Map<string, { tick: number, list: Ranked[], rank: Map<string, number> }>}
+ * `rank` is a name's index in the list; `place` its place (0 = first), shared by tied scores (the number of higher scores).
+ * @type {Map<string, { tick: number, list: Ranked[], rank: Map<string, number>, place: Map<string, number> }>}
  */
 const rankedCache = new Map();
 
@@ -452,10 +530,17 @@ function rankedInfo(id) {
   list.sort((a, b) => b.score - a.score);
   /** @type {Map<string, number>} */
   const rank = new Map();
+  /** @type {Map<string, number>} */
+  const place = new Map();
+  let first = 0; // index of the first entry with this entry's score: tied scores share a place, as on the ticker
   list.forEach((r, i) => {
-    if (!rank.has(r.name)) rank.set(r.name, i);
+    if (i > 0 && r.score !== list[i - 1].score) first = i;
+    if (!rank.has(r.name)) {
+      rank.set(r.name, i);
+      place.set(r.name, first);
+    }
   });
-  const info = { tick: now, list, rank };
+  const info = { tick: now, list, rank, place };
   rankedCache.set(id, info);
   return info;
 }
@@ -463,8 +548,11 @@ function rankedInfo(id) {
 /** @param {string} id */
 const ranked = (id) => rankedInfo(id).list;
 
-/** A name's place on a stat's board (0 = first), or -1 when it isn't on it. @param {string} id @param {string} name */
-const placeOf = (id, name) => rankedInfo(id).rank.get(name) ?? -1;
+/**
+ * A name's place on a stat's board (0 = first; tied scores share a place, as on the ticker), or -1 when it isn't on it.
+ * @param {string} id @param {string} name
+ */
+const placeOf = (id, name) => rankedInfo(id).place.get(name) ?? -1;
 
 /** @param {boolean} on */
 const state = (on) => (on ? "Enabled" : "Disabled");
@@ -594,17 +682,20 @@ async function leaderboardMenu(player) {
 
 /** @param {Player} player @param {Stat} stat @returns {Promise<boolean>} true = back to the list */
 async function leaderboard(player, stat) {
-  const list = ranked(stat.id);
+  const { list, rank } = rankedInfo(stat.id);
   const medals = ["§6§l1.§r", "§7§l2.§r", "§c§l3.§r"];
   const size = get("leaderboardSize");
+  // Numbered by place: tied scores share a number, as in My stats and on the ticker.
+  let n = 0;
   const lines = list.slice(0, size).map((s, i) => {
+    if (i > 0 && s.score !== list[i - 1].score) n = i;
     const me = s.name === player.name;
-    const place = medals[i] ?? `§8${i + 1}.`;
+    const place = medals[n] ?? `§8${n + 1}.`;
     return `${place} ${me ? "§b§l" : "§r"}${s.name}§r  ${fmt(stat, s.score)}`;
   });
-  const myRank = placeOf(stat.id, player.name);
-  if (myRank >= size) {
-    lines.push("§8...", `§8${myRank + 1}. §b${player.name}§r  ${fmt(stat, list[myRank].score)}`);
+  const myIndex = rank.get(player.name) ?? -1;
+  if (myIndex >= size) {
+    lines.push("§8...", `§8${placeOf(stat.id, player.name) + 1}. §b${player.name}§r  ${fmt(stat, list[myIndex].score)}`);
   }
 
   const res = await show(
