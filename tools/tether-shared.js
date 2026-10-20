@@ -36,7 +36,9 @@
 //     `maxCooldown`, so a mob that keeps falling or being pushed is not teleported every check. guard.snaps counts.
 //
 //   freeSpotNear(dim, home, radius, seed?)   a standable spot (floor under, feet and head free, no liquid) within
-//                                            radius of home, or undefined; `seed` turns the search so mobs differ
+//                                            radius of home that a mob can walk to from home (no wall or fence in
+//                                            the way), at home's floor height first, never 2 up or down; or
+//                                            undefined; `seed` turns the search so mobs differ
 //   settledBelow(ent, anchor)                 true when the mob dropped straight down from its anchor (its floor went
 //                                            or it was put a block high) and stands on the ground: move the anchor
 //                                            there instead of lifting it back up, which would loop.
@@ -68,9 +70,14 @@ function block(dim, x, y, z) {
   }
 }
 
+/** Blocks a mob can't step up onto from the side (taller than a block, or a gate). */
+const NO_STEP = /fence|wall|gate|iron_bars|pane|border_block/;
+
 /**
- * A standable spot within `radius` of `home` (floor under, feet and head free, no liquid), nearest rings first,
- * never `home`'s own block unless nothing else fits. Undefined when none (or unloaded).
+ * A standable spot within `radius` of `home` that a mob can walk to from home: floor under, feet and head free, no
+ * liquid, and nothing in the straight line from home that it can't step over (a wall, a fence, a gate). Spots at
+ * home's own floor height come first, then home's own block, then a block lower, then a block higher; never two up
+ * (a roof or a wall top) or two down. Undefined when none (or unloaded).
  * @param {any} dim @param {Vec} home @param {number} radius @param {number} [seed]
  * @returns {Vec | undefined}
  */
@@ -82,9 +89,9 @@ export function freeSpotNear(dim, home, radius, seed = 0) {
   const rings = [];
   for (let r = 1.5; r <= Math.max(1.5, radius); r += 1.5) rings.push(r);
   const turn = ((seed % 8) + 8) % 8;
-  /** @param {number} x @param {number} z */
-  const at = (x, z) => {
-    for (const dy of [0, 1, -1, 2, -2]) {
+  /** @param {number} x @param {number} z @param {number[]} dys */
+  const at = (x, z, dys) => {
+    for (const dy of dys) {
       const y = hy + dy;
       const feet = block(dim, x, y, z);
       if (!open(feet)) continue;
@@ -94,17 +101,37 @@ export function freeSpotNear(dim, home, radius, seed = 0) {
     }
     return undefined;
   };
-  for (const r of rings) {
-    for (let k = 0; k < 8; k++) {
-      const a = ((k + turn) % 8) * (Math.PI / 4);
-      const x = Math.floor(home.x + Math.cos(a) * r);
-      const z = Math.floor(home.z + Math.sin(a) * r);
-      if (x === hx && z === hz) continue;
-      const s = at(x, z);
-      if (s) return s;
+  /** Can a mob walk the straight line from home to this column (stepping up at most one plain block)? @param {number} x @param {number} z */
+  const reach = (x, z) => {
+    const tx = x + 0.5;
+    const tz = z + 0.5;
+    const d = Math.hypot(tx - home.x, tz - home.z);
+    const n = Math.ceil(d / 0.5);
+    for (let i = 1; i < n; i++) {
+      const cx = Math.floor(home.x + ((tx - home.x) * i) / n);
+      const cz = Math.floor(home.z + ((tz - home.z) * i) / n);
+      if ((cx === hx && cz === hz) || (cx === x && cz === z)) continue;
+      const b = block(dim, cx, hy, cz);
+      if (open(b)) continue;
+      if (!b || NO_STEP.test(b.typeId) || !open(block(dim, cx, hy + 1, cz)) || !open(block(dim, cx, hy + 2, cz))) return false;
     }
-  }
-  return at(hx, hz);
+    return true;
+  };
+  /** @param {number[]} dys */
+  const ringsAt = (dys) => {
+    for (const r of rings) {
+      for (let k = 0; k < 8; k++) {
+        const a = ((k + turn) % 8) * (Math.PI / 4);
+        const x = Math.floor(home.x + Math.cos(a) * r);
+        const z = Math.floor(home.z + Math.sin(a) * r);
+        if (x === hx && z === hz) continue;
+        const s = at(x, z, dys);
+        if (s && reach(x, z)) return s;
+      }
+    }
+    return undefined;
+  };
+  return ringsAt([0]) ?? at(hx, hz, [0]) ?? ringsAt([-1]) ?? ringsAt([1]) ?? at(hx, hz, [-1, 1]);
 }
 
 /**

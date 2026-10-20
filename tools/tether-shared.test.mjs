@@ -3,7 +3,12 @@
 // (water, lava, a hole, far beyond the limit) still teleports, to a free spot near home, with a growing cooldown.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSnapGuard, createTether, freeSpotNear, settledBelow } from "./tether-shared.js";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+// TETHER_SHARED=<an older copy of tether-shared.js> runs these against it (the before evidence).
+const shared = await import(process.env.TETHER_SHARED ? pathToFileURL(path.resolve(process.env.TETHER_SHARED)).href : "./tether-shared.js");
+const { createSnapGuard, createTether, freeSpotNear, settledBelow } = shared;
 
 /** Flat grass at y 63 (floor y 63, feet at 64), water and lava where asked. */
 function flatDim({ water = new Set(), lava = new Set(), holes = new Set() } = {}) {
@@ -210,4 +215,33 @@ test("snap guard: free first, then a doubling wait while put-backs keep coming, 
   assert.equal(g.allow("a", 700), true, "quiet for a window");
   assert.equal(g.snaps, 4);
   assert.equal(g.count("a"), 4);
+});
+
+/** Flat grass at y 63 plus extra blocks: `extra` maps "x,y,z" to a type id. */
+function builtDim(extra) {
+  const base = flatDim();
+  return {
+    getBlock(p) {
+      const t = extra.get(`${p.x},${p.y},${p.z}`);
+      return t ? { typeId: t, isAir: false, isLiquid: false } : base.getBlock(p);
+    },
+  };
+}
+
+test("freeSpotNear never puts a mob on a roof or wall top two blocks up: home itself instead", () => {
+  const extra = new Map();
+  // A 2-high wall all around home (every column within 4 blocks but home's own), open on top.
+  for (let x = -4; x <= 4; x++) for (let z = -4; z <= 4; z++) if (x || z) for (const y of [64, 65]) extra.set(`${x},${y},${z}`, "minecraft:stone");
+  const s = freeSpotNear(builtDim(extra), home, 3, 0);
+  assert.ok(s, "a spot");
+  assert.deepEqual([Math.floor(s.x), s.y, Math.floor(s.z)], [0, 64, 0], `home, not up on the wall (${JSON.stringify(s)})`);
+});
+
+test("freeSpotNear never picks a spot behind a fence (a closed pen next to home)", () => {
+  const extra = new Map();
+  for (let z = -5; z <= 5; z++) extra.set(`1,64,${z}`, "minecraft:oak_fence");
+  for (let seed = 0; seed < 8; seed++) {
+    const s = freeSpotNear(builtDim(extra), home, 3, seed);
+    assert.ok(s && Math.floor(s.x) <= 0, `seed ${seed}: on home's side of the fence (${JSON.stringify(s)})`);
+  }
 });
