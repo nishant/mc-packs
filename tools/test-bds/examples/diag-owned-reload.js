@@ -30,7 +30,8 @@ export default async function (t) {
     for (const k of ["decl:a", "help:orphan", "mystery:z"]) send("realm:probe_set", k);
     await t.wait(10);
     const b = await ping("p1");
-    t.check(b.probe_bp.props === 2, `phase 1: the probe wrote decl:a and has its probe:big (${b.probe_bp.props})`);
+    // Written through the probe's own wrapper, so while it is running all 3 seeded keys plus probe:big are the probe's.
+    t.check(b.probe_bp.props === 4, `phase 1: the probe wrote decl:a, help:orphan and mystery:z and has its probe:big (${b.probe_bp.props})`);
     t.restart("seeded three keys; restarting so no pack has touched them");
   }
 
