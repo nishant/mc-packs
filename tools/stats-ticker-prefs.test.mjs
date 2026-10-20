@@ -54,7 +54,7 @@ let tick = 100;
 let listed = 0; // world.getAllPlayers() calls
 /**
  * Who is online, as in the game: a player who goes is announced by playerLeave, one who comes by playerSpawn (the
- * ticker keeps its groups from those events, not from listing every player each step).
+ * ticker keeps its player list from those events, not from listing every player each pass).
  */
 function setPlayers(list) {
   const gone = players.filter((p) => !list.includes(p));
@@ -236,7 +236,7 @@ function ann() {
   setPlayers([player]);
   return player;
 }
-/** One second of game ticks: each interval runs as often as it asked (the ticker every 5 ticks, one player group each). */
+/** One second of game ticks: each interval runs as often as it asked (the ticker once, for every player). */
 function tickers() {
   const before = players[0].bars.length;
   for (let i = 0; i < 20; i++) {
@@ -340,7 +340,7 @@ test("both menus toggle the same preference and the cache drops without a tick w
 });
 
 // F45: the ticker's cost at 40 players. It writes the action bar at most every 2 seconds per player on one stat,
-// spreads players over the second, and ranks against a board read at most every 5 seconds per stat.
+// handles every player in one pass a second (4 passes 5 ticks apart measured dearer), and ranks against a board read at most every 5 seconds per stat.
 function onlyStat(id, style = "full") {
   settings.set("tickerEnabled", true);
   settings.set("tickerDefaultOn", true);
@@ -352,7 +352,7 @@ const restoreTicker = () => settings.reset();
 const plain = (/** @type {string | undefined} */ s) => String(s ?? "").replace(/§./g, "");
 const board = (id) => objectives.get(`stats_${id}`) ?? server.world.scoreboard.addObjective(`stats_${id}`);
 
-test("F45: players are spread over the second, and every one is drawn within it", () => {
+test("F45: every ticker is drawn in one pass a second, and every one within the first second", () => {
   onlyStat("deaths");
   const many = Array.from({ length: 40 }, (_, i) => new Player(`P${i}`));
   setPlayers(many);
@@ -366,8 +366,12 @@ test("F45: players are spread over the second, and every one is drawn within it"
   }
   tickers();
   assert.equal(many.filter((p) => p.bars.length === 1).length, 40, "each of the 40 players is drawn once in the first second");
-  assert.ok(perTick.size >= 3, `the writes are spread over several ticks (${[...perTick.values()].join(", ")})`);
-  assert.ok(Math.max(...perTick.values()) <= 20, `no tick draws more than half of them (${[...perTick.values()].join(", ")})`);
+  // Each pass costs about 0.35 ms on BDS whatever it does: one pass a second, not four (perf-soak at 10 and 40 players).
+  assert.equal(perTick.size, 1, `the writes come from one pass (${[...perTick.values()].join(", ")})`);
+  for (const p of many) p.bars.length = 0;
+  perTick.clear();
+  for (let s = 0; s < 3; s++) tickers();
+  assert.ok(perTick.size <= 3, `three seconds take at most three passes (${perTick.size} ticks wrote)`);
   restoreTicker();
 });
 
@@ -485,15 +489,15 @@ test("tied scores share a place in My stats and the leaderboard, as on the ticke
   restoreTicker();
 });
 
-test("F45: the ticker keeps its groups from join and leave events, not a player list every step", () => {
+test("F45: the ticker keeps its player list from join and leave events, not a full list every pass", () => {
   onlyStat("deaths");
   const many = Array.from({ length: 40 }, (_, i) => new Player(`L${i}`));
   setPlayers(many);
-  tickers(); // the first second may rebuild the groups once
+  tickers(); // the first second may rebuild the list once
   const from = listed;
   for (let s = 0; s < 5; s++) tickers();
   // The once-a-second tracking pass lists the players 5 times; the ticker at most once more (its 5-second rebuild),
-  // where listing them every step would add 20.
+  // where listing them every pass would add 5.
   assert.ok(listed - from <= 6, `getAllPlayers ran ${listed - from} times in 5 seconds`);
   // A player who joins is drawn within a second; one who left is no longer drawn.
   const late = new Player("Late");

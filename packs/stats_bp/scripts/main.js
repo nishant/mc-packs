@@ -205,9 +205,12 @@ function applySidebar() {
  * note draws at once. Writing the bar is the ticker's biggest cost, so it writes only this often.
  */
 const REFRESH_TICKS = 40;
-/** Players are spread over the second: each is handled once every 20 ticks, in one of 4 groups 5 ticks apart. */
-const TICKER_GROUPS = 4;
-const TICKER_STEP = 20 / TICKER_GROUPS;
+/**
+ * Every ticker is handled in one pass a second. Spreading players over 4 passes 5 ticks apart was measured dearer:
+ * each pass costs about 0.35 ms whatever it does, so stats_bp went from 0.163 to 0.208-0.210 ms a tick at 40 players
+ * and from 0.064 to 0.118-0.124 at 10 (perf-soak, October 2026).
+ */
+const TICKER_STEP = 20;
 /**
  * How long a stat's ranking (every name's score, read from the board) is reused for the ticker's "#2 of 9": the
  * player's own score is read live and placed against it, so their own rank moves at once and only the others' scores
@@ -221,35 +224,19 @@ const RANK_TICKS = 100;
  * @type {Map<string, { index: number, seconds: number, text: string, head?: string, at: number, via?: "bar" | "hud" }>}
  */
 const tickers = new Map();
-/** player id -> its ticker group (0 to TICKER_GROUPS - 1), from a hash of the id so it never shifts as players come and go. */
-const tickerGroups = new Map();
-/** @param {string} id */
-function groupOf(id) {
-  let g = tickerGroups.get(id);
-  if (g === undefined) {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-    tickerGroups.set(id, (g = (h >>> 0) % TICKER_GROUPS));
-  }
-  return g;
-}
 /**
- * The players in each ticker group (id -> Player), kept up to date by playerSpawn and playerLeave, so a step handles
- * its own group without listing every player: listing them all 4 times a second cost more than the work it saved
- * (stats_bp 0.17-0.20 -> 0.22 ms a tick at 40 players). Rebuilt from the player list every ROSTER_TICKS anyway, in
- * case an event was missed.
- * @type {Map<string, Player>[]}
+ * The players online (id -> Player), kept up to date by playerSpawn and playerLeave, so the ticker's pass doesn't
+ * list every player and read every id each second. Rebuilt from the player list every ROSTER_TICKS anyway, in case
+ * an event was missed.
+ * @type {Map<string, Player>}
  */
-const tickerRoster = Array.from({ length: TICKER_GROUPS }, () => new Map());
+const tickerRoster = new Map();
 const ROSTER_TICKS = 100;
 let rosterAt = -Infinity;
 /** @param {number} now */
 function rebuildRoster(now) {
-  for (const group of tickerRoster) group.clear();
-  for (const player of world.getAllPlayers()) {
-    const id = player.id;
-    tickerRoster[groupOf(id)].set(id, player);
-  }
+  tickerRoster.clear();
+  for (const player of world.getAllPlayers()) tickerRoster.set(player.id, player);
   rosterAt = now;
 }
 /** player id -> tick until which another pack's action bar message is left alone (realm:actionbar) */
@@ -297,14 +284,12 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   tickers.delete(playerId);
   pausedUntil.delete(playerId);
   tickerPrefs.delete(playerId);
-  tickerRoster[groupOf(playerId)].delete(playerId);
-  tickerGroups.delete(playerId);
+  tickerRoster.delete(playerId);
 });
-// A joining player is in its group's next step (within a second), not only after the next roster rebuild.
+// A joining player is in the next pass (within a second), not only after the next roster rebuild.
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
   try {
-    const id = player.id;
-    tickerRoster[groupOf(id)].set(id, player);
+    tickerRoster.set(player.id, player);
   } catch (e) {
     console.warn(`[stats] ticker roster: ${e}`);
   }
@@ -430,14 +415,12 @@ function clearTicker(player, t) {
 
 system.runInterval(() => {
   const now = system.currentTick;
-  const group = Math.floor(now / TICKER_STEP) % TICKER_GROUPS;
   const hudAlive = now - hudHeard < HUD_STALE_TICKS;
   if (now - rosterAt >= ROSTER_TICKS || now < rosterAt) rebuildRoster(now);
-  const members = tickerRoster[group]; // the others' turns come in the other ticks of this second
-  for (const [id, player] of members) {
+  for (const [id, player] of tickerRoster) {
     try {
       if (!player.isValid) {
-        members.delete(id);
+        tickerRoster.delete(id);
         continue;
       }
       let t = tickers.get(id);
