@@ -4,10 +4,6 @@
 // pack's default. Also: "Don't remind operators" stops the chat line for every operator, and a player who isn't an
 // operator can't open any of it.
 //   node tools/test-bds/run.mjs --quiet --only admin_bp,map_bp,elite_bp,cleanup_bp,find_bp,afk_bp,mail_bp --scenario tools/test-bds/examples/admin-size-profile.js --timeout 600
-import fs from "node:fs";
-
-const packFile = (/** @type {string} */ rel) => fs.readFileSync(new URL(`../../../packs/${rel}`, import.meta.url), "utf8");
-
 export default async function (t) {
   const PACKS = ["admin_bp", "map_bp", "elite_bp", "cleanup_bp", "find_bp", "afk_bp", "mail_bp"];
   for (const pack of PACKS) if (!t.packs.includes(pack)) t.fail(`this scenario needs ${pack}`);
@@ -49,11 +45,9 @@ export default async function (t) {
     await t.waitUntil(() => mapStates.length, { timeout: 40, message: "the Minimap's state" });
     return mapStates[0];
   }
-  // The Champions ceiling comes from the pack, not from this file: its default (Small Realm) and the size preset
-  // (Large server). When they are equal, that setting is "already matching" and is not in the lists.
-  const eliteSmall = Number(/^\s*maxAlive: (\d+),/m.exec(packFile("elite_bp/scripts/config.js"))?.[1]);
-  const eliteLarge = Number(/pack: "elite_bp", key: "maxAlive", large: (\d+)/.exec(packFile("admin_bp/scripts/presets.js"))?.[1]);
-  t.assert(Number.isFinite(eliteSmall) && Number.isFinite(eliteLarge), `read the Champions ceiling from the pack (${eliteSmall}, ${eliteLarge})`);
+  // Champions ceiling: default (Small Realm) and Large server preset. tools/test-bds/lib/size-profile-constants.test.mjs keeps these equal to elite_bp config.js and admin_bp presets.js.
+  const eliteSmall = 80;
+  const eliteLarge = 80;
   const LARGE = { "map_bp:budgetLevel": "low", "map_bp:mobRadiusMax": 24, "elite_bp:maxAlive": eliteLarge, "cleanup_bp:threshold": 1500, "find_bp:liveScanRadius": 8, "admin_bp:checkSeconds": 60, "mail_bp:sendCooldownSeconds": 30, "afk_bp:sleep.percent": 50 };
   const SMALL = { "map_bp:budgetLevel": "normal", "map_bp:mobRadiusMax": 32, "elite_bp:maxAlive": eliteSmall, "cleanup_bp:threshold": 500, "find_bp:liveScanRadius": 16, "admin_bp:checkSeconds": 30, "mail_bp:sendCooldownSeconds": 10, "afk_bp:sleep.percent": 100 };
   const changes = Object.keys(LARGE).filter((k) => LARGE[k] !== SMALL[k]).length;
