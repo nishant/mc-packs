@@ -200,9 +200,13 @@ to be swallowed and showed up 400 ticks later as "chunk did not load"), and a `t
 
 Ticking areas are saved with the world, so they outlive `t.restart()`. `t.loadArea` names each area
 `harness_<phase>_<n>` and saves the list of the areas it added (the test pack's own `harness:tickingAreas` property,
-not any pack's data); the next phase removes those areas, and only those, before its scenario starts. A scenario's own
-areas are never touched, a list entry that is not a harness name is refused, and a removal the game rejects is logged
-as `ticking area cleanup: ...` and the run goes on. Before this, the second phase's first `t.player()` at the same spot
+not any pack's data). A phase that calls `t.restart()` removes those areas, and only those, before it ends, while
+their chunks are loaded; the next phase removes whatever is still listed (an area the game would not remove, or a
+phase that ended another way) before its scenario starts. Removing them only at the start of the next run broke the
+atlas scenario: an area whose chunks were still loading from the save, removed then, left those chunks unloadable for
+the whole run, even under a new area over the same spot (`chunk at 2000,2000 did not load in 400 ticks`, with 1 of 10
+areas in use). A scenario's own areas are never touched, a list entry that is not a harness name is refused, and a
+removal the game rejects is logged as `ticking area cleanup: ...` and the run goes on. Before this, the second phase's first `t.player()` at the same spot
 failed with `tickingarea add circle ... failed: the command did not succeed` (the name was taken, and the old area's
 chunks were not readable yet). `lib/harness-lifecycle.test.mjs` runs `harness.js` against a fake game whose areas
 survive a restart; `lib/rain-seabed.test.mjs` runs Rain's real scripts, the scenario's hook and the scenario itself.

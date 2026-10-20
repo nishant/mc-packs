@@ -4,7 +4,7 @@
 import * as mc from "@minecraft/server";
 import * as gt from "@minecraft/server-gametest";
 import scenario from "./scenario.js";
-import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, ownedAreaName, radiusProblem, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
+import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, ownedAreaName, radiusProblem, readOwnedAreas, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
 
 const { world, system, GameMode, CommandPermissionLevel } = mc;
 
@@ -249,11 +249,16 @@ function runCmd(target, cmd) {
 }
 
 /**
- * Ticking areas are saved with the world, so the ones loadArea added in an earlier phase are still there after t.restart()
- * (their chunks load in the first seconds of the new run). Removes them, only the ones this harness added (its saved
- * list, checked name by name; a scenario's own areas are never touched) and says why when one cannot be removed.
+ * Ticking areas are saved with the world, so the ones loadArea added would still be there after t.restart(). Removes
+ * them, only the ones this harness added (its saved list, checked name by name; a scenario's own areas are never
+ * touched) and says why when one cannot be removed. It runs when a phase asks for the restart, while every chunk of its
+ * areas is loaded: removed at the start of the next phase instead, an area whose chunks were still loading from the
+ * save left those chunks unloadable for that whole run (no area added over them afterwards ever loaded them: the
+ * atlas scenario's phase 2, "chunk at 2000,2000 did not load in 400 ticks", with only the new area in use). The start
+ * of each phase still removes what is listed, for a phase that ended without asking for the restart.
+ * @param {string} what how the log names the areas
  */
-function removeEarlierAreas() {
+function removeOwnedAreas(what) {
   let raw;
   try {
     raw = world.getDynamicProperty(OWNED_AREAS_KEY);
@@ -262,12 +267,15 @@ function removeEarlierAreas() {
     return;
   }
   const { removed, problems } = releaseOwnedAreas(raw, (area) => runCmd(world.getDimension(area.dimension), `tickingarea remove ${area.name}`));
-  if (removed.length) out({ type: "log", msg: `ticking areas from earlier phases removed: ${removed.map((a) => a.name).join(", ")}` });
+  if (removed.length) out({ type: "log", msg: `${what} removed: ${removed.map((a) => a.name).join(", ")}` });
   for (const problem of problems) out({ type: "log", msg: `ticking area cleanup: ${problem}` });
+  // An area the game would not remove stays listed, so the next phase tries again.
+  const left = readOwnedAreas(raw).areas.filter((a) => !removed.some((r) => r.name === a.name && r.dimension === a.dimension));
   try {
-    world.setDynamicProperty(OWNED_AREAS_KEY, undefined); // this key only: a scenario's own saved data is not ours to clear
+    // this key only: a scenario's own saved data is not ours to clear
+    world.setDynamicProperty(OWNED_AREAS_KEY, left.length ? JSON.stringify(left) : undefined);
   } catch (e) {
-    out({ type: "log", msg: `ticking area cleanup: the saved list could not be cleared: ${e}` });
+    out({ type: "log", msg: `ticking area cleanup: the saved list could not be updated: ${e}` });
   }
 }
 
@@ -479,7 +487,7 @@ async function run(cfg) {
   started = true;
   const t = makeT(cfg);
   out({ type: "start", tick: system.currentTick });
-  removeEarlierAreas();
+  removeOwnedAreas("ticking areas from earlier phases");
   let ok = true, msg = "scenario finished", restart = false;
   try {
     await scenario(t);
@@ -488,6 +496,7 @@ async function run(cfg) {
     else { ok = false; msg = `scenario threw: ${e}${e && e.stack ? "\n" + e.stack : ""}`; }
   }
   if (ok && t.failures.length) { ok = false; msg = `${t.failures.length} check(s) failed: ${t.failures.join("; ")}`; }
+  if (restart) removeOwnedAreas("this phase's ticking areas (before the restart)");
   out({ type: "done", ok, msg, restart, phase: t.phase, forms: forms.length, messages: messages.length });
 }
 

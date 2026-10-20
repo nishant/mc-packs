@@ -139,10 +139,40 @@ test("a phase that starts after a physical restart can t.player at the same spot
   const one = await runPhase(saved, RESTART_SCENARIO, 1);
   assert.equal(one.done.ok, true, one.done.msg);
   assert.equal(one.done.restart, true);
-  assert.ok(saved.areas.length >= 2, "phase 1's areas are saved with the world");
   const two = await runPhase(saved, RESTART_SCENARIO, 2);
   assert.equal(two.done.ok, true, two.done.msg);
   assert.equal(two.done.restart, false);
+});
+
+test("the same, when phase 1's areas could not be removed and are saved with the world", async () => {
+  const saved = savedWorld({ failRemove: ["harness_1_1", "harness_1_2"] });
+  const one = await runPhase(saved, RESTART_SCENARIO, 1);
+  assert.equal(one.done.ok, true, one.done.msg);
+  assert.equal(one.done.restart, true);
+  assert.ok(saved.areas.length >= 2, "phase 1's areas are saved with the world");
+  saved.failRemove.clear();
+  const two = await runPhase(saved, RESTART_SCENARIO, 2);
+  assert.equal(two.done.ok, true, two.done.msg);
+  assert.equal(two.done.restart, false);
+  assert.ok(two.logs.some((l) => /ticking areas from earlier phases removed: harness_1_1, harness_1_2/.test(l)), two.logs.join("\n"));
+});
+
+// BDS: an earlier phase's area removed at the start of the next run, while its chunks were still loading from the save,
+// left those chunks unloadable for the whole run (atlas phase 2). A phase that asks for a restart removes its own areas
+// first, while their chunks are loaded, and saves an empty list.
+test("a phase that asks for a restart removes its own areas before it ends", async () => {
+  const saved = savedWorld();
+  saved.areas.push({ name: "pool", x: 900, z: 900, radius: 1 });
+  const one = await runPhase(saved, RESTART_SCENARIO, 1);
+  assert.equal(one.done.restart, true);
+  assert.deepEqual(saved.areas.map((a) => a.name), ["pool"], "only the scenario's own area is saved with the world");
+  assert.equal(saved.props.has("harness:tickingAreas"), false, "nothing is left for the next phase to remove");
+  assert.ok(one.logs.some((l) => /this phase's ticking areas \(before the restart\) removed: harness_1_1, harness_1_2/.test(l)), one.logs.join("\n"));
+  const removeAt = one.out.findIndex((o) => o.type === "log" && /before the restart/.test(o.msg));
+  assert.ok(removeAt >= 0 && removeAt < one.out.findIndex((o) => o.type === "done"), "removed before the phase reports done");
+  const last = await runPhase(saved, RESTART_SCENARIO, 2);
+  assert.equal(last.done.ok, true, last.done.msg);
+  assert.ok(last.areas.some((n) => n.startsWith("harness_2_")), "a phase that ends without a restart keeps its areas until the next run");
 });
 
 test("the areas of earlier phases are removed, nothing else, and the world never fills up over many restarts", async () => {
