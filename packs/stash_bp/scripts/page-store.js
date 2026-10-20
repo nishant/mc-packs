@@ -430,11 +430,17 @@ export function kindSignature(item) {
  * never exported again. Saved pages are not counted: they stay frozen while a journal is pending (no page reads or
  * writes), so they still hold exactly what they held before the failed move, and the before-image was never on them.
  * A live stack whose metadata can't be read cancels nothing (the before-image copy is exported: kept, not lost).
- * @param {Entry[]} before @param {Entry[]} live @returns {[number, number][]}
+ * An unstackable before-image item (a tool, armor, a shulker box) that matches nothing exactly but has a live item of
+ * the same type left over was most likely kept and then used, renamed, enchanted or dyed: it goes in `changed`, not in
+ * the plan, unless `withChanged` (the operator chose to export those too).
+ * @param {Entry[]} before @param {Entry[]} live @param {boolean} [withChanged]
+ * @returns {{ plan: [number, number][], changed: [number, number][] }}
  */
-export function missingPlan(before, live) {
+export function missingPlan(before, live, withChanged = false) {
   /** @type {Map<string, number>} */
   const have = new Map();
+  /** @type {Map<string, string>} exact kind -> type id, for unstackable live items */
+  const single = new Map();
   for (const e of live) {
     let key;
     try {
@@ -443,16 +449,50 @@ export function missingPlan(before, live) {
       continue;
     }
     have.set(key, (have.get(key) ?? 0) + e.item.amount);
+    if (e.item.maxAmount === 1) single.set(key, e.item.typeId);
   }
-  /** @type {[number, number][]} */
-  const plan = [];
+  /** @type {Entry[]} */
+  const unmatched = [];
+  /** @type {Map<number, number>} before-image slot -> how many are missing */
+  const missing = new Map();
   for (const e of before) {
     const key = kindSignature(e.item);
     const kept = Math.min(have.get(key) ?? 0, e.item.amount);
     if (kept) have.set(key, /** @type {number} */ (have.get(key)) - kept);
-    if (e.item.amount > kept) plan.push([e.s, e.item.amount - kept]);
+    if (e.item.amount > kept) {
+      missing.set(e.s, e.item.amount - kept);
+      if (!kept && e.item.maxAmount === 1) unmatched.push(e);
+    }
   }
-  return plan;
+  // Unstackable live items no exact match claimed, by type.
+  /** @type {Map<string, number>} */
+  const loose = new Map();
+  for (const [key, typeId] of single) {
+    const left = have.get(key) ?? 0;
+    if (left > 0) loose.set(typeId, (loose.get(typeId) ?? 0) + left);
+  }
+  /** @type {Set<number>} */
+  const changedSlots = new Set();
+  for (const e of unmatched) {
+    const left = loose.get(e.item.typeId) ?? 0;
+    if (!left) continue;
+    loose.set(e.item.typeId, left - 1);
+    changedSlots.add(e.s);
+  }
+  /** @type {[number, number][]} */
+  const plan = [];
+  /** @type {[number, number][]} */
+  const changed = [];
+  for (const e of before) {
+    const n = missing.get(e.s);
+    if (!n) continue;
+    if (changedSlots.has(e.s)) {
+      changed.push([e.s, n]);
+      if (!withChanged) continue;
+    }
+    plan.push([e.s, n]);
+  }
+  return { plan, changed };
 }
 
 /** The armor and offhand slots (EquipmentSlot values; the main hand is an inventory slot). */
@@ -465,14 +505,17 @@ const WORN = ["Head", "Chest", "Legs", "Feet", "Offhand"];
  * journaled no plan, keeps exporting the whole before-image in the same chest layout); a new one compares the
  * before-image with what the player carries now.
  * @param {Player} target @param {State["pending"]} pending @param {(e: Entry) => boolean} [skip]
+ * @param {boolean} [withChanged] also export unstackable items kept but changed since (see missingPlan)
  */
-function planOf(target, pending, skip) {
+function planOf(target, pending, skip, withChanged = false) {
   if (!pending) throw new Error("nothing pending");
   let before = loadSnapshot(target, pending.before);
   if (skip) before = before.filter((e) => !skip(e));
   const out = /** @type {ExportJournal | undefined} */ (pending.out);
   /** @type {[number, number][]} */
   let plan;
+  /** @type {[number, number][]} */
+  let changed = [];
   if (out?.x) plan = out.x;
   else if (out) plan = before.map((e) => /** @type {[number, number]} */ ([e.s, e.item.amount]));
   else {
@@ -498,7 +541,7 @@ function planOf(target, pending, skip) {
     } catch {
       // no equipment component: nothing worn
     }
-    plan = missingPlan(before, live);
+    ({ plan, changed } = missingPlan(before, live, withChanged));
   }
   const bySlot = new Map(before.map((e) => [e.s, e.item]));
   const items = plan.map(([s, n]) => {
@@ -510,12 +553,14 @@ function planOf(target, pending, skip) {
     return part;
   });
   const placed = new Set(out?.f ?? []);
-  return { plan, items, placed, before };
+  const changedItems = changed.map(([s, n]) => ({ item: /** @type {ItemStack} */ (bySlot.get(s)), n }));
+  return { plan, items, placed, before, changed: changedItems };
 }
 
 /**
  * What an operator is told before confirming, or undefined when nothing is pending: what will be exported (only what
- * the player no longer carries), and a key that changes whenever that does. `error` is set when the image can't be read.
+ * the player no longer carries), the unstackable items they kept but changed since (`changed`, exported only when the
+ * operator chooses to), and a key that changes whenever any of that does. `error` is set when the image can't be read.
  * @param {Player} target @param {(e: Entry) => boolean} [skip] entries the exporter leaves out (the pack's own buttons)
  */
 export function pendingSummary(target, skip) {
@@ -523,15 +568,17 @@ export function pendingSummary(target, skip) {
   if (!pending) return undefined;
   const started = !!pending.out;
   try {
-    const { plan, items, placed, before } = planOf(target, pending, skip);
+    const { plan, items, placed, before, changed } = planOf(target, pending, skip);
     /** @type {{ id: string, name: string | undefined, n: number }[]} */
     const lines = [];
     items.forEach((item, i) => {
       if (!placed.has(i)) lines.push({ id: item.typeId, name: item.nameTag, n: item.amount });
     });
-    return { id: pending.before.id, key: `${pending.before.id}|${JSON.stringify(plan)}|${[...placed].join(",")}`, items: lines.length, kept: before.length, chests: Math.ceil(plan.length / CHEST_SLOTS), lines, started };
+    const changedLines = changed.map(({ item, n }) => ({ id: item.typeId, name: item.nameTag, n }));
+    const key = `${pending.before.id}|${JSON.stringify(plan)}|${[...placed].join(",")}|${JSON.stringify(changedLines)}`;
+    return { id: pending.before.id, key, items: lines.length, kept: before.length, chests: Math.ceil(plan.length / CHEST_SLOTS), chestsWithChanged: Math.ceil((plan.length + changed.length) / CHEST_SLOTS), lines, changed: changedLines, started };
   } catch (e) {
-    return { id: pending.before.id, key: `${pending.before.id}|error`, items: 0, kept: 0, chests: 0, lines: [], started, error: String(e) };
+    return { id: pending.before.id, key: `${pending.before.id}|error`, items: 0, kept: 0, chests: 0, chestsWithChanged: 0, lines: [], changed: [], started, error: String(e) };
   }
 }
 
@@ -544,16 +591,18 @@ export function pendingSummary(target, skip) {
  * the planned kind (placed, but the record was lost) counts as placed. Opaque stacks are carried as
  * ItemStacks and never rebuilt from signatures. The target's live inventory is never touched. `skip` leaves out the
  * pack's own page buttons (never real items). An export already started stays in the dimension it began in.
- * @param {Player} operator @param {Player} target @param {(e: Entry) => boolean} [skip]
+ * `withChanged` also exports the unstackable items the player kept but changed since (see missingPlan); a started
+ * export keeps its journaled plan either way.
+ * @param {Player} operator @param {Player} target @param {(e: Entry) => boolean} [skip] @param {boolean} [withChanged]
  * @returns {{ ok: boolean, message: string }}
  */
-export function exportPending(operator, target, skip) {
+export function exportPending(operator, target, skip, withChanged = false) {
   let state = stateOf(target);
   const pending = state.pending;
   if (!pending) return { ok: false, message: "Nothing is waiting for recovery." };
   let planned;
   try {
-    planned = planOf(target, pending, skip);
+    planned = planOf(target, pending, skip, withChanged);
   } catch (e) {
     return { ok: false, message: `The saved images could not be read, nothing changed (${e}).` };
   }

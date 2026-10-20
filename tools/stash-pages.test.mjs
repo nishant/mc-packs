@@ -1814,6 +1814,35 @@ test("F4 recover: a stack moved into armor or the offhand since counts as carrie
   p.worn = undefined;
 });
 
+test("F4 recover: a tool kept but used since is listed as changed and exported only when the operator chooses", async () => {
+  const pick = () => {
+    const t = stack("minecraft:diamond_pickaxe");
+    t.damage = 10;
+    t.enchants = [{ id: "efficiency", level: 5 }];
+    return t;
+  };
+  for (const choice of [0, 1]) {
+    const { p, op, dim } = stuck({ 21: pick() });
+    // The player kept mining with the same pickaxe after the failure.
+    p.container.getItem(21).damage = 40;
+    mc.formResponses.set(op.id, [{ selection: choice }]);
+    const message = await pages.recoverInventory(op, p);
+    const shown = mc.forms.filter((f) => f.player === op).at(-1).form.text;
+    assert.match(shown, /used, renamed, enchanted or dyed since[^]*1 x Diamond pickaxe/i, shown);
+    assert.match(shown, /these 1 are no longer/, "only the diamonds are listed as missing");
+    assert.match(message, /Exported \d+ stacks/, message);
+    if (choice === 0) assert.deepEqual(chestContents(dim), ["diamond:3"], "the kept pickaxe is not copied by default");
+    else assert.deepEqual(chestContents(dim), ["diamond:3", "diamond_pickaxe:1"], "the operator chose to export it too");
+    assert.equal(nativeIndex(p).pending, undefined);
+  }
+  // A pickaxe the player no longer has at all is still plainly missing.
+  const { p, op, dim } = stuck({ 21: pick() });
+  p.container.setItem(21, undefined);
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  assert.match(await pages.recoverInventory(op, p), /Exported 2 stacks/);
+  assert.deepEqual(chestContents(dim), ["diamond:3", "diamond_pickaxe:1"]);
+});
+
 test("F4 recover: an inventory that changes while the operator decides exports nothing", async () => {
   const { p, op, dim } = stuck();
   mc.formResponses.set(op.id, [() => { p.container.setItem(18, stack("minecraft:diamond", 3)); return { selection: 0 }; }]);
