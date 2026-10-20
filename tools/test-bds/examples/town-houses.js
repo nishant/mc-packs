@@ -110,6 +110,7 @@ export default async function (t) {
     d = await dump("elm");
     return houses.every((h, k) => d.residents.r.find((r) => r.s === k)?.h === h && d.residents.r.find((r) => r.s === k)?.d === undefined);
   }, { timeout: 2400, interval: 100, message: "every family lives in its house" });
+  await t.wait(10); // a family moved in this census's tick: its look (a profession event) applies on a later tick
   const rs = residents();
   t.check(rs.length === 4, `4 residents (${rs.length}), the well's 2 moved, not doubled`);
   for (const [k, h] of houses.entries()) {
