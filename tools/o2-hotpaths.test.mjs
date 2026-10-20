@@ -155,6 +155,33 @@ test("durability: a player who uses nothing is read only by the 5 s sweep, and a
   assert.match(p.bars[1], /Iron Chestplate is about to break/);
 });
 
+test("durability: a shield that wears with no event (a fully blocked hit) warns at the next check, not at the 5 s sweep", async () => {
+  const sim = createSim();
+  const calls = { equip: 0, comp: 0, max: 0, typeId: 0 };
+  // Ten players, so most of them are far from their sweep share when their shields wear.
+  const shields = [];
+  const players = [];
+  for (let i = 0; i < 10; i++) {
+    const dmg = { damage: 300 }; // 36/336 left: above the 10% line
+    shields.push(dmg);
+    players.push(geared(sim, `Guard${i}`, { Offhand: tool(calls, "minecraft:shield", 336, dmg) }, calls));
+  }
+  await sim.load("durability_bp");
+  sim.boot();
+  sim.step(20 * 6); // every player's sweep share has come round once, so each shield has been seen
+  for (const p of players) assert.deepEqual(p.bars, []);
+  // One ravager hit blocked: 1 + 12 durability, no hurt, no hit by the player, no other event.
+  for (const dmg of shields) dmg.damage = 313; // 23/336 left (6.8%): a warning
+  sim.step(10);
+  for (const p of players) assert.equal(p.bars.length, 1, `${p.name}: warned within one check: ${p.bars.join(" | ")}`);
+  for (const dmg of shields) dmg.damage = 330; // 6/336 left: about to break
+  sim.step(10);
+  for (const p of players) {
+    assert.equal(p.bars.length, 2, `${p.name}: critical within one check`);
+    assert.match(p.bars[1], /Shield is about to break/);
+  }
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // relics_bp
 // ---------------------------------------------------------------------------------------------------------------

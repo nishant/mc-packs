@@ -13,6 +13,10 @@ const ARMOR = [EquipmentSlot.Head, EquipmentSlot.Chest, EquipmentSlot.Legs, Equi
 /** An elytra wears down while gliding, which fires no event: its wearer's armor is checked every ARMOR_EVERY checks. */
 const ARMOR_EVERY = 4;
 const ALL = [...HELD, ...ARMOR];
+/** Held items that wear with no event at the moment they wear: a shield blocking a hit (a blocked hit deals no damage, so
+ * no entityHurt), and a brush (it wears when brushing ends, long after the interaction that started it). A player holding
+ * one has that hand checked at every check, so its warning comes as quickly as for any other tool. */
+const QUIET = new Set(["minecraft:shield", "minecraft:brush"]);
 /** Every slot of every player is also checked once in this many checks (5 s by default), spread over the checks by
  * player, for what fires no event (armor put on by a dispenser or a command, another pack changing an item). */
 const SWEEP_EVERY = 10;
@@ -36,6 +40,8 @@ const heldDirty = new Set();
 const armorDirty = new Set();
 /** Players wearing an elytra at their last armor check. @type {Set<string>} */
 const gliders = new Set();
+/** player id → the held slots that held a QUIET item at their last check. @type {Map<string, Set<EquipmentSlot>>} */
+const quiet = new Map();
 /** Each player's share of the sweep (0 to SWEEP_EVERY - 1), from a hash of their id. @type {Map<string, number>} */
 const sweepSlot = new Map();
 /** @param {string} id */
@@ -72,7 +78,7 @@ world.afterEvents.playerInventoryItemChange.subscribe(({ player, itemStack, befo
   held(player);
   if (player && (wearable(beforeItemStack) || wearable(itemStack))) armorDirty.add(player.id);
 });
-// Hurt: armor wears, and a shield in the off hand.
+// Hurt: armor wears. (A shield that blocks the whole hit fires no hurt: QUIET items are checked every check instead.)
 world.afterEvents.entityHurt.subscribe(
   ({ hurtEntity }) => {
     if (!isPlayer(hurtEntity)) return;
@@ -95,7 +101,11 @@ system.runInterval(() => {
     try {
       const id = player.id;
       const all = armorDirty.has(id) || slotOf(id) === sweep || (glide && gliders.has(id));
-      if (!all && !heldDirty.has(id)) continue;
+      if (!all && !heldDirty.has(id)) {
+        const hands = quiet.get(id);
+        if (hands) check(player, [...hands]);
+        continue;
+      }
       heldDirty.delete(id);
       if (all) armorDirty.delete(id);
       check(player, all ? ALL : HELD);
@@ -110,6 +120,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   heldDirty.delete(playerId);
   armorDirty.delete(playerId);
   gliders.delete(playerId);
+  quiet.delete(playerId);
   sweepSlot.delete(playerId);
 });
 
@@ -123,7 +134,10 @@ onChange((key, player) => {
 
 /** @param {Player} player @param {EquipmentSlot[]} slots */
 function check(player, slots) {
-  if (getFor(player, "off") === true) return;
+  if (getFor(player, "off") === true) {
+    quiet.delete(player.id);
+    return;
+  }
   const equippable = player.getComponent("minecraft:equippable");
   if (!equippable) return;
 
@@ -137,6 +151,15 @@ function check(player, slots) {
     if (slot === EquipmentSlot.Chest) {
       if (item?.typeId === "minecraft:elytra") gliders.add(player.id);
       else gliders.delete(player.id);
+    } else if (slot === EquipmentSlot.Mainhand || slot === EquipmentSlot.Offhand) {
+      let hands = quiet.get(player.id);
+      if (item && QUIET.has(item.typeId)) {
+        if (!hands) quiet.set(player.id, (hands = new Set()));
+        hands.add(slot);
+      } else if (hands) {
+        hands.delete(slot);
+        if (!hands.size) quiet.delete(player.id);
+      }
     }
     if (!item) {
       seen.delete(key);
