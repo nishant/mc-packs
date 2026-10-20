@@ -281,32 +281,32 @@ function check(player, objectives) {
   player.playSound("random.levelup", { pitch: 1, volume: 0.9 });
 }
 
-// Each player is checked (and their record saved) every checkSeconds, a share of the players each second, so a full
-// server doesn't check and save everyone on the same tick.
-let elapsed = 0;
-system.runInterval(() => {
-  const every = Math.max(1, CONFIG.checkSeconds);
-  const turn = elapsed++ % every;
-  const players = world.getAllPlayers();
-  /** @type {string[]} */
-  const ids = [];
-  /** @type {Map<string, import("@minecraft/server").ScoreboardObjective | null>} */
-  const objectives = new Map();
-  for (let i = turn; i < players.length; i += every) {
-    const player = players[i];
+// Each player is checked (and their record saved) every checkSeconds, a share of the players each second
+// (scripts/spread.js, by player id), so a full server doesn't check and save everyone on the same tick.
+const CHECK_EVERY = Math.max(1, Math.floor(CONFIG.checkSeconds) || 1);
+spreadPlayers(system, world, {
+  every: 20 * CHECK_EVERY,
+  parts: CHECK_EVERY,
+  visit: (share) => {
+    /** @type {string[]} */
+    const ids = [];
+    /** @type {Map<string, import("@minecraft/server").ScoreboardObjective | null>} */
+    const objectives = new Map();
+    for (const player of share) {
+      try {
+        check(player, objectives);
+        ids.push(player.id);
+      } catch (e) {
+        console.warn(`[milestones] ${e}`);
+      }
+    }
     try {
-      check(player, objectives);
-      ids.push(player.id);
+      flush(ids);
     } catch (e) {
       console.warn(`[milestones] ${e}`);
     }
-  }
-  try {
-    flush(ids);
-  } catch (e) {
-    console.warn(`[milestones] ${e}`);
-  }
-}, 20);
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Menu
