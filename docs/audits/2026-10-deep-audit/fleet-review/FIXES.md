@@ -50,7 +50,7 @@ Run this only after msftMyt's release of that branch is merged to `master` and p
 Severity order:
 1. F1-F4, the blockers and highs
 2. F5-F14, the mediums
-3. F43-F45 (test regressions, broken new scenarios, the stats ticker cost) with the mediums; the lows (F15-F35); and F42 (wanderers rubber-banding, owner-reported; treat it as a medium)
+3. F47 (party catch-up at the Gray Ring, owner-reported, high) with the highs; F43-F45 (test regressions, broken new scenarios, the stats ticker cost) with the mediums; the lows (F15-F35); and F42 (wanderers rubber-banding, owner-reported; treat it as a medium)
 4. the living towns feature (F36-F41), after F1-F14
 5. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
 
@@ -286,6 +286,44 @@ Severity order:
   are over. As one Realm Bundle at 10 players (the owner's case), the branch is under 5 ms: 4.75 in the steady
   window, 4.27 over the whole run. Use these as the "before" numbers for F2, F7 and F45, and treat calendar and
   wander (failing in both trees) as known failures to fix or explain.
+
+- [ ] **F47 (high, owner report October 19) Party catch-up at the Gray Ring is broken** (Signs in the Sky, "Song in
+  the Dark": "Creep close to the Gray Ring without being seen", then "Listen to the Cantor"; screenshot
+  `../media/gray-ring-party.png`).
+  - **What happened:** the owner finished the chapter, then went back with party mates who still needed it. The
+    owner was a helper ("Party quest: you finished it, so you're helping"). Three things went wrong:
+    - Near the ring, the Gray Choir watchers neither spotted nor sent back anyone, as they did on the owner's own
+      run.
+    - The watchers rubber-band.
+    - Entering the Gray Ring did nothing.
+  - **Code to start from:**
+    - saga_bp `objectives.js`: `SOLO` (around :426) lists `stealth`, `vision`, `follow` and others as steps a
+      helper does not count for (`helps`). So for the helper, `stealthTick` (around :1712) never runs: no
+      watchers, no "seen", no reset. That much is by design, but it means a helper walking with the party is
+      invisible to the scene.
+    - The watchers are spawned per player (`owner: player.id`), so each mate who needs the step gets their own
+      set of 4 vindicators. Check that their sets don't overlap, remove each other (`removeActors`), or end up
+      with nobody owning the guard state (`sceneFor`).
+    - `stealthFast` moves each watcher along its rounds with `teleport` (around :1792) while the vanilla AI also
+      moves it. That is the rubber-banding; fix it together with F42.
+    - "Nothing happens in the ring": find why the step doesn't complete for the mates who need it. The goal is
+      `goal: { dx: 0, dz: 8 }` at `choir_ring`. Check `onSpotted: "reset"`, the goal check, and that the next
+      step (`vision` "Listen to the Cantor") starts for each mate.
+  - **What it should do (the owner's intent: the party plays it together):**
+    - One shared watcher set per place while any party member there still needs the step.
+    - The watchers see every party member nearby, helpers included. Being seen sends that player back (and tells
+      the party), the same as on a solo run.
+    - Each mate who needs the step completes it on reaching the goal, and the vision plays for them.
+    - Helpers can't complete it for others, but they are part of the scene.
+    - Review every other `SOLO` step type (meet, inspect, escort, lead, defend, follow, vision, answer, wait,
+      sleep, wear) for the same "helper is invisible or the scene is per player" problem with a party. Say per
+      type whether it works with a party, and fix the ones that don't.
+  - **Test:** a BDS scenario with 3 players in a party: a helper who finished the chapter, and two mates on the
+    step. Check that:
+    - watchers spawn once
+    - spotting a mate and spotting the helper each send that player back
+    - both mates complete the step at the goal and get the vision
+    - no watcher snaps back more than a few times in 2 minutes
 
 ## Feature: living towns (owner request, October 19)
 
