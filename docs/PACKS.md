@@ -1732,7 +1732,7 @@ Pick a nickname and a color to show above your head instead of your gamertag. Ch
 | `afkTag` | `afk` | The tag the AFK pack gives AFK players. Keep it the same as AFK `tag` |
 | `afkPrefix` | `§7[AFK]§r ` | Shown before a nickname while the player has `afkTag`. Keep it the same as AFK `nameTagPrefix` |
 
-Operators can change `enabled`, `showGamertag` and `forgetGamertagsAfterDays` in game with `/realm:config`; name tags update within half a second. Pruning reads the live setting again before each deletion. `afkTag` and `afkPrefix` stay in `config.js`.
+Operators can change `enabled`, `showGamertag` and `forgetGamertagsAfterDays` in game with `/realm:config`; name tags update at once. Pruning reads the live setting again before each deletion. `afkTag` and `afkPrefix` stay in `config.js`.
 
 ### Saved data
 
@@ -1746,7 +1746,7 @@ Operators can change `enabled`, `showGamertag` and `forgetGamertagsAfterDays` in
 ### How it works
 
 - The nickname is the player's `nameTag` (`§<color><nickname>§r`, then `\n§7<gamertag>`, then `\n§7<title>` when the player has the tag `realm_title:<title>`). Bedrock forgets a player's name tag when they leave, so it's set again whenever a player spawns.
-- Twice a second the pack compares each nicknamed player's name tag with what it should be and sets it again if it differs. That puts the tag back whatever else changed it, and adds `afkPrefix` itself for players with the `afk` tag (the AFK pack only adds and removes its prefix in front of the existing tag, so the two agree). The same check picks up a title being put on or taken off, and puts the plain gamertag back once a player has neither a nickname nor a title.
+- The pack compares a player's name tag with what it should be and sets it again if it differs: at once when the AFK pack marks them away or back or the Titles pack changes the title they wear (both send `realm:nametag` `{ player, from }` right after), and for everyone every 5 seconds, a tenth of the players every half second (for anything that says nothing, such as an operator's `/tag`). That puts the tag back whatever else changed it, and adds `afkPrefix` itself for players with the `afk` tag (the AFK pack only adds and removes its prefix in front of the existing tag, so the two agree). The same check picks up a title being put on or taken off, and puts the plain gamertag back once a player has neither a nickname nor a title.
 - Nicknames are read into memory once and kept in step as they change.
 - Inactive gamertags are checked shortly after load and every six hours. Deletions are logged; online players and the live disable setting are rechecked across yielded work. This removes remembered gamertags and their timestamp, not a player's saved nickname.
 
@@ -3655,7 +3655,7 @@ Operators can change `enabled`, `trails`, `trailTicks`, `trailBudget`, `announce
 ### How it works
 
 - Other packs unlock with the script events `realm:title_unlock` `{ player, title, from }` and `realm:trail_unlock` `{ player, trail, from }` (`player` is the player id; `trail` is `cloud`, `leaves`, `ember`, `sparkle`, `hearts`, `glyphs`, `confetti` or `notes`). The data is a world property per player, so an unlock for someone offline is kept for them. Repeats are ignored quietly.
-- The chosen title is the player tag `realm_title:<text>`; only this pack sets or removes it. The [Nicknames](#nicknames--nick_bp) pack reads it.
+- The chosen title is the player tag `realm_title:<text>`; only this pack sets or removes it. The [Nicknames](#nicknames--nick_bp) pack reads it; after each change this pack sends `realm:nametag` `{ player, from: "titles_bp" }` so Nicknames shows it at once.
 - **Stats** are counted once a second and saved every minute and when the player leaves. The weather can't be read by scripts, so the pack follows `weatherChange` in the Overworld and keeps the last value in `titles:weather`, as Rain Extras does. Outdoors means the highest block above you is at most one block above your feet.
 - **Trails** use `dimension.spawnParticle` with `realm:trail_cloud`, `realm:trail_leaves`, `realm:trail_ember` and `realm:trail_sparkle` from the Realm Skies resource pack, so every player nearby sees them. The pack checks every 2 ticks whether `trailTicks` have passed, then starts at a different player each time so the budget is shared fairly. When nobody online has chosen a trail the pass is skipped.
 - Inactive-record pruning runs shortly after load and every six hours. Each deletion rechecks the live retention setting and whether the player is online or the record is in use, then logs the removal. Unlike Nicknames' gamertag-only pruning, this deletes the earned title/trail record and its stats.
@@ -6718,7 +6718,7 @@ Delivery takes an entry before granting its reward so a restart cannot blindly p
 | Elytra HUD → Coordinates HUD | While a player glides, the Elytra HUD sends `realm:actionbar`, so the Coordinates HUD pauses for that player and comes back a second or two after landing |
 | Elytra HUD ↔ Low Durability Warning, Land Claims, AFK smart sleep | All write the bar above the hotbar. While gliding, their messages can show for a moment before the HUD's next update replaces them |
 | Realm Mail ↔ Welcome, News | The unread letters line comes 8 seconds after joining (`notifyDelaySeconds`), after the welcome and news popups |
-| AFK ↔ Nicknames | Both write the name above a player's head. The AFK pack only adds or removes its own `[AFK]` prefix in front of whatever the tag shows, so a nickname and title stay put. Keep Nicknames `afkTag` and `afkPrefix` the same as AFK `tag` and `nameTagPrefix` |
+| AFK ↔ Nicknames | Both write the name above a player's head. The AFK pack only adds or removes its own `[AFK]` prefix in front of whatever the tag shows, so a nickname and title stay put. Keep Nicknames `afkTag` and `afkPrefix` the same as AFK `tag` and `nameTagPrefix`. AFK (on away and back) and Titles (on wearing a title) send `realm:nametag` `{ player, from }`, and Nicknames puts that player's tag right at once instead of at its 5-second check |
 | Right-click Harvest → Daily Quests | A crop harvested by tapping counts for harvest quests, the same as breaking it |
 | Daily Quests ↔ Stats, Milestones | Separate counts: the same mining, kills and travel add to all of them |
 | Slot Machine ↔ Crowns | Crowns stakes are taken from and wins paid into the shared `crowns` scoreboard, so they show in `/realm:crowns` at once. Without the Crowns pack, Crowns stakes still work but nobody earns Crowns to play with |

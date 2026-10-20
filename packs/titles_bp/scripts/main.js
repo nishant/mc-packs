@@ -233,6 +233,8 @@ function worn(player) {
 function wear(player, title) {
   for (const t of player.getTags()) if (t.startsWith(TITLE_TAG)) player.removeTag(t);
   if (title) player.addTag(TITLE_TAG + title);
+  // The Nicknames pack shows the title under the name: it puts the name tag right at once on this.
+  system.sendScriptEvent("realm:nametag", JSON.stringify({ player: player.id, from: "titles_bp" }));
 }
 
 onScriptEvent(

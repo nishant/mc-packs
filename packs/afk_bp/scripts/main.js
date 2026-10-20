@@ -33,6 +33,9 @@ function baseNameTag(player) {
   return base || player.name;
 }
 
+/** Tells the Nicknames pack the name tag or the AFK tag changed, so it puts its own name tag right at once. @param {Player} player */
+const tellNameTag = (player) => system.sendScriptEvent("realm:nametag", JSON.stringify({ player: player.id, from: "afk_bp" }));
+
 /** Takes our AFK prefix off the name tag, keeping whatever else is there (a nickname or title). @param {Player} player */
 function clearNameTag(player) {
   if (player.nameTag.startsWith(CONFIG.nameTagPrefix)) player.nameTag = baseNameTag(player);
@@ -113,12 +116,14 @@ function setAfk(player, afk) {
     // Prefix the current tag rather than the gamertag, so a nickname or title stays.
     player.nameTag = CONFIG.nameTagPrefix + baseNameTag(player);
     player.addTag(CONFIG.tag);
+    tellNameTag(player);
     if (announces(player)) world.sendMessage(`§7${player.name} is now AFK`);
   } else {
     const minutes = Math.round((system.currentTick - (s.afkSince ?? system.currentTick)) / 1200);
     s.afkSince = undefined;
-    clearNameTag(player);
     player.removeTag(CONFIG.tag);
+    clearNameTag(player);
+    tellNameTag(player);
     if (announces(player)) world.sendMessage(`§7${player.name} is back${minutes > 0 ? ` (AFK ${minutes}m)` : ""}`);
   }
 }

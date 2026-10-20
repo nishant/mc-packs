@@ -207,9 +207,45 @@ test("afk: idle players go AFK after afkMinutes as before, turning players don't
   assert.ok(w.players.every((p) => !p.hasTag("afk")), "nobody is AFK before 5 minutes");
   sim.step(80);
   for (const p of w.players) assert.equal(p.hasTag("afk"), p !== turner, `${p.name} AFK: ${p.hasTag("afk")}`);
+  // the Nicknames pack is told about each new AFK name tag
+  const told = new Set(sim.game.sent.filter((e) => e.id === "realm:nametag").map((e) => JSON.parse(e.message).player));
+  for (const p of w.players) assert.equal(told.has(p.id), p !== turner, `${p.name} realm:nametag`);
   const most = Math.max(...[...rotAt.values()].map((s) => s.size));
   assert.ok(most <= 4, `at most 4 players a tick, got ${most}`);
   // turning already counts as active: the turning player's movement input isn't read
   assert.ok((inputs.get(turner.id) ?? 0) <= 1, `movement reads for a turning player: ${inputs.get(turner.id)} (only the first look, before there is a turn to compare)`);
   assert.ok((inputs.get(w.players[0].id) ?? 0) > 250, "an idle player's movement is read every second");
+});
+
+test("nick: name tags are put right on realm:nametag at once and by a 5-second sweep of a tenth of the players", async () => {
+  const sim = createSim();
+  const w = walkers(sim, 40);
+  /** @type {Map<number, Set<string>>} */
+  const tagsAt = new Map();
+  for (const [i, p] of w.players.entries()) {
+    sim.props.set(`nick:p:${p.id}`, JSON.stringify({ n: `Nick${i}`, c: "a", g: p.name }));
+    const getTags = p.getTags.bind(p);
+    p.getTags = () => {
+      const t = sim.game.tick;
+      if (!tagsAt.has(t)) tagsAt.set(t, new Set());
+      tagsAt.get(t).add(p.id);
+      return getTags();
+    };
+  }
+  await loadReal(sim, "nick_bp");
+  sim.step(200);
+  for (const [i, p] of w.players.entries()) assert.ok(p.nameTag.includes(`Nick${i}`), `${p.name}: ${p.nameTag}`);
+  const most = Math.max(...[...tagsAt.values()].map((s) => s.size));
+  assert.ok(most <= 4, `at most 4 players a tick, got ${most}`);
+  // Something else changed a tag and said so: put right within a tick or two.
+  const a = w.players[3];
+  a.nameTag = "changed";
+  sim.game.system.sendScriptEvent("realm:nametag", JSON.stringify({ player: a.id, from: "afk_bp" }));
+  sim.step(2);
+  assert.ok(a.nameTag.includes("Nick3"), `after realm:nametag: ${a.nameTag}`);
+  // ...and without a word: within the 5-second sweep.
+  const b = w.players[4];
+  b.nameTag = "changed";
+  sim.step(100);
+  assert.ok(b.nameTag.includes("Nick4"), `after the sweep: ${b.nameTag}`);
 });
