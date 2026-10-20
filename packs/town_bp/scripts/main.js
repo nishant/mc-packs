@@ -1995,7 +1995,7 @@ function stepScan() {
     }
     reads++;
     job.pending = undefined;
-    const [kind, a, b, c] = /** @type {[string, number, number, number]} */ (q);
+    const [kind, a, b, c] = /** @type {any[]} */ (q);
     job.answer = kind === "c" ? readCol(dim, a, b) : blockInfo(dim, a, b, c);
   }
 }
@@ -2062,7 +2062,8 @@ function autoGeometry(p, s) {
   const fp = rectOf(fpBox);
   const region = regionOf(fp);
   const pad = s.y - 1;
-  const plan = s.lv === undefined ? [] : (decodePlan(s.lv, region, pad) ?? []);
+  /** @type {{ x: number, z: number, t: number }[]} */
+  const plan = (s.lv === undefined ? undefined : decodePlan(s.lv, region, pad)) ?? [];
   return { fpBox, fp, region, pad, plan, dock: p.build === "dock", y1: Math.min(fpBox.min.y, pad - 5), y2: Math.max(fpBox.max.y, pad + 5) + 1 };
 }
 /** @typedef {ReturnType<typeof autoGeometry>} Geometry */
