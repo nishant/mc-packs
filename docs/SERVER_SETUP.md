@@ -152,7 +152,9 @@ Measured with 40 simulated players, Large server took the whole bundle from 9.5 
 
 ### Current matched audit (2026-10-19)
 
-On Windows BDS 1.26.52.3, the same harness and declared workload ran master `27f26f6e` and candidate `a1b2a32c` with every declared player retained for the full 900-second steady windows. These figures sum **67 separate behavior-pack script contexts**, not the still-required genuine one-context Realm Bundle run. They are script callback time, not client FPS or all server CPU time.
+On Windows BDS 1.26.52.3, the same harness and declared workload ran master `27f26f6e` and candidate `a1b2a32c` with every declared player retained for the full 900-second steady windows. These figures sum **67 separate behavior-pack script contexts**, not the genuine one-context Realm Bundle run. They are script callback time, not client FPS or all server CPU time.
+
+For this release the owner explicitly deferred the remaining soak/load tests to Nish's Claude on 2026-10-20. The later final-bundle 40-player run was interrupted before its full 900 seconds; candidate 100-player, Saga 100-player and the remaining idle-preview measurement are unverified, not passes. The historical `a1b2a32c` figures below are not relabeled as measurements of the later Expedition loader-release/Realm News delta.
 
 | Players | Master, ms/tick | Candidate, ms/tick | Steady window |
 |---|---:|---:|---|

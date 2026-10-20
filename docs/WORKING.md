@@ -100,6 +100,8 @@ From two weeks of history (728 commits, 161 of them fixes): the same classes cam
 
 ## Audit pass (October 2026: every pack for public servers)
 
+**This audit release only (owner override, 2026-10-20):** "lets skip the soak tests, let nishs claude do that later". The interrupted final one-context window and unstarted 100-player, Saga-100 and O10 idle windows are `USER_DEFERRED`, never PASS. Completed source-labeled measurements and their failed budgets remain unchanged. This exception does not remove the normal finishing order or waive functional checks, publishing or live verification.
+
 Everything this audit left open (75 items in 13 task groups, plus owner decisions and a backlog) is in `docs/audits/2026-10-deep-audit/OPEN.md`, with the findings tables, triage, baseline and soak reports beside it. Start follow-up work there, and mark items done in it as they ship.
 
 The second full audit (after PR #38) judged everything against a public release: servers with 30 to 100+ players, strangers installing from the docs, worlds with no town. It found 5 blockers, 26 highs, 74 mediums and 125 lows; every blocker and high was fixed, and the deferred rest is triaged into docs-only, cheap fixes, follow-up tasks and won't-fix.

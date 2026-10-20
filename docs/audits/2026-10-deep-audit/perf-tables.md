@@ -4,13 +4,15 @@
 
 Production before: master `27f26f6e8eab780e7e18462c7475529028fdb92b` (the later `92ffb5ad` changes only review documentation; its packs tree is identical). Production after: `a1b2a32ce68eaf8568b2c44d69669bb1d95e59ef`; later suite/leaf-adapter commits change no production pack. Both sides use the same `a1b2a32c` native profiler runtime and scenario, Windows BDS 1.26.52.3, and the original declared workload: group 5, spread 240, two water players, two Nether players, commands 45 and refill 20.
 
-Each accepted run retained every declared player through **900 steady game seconds / 18,000 ticks**. The figures below exclude the spawn ramp and sum **67 separate script contexts**. They are not the still-required genuine Realm Bundle one-context run, client FPS, or all engine CPU. Each run's 30-second census observed one owned BDS and no other native server (31 samples at 10 players, 36 at 40); this is not a guarantee against every short external CPU task. The profiler uses 1 ms `Date.now` callback timing, includes synchronous native work, and does not attribute post-`await` continuations.
+Each accepted run retained every declared player through **900 steady game seconds / 18,000 ticks**. The figures below exclude the spawn ramp and sum **67 separate script contexts**. They are not the owner-deferred genuine Realm Bundle one-context run, client FPS, or all engine CPU. Each run's 30-second census observed one owned BDS and no other native server (31 samples at 10 players, 36 at 40); this is not a guarantee against every short external CPU task. The profiler uses 1 ms `Date.now` callback timing, includes synchronous native work, and does not attribute post-`await` continuations.
+
+**Owner override (2026-10-20):** "lets skip the soak tests, let nishs claude do that later". The genuine final `414a18f6` Bundle + Resources run was identity-verified and stopped at 05:06:43 UTC (`USER_DEFERRED_INTERRUPTED`): it logged 40 players through 660 game seconds, but did not finish the declared 900-second window or produce a final timing report. It is NOT PASS and supplies no replacement timing here. Candidate 100/300, Saga 100/two quests/120 and the unstarted O10 idle diagnostic measurement are `USER_DEFERRED` to Nish's Claude. No completed hour or profile is rerun. The table's candidate remains the explicitly historical `a1b2a32c`, before the later two-tick Expedition loader-release fix and Realm News update; it is not a final-`414a18f6` performance certificate.
 
 | Players | Master steady ms/tick | Candidate steady ms/tick | Workload acceptance |
 |---|---:|---:|---|
 | 10 | 6.648 | 4.941 | Both full 900-second windows valid; failed first candidate 7/10 admission excluded and retained separately |
 | 40 | 9.429222222222222 | 7.972722222222222 | Both full 900-second windows valid; numerical budget FAIL |
-| 100 | N/A | N/A | Master admission BLOCKED after two bounded attempts; candidate load proof still pending, no partial-population timing substituted |
+| 100 | N/A | N/A | Master admission BLOCKED after two bounded attempts; candidate USER_DEFERRED before running, no partial-population timing substituted |
 
 **Owner answer (2026-10-19): ACCEPTED_EXCEPTION.** The owner accepts the known whole-total 40-player target miss for this release, with documentation and pending the other gates. The measured total is about **15.45% lower**, but **does not meet under 5 ms/tick**. The unchanged canonical evaluator still returns failure. This is not a budget PASS, an increased threshold, or an implied waiver of individual-pack targets.
 
@@ -96,7 +98,7 @@ The seven resource packs (`build_rp`, `hud_rp`, `platypus_rp`, `rain_rp`, `silly
 
 - Candidate 10-player v1 admitted 7/10 and ran no steady window; its unchanged v2 retry supplied the valid 10-player row.
 - Master 100-player v1 admitted 95/100 and ran no steady window. Its only identical retry irreversibly lost a required player after three original ground probes and was stopped before further futile ramp work. Both are excluded; no 95-player or old historical value fills the 100-player column.
-- Candidate 100, Saga 100 with two real quests each, the genuine one-context 40-player Realm Bundle, and remaining functional/special-load cases still require their own evidence. The full functional master/candidate matrices are not replaced by these four profiles.
+- Candidate 100, Saga 100 with two real quests each, the genuine one-context 40-player Realm Bundle and O10's remaining measurement are owner-deferred, not passes. The full functional master/candidate matrices and separately versioned corrected-case proofs are not replaced by these four historical profiles.
 - The older unprofiled 40-player hour observed private-byte growth and working-set trimming; a completed population/window is not a leak rule-out, GC evidence or pack attribution.
 
 ## Historical initial-audit figures (different source, host and windows)
