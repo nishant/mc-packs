@@ -1274,8 +1274,9 @@ function inSight(dim, a, b) {
 /**
  * Spawns story mobs (an ambush, adds, a wrong answer) around a point: real fights, removed later.
  * @param {Player} player @param {Dimension} dim @param {Vector3} at @param {{ mobs: string[], count: number }} group @param {string} key @param {number} [min] @param {number} [max]
+ * @param {string} [owner] whose scene they belong to (a party's shared scene), else the player's
  */
-export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
+export function spawnGroup(player, dim, at, group, key, min = 4, max = 8, owner = player.id) {
   /** @type {Entity[]} */
   const out = [];
   const n = Math.max(0, Math.min(24, Math.floor(group.count ?? 1)));
@@ -1304,7 +1305,7 @@ export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
       if (inSight(dim, eye, { x, y: y + 1.5, z }) || (deep && (top = waterTop(dim, x, y, z)) !== undefined && inSight(dim, eye, { x, y: top + 0.5, z }))) spot = { x, y, z };
     }
     spot ??= { x: at.x, y: y0, z: at.z };
-    const ent = spawnActor(dim, type, spot, { owner: player.id, key, role: "add" });
+    const ent = spawnActor(dim, type, spot, { owner, key, role: "add" });
     if (ent && (CHOIR.has(key) || key.startsWith("realm:saga:whc_"))) ent.addTag("saga:choir");
     if (ent) noBanner(ent);
     if (ent) out.push(ent);
@@ -1675,18 +1676,25 @@ export function talked(player, npc) {
 }
 
 // ---------------------------------------------------------------------------
-// Scenes: one per player and objective that needs runtime state
+// Scenes: one per player and objective that needs runtime state, or one per party and step (shared scenes)
 // ---------------------------------------------------------------------------
 
 /**
+ * @typedef {object} SceneMember
+ * @property {boolean} need the step is theirs to finish (false: a party mate helping, who is part of the scene but can't finish it)
+ * @property {Entry} e their own entry (or party quest)
+ * @property {number} seen loop run they were last here
+ */
+/**
  * @typedef {object} SceneState
  * @property {string} kind
- * @property {string} pid
+ * @property {string} pid who owns the scene and its characters: the player, or their party (`party|<tag>`) for a shared scene
  * @property {string} key
- * @property {Entry} e
+ * @property {Entry} e the entry of a member it is for (the last one who needs it)
  * @property {number} i
- * @property {number} seen loop run it was last visited
- * @property {number} [farSince] tick the player went far away
+ * @property {number} seen loop run it was last visited by someone who needs it
+ * @property {Map<string, SceneMember>} members players in it, by id
+ * @property {number} [farSince] tick everyone went far away
  * @property {any} [state]
  * @property {any} [data]
  */
@@ -1697,42 +1705,170 @@ export const scenes = new Map();
 const sk = (pid, key) => `${pid}|${key}`;
 let run = 0;
 
-/** @param {Player} player @param {Entry} e @param {number} i @param {string} kind @returns {SceneState} */
+/**
+ * Scene kinds a party shares: one scene (one set of characters, guards, story mobs, one wisp) per place and step while
+ * anyone in the party there still needs the step. The rest (clues, riddles, block scans) stay each player's own.
+ */
+const SHARED = new Set(["defeat"]);
+
+/**
+ * Does a party play this entry's chapter together (its scenes shared)? The main story with the party story on, side and
+ * festival stories with party sharing on, as party.js decides who takes chapters together. Daily favors, wanderer jobs
+ * and heart stories stay each player's own. @param {Entry} e
+ */
+function partyPlays(e) {
+  if (e.fav !== undefined || e.wv || get("enabled") !== true) return false;
+  const kind = e.story.kind;
+  if (kind === "main") return get("partyStory") === true;
+  return (kind === undefined || kind === "side" || kind === "festival") && get("partyShare") === true;
+}
+
+/** The party tag a player carries (the Parties pack's `realm_party:<code>`), if any. @param {Player} player */
+function partyOf(player) {
+  try {
+    return player.getTags().find((t) => t.startsWith("realm_party:"));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Who owns a scene of this kind for this player and entry: their party (`party|<tag>`) when the party plays it together
+ * and the kind is shared, else the player.
+ * @param {Player} player @param {Entry} e @param {string} kind
+ */
+export function sceneOwner(player, e, kind) {
+  if (!SHARED.has(kind) || !partyPlays(e)) return player.id;
+  const tag = partyOf(player);
+  return tag ? `party|${tag}` : player.id;
+}
+
+/**
+ * The scene of a player's objective, made when missing; the player is a member who needs it, or a helper when their
+ * entry is a party quest (`pq`, joinScene). @param {Player} player @param {Entry} e @param {number} i @param {string} kind
+ * @returns {SceneState}
+ */
 function sceneFor(player, e, i, kind) {
   const key = objKey(e, i);
-  let s = scenes.get(sk(player.id, key));
+  const owner = sceneOwner(player, e, kind);
+  let s = scenes.get(sk(owner, key));
   if (!s || s.kind !== kind) {
-    s = { kind, pid: player.id, key, e, i, seen: run, data: {} };
-    scenes.set(sk(player.id, key), s);
+    if (s) endScene(owner, key);
+    s = { kind, pid: owner, key, e, i, seen: run, data: {}, members: new Map() };
+    scenes.set(sk(owner, key), s);
   }
-  s.e = e;
-  s.seen = run;
+  const need = !e.pq;
+  s.members.set(player.id, { need, e, seen: run });
+  if (need) {
+    s.e = e;
+    s.seen = run;
+  }
   return s;
 }
 
-/** Ends a scene: its characters and story mobs go. @param {string} pid @param {string} key @param {boolean} [effect] */
-export function endScene(pid, key, effect = false) {
-  const s = scenes.get(sk(pid, key));
-  if (s?.data) s.data.interactJob = undefined; // its background scan stops
-  scenes.delete(sk(pid, key));
-  removeActors({ owner: pid, key }, effect);
-  // The animals fed or tamed for it count again next time (the same daily favor on a later day, a reset chapter).
-  tended.delete(`${pid}|${key}`);
-  tended.delete(`tame|${pid}|${key}`);
+/**
+ * A party mate helping with a step (their party quest, `pq`) joins its shared scene if there is one: they are part of
+ * it (guards see them, a wisp waits for them) but can't finish it for anyone. @param {Player} player @param {Entry} e
+ * @param {number} i @param {string} kind @returns {SceneState | undefined}
+ */
+function joinScene(player, e, i, kind) {
+  const s = scenes.get(sk(sceneOwner(player, e, kind), objKey(e, i)));
+  if (!s || s.kind !== kind || s.pid === player.id) return undefined;
+  s.members.set(player.id, { need: false, e, seen: run });
+  return s;
 }
 
-/** Ends every scene of a player (they left, or their stories were reset). @param {string} pid */
+/**
+ * Members of a scene seen in this loop run or the one before, online: everyone (`need` undefined), or only those who
+ * still need the step (true) or only helpers (false).
+ * @param {SceneState} s @param {boolean} [need] @returns {{ p: Player, m: SceneMember }[]}
+ */
+function membersOf(s, need) {
+  /** @type {{ p: Player, m: SceneMember }[]} */
+  const out = [];
+  if (!s.members.size) return out;
+  const all = world.getAllPlayers();
+  for (const [pid, m] of s.members) {
+    if (m.seen < run - 1) {
+      s.members.delete(pid);
+      continue;
+    }
+    if (need !== undefined && m.need !== need) continue;
+    const p = all.find((x) => x.id === pid);
+    if (!p || !p.isValid) {
+      s.members.delete(pid);
+      continue;
+    }
+    if (m.need && objDone(m.e, s.i, m.e.sg ?? sagaOf(p))) continue; // finished meanwhile: no longer needs it
+    out.push({ p, m });
+  }
+  return out;
+}
+
+/** Does anyone (else) in the scene still need its step? @param {SceneState} s @param {string} [but] a player id to leave out */
+function stillNeeded(s, but) {
+  return membersOf(s, true).some(({ p }) => p.id !== but);
+}
+
+/** Ends a scene: its characters and story mobs go. @param {string} owner @param {string} key @param {boolean} [effect] */
+function dropScene(owner, key, effect = false) {
+  const s = scenes.get(sk(owner, key));
+  if (s?.data) s.data.interactJob = undefined; // its background scan stops
+  scenes.delete(sk(owner, key));
+  removeActors({ owner, key }, effect);
+  // The animals fed or tamed for it count again next time (the same daily favor on a later day, a reset chapter).
+  tended.delete(`${owner}|${key}`);
+  tended.delete(`tame|${owner}|${key}`);
+}
+
+/**
+ * A player is done with a scene (their step finished, reset or replaced): their own scene ends; in a party's shared
+ * scene they leave it, and it ends once nobody in it needs the step any more.
+ * @param {string} pid @param {string} key @param {boolean} [effect]
+ */
+export function endScene(pid, key, effect = false) {
+  dropScene(pid, key, effect);
+  for (const s of [...scenes.values()]) {
+    if (s.key !== key || s.pid === pid || !s.members.has(pid)) continue;
+    s.members.delete(pid);
+    if (!stillNeeded(s)) dropScene(s.pid, s.key, effect);
+  }
+}
+
+/** Ends every scene of a player (they left, or their stories were reset); they leave the shared ones. @param {string} pid */
 export function endScenesOf(pid) {
   for (const s of [...scenes.values()]) {
-    if (s.pid !== pid) continue;
-    if (s.data) s.data.interactJob = undefined;
-    scenes.delete(sk(s.pid, s.key));
+    if (s.pid === pid) {
+      if (s.data) s.data.interactJob = undefined;
+      scenes.delete(sk(s.pid, s.key));
+    } else if (s.members.delete(pid) && !stillNeeded(s)) dropScene(s.pid, s.key);
   }
   removeActors({ owner: pid });
   for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
 }
 
-/** The far-away timer: true once the player has been away long enough for the scene to end. @param {SceneState} s @param {boolean} near */
+/** A player's scene of an objective, their own or a shared one they are in. @param {string} pid @param {string} key */
+function sceneOfPid(pid, key) {
+  const own = scenes.get(sk(pid, key));
+  if (own) return own;
+  for (const s of scenes.values()) if (s.key === key && s.members.has(pid)) return s;
+  return undefined;
+}
+
+/**
+ * Ends a scene a little later (its characters vanish with a puff) unless someone in it still needs the step then.
+ * @param {SceneState} s @param {number} ticks
+ */
+function endLater(s, ticks) {
+  s.data.keepUntil = system.currentTick + ticks + 10;
+  system.runTimeout(() => {
+    if (scenes.get(sk(s.pid, s.key)) !== s) return;
+    if (stillNeeded(s)) return;
+    dropScene(s.pid, s.key, true);
+  }, ticks);
+}
+
+/** The far-away timer: true once everyone has been away long enough for the scene to end. @param {SceneState} s @param {boolean} near */
 function tooFar(s, near) {
   if (near) {
     delete s.farSince;
@@ -2107,7 +2243,9 @@ function spotted(s, player, gd, sp, obj) {
 /**
  * A `defeat` at a place whose mobs never come there by themselves (the Choir, vexes, bogged): with `spawn`, a group
  * of them comes when the player is in the area and keeps coming, `count` alive at a time (never more than are left
- * to defeat), topped up every `every` seconds. They go when the player leaves (the scene ends).
+ * to defeat), topped up every `every` seconds. They go when the player leaves (the scene ends). A party that plays the
+ * chapter together shares one group (one scene per place and step): never more alive than the one furthest from done
+ * still has to defeat.
  * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
  */
 function defeatSpawnTick(player, e, i, obj) {
@@ -2120,22 +2258,29 @@ function defeatSpawnTick(player, e, i, obj) {
   if (d > r + 24) return;
   const s = sceneFor(player, e, i, "defeat");
   const now = system.currentTick;
-  const mobs = actorsOf(player.id, s.key, "add").filter((a) => a.ent.isValid);
+  const mobs = actorsOf(s.pid, s.key, "add").filter((a) => a.ent.isValid);
   // In a fight they don't time out (expireAdds).
   for (const a of mobs) a.born = now;
+  /** Who has been told the fight is on. @type {Set<string>} */
+  const warned = (s.data.warned ??= new Set());
+  const warn = (/** @type {Player} */ p) => {
+    if (warned.has(p.id)) return;
+    warned.add(p.id);
+    p.sendMessage(`§c[Story] ${sp.warn ?? "They're here. Fight!"}`);
+    p.playSound("raid.horn", { volume: 0.5, pitch: 1.2 });
+  };
+  if (d <= r && mobs.length) warn(player);
   if (d > r || (obj.night && !isNight()) || now < (s.data.next ?? 0)) return;
-  const left = target(obj) - progressOf(e, i);
+  // Never more than the member furthest from done still has to defeat (each counts their own kills, mates share them).
+  let left = target(obj) - progressOf(e, i);
+  for (const { m } of membersOf(s, true)) left = Math.max(left, target(obj) - progressOf(m.e, i));
   const want = Math.min(Math.max(1, sp.count ?? 3), left) - mobs.length;
   if (want <= 0) return;
   const center = withY(loc);
   if (!center) return;
-  if (!s.data.warned) {
-    s.data.warned = true;
-    player.sendMessage(`§c[Story] ${sp.warn ?? "They're here. Fight!"}`);
-    player.playSound("raid.horn", { volume: 0.5, pitch: 1.2 });
-  }
   s.data.next = now + Math.max(5, sp.every ?? 20) * 20;
-  spawnGroup(player, world.getDimension(loc.dim), center, { mobs: sp.mobs ?? obj.mobs ?? [], count: want }, s.key, 6, Math.max(8, Math.min(16, r / 2)));
+  spawnGroup(player, world.getDimension(loc.dim), center, { mobs: sp.mobs ?? obj.mobs ?? [], count: want }, s.key, 6, Math.max(8, Math.min(16, r / 2)), s.pid);
+  for (const { p } of membersOf(s)) if (p.dimension.id === loc.dim && across(p.location, loc) <= r) warn(p);
 }
 
 // ---- escort ------------------------------------------------------------
@@ -3345,7 +3490,7 @@ export function tickPlayer(player, list) {
 /** Starts a loop run: scenes not visited in the previous run are ended. */
 export function beginRun() {
   const now = system.currentTick;
-  for (const s of [...scenes.values()]) if (s.seen < run && !(s.data?.keepUntil > now)) endScene(s.pid, s.key);
+  for (const s of [...scenes.values()]) if (s.seen < run && !(s.data?.keepUntil > now)) dropScene(s.pid, s.key);
   run++;
   survived = new Set();
 }
