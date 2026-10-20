@@ -3,9 +3,36 @@
 // Then: a rocket with a long lore (over 2000 characters) still refills (refill_need carries the lore's start and a
 // hash); a banner never comes from another page (its pattern isn't compared); and a player who just died gets
 // nothing moved into the hotbar (it would drop with the death loot).
-//   node tools/test-bds/run.mjs --quiet --flat --only refill_bp,stash_bp --scenario tools/test-bds/examples/refill-pages.js --timeout 600
+// O17/O20: the committed page index lets a refill request skip pages that can't hold the item. A harness-only counter in
+// a copy of stash_bp (tools/test-bds/hooks/stash-loads.mjs) counts the saved pages it loads: refilling from page 1 loads
+// it (the counter works), and a request nothing on any page matches loads no page at all. The counter uses nothing of
+// the index, so the same recipe runs the code from before it (f7a824e^ as its second argument), which loads page 1 for
+// the miss and fails case 6 for that reason.
+//   mkdir -p /tmp/refill-pages
+//   node tools/test-bds/hooks/stash-loads.mjs /tmp/refill-pages/packs
+//   node tools/test-bds/run.mjs --quiet --flat --packs /tmp/refill-pages/packs --only refill_bp,stash_bp --scenario tools/test-bds/examples/refill-pages.js --timeout 600
 export default async function (t) {
   const mc = t.mc;
+  const loadReports = new Map();
+  t.system.afterEvents.scriptEventReceive.subscribe(
+    ({ id, message }) => {
+      if (id !== "harness:stash_loads_report") return;
+      try {
+        const r = JSON.parse(message);
+        loadReports.set(r.id, r);
+      } catch {}
+    },
+    { namespaces: ["harness"] },
+  );
+  let loadSeq = 0;
+  /** How many saved pages stash_bp has loaded so far (the harness counter in its copy). */
+  const pageLoads = async () => {
+    const id = `l${++loadSeq}`;
+    await t.console(`scriptevent harness:stash_loads ${id}`);
+    const r = await t.waitUntil(() => loadReports.get(id), { timeout: 60, message: "the page-load counter in stash_bp answered" });
+    t.assert(r.patched === true, "the page-load counter is in place");
+    return r.loads;
+  };
   const p = await t.player("Flyer", { op: true });
   t.cmd(p, "/gamemode survival");
   const inv = p.getComponent("minecraft:inventory").container;
@@ -43,8 +70,11 @@ export default async function (t) {
   await t.wait(8);
   t.check(count() === 0, "no rockets on page 2");
   const since = t.tick;
+  const loadsBefore = await pageLoads();
   t.check(await useLast(), "the rocket was used");
   await t.waitUntil(() => inv.getItem(0)?.typeId === ROCKET, { timeout: 40, message: "refilled from page 1" });
+  const loadsRefill = (await pageLoads()) - loadsBefore;
+  t.check(loadsRefill >= 1, `refilling from page 1 loaded it (${loadsRefill} page loads): the counter sees page loads`);
   t.check(inv.getItem(0).amount === 64, `64 from page 1 (${inv.getItem(0).amount})`);
   const note = t.messages(p, { since, kind: "actionbar" }).find((m) => /Refilled/.test(m.plain));
   t.check(/Page #1.*Refilled 64x Firework rocket/.test(note?.plain ?? ""), `the bar says from where (${note?.plain})`);
@@ -109,9 +139,13 @@ export default async function (t) {
   // 6. (O20) Nothing matches: a request nothing on any page can answer fills nothing and moves nothing.
   await toPage(2);
   for (let s = 0; s < 9; s++) inv.setItem(s, undefined);
+  await t.wait(5);
+  const loadsMiss = await pageLoads();
   t.system.sendScriptEvent("realm:refill_need", JSON.stringify({ player: p.id, slot: 0, id: "minecraft:pufferfish" }));
   await t.wait(20);
   t.check(!inv.getItem(0), `a miss fills nothing (${inv.getItem(0)?.typeId})`);
+  const missLoads = (await pageLoads()) - loadsMiss;
+  t.check(missLoads === 0, `the page index answered the miss without loading a page (${missLoads} page loads)`);
   await toPage(1);
   t.check(inv.getItem(22)?.amount === 64, "a miss moved nothing");
 
