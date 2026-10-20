@@ -1114,10 +1114,27 @@ function line2Of(region, dest) {
 /**
  * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
  * markers, the second line, which parts show, and the heading and place they were last drawn for.
- * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string, drawn?: number, lag?: boolean, fresh?: number, dirty?: boolean }} View
+ * `shown` and `shownSecond`: the markers and second line it was last drawn with (a pass that finds the same draws nothing).
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string, drawn?: number, lag?: boolean, fresh?: number, dirty?: boolean, shown?: Marker[], shownSecond?: string }} View
  */
 /** @type {Map<string, View>} */
 const views = new Map();
+
+/** Markers closer than this (blocks) to where they were drawn count as unmoved: a strip cell is 5 degrees and a radar cell 2.4 blocks or more. */
+const MARKER_SLACK = 0.25;
+/**
+ * Would these markers draw the same as the ones last drawn (same kinds in the same order, none moved MARKER_SLACK)?
+ * @param {Marker[] | undefined} a @param {Marker[]} b
+ */
+function sameMarkers(a, b) {
+  if (!a || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const m = a[i];
+    const n = b[i];
+    if (m.kind !== n.kind || m.clamp !== n.clamp || Math.abs(m.x - n.x) >= MARKER_SLACK || Math.abs(m.z - n.z) >= MARKER_SLACK) return false;
+  }
+  return true;
+}
 
 /** 0 = north, clockwise. @param {Player} player */
 const headingOf = (player) => (((player.getRotation().y + 180) % 360) + 360) % 360;
@@ -1166,9 +1183,12 @@ function pass(player, all, seen, now) {
   /** @type {View} */
   const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, terrain: pr.terrain, dest: dest?.spot?.n, target: dest?.spot, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, y: 0, z: 0 };
   const old = views.get(player.id);
-  if (old && old.dim === view.dim) Object.assign(view, { heading: old.heading, x: old.x, y: old.y, z: old.z, tv: old.tv, drawn: old.drawn, fresh: old.fresh });
-  // Drawn by the per-tick redraw, within its budget (next tick unless many players are waiting).
-  view.dirty = true;
+  const same = !!old && old.dim === view.dim;
+  if (same) Object.assign(view, { heading: old.heading, x: old.x, y: old.y, z: old.z, tv: old.tv, drawn: old.drawn, fresh: old.fresh, shown: old.shown, shownSecond: old.shownSecond });
+  // Drawn by the per-tick redraw, within its budget (next tick unless many players are waiting), unless the pass found
+  // what is already on screen: then only turning, moving, new land or the refresh draws it (a still player's pass
+  // costs no strip and radar).
+  view.dirty = !same || !!old.dirty || !lastSent.has(player.id) || old.compass !== view.compass || old.radar !== view.radar || old.radius !== view.radius || old.north !== view.north || old.terrain !== view.terrain || view.shownSecond !== view.second || !sameMarkers(view.shown, view.markers);
   views.set(player.id, view);
   costMs += Date.now() - t0;
   costPlayers++;
@@ -1224,6 +1244,9 @@ function render(player, v, now, refresh, heading = headingOf(player), at = playe
   }
   const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
   if (side.held(player)) return false;
+  // On screen from now (or already): a pass that finds the same markers and line doesn't draw again.
+  v.shown = v.markers;
+  v.shownSecond = v.second;
   const sent = lastSent.get(player.id);
   let showC = v.compass && (!sent || !sent.compass || sent.ctext !== compassText || (refresh && now - sent.cat >= REFRESH));
   let showR = v.radar && (!sent || !sent.radar || sent.rtext !== radar || (refresh && now - sent.rat >= REFRESH));

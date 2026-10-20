@@ -154,3 +154,45 @@ test("the real redraw callback refreshes a still player's title without building
   assert.ok(renders.includes("turned"), "a player who turned is built again");
   assert.ok(renders.includes("lagging"), "a radar waiting for its terrain is built again");
 });
+
+/** A top-level function of main.js (from `function name(` to its closing brace at the start of a line). */
+function functionSource(name) {
+  const at = mainSource.indexOf(`\nfunction ${name}(`);
+  const end = mainSource.indexOf("\n}\n", at);
+  assert.ok(at >= 0 && end > at, `function ${name} found`);
+  return mainSource.slice(at + 1, end + 2);
+}
+
+test("the real pass draws again only when it found something new: a still player's pass builds no strip and radar (W1/O5)", () => {
+  const helpers = mainSource.includes("function sameMarkers(") ? `${mainSource.match(/^const MARKER_SLACK = .+;$/m)[0]}\n${functionSource("sameMarkers")}` : "";
+  const markers = () => [{ kind: "mob", x: 10.2, z: -4, clamp: true }, { kind: "folk", x: 3, z: 3, clamp: false }];
+  let found = markers();
+  const views = new Map();
+  const lastSent = new Map([["p", { ctext: "c", cat: 0, rtext: "r", rat: 0, compass: true, radar: true }]]);
+  const player = { id: "p", location: { x: 0, y: 64, z: 0 }, dimension: { id: "minecraft:overworld" } };
+  const sandbox = {
+    prefsOf: () => ({ compass: true, radar: true, radius: 24, north: false, terrain: true }), get: () => true, lastSent, views, Date,
+    gather: () => ({ markers: found, liveFolk: new Map() }), destination: () => undefined, arrival: () => undefined, arrived: new Map(),
+    regions: new Map(), line2: (r, d) => `${r}|${d}`, OVERWORLD: "minecraft:overworld", DIM_NAMES: {}, G: {}, cutWords: (t) => t, costMs: 0, costPlayers: 0,
+    side: { clear() {}, redraw() {} }, Math,
+  };
+  const pass = vm.runInNewContext(`${helpers}\n${functionSource("pass")}\npass`, sandbox);
+  pass(player, [player], [], 10);
+  assert.equal(views.get("p").dirty, true, "the first pass draws");
+  // The redraw drew it (render marks it clean and records what it drew).
+  const drawn = views.get("p");
+  drawn.dirty = false;
+  drawn.shown = drawn.markers;
+  drawn.shownSecond = drawn.second;
+  found = markers();
+  pass(player, [player], [], 20);
+  assert.equal(views.get("p").dirty, false, "a pass that finds the same markers and line draws nothing");
+  found = markers();
+  found[0].x += 0.1;
+  pass(player, [player], [], 30);
+  assert.equal(views.get("p").dirty, false, "nor one where a marker moved less than a fraction of a cell");
+  found = markers();
+  found[0].x += 3;
+  pass(player, [player], [], 40);
+  assert.equal(views.get("p").dirty, true, "a marker that moved draws again");
+});
