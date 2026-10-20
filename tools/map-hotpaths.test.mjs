@@ -212,3 +212,36 @@ test("the 200-tick radar rebuild is spread over the ticks by player, not one wav
   }
   assert.ok(most <= 4, `at most ${most} of 40 players' rebuilds fall on one tick (all 40 before)`);
 });
+
+test("a jump keeps a roofed player's cave layer, so the scanner doesn't read a new layer from nothing (O1)", async () => {
+  const terrainMod = await import("../packs/map_bp/scripts/terrain.js");
+  const keep = mainSource.match(/^const LAYER_KEEP = .+;$/m)?.[0] ?? "";
+  const terrain = new terrainMod.TerrainWorld(6000, 24);
+  const scanPlans = new Map();
+  const playerStore = new Map();
+  const sandbox = {
+    terrain, scanPlans, playerStore, lastPose: new Map(), terrainBaseMemo: new Map(), planTurn: { left: 2, made: 0 }, retryAt: new Map(),
+    prefsOf: () => ({ radar: true, terrain: true, radius: 24 }), colKey: terrainMod.colKey, aheadPicks: terrainMod.aheadPicks, MISS_RETRY: terrainMod.MISS_RETRY,
+    SCAN_MAX_AGE: 2400, PLAN_MIN_AGE: 4, Math,
+  };
+  const planFor = vm.runInNewContext(`${keep}\n${functionSource("planFor")}\nplanFor`, sandbox);
+  const nether = { id: "minecraft:nether" };
+  const p = { id: "p", isValid: true, dimension: nether, location: { x: 0.5, y: 40, z: 0.5 }, isOnGround: true, getVelocity: () => ({ x: 0, y: 0, z: 0 }) };
+  planFor(p, 100);
+  assert.equal(playerStore.get("p").id, "minecraft:nether|layer40");
+  // Mid-jump, a block higher.
+  p.location = { x: 0.5, y: 41.2, z: 0.5 };
+  p.isOnGround = false;
+  planFor(p, 110);
+  assert.equal(playerStore.get("p").id, "minecraft:nether|layer40", "a jump keeps the layer they stand on");
+  // Landed on a step a block up: the new layer.
+  p.location = { x: 1.5, y: 41, z: 0.5 };
+  p.isOnGround = true;
+  planFor(p, 120);
+  assert.equal(playerStore.get("p").id, "minecraft:nether|layer41");
+  // Falling far: the layer follows at once.
+  p.location = { x: 1.5, y: 30, z: 0.5 };
+  p.isOnGround = false;
+  planFor(p, 130);
+  assert.equal(playerStore.get("p").id, "minecraft:nether|layer30");
+});

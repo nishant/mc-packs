@@ -811,6 +811,8 @@ system.runInterval(() => {
   scanTicks++;
 }, 1);
 
+/** Blocks up or down that change a roofed viewer's layer even in the air (a jump is about 1.25). */
+const LAYER_KEEP = 3;
 /** @param {Player} player @param {number} now @returns {ScanPlan | undefined} */
 function planFor(player, now) {
   if (!player.isValid) return undefined;
@@ -825,7 +827,20 @@ function planFor(player, now) {
   const surface = terrain.store(dim.id, undefined);
   const top = terrain.get(surface, at.x, at.z, 1, true);
   const roof = dim.id === "minecraft:nether" || (!!top && top.kind !== "water" && top.y > at.y + 6);
-  const py = Math.floor(at.y);
+  // The layer is the height they stand at: a jump (or a step off a ledge) keeps the layer they stood on, since every
+  // layer is a store of its own that the scanner reads again from nothing (O1). A move of LAYER_KEEP blocks or more
+  // (a fall, a ladder, swimming) changes it at once.
+  let py = Math.floor(at.y);
+  const before = scanPlans.get(player.id);
+  if (roof && before?.roof && before.dim.id === dim.id && py !== before.py && Math.abs(py - before.py) < LAYER_KEEP) {
+    let grounded = true;
+    try {
+      grounded = player.isOnGround;
+    } catch {
+      // left meanwhile: the layer doesn't matter
+    }
+    if (!grounded) py = before.py;
+  }
   const store = terrain.store(dim.id, roof ? py : undefined);
   playerStore.set(player.id, store);
   // Where the radar draws its terrain from (radarOf: whole blocks).
