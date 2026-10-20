@@ -2111,7 +2111,7 @@ function scanInput(t, claims) {
   };
 }
 
-/** A tick of the scan: up to SCAN_READS_TICK reads. */
+/** A tick of the scan: up to SCAN_READS_TICK reads, ended early when the scan says its own work is used up ("tick"). */
 function stepScan() {
   const job = scanJob;
   if (!job) return;
@@ -2143,6 +2143,7 @@ function stepScan() {
       if (r.done) return finishScan(t, r.value);
       q = r.value;
     }
+    if (q[0] === "tick") return; // the scan's own work for this tick is used up (SCAN.workTick)
     if (q[0] === "claims") {
       job.pending = undefined;
       const [, x1, z1, x2, z2] = /** @type {["claims", number, number, number, number]} */ (q);

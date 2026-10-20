@@ -3,6 +3,7 @@
 // worlds (a hillside, a cabin and a path, a lake for the dock, unloaded columns) and every rejection.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { MinecraftBlockTypes } from "@minecraft/vanilla-data";
 import { FORWARD, designFootprint } from "../packs/town_bp/scripts/designs.js";
 import {
@@ -339,4 +340,34 @@ test("scan: a project with `near` (the garden pen) goes beside that point, not n
   // Nothing beside the point (all of it man-made): no spot, rather than one far away.
   const built = (x, z) => (Math.hypot(x - garden.x, z - garden.z) <= SCAN.maxNear + 8 ? { k: "M" } : flat(x, z));
   assert.deepEqual(run({ ...base, projects: [pen] }, built).nos, ["pen"]);
+});
+
+test("scan pacing: work on columns already read still ends the tick (F37 review), so no tick evaluates every candidate", () => {
+  // Rolling ground and five 7 x 7 houses: houses after the first re-walk rings the first one read (all cached).
+  const roll = worldOf((x, z) => 64 + Math.round(2 * Math.sin(x / 9) + 2 * Math.cos(z / 11)));
+  let positions = 0;
+  const houses = ["house_1", "house_2", "house_3", "house_4", "house_5"].map((hid) => ({
+    id: hid,
+    box: (s) => {
+      positions++;
+      return designFootprint("house", s);
+    },
+  }));
+  const gen = scanTown({ ...base, projects: [{ id: "well", well: true, box: box("well") }, ...houses] });
+  let most = 0;
+  let ticks = 0;
+  let r = gen.next();
+  while (!r.done) {
+    const q = r.value;
+    most = Math.max(most, positions);
+    positions = 0;
+    if (q[0] === "tick") ticks++;
+    r = gen.next(q[0] === "c" ? roll(q[1], q[2]) : q[0] === "b" ? { id: id("stone") } : q[0] === "claims" ? 0 : undefined);
+  }
+  assert.equal(r.value.picks.length, 6, "every project still gets a spot");
+  assert.ok(ticks > 100, `the scan asks to end the tick (${ticks})`);
+  // Each position costs at least 8 units of SCAN.workTick, so at most workTick / 8 (plus the one that crosses it).
+  assert.ok(most <= SCAN.workTick / 8 + 1, `positions looked at between two requests: ${most}`);
+  const src = readFileSync(new URL("../packs/town_bp/scripts/main.js", import.meta.url), "utf8");
+  assert.match(src, /if \(q\[0\] === "tick"\) return;/, "stepScan ends its tick on the scan's request");
 });

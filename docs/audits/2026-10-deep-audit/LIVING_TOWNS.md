@@ -354,7 +354,7 @@ Two towns at Capital: 2 NPCs + 2 labels + 20 villagers + 8 animals = 32 entities
 | Build interval (existing, 100 ticks): plus the mayor check per town | always | under 0.02 ms/tick |
 | Census | every 600 ticks per town with a player in it | under 0.01 ms/tick |
 | `playerPlaceBlock` mark | per placed block | 2 checks; saves coalesced every 10 s |
-| Scan | after an add or level-up, while a player is in the town | 12 column reads a tick (about 0.4 ms/tick), for about 20 to 60 s |
+| Scan | after an add or level-up, while a player is in the town | 12 column reads and 400 column lookups (`SCAN.workTick`) a tick, whichever comes first (about 0.4 to 0.6 ms/tick in interpreted V8, not yet measured on BDS), for one to five minutes |
 | Validation and build job | a few seconds per build | 64 block reads or 48 block changes a tick (about 0.5 ms/tick) |
 | npc_bp per mayor | while a player is near (its existing loop) | like one townsfolk, about 0.01 ms/tick |
 
@@ -530,3 +530,4 @@ behavior, versions bumped and `node tools/sync-diag.mjs` run. The lead runs `hel
 | D65 | Townsfolk keeps `from` as `f` when it is a townsfolk id (`bram`-like or `mayor:<town>`), tells a piece with `f` only from that townsfolk's greeting, and treats pieces with different `f` as different news in its 30-minute replace rule | Two towns' news would otherwise replace each other; nobody else should tell a mayor's own news |
 | D66 | `townLife` Disabled: no new path, post or pen (one pen half built finishes), the animals stay; restoring leftovers still runs | Turning it off never removes blocks or mobs |
 | D67 | The perf scenario sets its 18 spots by hand (autoSpots Disabled during setup) and fills the residents with census calls, so its soak has no scan or build; `--arg baseline=1` is the Townsfolk baseline and `--arg transient=scan` or `build` measures the transients on their own | Section 10 asks for the steady cost and the transients separately |
+| D68 | The scan counts its own work (every column lookup, cached or not, and 8 plus the lists for each position) and yields `["tick"]` at 400; `stepScan` ends its tick on it | A review measured 62-117 ms between yields in V8 when later houses re-walked cached rings. With 400, node --jitless (closest to QuickJS here) gives a median 0.6 ms a tick; a level of 5 houses takes about 4 minutes instead of under one, which the priorities (performance over UX) accept |

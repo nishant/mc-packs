@@ -283,12 +283,13 @@ export function compareKeys(a, b) {
  * }} ScanInput
  * `final`: a candidate that waits for unknown columns no longer holds back a valid one (the scan waited enough).
  * Requests the scan yields: ["c", x, z] a column (answer a Column), ["b", x, y, z] a block (BlockInfo or undefined),
- * ["claims", x1, z1, x2, z2] how many claims overlap (a number).
- * @typedef {["c", number, number] | ["b", number, number, number] | ["claims", number, number, number, number]} ScanRequest
+ * ["claims", x1, z1, x2, z2] how many claims overlap (a number), ["tick"] the scan's own work for this tick is done
+ * (answer nothing; the caller ends its tick).
+ * @typedef {["c", number, number] | ["b", number, number, number] | ["claims", number, number, number, number] | ["tick"]} ScanRequest
  * @typedef {{ x: number, z: number, f: number, pad: number, vol: number, lv?: string, lt?: string, dist: number, key: number[], region: Rect, cuts: { x: number, z: number, t: number }[] }} Candidate
  */
 
-export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear: 9, maxNear: 30, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3 };
+export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear: 9, maxNear: 30, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3, workTick: 400 };
 
 /**
  * Picks a spot for each project, one after another (the well first), reading columns as it goes (yield). Returns
@@ -299,8 +300,18 @@ export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear
 export function* scanTown(input) {
   /** @type {Map<number, Column>} */
   const cache = new Map();
+  // Work counted in column lookups (cached or not), so a scan over columns it already read still stops for the
+  // tick: without it, later projects re-walk cached rings and evaluate every candidate in one tick (F37 review).
+  let work = 0;
+  /** Ends the tick when this tick's work is used up. @returns {Generator<ScanRequest, void, any>} */
+  function* pace() {
+    if (work < SCAN.workTick) return;
+    work = 0;
+    yield ["tick"];
+  }
   /** @param {number} x @param {number} z @returns {Generator<ScanRequest, Column, any>} */
   function* col(x, z) {
+    work++;
     const key = (x + 32768) * 65536 + (z + 32768);
     let c = cache.get(key);
     if (!c) {
@@ -310,7 +321,10 @@ export function* scanTown(input) {
     return c;
   }
   /** Synchronous lookup of a column already read. @param {number} x @param {number} z */
-  const known = (x, z) => cache.get((x + 32768) * 65536 + (z + 32768)) ?? UNKNOWN;
+  const known = (x, z) => {
+    work++;
+    return cache.get((x + 32768) * 65536 + (z + 32768)) ?? UNKNOWN;
+  };
   const taken = [...(input.taken ?? [])];
   const pads = [...(input.pads ?? [])];
   /** @type {{ id: string, spot: AutoSpot }[]} */
@@ -334,6 +348,7 @@ export function* scanTown(input) {
 
   /** Cheap checks first, no reads: the town's edge, other spots, posts and places, claims. @param {Rect} region */
   function blockedWithoutReads(region) {
+    work += 8 + taken.length + (input.posts?.length ?? 0) + (input.claims?.length ?? 0);
     const lim = input.radius - SCAN.keep;
     for (const [x, z] of [[region.x1, region.z1], [region.x1, region.z2], [region.x2, region.z1], [region.x2, region.z2]])
       if (Math.hypot(x - input.cx, z - input.cz) > lim) return "edge";
@@ -414,6 +429,7 @@ export function* scanTown(input) {
   function* evalBuild(p, x, z, f, o) {
     const fp = rectOf(p.box({ x, y: 0, z, f }));
     const region = regionOf(fp);
+    yield* pace();
     if (blockedWithoutReads(region)) return undefined;
     let unknown = false;
     for (let i = region.x1; i <= region.x2; i++)
@@ -441,6 +457,7 @@ export function* scanTown(input) {
     /** @type {Candidate[]} */
     const out = [];
     for (const pad of [m, m - 1, m + 1]) {
+      yield* pace();
       const plan = gradePlan(region, fp, known, pad, input.depth);
       if (!plan.ok) continue;
       if (input.placed?.(region, pad - 5, pad + 12)) return undefined;
@@ -510,6 +527,7 @@ export function* scanTown(input) {
     const rMax = input.radius - SCAN.edge;
     for (let r = 4; r <= rMax; r += SCAN.ringStep) {
       for (const [x, z] of ring(r)) {
+        yield* pace();
         const c = yield* col(x, z);
         if (c.k === "U") {
           waitDist = Math.min(waitDist, r);
@@ -545,6 +563,7 @@ export function* scanTown(input) {
   function* evalDock(p, x, z, f, w) {
     const fp = rectOf(p.box({ x, y: w + 1, z, f }));
     const region = regionOf(fp);
+    yield* pace();
     if (blockedWithoutReads(region)) return undefined;
     let unknown = false;
     for (let i = region.x1; i <= region.x2; i++)
