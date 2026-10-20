@@ -232,6 +232,31 @@ test("a removal the game rejects or throws on is reported with its reason, and t
   }
 });
 
+// BDS answers "tickingarea remove" of an area that is no longer there with no success, the same as a refusal. An area
+// that is gone (a scenario's "/tickingarea remove_all") gets one retry at the next phase's start, then leaves the list.
+test("an area that is already gone is tried once more at the next start, then dropped, not retried every phase", async () => {
+  const saved = savedWorld();
+  const scenario = `export default async function (t) {
+    if (t.phase === 1) {
+      const a = await t.player("Ann");
+      await t.loadArea(a.location.x + 30, a.location.z, { radius: 1 });
+      t.server("/tickingarea remove_all");
+    }
+    if (t.phase < 3) t.restart("again");
+  }`;
+  const one = await runPhase(saved, scenario, 1);
+  assert.equal(one.done.restart, true);
+  assert.ok(one.logs.some((l) => /could not remove harness_1_1/.test(l)), one.logs.join("\n"));
+  assert.match(String(saved.props.get("harness:tickingAreas")), /harness_1_1/, "kept for one retry");
+  const two = await runPhase(saved, scenario, 2);
+  assert.ok(two.logs.some((l) => /no more tries for harness_1_1, harness_1_2/.test(l)), two.logs.join("\n"));
+  assert.equal(saved.props.has("harness:tickingAreas"), false, "dropped after the retry");
+  const three = await runPhase(saved, scenario, 3);
+  assert.equal(three.done.ok, true, three.done.msg);
+  assert.deepEqual(three.commands.filter((c) => c.startsWith("tickingarea remove ")), [], "no third try");
+  assert.equal(three.logs.some((l) => /ticking area cleanup/.test(l)), false, three.logs.join("\n"));
+});
+
 test("a rejected add of a name the game never saw is still a hard failure with the game's message", async () => {
   const saved = savedWorld();
   for (let i = 0; i < MAX_AREAS; i++) saved.areas.push({ name: `other_${i}`, x: 5000 + i * 100, z: 5000, radius: 1 });

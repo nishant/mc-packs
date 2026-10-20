@@ -202,7 +202,9 @@ Ticking areas are saved with the world, so they outlive `t.restart()`. `t.loadAr
 `harness_<phase>_<n>` and saves the list of the areas it added (the test pack's own `harness:tickingAreas` property,
 not any pack's data). A phase that calls `t.restart()` removes those areas, and only those, before it ends, while
 their chunks are loaded; the next phase removes whatever is still listed (an area the game would not remove, or a
-phase that ended another way) before its scenario starts. Removing them only at the start of the next run broke the
+phase that ended another way) before its scenario starts. That start is the last try: an area that still cannot be
+removed leaves the list with a log line (BDS answers a remove of an area that is already gone, say after a scenario's
+`/tickingarea remove_all`, with no success, so it is not retried every phase). Removing them only at the start of the next run broke the
 atlas scenario: an area whose chunks were still loading from the save, removed then, left those chunks unloadable for
 the whole run, even under a new area over the same spot (`chunk at 2000,2000 did not load in 400 ticks`, with 1 of 10
 areas in use). A scenario's own areas are never touched, a list entry that is not a harness name is refused, and a

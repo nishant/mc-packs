@@ -256,9 +256,13 @@ function runCmd(target, cmd) {
  * save left those chunks unloadable for that whole run (no area added over them afterwards ever loaded them: the
  * atlas scenario's phase 2, "chunk at 2000,2000 did not load in 400 ticks", with only the new area in use). The start
  * of each phase still removes what is listed, for a phase that ended without asking for the restart.
+ * An area that cannot be removed at the restart stays listed so the next phase's start tries once more; that start is
+ * the last try, and what still fails there leaves the list (the game answers a remove of an area that is already gone,
+ * say after a scenario's "/tickingarea remove_all", with no success, so keeping it would retry and log it forever).
  * @param {string} what how the log names the areas
+ * @param {{ keepFailed?: boolean }} [options] keepFailed: list what could not be removed for the next phase to retry
  */
-function removeOwnedAreas(what) {
+function removeOwnedAreas(what, { keepFailed = false } = {}) {
   let raw;
   try {
     raw = world.getDynamicProperty(OWNED_AREAS_KEY);
@@ -269,8 +273,9 @@ function removeOwnedAreas(what) {
   const { removed, problems } = releaseOwnedAreas(raw, (area) => runCmd(world.getDimension(area.dimension), `tickingarea remove ${area.name}`));
   if (removed.length) out({ type: "log", msg: `${what} removed: ${removed.map((a) => a.name).join(", ")}` });
   for (const problem of problems) out({ type: "log", msg: `ticking area cleanup: ${problem}` });
-  // An area the game would not remove stays listed, so the next phase tries again.
-  const left = readOwnedAreas(raw).areas.filter((a) => !removed.some((r) => r.name === a.name && r.dimension === a.dimension));
+  const failed = readOwnedAreas(raw).areas.filter((a) => !removed.some((r) => r.name === a.name && r.dimension === a.dimension));
+  if (failed.length && !keepFailed) out({ type: "log", msg: `ticking area cleanup: no more tries for ${failed.map((a) => a.name).join(", ")}; dropped from the saved list (an area that is already gone cannot be removed either)` });
+  const left = keepFailed ? failed : [];
   try {
     // this key only: a scenario's own saved data is not ours to clear
     world.setDynamicProperty(OWNED_AREAS_KEY, left.length ? JSON.stringify(left) : undefined);
@@ -496,7 +501,7 @@ async function run(cfg) {
     else { ok = false; msg = `scenario threw: ${e}${e && e.stack ? "\n" + e.stack : ""}`; }
   }
   if (ok && t.failures.length) { ok = false; msg = `${t.failures.length} check(s) failed: ${t.failures.join("; ")}`; }
-  if (restart) removeOwnedAreas("this phase's ticking areas (before the restart)");
+  if (restart) removeOwnedAreas("this phase's ticking areas (before the restart)", { keepFailed: true });
   out({ type: "done", ok, msg, restart, phase: t.phase, forms: forms.length, messages: messages.length });
 }
 
