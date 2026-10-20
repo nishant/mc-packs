@@ -16,7 +16,7 @@ const source = ts.createSourceFile("main.js", text, ts.ScriptTarget.Latest, true
 const parts = [];
 function visit(/** @type {import("typescript").Node} */ node) {
   if (ts.isFunctionDeclaration(node) && node.name?.text === "behave") parts.push(node.getText(source));
-  if (ts.isVariableStatement(node) && /\b(postGuard = createSnapGuard|MOVE_DISTANCE = |anchorOf = |dist = )/.test(node.getText(source))) parts.push(node.getText(source));
+  if (ts.isVariableStatement(node) && /\b(postGuard = createSnapGuard|postFall = createFallWatch|MOVE_DISTANCE = |anchorOf = |dist = )/.test(node.getText(source))) parts.push(node.getText(source));
   ts.forEachChild(node, visit);
 }
 visit(source);
@@ -45,6 +45,9 @@ function run(rec, entity) {
     createSnapGuard: tether.createSnapGuard,
     settledBelow: tether.settledBelow,
     standable: tether.standable,
+    createFallWatch: tether.createFallWatch ?? (() => ({ falling: () => false, forget() {} })),
+    floorGone: tether.floorGone,
+    freeSpotNear: tether.freeSpotNear,
   };
   vm.createContext(ctx);
   vm.runInContext(`${parts.join("\n")}\nthis.behave = behave;`, ctx);
@@ -128,4 +131,38 @@ test("dug out, then refilled: the townsfolk goes back up onto its own post, not 
   assert.equal(rec.y, 64, "back on its own post");
   assert.equal(ent.location.y, 64, "standing on the refilled floor");
   assert.equal(rec.orig, undefined, "nothing left to go back to");
+});
+
+test("its floor dug into water: a townsfolk floating there is not left in the water for good", () => {
+  // Floor at y 63 with a pit at 0,0 down to water at y 60 and 61 (stone under it).
+  const dim = {
+    getBlock({ x, y, z }) {
+      const pit = x === 0 && z === 0;
+      if (pit && (y === 60 || y === 61)) return { typeId: "minecraft:water", isAir: false, isLiquid: true };
+      const solid = y < 60 || (y <= 63 && !pit);
+      return solid ? { typeId: "minecraft:stone", isAir: false, isLiquid: false } : { typeId: "minecraft:air", isAir: true, isLiquid: false };
+    },
+  };
+  const rec = { id: "mara", dim: "minecraft:overworld", x: 0.5, y: 64, z: 0.5, yaw: 0 };
+  const ent = {
+    dimension: { id: "minecraft:overworld", ...dim },
+    location: { x: 0.5, y: 61.2, z: 0.5 }, // floating in the pit's water
+    isOnGround: false,
+    isInWater: true,
+    teleport(to) {
+      this.location = { ...to };
+      this.isInWater = false;
+      this.isOnGround = to.y === 64;
+    },
+  };
+  const { ctx } = run(rec, ent);
+  ctx.world.getDimension = () => ({ id: "minecraft:overworld", ...dim });
+  for (let k = 0; k < 60; k++) {
+    ctx.system.currentTick = k * 10;
+    ctx.behave(rec, {}, ent, false);
+    if (ent.location.y < 63) ent.isInWater = true; // put back over the pit, it drops into the water again
+    if (ent.location.y >= 64 && Math.floor(ent.location.x) === 0 && Math.floor(ent.location.z) === 0) ent.location = { x: 0.5, y: 61.2, z: 0.5 };
+  }
+  assert.ok(ent.location.y >= 64, `out of the water, on the floor (${JSON.stringify(ent.location)})`);
+  assert.ok(!(Math.floor(ent.location.x) === 0 && Math.floor(ent.location.z) === 0), "next to the pit, not over it");
 });

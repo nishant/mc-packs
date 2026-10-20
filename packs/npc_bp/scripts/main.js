@@ -19,7 +19,7 @@ import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
 import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
-import { createSnapGuard, settledBelow, standable } from "./tether.js";
+import { createFallWatch, createSnapGuard, floorGone, freeSpotNear, settledBelow, standable } from "./tether.js";
 import { onScriptEvent } from "./script-events.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
@@ -610,6 +610,8 @@ function say(entity, t, line) {
 
 /** Put-backs per townsfolk: the first at once, then a wait that doubles while they keep coming (tether.js). */
 const postGuard = createSnapGuard({ cooldown: 40, maxCooldown: 600 });
+/** Townsfolk dropping from their post (waited for), told from ones floating in water or hanging below it (tether.js). */
+const postFall = createFallWatch();
 
 /** @param {string} line @param {string} name */
 const fill = (line, name) => line.split("{player}").join(name);
@@ -637,7 +639,7 @@ function behave(rec, t, entity, lively) {
   if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
     // The floor under its post is gone (broken, or the post was a block or more above the ground): it dropped straight
     // down and stands there. Putting it back up would only let it fall again, every check: its post moves down instead.
-    if (entity.dimension.id === rec.dim && entity.location.y < at.y && Math.hypot(entity.location.x - at.x, entity.location.z - at.z) <= 1 && !entity.isOnGround) return; // still falling: wait until it lands
+    if (entity.dimension.id === rec.dim && postFall.falling(entity, rec.id, at, system.currentTick)) return; // still falling: wait until it lands
     if (entity.dimension.id === rec.dim && settledBelow(entity, at)) {
       const y = Math.round(entity.location.y * 1000) / 1000;
       console.warn(`[npc] ${rec.id}: the floor under its post at ${Math.floor(rec.x)}, ${rec.y}, ${Math.floor(rec.z)} is gone: the post moves down to y ${y}`);
@@ -645,6 +647,21 @@ function behave(rec, t, entity, lively) {
       rec.y = y;
       save();
       return;
+    }
+    // Its floor is gone and it didn't land under its post (it floats in the water below, or hangs somewhere): putting
+    // it back would only drop it in again, so its post moves to a free spot next to it until the floor is back.
+    if (entity.dimension.id === rec.dim && loaded(dim, at) && floorGone(dim, at) && postGuard.allow(rec.id, system.currentTick)) {
+      const spot = freeSpotNear(dim, at, 3);
+      if (spot) {
+        console.warn(`[npc] ${rec.id}: the floor under its post at ${Math.floor(at.x)}, ${at.y}, ${Math.floor(at.z)} is gone: it waits at ${Math.floor(spot.x)}, ${spot.y}, ${Math.floor(spot.z)}`);
+        rec.orig ??= at;
+        Object.assign(rec, { x: spot.x, y: spot.y, z: spot.z });
+        save();
+        entity.teleport(spot, { dimension: dim, rotation: { x: 0, y: rec.yaw } });
+        postGuard.snapped(rec.id, system.currentTick);
+        st.yaw = rec.yaw;
+        return;
+      }
     }
     // Pushed or moved by someone: back home, but only into a loaded spot nobody stands on, and with a growing wait if
     // it keeps being pushed off (a mob leaning on it would otherwise bounce it back and forth every check).

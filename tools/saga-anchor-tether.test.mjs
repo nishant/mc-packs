@@ -17,7 +17,7 @@ const source = ts.createSourceFile("actors.js", text, ts.ScriptTarget.Latest, tr
 const parts = [];
 function visit(/** @type {import("typescript").Node} */ node) {
   if (ts.isFunctionDeclaration(node) && node.name?.text === "tendActors") parts.push(node.getText(source).replace(/^export /, ""));
-  if (ts.isVariableStatement(node) && node.getText(source).includes("anchorGuard = createSnapGuard")) parts.push(node.getText(source));
+  if (ts.isVariableStatement(node) && /anchorGuard = createSnapGuard|anchorFall = createFallWatch/.test(node.getText(source))) parts.push(node.getText(source));
   ts.forEachChild(node, visit);
 }
 visit(source);
@@ -35,6 +35,9 @@ function run(entity, anchor) {
     createSnapGuard: tether.createSnapGuard,
     settledBelow: tether.settledBelow,
     standable: tether.standable,
+    createFallWatch: tether.createFallWatch,
+    floorGone: tether.floorGone,
+    freeSpotNear: tether.freeSpotNear,
   };
   vm.createContext(ctx);
   vm.runInContext(`${parts.join("\n")}\nthis.tend = tendActors;`, ctx);
@@ -125,4 +128,36 @@ test("floor gone, then refilled: the character goes back up onto its own spot, n
   ctx.tend();
   assert.equal(ctx.actors.get("a1").anchor.y, 64, "its own spot again");
   assert.equal(ent.location.y, 64, "standing on the refilled floor");
+});
+
+test("its floor dug into water: a character floating there is not left in the water for good", () => {
+  const dim3 = {
+    getBlock({ x, y, z }) {
+      const pit = x === 0 && z === 0;
+      if (pit && (y === 60 || y === 61)) return { typeId: "minecraft:water", isAir: false, isLiquid: true };
+      const solid = y < 60 || (y <= 63 && !pit);
+      return solid ? { typeId: "minecraft:stone", isAir: false, isLiquid: false } : { typeId: "minecraft:air", isAir: true, isLiquid: false };
+    },
+  };
+  const ent = {
+    isValid: true,
+    dimension: dim3,
+    location: { x: 0.5, y: 61.2, z: 0.5 },
+    isOnGround: false,
+    isInWater: true,
+    teleport(to) {
+      this.location = { ...to };
+      this.isInWater = false;
+      this.isOnGround = true;
+    },
+  };
+  const ctx = run(ent, { x: 0.5, y: 64, z: 0.5 });
+  for (let s = 0; s < 30; s++) {
+    ctx.system.currentTick = s * 20;
+    ctx.tend();
+    // Put back over the pit, it only drops into the water again.
+    if (Math.floor(ent.location.x) === 0 && Math.floor(ent.location.z) === 0) Object.assign(ent, { location: { x: 0.5, y: 61.2, z: 0.5 }, isInWater: true, isOnGround: false });
+  }
+  assert.ok(ent.location.y >= 64, `out of the water, on the floor (${JSON.stringify(ent.location)})`);
+  assert.ok(!(Math.floor(ent.location.x) === 0 && Math.floor(ent.location.z) === 0), "next to the pit, not over it");
 });

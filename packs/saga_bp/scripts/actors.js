@@ -3,7 +3,7 @@
 import { GameMode, system, world } from "@minecraft/server";
 import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
 import { spawnFresh } from "./spawn.js";
-import { createSnapGuard, settledBelow, standable } from "./tether.js";
+import { createFallWatch, createSnapGuard, floorGone, freeSpotNear, settledBelow, standable } from "./tether.js";
 import { DIMENSIONS, dist3, hash } from "./util.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
@@ -138,6 +138,7 @@ export function removeActor(id, effect = false) {
   const a = actors.get(id);
   actors.delete(id);
   anchorGuard.forget(id);
+  anchorFall.forget(id);
   nameLabels.removeFor(id);
   if (!a) return;
   try {
@@ -199,6 +200,8 @@ export const actorOf = (ent) => actors.get(ent.id);
 
 /** Put-backs of anchored actors: the first at once, then a wait that doubles while they keep coming (tether.js). */
 const anchorGuard = createSnapGuard({ cooldown: 40, maxCooldown: 600 });
+/** Anchored actors dropping from their spot (waited for), told from ones floating in water or hanging below it (tether.js). */
+const anchorFall = createFallWatch();
 
 /**
  * Keeps anchored actors at their spot and invulnerable ones at full health; drops entries of entities that are gone.
@@ -213,6 +216,7 @@ export function tendActors() {
       if (!a.ent.isValid) {
         actors.delete(id); // unloaded or dead: the scene spawns a new one when needed
         anchorGuard.forget(id);
+        anchorFall.forget(id);
         dressing.delete(id);
         nameLabels.removeFor(id);
         continue;
@@ -228,13 +232,19 @@ export function tendActors() {
         a.ent.teleport(a.anchor);
       } else if (a.anchor && dist3(a.ent.location, a.anchor) > 2) {
         const l = a.ent.location;
-        const below = l.y < a.anchor.y && Math.hypot(l.x - a.anchor.x, l.z - a.anchor.z) <= 1;
-        if (below && !a.ent.isOnGround) {
+        if (anchorFall.falling(a.ent, id, a.anchor, now)) {
           // still falling: wait until it lands
         } else if (settledBelow(a.ent, a.anchor)) {
           a.orig ??= a.anchor;
           a.anchor = { x: l.x, y: l.y, z: l.z };
         } else if (anchorGuard.allow(id, now)) {
+          // Its floor is gone and it didn't land under its spot (it floats in water, or hangs somewhere): a free spot
+          // next to it until the floor is back, instead of dropping it in again.
+          const spot = floorGone(a.ent.dimension, a.anchor) ? freeSpotNear(a.ent.dimension, a.anchor, 3) : undefined;
+          if (spot) {
+            a.orig ??= a.anchor;
+            a.anchor = spot;
+          }
           a.ent.teleport(a.anchor);
           anchorGuard.snapped(id, now);
         }

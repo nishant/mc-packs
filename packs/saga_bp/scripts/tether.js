@@ -10,7 +10,7 @@
 // the last resort (in water or lava, stuck down a hole, or past the hard radius), goes to a free spot near home (not
 // the exact center, where it may stand in another mob), and waits out a cooldown that doubles while snaps keep coming.
 //
-//   import { createTether, createSnapGuard, freeSpotNear, settledBelow, standable } from "./tether.js";
+//   import { createTether, createSnapGuard, createFallWatch, freeSpotNear, floorGone, settledBelow, standable } from "./tether.js";
 //
 //   const tether = createTether({ soft: 4, hard: 12 });   // options below
 //   // every few ticks, for each mob (its dimension is the caller's to check):
@@ -49,6 +49,14 @@
 //                                            anchor and go back to it once standable() says its floor is back.
 //   standable(dim, at)                        can a mob stand at `at` (exactly, a fraction of a block too): a floor
 //                                            under its feet, its body free; false when not loaded
+//   floorGone(dim, at)                        is the block under `at` air or a liquid (loaded)? Then putting the mob
+//                                            back there only drops it again: give it a spot next to it meanwhile
+//                                            (freeSpotNear) and go back once standable()
+//
+//   const fall = createFallWatch({ maxTicks: 100 });
+//   if (fall.falling(ent, id, anchor, now)) return;   // dropping from its anchor: wait until it lands
+//     True only while the mob is just below its anchor, off the ground, out of water and lava, and still going down
+//     (and for at most `maxTicks`): one floating in water, or hanging somewhere, is no longer "falling".
 //
 // Cost per check: the mob's location and isInWater, one getBlock (lava) and, only while steering or on a state
 // change, its movement component and an impulse. Nothing else is read.
@@ -169,6 +177,63 @@ export function standable(dim, at) {
   if (PASSABLE.test(b.typeId) && !floor(block(dim, x, under - 1, z))) return false;
   for (let y = Math.max(under + 1, Math.floor(at.y + 0.01)); y <= Math.floor(at.y + 1.8); y++) if (!open(block(dim, x, y, z))) return false;
   return true;
+}
+
+/** Is the block under `at` air or a liquid? False when not loaded. @param {any} dim @param {Vec} at */
+export function floorGone(dim, at) {
+  const b = block(dim, Math.floor(at.x), Math.floor(at.y - 0.01), Math.floor(at.z));
+  return !!b && (b.isAir || b.isLiquid);
+}
+
+/**
+ * @typedef {object} FallWatch
+ * @property {(ent: any, id: string, anchor: Vec, now: number) => boolean} falling
+ * @property {(id: string) => void} forget
+ */
+
+/**
+ * Tells a mob dropping from its anchor (wait for it to land) from one that only hangs below it: floating in water or
+ * lava, or not getting lower for a few checks, or past `maxTicks`. @param {{ maxTicks?: number }} [o] @returns {FallWatch}
+ */
+export function createFallWatch(o = {}) {
+  const maxTicks = o.maxTicks ?? 100;
+  /** id -> lowest y seen, since when, checks without getting lower, given up (until it lands or leaves) @type {Map<string, { y: number, since: number, still: number, gave: boolean }>} */
+  const byId = new Map();
+  return {
+    falling(ent, id, anchor, now) {
+      let l;
+      let air;
+      try {
+        l = ent.location;
+        air = !ent.isOnGround && !ent.isInWater;
+      } catch {
+        return false;
+      }
+      if (air) air = !block(ent.dimension, Math.floor(l.x), Math.floor(l.y), Math.floor(l.z))?.typeId?.includes("lava");
+      if (!air || l.y >= anchor.y || Math.hypot(l.x - anchor.x, l.z - anchor.z) > 1) {
+        byId.delete(id);
+        return false;
+      }
+      const s = byId.get(id);
+      if (!s) {
+        byId.set(id, { y: l.y, since: now, still: 0, gave: false });
+        return true;
+      }
+      if (!s.gave && now - s.since <= maxTicks) {
+        if (l.y < s.y - 0.05) {
+          s.y = l.y;
+          s.still = 0;
+          return true;
+        }
+        if (++s.still < 3) return true;
+      }
+      s.gave = true;
+      return false;
+    },
+    forget(id) {
+      byId.delete(id);
+    },
+  };
 }
 
 /**

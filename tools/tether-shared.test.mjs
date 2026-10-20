@@ -279,3 +279,19 @@ test("a mob in a nook behind a wall is not pinned against it forever: it rests t
   assert.ok(back >= 0, `back inside its radius (at tick ${back}), not wedged behind the wall for 5 minutes (at ${JSON.stringify(e.location)})`);
   assert.ok(tether.snaps <= 1, `${tether.snaps} snaps`);
 });
+
+test("fall watch: waits while a mob drops from its anchor, not while it floats in water or hangs without getting lower", () => {
+  if (!shared.createFallWatch) assert.fail("no createFallWatch: a mob below its anchor and off the ground counts as falling for good");
+  const fall = shared.createFallWatch({ maxTicks: 100 });
+  const anchor = { x: 0.5, y: 64, z: 0.5 };
+  const e = { dimension: flatDim({ holes: new Set(["0,0"]) }), location: { x: 0.5, y: 63, z: 0.5 }, isOnGround: false, isInWater: false };
+  assert.equal(fall.falling(e, "a", anchor, 0), true, "just dropped");
+  e.location.y = 61;
+  assert.equal(fall.falling(e, "a", anchor, 10), true, "still dropping");
+  assert.equal(fall.falling(e, "a", anchor, 20), true);
+  assert.equal(fall.falling(e, "a", anchor, 30), true);
+  assert.equal(fall.falling(e, "a", anchor, 40), false, "not getting lower: hanging, not falling");
+  assert.equal(fall.falling(e, "a", anchor, 50), false, "and stays given up");
+  const w = { ...e, id: "w", isInWater: true };
+  assert.equal(fall.falling(w, "w", anchor, 0), false, "floating in water");
+});
