@@ -196,3 +196,19 @@ test("the real pass draws again only when it found something new: a still player
   pass(player, [player], [], 40);
   assert.equal(views.get("p").dirty, true, "a marker that moved draws again");
 });
+
+test("the 200-tick radar rebuild is spread over the ticks by player, not one wave for everyone (O10)", () => {
+  const radar = functionSource("radarOf");
+  const bucket = radar.match(/Math\.floor\(\(?now[^`]*?\/ STALE_EVERY\)/)?.[0];
+  assert.ok(bucket, "radarOf's key has a STALE_EVERY bucket");
+  assert.ok(mainSource.includes("function staleSlot("), "each player has a turn (staleSlot)");
+  const staleSlot = vm.runInNewContext(`${mainSource.match(/^const STALE_EVERY = .+;$/m)[0]}\n${functionSource("staleSlot")}\nstaleSlot`);
+  const ids = Array.from({ length: 40 }, (_, i) => String(-4294967295 + i * 7919));
+  const at = (id, now) => vm.runInNewContext(bucket, { now, memo: { slot: staleSlot(id) }, STALE_EVERY: 200, Math });
+  let most = 0;
+  for (let now = 1; now <= 400; now++) {
+    const turned = ids.filter((id) => at(id, now) !== at(id, now - 1)).length;
+    most = Math.max(most, turned);
+  }
+  assert.ok(most <= 4, `at most ${most} of 40 players' rebuilds fall on one tick (all 40 before)`);
+});

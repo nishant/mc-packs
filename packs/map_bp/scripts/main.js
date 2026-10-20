@@ -594,7 +594,8 @@ const terrain = new TerrainWorld(6000, 24);
  * drawn from it (`rows`: the base plus this draw's markers, which `touched` lists, so the next draw puts back only
  * those). A player who doesn't move or turn far enough for the terrain to change costs no terrain lookups.
  * `need` is what the scanner should read for it (missing columns nearest first, then stale ones), made at `needAt`.
- * @type {Map<string, { key: string, base: string[], rows: string[], touched: number[], need: import("./terrain.js").Pick[], needAt: number, needStore?: import("./terrain.js").Store }>}
+ * `slot`: the player's turn for the STALE_EVERY rebuild (staleSlot).
+ * @type {Map<string, { key: string, base: string[], rows: string[], touched: number[], need: import("./terrain.js").Pick[], needAt: number, needStore?: import("./terrain.js").Store, slot: number }>}
  */
 const terrainBaseMemo = new Map();
 /** The store each player's radar reads, set by the scan every tick (roofed players read their layer). @type {Map<string, import("./terrain.js").Store>} */
@@ -916,6 +917,16 @@ let radarRebuilds = 0;
 let radarStale = false;
 /** The radar is built again this often anyway, so columns that went stale are found (and read again). */
 const STALE_EVERY = 200;
+/**
+ * Each player's turn within STALE_EVERY (a hash, FNV-1a, of their id), so these rebuilds are spread over the ticks
+ * instead of every still player's at once (a wave of 0.8 ms rebuilds every 200 ticks, O10).
+ * @param {string} id
+ */
+function staleSlot(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return h % STALE_EVERY;
+}
 /** The terrain grid turns in steps of this many degrees and moves in whole blocks (an edge cell moves under a block). */
 const TERRAIN_TURN = 2;
 
@@ -935,7 +946,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
   const store = useTerrain ? storeFor(playerId, dimId) : undefined;
   let memo = playerId ? terrainBaseMemo.get(playerId) : undefined;
   if (!memo) {
-    memo = { key: "", base: EMPTY_ROWS.slice(), rows: EMPTY_ROWS.slice(), touched: [], need: [], needAt: -1 };
+    memo = { key: "", base: EMPTY_ROWS.slice(), rows: EMPTY_ROWS.slice(), touched: [], need: [], needAt: -1, slot: staleSlot(playerId) };
     if (playerId) terrainBaseMemo.set(playerId, memo);
   }
   const { base, rows, touched } = memo;
@@ -943,8 +954,8 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
   const tz = Math.round(at.z);
   const th = north ? 0 : Math.round(heading / TERRAIN_TURN) * TERRAIN_TURN;
   // Built again when the pose (whole blocks, TERRAIN_TURN degrees) or the land near the player changed, and every
-  // STALE_EVERY ticks so columns older than SCAN_MAX_AGE are found and read again.
-  const key = !store ? "empty" : `${terrainVerOf(playerId, dimId, at, radius)}|${tx}|${tz}|${th}|${radius}|${Math.floor(now / STALE_EVERY)}`;
+  // STALE_EVERY ticks (each player at their own turn) so columns older than SCAN_MAX_AGE are found and read again.
+  const key = !store ? "empty" : `${terrainVerOf(playerId, dimId, at, radius)}|${tx}|${tz}|${th}|${radius}|${Math.floor((now + memo.slot) / STALE_EVERY)}`;
   radarStale = false;
   if (memo.key !== key && !rebuild && memo.key && key !== "empty") {
     // No time to build the terrain again: this tick's markers go on the last picture (radarStale tells the caller).
