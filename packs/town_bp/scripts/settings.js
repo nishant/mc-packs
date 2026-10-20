@@ -21,6 +21,10 @@ const OPTIONS = [
   { key: "levelDepth", type: "int", scope: "world", label: "Most blocks a picked spot's ground is leveled", help: "Natural ground only, cut or filled; 0 never levels", min: 0, max: 3, step: 1 },
   { key: "outlineSeconds", type: "int", scope: "world", label: "Outline shown before a build (seconds)", help: "To players within 32 blocks; 0 shows none", min: 0, max: 15, step: 1 },
   { key: "houses", type: "bool", scope: "world", label: "Towns build houses from level 2", help: "One for each family the level brings, at picked spots" },
+  { key: "residents", type: "bool", scope: "world", label: "Residents move into towns", help: "Villagers that never take players' beds or job sites" },
+  { key: "residentCapWorld", type: "int", scope: "world", label: "Most residents in the world", help: "Each is a mob; lowering it removes nobody", min: 0, max: 40, step: 2 },
+  { key: "residentsTrade", type: "bool", scope: "world", label: "Residents trade", help: "Vanilla trading bypasses the Crowns economy" },
+  { key: "replaceMinutes", type: "int", scope: "world", label: "Minutes before a new family replaces one", help: "In-game minutes; 20 is one in-game day", min: 5, max: 120, step: 5 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

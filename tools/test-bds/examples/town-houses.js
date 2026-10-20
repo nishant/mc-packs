@@ -2,7 +2,9 @@
 // builds house_1..house_4 (residentsPerLevel[1]) by itself at automatic spots, with no deliveries. Each house has its
 // door in the front wall facing the spot, a two-block bed (foot and head, still whole after a neighbor update, so its
 // direction state matches its halves) and its own job-site block from houseJobs. No region overlaps another; the
-// mayor's page counts the houses; Remove spot takes a house away and puts the ground back.
+// mayor's page counts the houses; Remove spot takes a house away and puts the ground back. With residents Enabled, the
+// well's 2 families move into house_1 and house_2 (while no player is within 24 blocks) and 2 more come to house_3 and
+// house_4, each with its house's look (farmer, librarian, fisherman, butcher) and standing in its house.
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-houses.js --timeout 6000
 export default async function (t) {
   const dim = t.dimension;
@@ -26,6 +28,13 @@ export default async function (t) {
     return { x: s.x + rx * x + fx * z, y: s.y + y, z: s.z + rz * x + fz * z };
   };
   const block = (v) => dim.getBlock(v);
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "res", pack: "town_bp", key: "residents", value: true }));
+  const residents = () => dim.getEntities({ type: "minecraft:villager_v2", tags: ["town:r:elm"] });
+  const census = async () => {
+    const since = t.tick;
+    town("census", { town: "elm" });
+    await t.waitMessage(p, /census of elm/, { since, timeout: 60 });
+  };
 
   let since = t.tick;
   town("add", { name: "Elm" });
@@ -37,7 +46,7 @@ export default async function (t) {
   }, { timeout: 2400, interval: 100, message: "level 1 spots picked" });
   t.check(houses.every((h) => !prog(d, h)?.done && !d.town.spots[h]), "a Settlement builds no houses");
 
-  // Level 1 done: a Village (level 2) with 4 houses due.
+  // Level 1 done: a Village (level 2) with 4 houses due. The well's families first.
   town("finish", { town: "elm", project: "well" });
   await t.wait(10);
   town("finish", { town: "elm", project: "notice_board" });
@@ -89,6 +98,27 @@ export default async function (t) {
     t.check(block(at(s, 2, 0, 5))?.typeId === "minecraft:bed" && block(at(s, 2, 0, 6))?.typeId === "minecraft:bed", `${h}: the bed is still whole after a neighbor update`);
   }
   t.check(d.town.log?.filter(([, text]) => /A new house went up/.test(text)).length >= 1, "the story tells of the new houses");
+
+  // Residents: the well's two move into house_1 and house_2, two more come to house_3 and house_4.
+  t.server("/tp Ann 90 -60 0"); // still in the town (96), more than 24 blocks from every house
+  await t.wait(20);
+  const LOOK = ["farmer", "librarian", "fisherman", "butcher"];
+  await t.waitUntil(async () => {
+    await census();
+    d = await dump("elm");
+    return houses.every((h, k) => d.residents.r.find((r) => r.s === k)?.h === h && d.residents.r.find((r) => r.s === k)?.d === undefined);
+  }, { timeout: 2400, interval: 100, message: "every family lives in its house" });
+  const rs = residents();
+  t.check(rs.length === 4, `4 residents (${rs.length}), the well's 2 moved, not doubled`);
+  for (const [k, h] of houses.entries()) {
+    const r = d.residents.r.find((x) => x.s === k);
+    const e = rs.find((x) => x.id === r.e);
+    const home = at(d.town.spots[h], 0, 0, 4);
+    t.check(!!e && Math.hypot(e.location.x - home.x, e.location.z - home.z) <= 16, `${h}: ${r.n} is home`);
+    t.check(!!e && e.matches({ families: [LOOK[k]] }), `${h}: ${r.n} is a ${LOOK[k]} (its job site)`);
+  }
+  t.server("/tp Ann 0 -60 0");
+  await t.wait(20);
 
   // The mayor's page counts them.
   const form = t.waitForm(p, { timeout: 100 });

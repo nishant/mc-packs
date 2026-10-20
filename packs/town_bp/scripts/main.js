@@ -24,6 +24,8 @@ import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newT
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
 import { addLog, cleanText, houseCount, isWorkId, logLine, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
+import { TICKS_PER_MINUTE, addNew, allocate, homeAt, homesFor, livingOf, lookEvent, lookFor, pickName, plan, readResidents, reconcile, ridOf, ridTag, slotCount } from "./residents.js";
+import { spawnFresh } from "./spawn.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
@@ -478,6 +480,7 @@ function levelUp(t) {
   if (!raised) return;
   queueScan(t, projectsAt(t.lvl).map((p) => p.id));
   queueWorks(t);
+  censusAt.delete(t.id);
   storyAdd(t, `It became a ${levelName(t.lvl)}`);
   saveTown(t);
   const title = `${t.n} is now a ${levelName(t.lvl)} (level ${t.lvl})`;
@@ -607,6 +610,7 @@ function build(t, p, fresh) {
 
 /** @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim @param {number} placed @param {number} skipped */
 function announceBuilt(t, p, s, dim, placed, skipped) {
+  censusAt.delete(t.id); // a new well or house: its families move in at the next check
   const where = `${s.x}, ${s.y}, ${s.z}`;
   if (isWork(p)) {
     // A house: news for the town (players in it, and its story), not the whole realm; no fireworks.
@@ -1042,6 +1046,7 @@ system.runInterval(() => {
     if (!players.length) return;
     mayorCheck(players);
     autoTick(players);
+    residentTick(players);
     for (const t of allTowns().values()) {
       for (const p of ALL) {
         const s = t.spots[p.id];
@@ -1786,6 +1791,7 @@ function deleteTown(t) {
   // Its own mayor goes with it (Mayor Bram stays where he lives).
   if (isTownMayorId(t.m)) send("realm:npc_mayor", { op: "remove", id: t.m });
   lastSet.delete(t.id);
+  dropResidents(t); // its residents stay as ordinary villagers
   zonesChanged();
 }
 
@@ -2623,7 +2629,7 @@ system.runInterval(() => {
 
 // ---------------------------------------------------------------------------
 // Scenario tests (BDS harness): the operator actions without forms. Only from the server console or an operator.
-//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump|mayor_move|mayor_rename|remove_town|v1|scan|build_pause", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?, "after"?}
+//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump|mayor_move|mayor_rename|remove_town|v1|scan|build_pause|census|residents_due", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?, "after"?}
 // ---------------------------------------------------------------------------
 
 onScriptEvent(
@@ -2655,11 +2661,24 @@ onScriptEvent(
       if (m.action === "zones") return broadcastZones();
       if (!t) return tell("no town");
       if (m.action === "dump")
-        return tell(JSON.stringify({ town: t, progress: ALL.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
+        return tell(JSON.stringify({ town: t, progress: ALL.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, residents: residentsOf(t), homes: homesOf(t), regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
       if (m.action === "scan") {
         findSpotsAgain(t, tell);
         if (!scanJob && get("autoSpots") === true && t.scan?.length) startScan(t);
         return;
+      }
+      if (m.action === "census") {
+        censusAt.set(t.id, system.currentTick);
+        census(t);
+        return tell(`census of ${t.id}: ${JSON.stringify(residentsOf(t))}`);
+      }
+      if (m.action === "residents_due") {
+        // Every family waiting to be replaced is due now (instead of after replaceMinutes).
+        const rs = residentsOf(t);
+        const now = world.getAbsoluteTime();
+        for (const r of rs.r) if (r.d !== undefined) r.d = now;
+        saveResidents(t, rs);
+        return tell(`residents of ${t.id} due at ${now}`);
       }
       if (m.action === "build_pause") {
         testPauseAfter = Math.max(0, Math.floor(Number(m.after) || 0));
@@ -2929,6 +2948,370 @@ onScriptEvent(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Residents (F39, residents.js): vanilla villagers that move into a town as it grows, 2 at the well, then one family
+// per house. They are spawned with spawnFresh, tagged realm:resident, town:r:<town> and town:rid:<town>.<n>, named, and
+// given the realm:town_resident group of town_bp's villager_v2 file (no bed, job site or bell is ever claimed; they
+// stay near home). Event driven: a death marks the family for replacement; a census per town every 30 seconds, only
+// while a player is in it, finds who is gone, strays and wanderers. Nothing runs per tick.
+// ---------------------------------------------------------------------------
+
+const RES_PREFIX = "town:r:";
+const VILLAGER = "minecraft:villager_v2";
+const RESIDENT_TAG = "realm:resident";
+const RESIDENT_PROP = "realm:resident"; // the entity property town_bp's villager_v2 file adds; true once a resident
+const CENSUS_TICKS = 600;
+const MOVE_CLEAR = 24; // a family moves house only while no player is this close to its old or new home
+const SPAWNS_PER_CENSUS = 2; // new families, replacements and moves at most per census
+/** Each town's residents (town:r:<town>), cached; this pack is the only writer. @type {Map<string, import("./residents.js").Residents>} */
+const resCache = new Map();
+/** Tick of each town's last census; deleted to have the next check (5 s) count it at once. @type {Map<string, number>} */
+const censusAt = new Map();
+/** false once a spawned villager had no realm:resident property: another add-on's villager_v2 file wins over ours. */
+let residentGate = true;
+const tapSaid = new Map();
+
+/** The project whose build is the well (its families' first home). */
+const WELL_ID = PROJECTS.find((p) => p.build === "well")?.id;
+const townTag = (/** @type {string} */ id) => `town:r:${id}`;
+const replaceTicks = () => Math.max(5, Math.min(120, Math.floor(Number(get("replaceMinutes")) || 20))) * TICKS_PER_MINUTE;
+const capWorld = () => Math.max(0, Math.min(40, Math.floor(Number(get("residentCapWorld")) || 0)));
+
+/** @param {Town} t @returns {import("./residents.js").Residents} */
+function residentsOf(t) {
+  let rs = resCache.get(t.id);
+  if (!rs) resCache.set(t.id, (rs = readResidents(readJson(RES_PREFIX + t.id))));
+  return rs;
+}
+
+/** @param {Town} t @param {import("./residents.js").Residents} rs */
+function saveResidents(t, rs) {
+  resCache.set(t.id, rs);
+  world.setDynamicProperty(RES_PREFIX + t.id, JSON.stringify(rs));
+}
+
+/** Is a home (the well, or house_<n>) built in this town? @param {Town} t @param {string} h */
+function homeBuilt(t, h) {
+  const id = h === "well" ? WELL_ID : h;
+  const p = id ? byId.get(id) : undefined;
+  return !!p && !!t.spots[p.id] && progressOf(t, p).built === 1;
+}
+
+/** Each slot's home now (residents.js homesFor). @param {Town} t */
+function homesOf(t) {
+  const slots = slotCount(t.lvl, homeBuilt(t, "well"), CONFIG.residentsPerLevel, CONFIG.residentCapTown);
+  return homesFor(slots, (h) => homeBuilt(t, h));
+}
+
+/** Where a home's family stands, or the town center when the home has no spot. @param {Town} t @param {string | undefined} h @param {number} slot */
+function anchorOf(t, h, slot) {
+  const s = h ? t.spots[h === "well" ? (WELL_ID ?? "") : h] : undefined;
+  return s ? homeAt(/** @type {string} */ (h), s, slot) : { x: t.x, y: t.y, z: t.z };
+}
+
+/** @param {Dimension} dim @param {Vector3} v */
+function isLoaded(dim, v) {
+  try {
+    return !!dim.getBlock(v);
+  } catch {
+    return false;
+  }
+}
+
+/** A place to stand at or near v (feet and head free, ground below), as a block center; undefined when there is none or it isn't loaded. @param {Dimension} dim @param {Vector3} v */
+function standAt(dim, v) {
+  for (const dy of [0, 1, -1, 2, -2, 3]) {
+    try {
+      const feet = dim.getBlock({ x: v.x, y: v.y + dy, z: v.z });
+      const head = dim.getBlock({ x: v.x, y: v.y + dy + 1, z: v.z });
+      const below = dim.getBlock({ x: v.x, y: v.y + dy - 1, z: v.z });
+      if (!feet || !head || !below) return undefined;
+      if (feet.isAir && head.isAir && !below.isAir && !below.isLiquid) return { x: v.x + 0.5, y: v.y + dy, z: v.z + 0.5 };
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/** Drops what a villager carries (its inventory) where it stands, before it is removed. @param {import("@minecraft/server").Entity} e */
+function dropCarried(e) {
+  const inv = e.getComponent("minecraft:inventory")?.container;
+  if (!inv) return;
+  for (let k = 0; k < inv.size; k++) {
+    const item = inv.getItem(k);
+    if (!item) continue;
+    e.dimension.spawnItem(item, e.location); // first: if it throws, the item stays with the villager, which isn't removed
+    inv.setItem(k, undefined);
+  }
+}
+
+/** Takes our tags off a villager (it stays, an ordinary villager that keeps its name). @param {import("@minecraft/server").Entity | undefined} e @param {string} town */
+function untagResident(e, town) {
+  if (!e) return;
+  try {
+    for (const tag of e.getTags()) if (tag === RESIDENT_TAG || tag === townTag(town) || tag.startsWith(`town:rid:${town}.`)) e.removeTag(tag);
+  } catch {
+    // unloaded meanwhile: the next census tries again
+  }
+}
+
+/**
+ * Spawns one family at its home: a vanilla villager, named, with its home's look, the realm:town_resident group and our
+ * tags (C6, C25). Undefined when there is no place to stand, the spawn failed, or villager_v2 isn't town_bp's (another
+ * add-on's file wins): then the villager is removed again before it gets a tag, and residents stop.
+ * @param {Town} t @param {Dimension} dim @param {import("./residents.js").Residents} rs @param {number} slot @param {string} h @param {string} name
+ * @returns {import("./residents.js").Resident | undefined}
+ */
+function spawnResident(t, dim, rs, slot, h, name) {
+  const at = standAt(dim, anchorOf(t, h, slot));
+  if (!at) return undefined;
+  const look = lookFor(h, slot, (home) => /** @type {any} */ (byId.get(home))?.job);
+  /** @type {import("@minecraft/server").Entity} */
+  let e;
+  try {
+    e = spawnFresh(dim, VILLAGER, at, { spawnEvent: "minecraft:spawn_from_village", fresh: true });
+  } catch (err) {
+    console.warn(`[town] resident: ${err}`);
+    return undefined;
+  }
+  let ours = false;
+  try {
+    ours = e.getProperty(RESIDENT_PROP) !== undefined; // defined only by town_bp's villager_v2 file
+  } catch {
+    // treated as not ours
+  }
+  if (!ours) {
+    try {
+      e.remove();
+    } catch {
+      // gone already
+    }
+    if (residentGate) tellOps("§c[Town Projects] Residents can't move in: another add-on defines villagers (minecraft:villager_v2), so town villagers would claim players' beds. Disable residents, or remove that add-on.");
+    residentGate = false;
+    return undefined;
+  }
+  const i = rs.n++;
+  try {
+    e.nameTag = name;
+    e.triggerEvent(lookEvent(look)); // first: a profession's group brings its own dweller component back
+    e.triggerEvent("realm:become_resident"); // last, so its dweller (no beds, job sites or bells) is the one in force
+    e.addTag(RESIDENT_TAG);
+    e.addTag(townTag(t.id));
+    e.addTag(ridTag(t.id, i));
+  } catch (err) {
+    console.warn(`[town] resident: ${err}`);
+    try {
+      e.remove();
+    } catch {
+      // gone already
+    }
+    return undefined;
+  }
+  return { s: slot, i, n: name, h, e: e.id, p: look };
+}
+
+/** Names living residents use, in the world and in this town. @param {Town} t */
+function namesInUse(t) {
+  const all = new Set();
+  const own = new Set();
+  for (const x of allTowns().values())
+    for (const r of residentsOf(x).r)
+      if (r.d === undefined) {
+        all.add(r.n);
+        if (x.id === t.id) own.add(r.n);
+      }
+  return { all, own };
+}
+
+/** New families each town may get now under residentCapWorld (residents.js allocate); `rs` is town t's census so far. @param {Town} t @param {import("./residents.js").Residents} rs */
+function roomByTown(t, rs) {
+  return allocate(
+    [...allTowns().values()].map((x) => ({ id: x.id, lvl: x.lvl, at: x.at, living: livingOf(x.id === t.id ? rs : residentsOf(x)), slots: homesOf(x).length })),
+    capWorld(),
+  );
+}
+
+/**
+ * One town's census (every CENSUS_TICKS while a player is in it): one getEntities by tag, then reconcile (gone,
+ * strays, wanderers), then at most SPAWNS_PER_CENSUS new families, replacements and moves.
+ * @param {Town} t
+ */
+function census(t) {
+  if (get("residents") !== true || !residentGate) return;
+  const dim = world.getDimension(t.dim);
+  const center = { x: t.x, y: t.y, z: t.z };
+  if (!isLoaded(dim, center)) return;
+  let rs = residentsOf(t);
+  const homes = homesOf(t);
+  if (!rs.r.length && !homes.some(Boolean)) return; // no home yet: nothing to look for
+  /** @type {import("@minecraft/server").Entity[]} */
+  let ents;
+  try {
+    ents = dim.getEntities({ type: VILLAGER, tags: [townTag(t.id)] });
+  } catch {
+    return;
+  }
+  const now = world.getAbsoluteTime();
+  const found = [];
+  for (const e of ents) {
+    try {
+      found.push({ id: e.id, rid: ridOf(t.id, e.getTags()), x: e.location.x, z: e.location.z });
+    } catch {
+      // unloaded meanwhile
+    }
+  }
+  const res = reconcile({ rs, town: t.id, found, loaded: (r) => isLoaded(dim, anchorOf(t, r.h, r.s)), center, radius: get("townRadius"), now, replaceTicks: replaceTicks() });
+  rs = res.rs;
+  let changed = res.changed;
+  const entity = new Map(ents.map((e) => [e.id, e]));
+  for (const id of res.untag) untagResident(entity.get(id), t.id);
+  for (const { id, s } of res.teleport) {
+    const e = entity.get(id);
+    const rec = rs.r.find((x) => x.s === s);
+    const to = standAt(dim, anchorOf(t, rec?.h, s));
+    try {
+      if (!e || !to || e.getComponent("minecraft:leashable")?.isLeashed || e.getComponent("minecraft:riding")) continue; // a player leads it: leave it
+      e.teleport(to, { dimension: dim });
+    } catch {
+      // unloaded meanwhile
+    }
+  }
+  // A resident whose group didn't take (the event came before its spawn finished): again.
+  for (const r of rs.r) {
+    const e = r.e && r.d === undefined ? entity.get(r.e) : undefined;
+    try {
+      if (e && e.getProperty(RESIDENT_PROP) !== true) e.triggerEvent("realm:become_resident");
+    } catch {
+      // fine
+    }
+  }
+  const todo = plan(rs, homes, roomByTown(t, rs).get(t.id) ?? 0, now);
+  if (todo.drop.length) {
+    rs = { ...rs, r: rs.r.filter((x) => !todo.drop.includes(x.s)) };
+    changed = true;
+  }
+  let budget = SPAWNS_PER_CENSUS;
+  /** @type {string[]} */
+  const arrived = [];
+  for (const sp of todo.spawn) {
+    if (budget <= 0) break;
+    const names = namesInUse(t);
+    for (const x of rs.r) if (x.d === undefined) names.own.add(x.n);
+    const name = pickName(CONFIG.residentNames, names.all, names.own);
+    const rec = spawnResident(t, dim, rs, sp.s, sp.h, name);
+    if (!rec) continue;
+    rs = addNew({ ...rs, r: [...rs.r.filter((x) => x.s !== sp.s), rec].sort((a, b) => a.s - b.s) }, name);
+    resCache.set(t.id, rs); // namesInUse sees the new name
+    arrived.push(name);
+    budget--;
+    changed = true;
+  }
+  for (const mv of todo.move) {
+    if (budget <= 0) break;
+    const rec = rs.r.find((x) => x.s === mv.s);
+    const old = rec?.e ? entity.get(rec.e) : undefined;
+    if (!rec || !old) continue; // not loaded: it moves when it is
+    const to = anchorOf(t, mv.h, mv.s);
+    let from;
+    try {
+      from = old.location;
+    } catch {
+      continue;
+    }
+    const near = world.getAllPlayers().some((pl) => pl.dimension.id === t.dim && [from, to].some((v) => Math.hypot(pl.location.x - v.x, pl.location.z - v.z) <= MOVE_CLEAR));
+    if (near) continue;
+    const moved = spawnResident(t, dim, rs, mv.s, mv.h, rec.n);
+    if (!moved) continue;
+    untagResident(old, t.id);
+    try {
+      dropCarried(old); // what it picked up (a farmer's crops) stays where it stood
+      old.remove(); // the same family, now at its new home
+    } catch {
+      // stays an ordinary villager without our tags
+    }
+    rs = { ...rs, r: rs.r.map((x) => (x.s === mv.s ? moved : x)) };
+    budget--;
+    changed = true;
+  }
+  if (changed) saveResidents(t, rs);
+  if (!arrived.length) return;
+  for (const name of arrived) {
+    const msg = `§aA new family moved into ${t.n}: ${name}.`;
+    for (const pl of world.getAllPlayers()) if (pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= get("townRadius")) pl.sendMessage(msg);
+  }
+  storyAdd(t, arrived.length === 1 ? `A new family moved in (${arrived[0]})` : `${arrived.length} new families moved in`);
+  saveTown(t);
+}
+
+/** On the build check (every 100 ticks): the census of one town with a player in it, when its time has come. @param {Player[]} players */
+function residentTick(players) {
+  if (get("residents") !== true || !residentGate) return;
+  const now = system.currentTick;
+  for (const t of allTowns().values()) {
+    if (now - (censusAt.get(t.id) ?? -CENSUS_TICKS) < CENSUS_TICKS || !playerIn(players, t)) continue;
+    censusAt.set(t.id, now);
+    census(t);
+    return; // one town a check
+  }
+}
+
+/** Forgets a removed town's residents: those loaded lose our tags (never killed). @param {Town} t */
+function dropResidents(t) {
+  resCache.delete(t.id);
+  censusAt.delete(t.id);
+  world.setDynamicProperty(RES_PREFIX + t.id, undefined);
+  try {
+    for (const e of world.getDimension(t.dim).getEntities({ type: VILLAGER, tags: [townTag(t.id)] })) untagResident(e, t.id);
+  } catch {
+    // fine: an unloaded one is untagged when tapped (its town is gone)
+  }
+}
+
+// A resident died: a new family replaces it after replaceMinutes (in-game time).
+world.afterEvents.entityDie.subscribe(
+  ({ deadEntity }) => {
+    try {
+      const id = deadEntity.id;
+      for (const t of allTowns().values()) {
+        const rs = residentsOf(t);
+        const rec = rs.r.find((x) => x.e === id && x.d === undefined);
+        if (!rec) continue;
+        rec.d = world.getAbsoluteTime() + replaceTicks();
+        delete rec.e;
+        delete rec.m;
+        saveResidents(t, rs);
+        return;
+      }
+    } catch (e) {
+      console.warn(`[town] resident died: ${e}`);
+    }
+  },
+  { entityTypes: [VILLAGER] },
+);
+
+// Trading (residentsTrade, default Disabled: it would bypass the Crowns economy): a tap on a resident is canceled.
+world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return;
+  const e = ev.target;
+  if (e.typeId !== VILLAGER || get("residentsTrade") === true || !e.hasTag(RESIDENT_TAG)) return;
+  const town = e.getTags().find((tag) => tag.startsWith("town:r:"))?.slice(7);
+  const t = town ? allTowns().get(town) : undefined;
+  if (!t) {
+    // Its town was removed while it was far away: an ordinary villager from now on.
+    system.run(() => town && untagResident(e, town));
+    return;
+  }
+  ev.cancel = true;
+  const player = ev.player;
+  const name = e.nameTag;
+  system.run(() => {
+    if (!player.isValid || system.currentTick - (tapSaid.get(player.id) ?? -200) < 200) return;
+    tapSaid.set(player.id, system.currentTick);
+    player.sendMessage(`§7${name || "This villager"} lives in ${t.n} and doesn't trade.`);
+  });
+});
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;

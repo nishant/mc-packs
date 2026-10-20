@@ -46,8 +46,28 @@ export const CONFIG = {
   /** Families a town has room for at each level, 1 to 5. From level 2 the town builds a house for each (at most `residentCapTown`). */
   residentsPerLevel: [2, 4, 6, 8, 10],
 
-  /** Most families (and houses) one town has, 0 to 10. */
+  /** Most families (residents, and houses) one town has, 0 to 10. */
   residentCapTown: 10,
+
+  /**
+   * Residents: vanilla villagers move into a town as it grows (2 at the well, then a family per house), named from
+   * `residentNames` and tagged `realm:resident`. They never claim a bed, job site or bell (town_bp's villager_v2 file)
+   * and stay near home. Disabled until a Bedrock Dedicated Server run proves that on 1.26 (decision D2); Enabled in
+   * /realm:config when it has.
+   */
+  residents: false,
+
+  /** Most residents in the whole world, 0 to 40 (each is a mob the server runs). Lowering it never removes anyone. */
+  residentCapWorld: 20,
+
+  /** Residents trade like vanilla villagers. Disabled: a tap on one does nothing, since trading would bypass the Crowns economy. */
+  residentsTrade: false,
+
+  /** In-game minutes (20 is one in-game day) before a new family moves in for one that died, 5 to 120. */
+  replaceMinutes: 20,
+
+  /** First names for residents (plain ASCII letters, at most 16 characters), each used once in the world while there are free ones. */
+  residentNames: ["Abel", "Agnes", "Arlo", "Basil", "Bertie", "Bonnie", "Cecil", "Clem", "Cyril", "Dale", "Della", "Dora", "Edie", "Elmer", "Etta", "Ezra", "Faye", "Floyd", "Gus", "Herb", "Hugo", "Jasper", "Lottie", "Lyle", "Mabel", "Milo", "Minnie", "Nora", "Opal", "Otto", "Percy", "Posy", "Rosa", "Rufus", "Tilly", "Toby", "Trudy", "Una", "Walt", "Zeke"],
 
   /** The job-site block of each house, in turn (house 1 the first, house 11 the first again), so residents get different jobs. */
   houseJobs: ["minecraft:composter", "minecraft:lectern", "minecraft:barrel", "minecraft:smoker", "minecraft:cartography_table", "minecraft:brewing_stand", "minecraft:fletching_table", "minecraft:loom", "minecraft:stonecutter_block", "minecraft:grindstone"],
