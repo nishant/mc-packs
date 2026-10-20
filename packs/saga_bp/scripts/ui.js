@@ -1850,6 +1850,34 @@ export function resetPlayer(target, by) {
   if (by && by.id !== target.id) by.sendMessage(`§a[Story] Reset the stories of ${target.name}.`);
 }
 
+/**
+ * Which of a player's chapters an operator means: the story named, else their only chapter, else their main-story one.
+ * A party quest they only help with is never theirs to finish (that would finish it for the party).
+ * @param {Player} target @param {string} [storyId] @returns {Entry | undefined}
+ */
+export function stepEntry(target, storyId) {
+  const list = entries(target).filter((e) => !e.pq);
+  if (storyId) return list.find((e) => e.story.id === storyId && !e.fav);
+  if (list.length === 1) return list[0];
+  const main = list.filter((e) => e.story.kind === "main" && !e.fav);
+  return main.length === 1 ? main[0] : undefined;
+}
+
+/**
+ * The operators' way to finish a stuck player's current step (Operator tools, `/realm:saga_step`): done as if they did
+ * it, and the content log says who did it for whom. Returns the step's label, or undefined when nothing was left.
+ * @param {Player} target @param {Entry} e @param {string} by the operator's name (or "the server")
+ */
+export function finishStepFor(target, e, by) {
+  const i = currentStep(e, sagaOf(target));
+  if (i < 0) return undefined;
+  const label = e.chapter.objectives[i].label;
+  if (!completeStep(target, e)) return undefined;
+  console.warn(`[saga] operator ${by} finished ${target.name}'s step "${label}" (${e.story.id}/${e.chapter.id} step ${i})`);
+  if (by !== target.name) target.sendMessage(`§e[Story] An operator finished your step "${label}" in ${e.story.title}.`);
+  return label;
+}
+
 /** @param {Player} player */
 async function opTools(player) {
   const res = await show(
@@ -1868,8 +1896,8 @@ async function opTools(player) {
     const target = await pickPlayer(player, "Finish a step");
     if (!target) return;
     const name = target.name;
-    const list = entries(target);
-    if (!list.length) return player.sendMessage(`§7[Story] ${name} isn't working on any chapter.`);
+    const list = entries(target).filter((e) => !e.pq); // a party quest they only help with is the party's, not theirs
+    if (!list.length) return player.sendMessage(`§7[Story] ${name} isn't working on any chapter of their own.`);
     const form = new ActionFormData().title("Finish a step").body(`${name}'s chapters: pick one to finish its current step.`);
     for (const e of list) form.button(`${e.story.title}\n§8${plain(stepLine(target, e, sagaOf(target))).slice(0, 60)}`);
     form.button("Back");
@@ -1878,8 +1906,8 @@ async function opTools(player) {
     // They may have left while the menu was open, and the operator may have lost their rights.
     if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
     if (!isOp(player)) return player.sendMessage("§c[Story] Only operators can do that; nothing was changed.");
-    const ok = completeStep(target, list[r.selection]);
-    player.sendMessage(ok ? `§a[Story] Finished ${name}'s current step in ${list[r.selection].story.title}.` : "§7[Story] Nothing left to finish there: they can report back.");
+    const label = finishStepFor(target, list[r.selection], player.name);
+    player.sendMessage(label ? `§a[Story] Finished ${name}'s step "${label}" in ${list[r.selection].story.title}.` : "§7[Story] Nothing left to finish there: they can report back.");
     return;
   }
   if (res.selection === 2) {
