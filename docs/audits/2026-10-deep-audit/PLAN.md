@@ -499,12 +499,14 @@ in W2.
    - merge damage in files changed by two or more workstreams
 
    One independent reviewer works on the merged tree; another reviews each workstream's diff before the merge.
-2. **Release-specific owner override (2026-10-20):** "lets skip the soak tests, let nishs claude do that later".
+2. **Contributor deferral (2026-10-20), not an owner decision:** "lets skip the soak tests, let nishs claude do that later"
+   was the contributor msftMyt's instruction to his own session (it names Nish in the third person).
    The remaining one-context 40/900 run was stopped with its partial evidence retained as
    `USER_DEFERRED_INTERRUPTED`, not PASS. Candidate 100/300, Saga 100/two-quest/120 and the unstarted
-   O10 idle measurement are `USER_DEFERRED` to Nish's Claude. Completed memory/performance observations
-   remain source-labeled evidence; they are not rerun or relabeled. This supersedes the remaining soak/load
-   release gates below, not functional correctness, normal shipping, or future projects' testing policy.
+   O10 idle measurement are `USER_DEFERRED` (by that user): open, for a later session (FIXES F57). Completed memory/performance observations
+   remain source-labeled evidence; they are not rerun or relabeled. It does not supersede the soak/load
+   gates below: they are still open (FIXES F57), and nothing here waives functional correctness, normal shipping,
+   or future projects' testing policy.
 
    Original requirement: full suite on the frozen merged tree and on master with the same harness (`suite.mjs --jobs 2 --retry`). Then
    15-minute soaks at 10 and 40 players and a 5-minute 100-player soak with `--profile`, plus a 40-player soak of

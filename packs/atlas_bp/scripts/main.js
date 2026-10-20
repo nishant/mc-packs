@@ -1788,9 +1788,12 @@ function debug(msg) {
     });
     return;
   }
-  if (msg.action === "slots" && p) {
-    const [cx, cz] = cellOf(p.location.x, p.location.z);
-    send("realm:atlas_state", { player: p.id, slots: slotsOf(cx, cz).map((sl) => ({ key: sl.key, x: sl.x, z: sl.z, pref: sl.pref, s: built.get(sl.key)?.s })), cell: [cx, cz], min: cellMin(cx, cz), size: S });
+  // "slots" lists the spots of the player's region, or of any region (`cell: [cx, cz]`), so a test can prefer a
+  // region's kinds (or place a safe zone) before anyone walks in and its first spots get built.
+  const askedCell = Array.isArray(msg.cell) && msg.cell.length === 2 && msg.cell.every((/** @type {unknown} */ n) => Number.isInteger(n)) ? msg.cell : undefined;
+  if (msg.action === "slots" && (p || askedCell)) {
+    const [cx, cz] = askedCell ?? cellOf(/** @type {Player} */ (p).location.x, /** @type {Player} */ (p).location.z);
+    send("realm:atlas_state", { player: p?.id, slots: slotsOf(cx, cz).map((sl) => ({ key: sl.key, x: sl.x, z: sl.z, pref: sl.pref, s: built.get(sl.key)?.s })), cell: [cx, cz], min: cellMin(cx, cz), size: S });
     return;
   }
   if (msg.action === "prefer" && typeof msg.key === "string" && KINDS.includes(msg.kind)) {
