@@ -153,8 +153,9 @@ Measured with 40 simulated players, Large server took the whole bundle from 9.5 
 ### Latest measurements (October 2026)
 
 The same test workload (simulated players walking, looking and running commands) on master before the October 2026
-fixes and after them, over a 15-minute steady window (18,000 ticks). These add up the 67 behavior packs running as
-separate packs, not the Realm Bundle as one pack; they are script time, not client FPS or all of the server's CPU.
+fixes and after them, on a Windows server running BDS 1.26.52.3, over a 15-minute steady window (18,000 ticks). These
+add up the 67 behavior packs running as separate packs, not the Realm Bundle as one pack; they are script time, not
+client FPS or all of the server's CPU. Every figure in this table and the two bullets below it comes from that run.
 
 | Players | Before, ms a tick | After, ms a tick |
 |---|---:|---:|
@@ -166,7 +167,9 @@ separate packs, not the Realm Bundle as one pack; they are script time, not clie
 - The Minimap is the largest part, 3.7 ms against its 1 ms budget. Over the 0.15 ms typical-pack budget: Easy
   Building 0.57, Quick Stack & Sort 0.31, Silly Enchants 0.28, Elytra HUD 0.23, Story Questlines 0.23, Stats 0.21,
   Realm Configuration 0.18 and Realm Calendar 0.15.
-- At 10 players, the Realm Bundle running as one pack took about 4.8 ms a tick, under the goal.
+- **A separate, shorter run** (a 4-core Linux test machine, an earlier build of these fixes, 5-minute steady window):
+  the Realm Bundle running as one pack took about 4.8 ms a tick at 10 players, under the goal. It is not the same
+  setup as the table, so do not compare the two directly.
 - **Not measured yet:** 100 players, the story quests at 100 players, and the Realm Bundle as one pack at 40
   players. Until then, treat 100+ player servers as untested.
 - This Realm keeps the **Small Realm** defaults (10 players, usually 1-4 online). Hardware, workload and how many
