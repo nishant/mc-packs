@@ -31,9 +31,12 @@ function world({ blocks = () => ({ typeId: "minecraft:air" }), valid = true, dim
       system,
       removeActors() {},
       tended: new Map(),
+      // Shared party scenes (objectives.js): an interact scene is always the player's own, with nobody else in it.
+      patrols: new Set(),
+      stillNeeded: () => false,
     },
   );
-  const scene = { kind: "interact", pid: "p1", key: "k", seen: 0, data: {} };
+  const scene = { kind: "interact", pid: "p1", key: "k", seen: 0, data: {}, members: new Map() };
   scenes.set("p1|k", scene);
   const tick = () => {
     const before = reads.n;
@@ -70,7 +73,7 @@ test("scans in flight are capped, and the rest wait their turn", () => {
   const w = world();
   const list = [];
   for (let i = 0; i < 6; i++) {
-    const s = { kind: "interact", pid: "p1", key: `k${i}`, seen: 0, data: {} };
+    const s = { kind: "interact", pid: "p1", key: `k${i}`, seen: 0, data: {}, members: new Map() };
     w.scenes.set(`p1|k${i}`, s);
     list.push(s);
     w.interactBlocks(s, w.player, obj, loc);
@@ -100,7 +103,7 @@ test("endScene and endScenesOf stop the scan at once and it never writes into th
 test("a scene that is replaced, a player who left, or another dimension also stops the scan", () => {
   const replaced = world();
   replaced.interactBlocks(replaced.scene, replaced.player, obj, loc);
-  replaced.scenes.set("p1|k", { kind: "interact", pid: "p1", key: "k", seen: 0, data: {} });
+  replaced.scenes.set("p1|k", { kind: "interact", pid: "p1", key: "k", seen: 0, data: {}, members: new Map() });
   replaced.tick();
   assert.equal(replaced.timers.size, 0);
   assert.equal(replaced.reads.n, 0);

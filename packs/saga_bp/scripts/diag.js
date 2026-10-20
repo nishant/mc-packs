@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "saga_bp";
-const VERSION = "1.16.10";
+const VERSION = "1.16.12";
 const NAME = "Story Questlines";
 /** @type {string[]} */
 const PREFIXES = ["saga"];

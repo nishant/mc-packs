@@ -372,7 +372,7 @@ Object.assign(mc.defaults, Object.fromEntries(["sneakTap", "sortHotbar", "locks"
 const mainServerUrl = dataUrl(`const m = globalThis.__mc.server; export const { Block, BlockTypes, BlockVolume, CommandPermissionLevel, Container, CustomCommandParamType, CustomCommandStatus, Dimension, Direction, ItemStack, Player, system, world } = m;`);
 // The router keeps its handlers in module state: each copy of main.js gets its own copy of script-events.js (a pack loads once in the game).
 const eventsSource = readFileSync(new URL("../packs/stash_bp/scripts/script-events.js", import.meta.url), "utf8").replace('"@minecraft/server"', JSON.stringify(mainServerUrl));
-const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const recoverInventory = async () => ""; export const refillFromPages = () => undefined; export const storedCount = () => []; export const revisionOf = () => "r"; export const setOpPages = () => ({ ok: true, message: "" });`);
+const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const recoverInventory = async () => ""; export const refillFromPages = () => undefined; export const storedCount = (...a) => (globalThis.__mc.storedCount ? globalThis.__mc.storedCount(...a) : []); export const revisionOf = () => "r"; export const setOpPages = () => ({ ok: true, message: "" });`);
 const mainSource = readFileSync(new URL("../packs/stash_bp/scripts/main.js", import.meta.url), "utf8")
   .replace('import "./diag.js";', "")
   .replace('"@minecraft/server-ui"', JSON.stringify(uiUrl))
@@ -1638,13 +1638,18 @@ function stuck(extra = {}) {
   return { p, op, dim };
 }
 const chestsOf = (dim) => [...dim.blocks.values()].filter((b) => b.typeId === "minecraft:chest");
+/** The player lost everything they carried (the page buttons stay): every before-image stack is missing. */
+const lose = (/** @type {any} */ p) => { for (let s = 0; s < 36; s++) if (!BUTTON_SLOTS.includes(s)) p.container.setItem(s, undefined); };
+/** Every stack in every chest, as "kind:amount". */
+const chestContents = (dim) => chestsOf(dim).flatMap((c) => c.getComponent("minecraft:inventory").container.slots.filter(Boolean).map((i) => `${i.typeId.replace("minecraft:", "")}:${i.amount}`)).sort();
 
 test("F2 recover: only the pack's own buttons are left out; a real item in a reserved slot is exported", async () => {
   const { p, op, dim } = stuck({ 15: stack("minecraft:emerald", 2), 16: stack(BTN_MENU, 1), 17: stack(BTN_NEXT, 1) });
+  for (const s of [15, 16, 17, 18, 19, 20]) p.container.setItem(s, undefined);
   mc.formResponses.set(op.id, [{ selection: 0 }]);
   const message = await pages.recoverInventory(op, p);
   assert.match(message, /Exported 4 stacks/, message);
-  assert.match(message, /exists twice/);
+  assert.match(message, /Nothing they still carry was copied/);
   const kinds = chestsOf(dim)[0].getComponent("minecraft:inventory").container.slots.filter(Boolean).map((i) => i.typeId);
   assert.ok(kinds.includes("minecraft:emerald"), "the real item in a reserved slot is kept");
   assert.ok(!kinds.includes(BTN_MENU) && !kinds.includes(BTN_NEXT), "no page button reaches a chest");
@@ -1672,7 +1677,7 @@ test("F2 recover: rechecks the operator and the exact journal after confirming",
   assert.match(await pages.recoverInventory(d.op, d.p), /Only an operator/);
 });
 
-test("F2 recover: a started export is never made again from another dimension, and a half-filled chest is finished once", async () => {
+test("F2 recover: a started export is never made again from another dimension, and a stack taken from a filled chest is never put back", async () => {
   const { p, op, dim } = stuck();
   const set = p.setDynamicProperty.bind(p);
   set("stash:native", JSON.stringify({ ...JSON.parse(p.getDynamicProperty("stash:native")), pending: { ...nativeIndex(p).pending, out: { d: "minecraft:nether", p: [[5, 64, 5]] } } }));
@@ -1685,6 +1690,7 @@ test("F2 recover: a started export is never made again from another dimension, a
   const first = storage.exportPending(r.op, r.p);
   assert.equal(first.ok, true);
   const again = stuck();
+  lose(again.p);
   const orig = again.p.setDynamicProperty.bind(again.p);
   let fail = true;
   again.p.setDynamicProperty = (k, v) => {
@@ -1700,11 +1706,13 @@ test("F2 recover: a started export is never made again from another dimension, a
   assert.equal(storage.exportPending(again.op, again.p).ok, true);
   assert.equal(chestsOf(again.dim).length, 1, "the same chest is finished, not duplicated");
   assert.equal(box.getItem(0)?.typeId, keep?.typeId);
-  assert.ok(box.getItem(1), "the missing slot was refilled once");
+  assert.equal(box.getItem(1), undefined, "F4: the stack someone took out is not put back (that would be a second copy)");
+  assert.ok(box.getItem(2), "the rest of the export is still there");
 });
 
 test("O18: an operator confirms, the before-image lands in chests once, opaque stacks intact", async () => {
   const { p, op, dim } = stuck();
+  lose(p);
   const pending = nativeIndex(p).pending;
   mc.formResponses.set(op.id, [{ selection: 0 }]);
   const message = await pages.recoverInventory(op, p);
@@ -1753,6 +1761,175 @@ test("O18: never overwrites blocks, and a crash after the chests were filled fin
   assert.equal(storage.exportPending(fresh.op, fresh.p).ok, true);
   assert.equal(chestsOf(fresh.dim).length, 1, "the retry recognized the filled chest");
   assert.equal(nativeIndex(fresh.p).pending, undefined);
+});
+
+test("F4 recover: only what the player no longer carries is exported, partial stacks included, and the operator sees the list", async () => {
+  const { p, op, dim } = stuck();
+  // After the failed move the player still has the shulker box and 9 iron; they used 5 of the iron since.
+  assert.equal(p.container.getItem(18), undefined, "the diamonds are the stack the failed move lost");
+  p.container.getItem(20).amount = 4;
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  const message = await pages.recoverInventory(op, p);
+  assert.match(message, /Exported 2 stacks/, message);
+  const shown = mc.forms.filter((f) => f.player === op).at(-1).form.text;
+  assert.match(shown, /3 x Diamond/, shown);
+  assert.match(shown, /5 x Iron ingot/, shown);
+  assert.doesNotMatch(shown, /shulker/i, "a stack they still carry is not listed");
+  assert.deepEqual(chestContents(dim), ["diamond:3", "iron_ingot:5"], "nothing they still carry exists twice");
+  assert.equal(nativeIndex(p).pending, undefined, "journal cleared");
+});
+
+test("F4 recover: a player who still carries everything gets no chest, only a cleared journal", async () => {
+  const { p, op, dim } = stuck();
+  p.container.setItem(18, stack("minecraft:diamond", 3));
+  const pending = nativeIndex(p).pending;
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  const message = await pages.recoverInventory(op, p);
+  assert.match(message, /nothing was exported/, message);
+  assert.equal(chestsOf(dim).length, 0);
+  assert.equal(nativeIndex(p).pending, undefined);
+  assert.ok(!mc.structures.has(pending.before.id) && !mc.structures.has(pending.after.id), "both images discarded");
+});
+
+test("F4 recover: a stack held on the cursor counts as carried", async () => {
+  const { p, op, dim } = stuck();
+  p.cursor.item = stack("minecraft:diamond", 3);
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  assert.match(await pages.recoverInventory(op, p), /nothing was exported/);
+  assert.equal(chestsOf(dim).length, 0);
+  p.cursor.item = undefined;
+});
+
+test("F4 recover: a stack moved into armor or the offhand since counts as carried", async () => {
+  const helmet = stack("minecraft:iron_helmet");
+  const { p, op, dim } = stuck({ 21: helmet, 22: stack("minecraft:arrow", 16) });
+  // After the failure the player puts the helmet on and the arrows in the offhand; only the diamonds are gone.
+  p.worn = { Head: p.container.getItem(21), Offhand: p.container.getItem(22) };
+  p.container.setItem(21, undefined);
+  p.container.setItem(22, undefined);
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  const message = await pages.recoverInventory(op, p);
+  assert.match(message, /Exported 1 stacks/, message);
+  assert.deepEqual(chestContents(dim), ["diamond:3"], "nothing worn is copied");
+  p.worn = undefined;
+});
+
+test("F4 recover: a tool kept but used since is listed as changed and exported only when the operator chooses", async () => {
+  const pick = () => {
+    const t = stack("minecraft:diamond_pickaxe");
+    t.damage = 10;
+    t.enchants = [{ id: "efficiency", level: 5 }];
+    return t;
+  };
+  for (const choice of [0, 1]) {
+    const { p, op, dim } = stuck({ 21: pick() });
+    // The player kept mining with the same pickaxe after the failure.
+    p.container.getItem(21).damage = 40;
+    mc.formResponses.set(op.id, [{ selection: choice }]);
+    const message = await pages.recoverInventory(op, p);
+    const shown = mc.forms.filter((f) => f.player === op).at(-1).form.text;
+    assert.match(shown, /used, renamed, enchanted or dyed since[^]*1 x Diamond pickaxe/i, shown);
+    assert.match(shown, /these 1 are no longer/, "only the diamonds are listed as missing");
+    assert.match(message, /Exported \d+ stacks/, message);
+    if (choice === 0) assert.deepEqual(chestContents(dim), ["diamond:3"], "the kept pickaxe is not copied by default");
+    else assert.deepEqual(chestContents(dim), ["diamond:3", "diamond_pickaxe:1"], "the operator chose to export it too");
+    assert.equal(nativeIndex(p).pending, undefined);
+  }
+  // A pickaxe the player no longer has at all is still plainly missing.
+  const { p, op, dim } = stuck({ 21: pick() });
+  p.container.setItem(21, undefined);
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  assert.match(await pages.recoverInventory(op, p), /Exported 2 stacks/);
+  assert.deepEqual(chestContents(dim), ["diamond:3", "diamond_pickaxe:1"]);
+});
+
+test("F4 recover: an export started by stash_bp 1.8.7 or older (no plan journaled) finishes its old chest without copying twice", async () => {
+  const { p, op, dim } = stuck();
+  lose(p);
+  const native = JSON.parse(p.getDynamicProperty("stash:native"));
+  const own = (/** @type {any} */ e) => BUTTON_SLOTS.includes(e.s) && [BTN_PREV, BTN_MENU, BTN_NEXT].includes(e.item.typeId);
+  const before = storage.loadSnapshot(p, native.pending.before).filter((e) => !own(e));
+  assert.equal(before.length, 3, "diamonds, shulker box, iron");
+  // The old code journaled one spot, placed a chest there and put the first stack in, then stopped.
+  const at = { x: 11, y: 64, z: 10 };
+  dim.getBlock(at).setType("minecraft:chest");
+  const box = dim.getBlock(at).getComponent("minecraft:inventory").container;
+  box.setItem(0, before[0].item.clone());
+  p.setDynamicProperty("stash:native", JSON.stringify({ ...native, pending: { ...native.pending, out: { d: dim.id, p: [[at.x, at.y, at.z]] } } }));
+  const shown = storage.pendingSummary(p, own);
+  assert.equal(shown.started, true);
+  const result = storage.exportPending(op, p, own);
+  assert.equal(result.ok, true, result.message);
+  assert.equal(chestsOf(dim).length, 1, "the old chest is finished, no second one");
+  assert.deepEqual(box.slots.filter(Boolean).map((i) => `${i.typeId}:${i.amount}`), before.map((e) => `${e.item.typeId}:${e.item.amount}`), "every before-image stack once, in the old layout");
+  assert.equal(nativeIndex(p).pending, undefined, "journal cleared");
+  assert.equal(storage.exportPending(op, p).ok, false, "a re-run finds nothing");
+  assert.equal(chestsOf(dim).length, 1);
+});
+
+test("F4 recover: an inventory that changes while the operator decides exports nothing", async () => {
+  const { p, op, dim } = stuck();
+  mc.formResponses.set(op.id, [() => { p.container.setItem(18, stack("minecraft:diamond", 3)); return { selection: 0 }; }]);
+  assert.match(await pages.recoverInventory(op, p), /changed while you were deciding/);
+  assert.equal(chestsOf(dim).length, 0);
+  assert.ok(nativeIndex(p).pending, "journal kept");
+});
+
+test("F4 recover: the confirm form is retried while the operator's chat is still closing (UserBusy)", async () => {
+  const { p, op, dim } = stuck();
+  mc.formResponses.set(op.id, [{ canceled: true, cancelationReason: "UserBusy" }, { canceled: true, cancelationReason: "UserBusy" }, { selection: 0 }]);
+  const run = pages.recoverInventory(op, p);
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setImmediate(r));
+    advance(1);
+  }
+  const message = await run;
+  assert.match(message, /Exported 1 stacks/, message);
+  assert.equal(mc.forms.filter((f) => f.player === op).length, 3, "shown again after each UserBusy");
+  assert.deepEqual(chestContents(dim), ["diamond:3"]);
+});
+
+test("F4 recover: several chests, a failure part way and a re-run place every stack exactly once", async () => {
+  /** @type {Record<number, any>} */
+  const extra = {};
+  for (let s = 0; s < 36; s++) if (!BUTTON_SLOTS.includes(s) && ![18, 19, 20].includes(s)) extra[s] = stack(s % 2 ? "minecraft:emerald" : "minecraft:gold_ingot", s + 1);
+  const { p, op, dim } = stuck(extra);
+  lose(p);
+  const planned = 33;
+  const original = ChestBox.prototype.setItem;
+  let calls = 0;
+  ChestBox.prototype.setItem = function (s, item) {
+    if (++calls === 30) throw new Error("injected chest write failure");
+    original.call(this, s, item);
+  };
+  let first;
+  try {
+    first = storage.exportPending(op, p);
+  } finally {
+    ChestBox.prototype.setItem = original;
+  }
+  assert.equal(first.ok, false, first.message);
+  const out = nativeIndex(p).pending?.out;
+  assert.equal(out?.x?.length, planned, "the plan is journaled");
+  assert.equal(out?.f?.length, 29, "every stack placed before the failure is recorded");
+  const [c1, c2] = chestsOf(dim).map((c) => c.getComponent("minecraft:inventory").container);
+  assert.ok(c1 && c2, "two chests");
+  // Someone takes a stack out of each chest before the operator runs it again.
+  const took = [c1.getItem(0), c2.getItem(1)];
+  c1.setItem(0, undefined);
+  c2.setItem(1, undefined);
+  // The player picks up more of a kind meanwhile: a started export keeps its journaled plan.
+  p.container.setItem(0, stack("minecraft:gold_ingot", 64));
+  const second = storage.exportPending(op, p);
+  assert.equal(second.ok, true, second.message);
+  assert.equal(chestsOf(dim).length, 2, "no third chest");
+  assert.equal(c1.getItem(0), undefined, "a taken stack is not put back");
+  assert.equal(c2.getItem(1), undefined, "a taken stack is not put back");
+  const placed = chestContents(dim).length + took.length;
+  assert.equal(placed, planned, "every planned stack was placed exactly once");
+  assert.equal(nativeIndex(p).pending, undefined);
+  assert.equal(storage.exportPending(op, p).ok, false, "a third run finds nothing");
+  assert.equal(chestsOf(dim).length, 2);
 });
 
 test("a completed move survives losing the script heap and is found again on its page", async () => {
@@ -2965,3 +3142,51 @@ test("with no Land Claims installed the sort still happens within a few ticks of
     }
     assert.deepEqual(contentsOf(box), SORTED, "sorted by the third tick: one tick to ask, one to be answered");
   }));
+
+// ---------------------------------------------------------------------------
+// F6: saga's count asks (main.js stashCountAsk)
+// ---------------------------------------------------------------------------
+
+test("F6 count: a page that can't be read answers unknown instead of staying silent", async () => {
+  const unload = await loadMain();
+  const p = makePlayer();
+  try {
+    mc.storedCount = () => undefined;
+    const from = mc.events.length;
+    for (const fn of mc.after["system:scriptEventReceive"] ?? []) fn({ id: "realm:stash_count_ask", message: JSON.stringify({ player: p.id, item: "minecraft:emerald" }) });
+    const answers = mc.events.slice(from).filter((e) => e.id === "realm:stash_count").map((e) => JSON.parse(e.message));
+    assert.deepEqual(answers, [{ player: p.id, item: "minecraft:emerald", unknown: true }]);
+  } finally {
+    delete mc.storedCount;
+    mc.players = mc.players.filter((x) => x !== p);
+    unload();
+  }
+});
+
+test("F6 count: a row too long for one message still goes out, every message under 2048 characters", async () => {
+  const unload = await loadMain();
+  const p = makePlayer();
+  try {
+    const long = "N".repeat(3000);
+    mc.storedCount = () => [
+      { id: "minecraft:emerald", name: long, lore: ["a".repeat(150)], n: 2 },
+      { id: "minecraft:emerald", n: 5 },
+      { id: "minecraft:emerald", name: "Lily's Marble", lore: ["x"], n: 1 },
+    ];
+    const from = mc.events.length;
+    for (const fn of mc.after["system:scriptEventReceive"] ?? []) fn({ id: "realm:stash_count_ask", message: JSON.stringify({ player: p.id, item: "minecraft:emerald" }) });
+    const sent = mc.events.slice(from).filter((e) => e.id === "realm:stash_count");
+    assert.ok(sent.length >= 1, "an answer was sent");
+    for (const e of sent) assert.ok(e.message.length < 2048, `message of ${e.message.length} characters`);
+    const parts = sent.map((e) => JSON.parse(e.message));
+    const rows = parts.flatMap((m) => m.rows);
+    assert.equal(rows.reduce((n, r) => n + r.n, 0), 8, "no row dropped");
+    assert.equal(parts[0].parts, sent.length);
+    assert.ok(rows.some((r) => r.name === "Lily's Marble" && r.lore?.[0] === "x"), "a short row keeps its name and lore");
+    assert.ok(rows.some((r) => r.n === 2 && r.name.length <= 200), "the long row keeps a cut name");
+  } finally {
+    delete mc.storedCount;
+    mc.players = mc.players.filter((x) => x !== p);
+    unload();
+  }
+});

@@ -74,6 +74,8 @@ export default async function (t) {
     sys.sendScriptEvent("realm:place_ping", "{}");
     await t.waitUntil(() => of("realm:place_ready", (m) => m.wid === "hob" && m.state === "built").length > 0, { timeout: 200, message: "Hob's camp still built" });
     const camp = of("realm:place_ready", (m) => m.wid === "hob" && m.state === "built").at(-1);
+    // The phase-1 ticking areas are removed at the restart and a simulated player loads no chunks: load the camp.
+    await t.loadArea(camp.x, camp.z, { radius: 2 });
     p.teleport({ x: camp.x + 3, y: camp.y + 1, z: camp.z });
     await t.waitUntil(() => ents("wander:c:hob").length === 1, { timeout: 400, message: "Hob is at his camp after the restart" });
     await t.wait(5);
@@ -86,6 +88,10 @@ export default async function (t) {
   t.server("/difficulty hard");
   await t.loadArea(X, Z, { radius: 4 });
   const p = await t.player("Tester", { op: true, x: X, z: Z });
+  // The zombie and the lightning below are for the wanderer: on hard they could kill Tester standing next to it, and a
+  // dead player gets no story dialog (Story Questlines' exclusive()), so Hob's chain could never be accepted.
+  p.addEffect("resistance", 20000, { amplifier: 255, showParticles: false });
+  p.addEffect("fire_resistance", 20000, { amplifier: 0, showParticles: false });
   await t.wait(20);
   p.teleport({ x: X + 0.5, y: p.location.y, z: Z + 0.5 }, { rotation: { x: 0, y: 0 } });
   await t.waitUntil(() => of("realm:wander_state", (m) => m.player === p.id).length > 0, { timeout: 300, message: "saga sends realm:wander_state" });
@@ -158,7 +164,13 @@ export default async function (t) {
     const tf = await tapForm;
     t.check(!!tf && tf.pack === "wander_bp", "...and opens our menu");
     if (tf) tf.answer(null);
-  } else t.log("simulated taps fire no interact events here: checked through the debug tap above");
+  } else {
+    t.log("simulated taps fire no interact events here: checked through the debug tap above");
+    // A menu the tap opened anyway (the test pack loads after wander_bp, which canceled it) is closed, so it doesn't
+    // hold the wanderer's per-player lock for the shim's 60 seconds.
+    const tf = await tapForm;
+    if (tf) tf.answer(null);
+  }
   real.remove();
 
   // Zombies can't hurt it or make a zombie villager of it.
@@ -228,6 +240,7 @@ export default async function (t) {
   // player loads no chunks, so every spot ahead of it could be unloaded ("no spot to stand on ahead").
   p.teleport({ x: X + 0.5, y: (await t.loadArea(X, Z, { radius: 2 })).top.y + 1, z: Z + 0.5 }, { rotation: { x: 0, y: 0 } });
   await t.wait(20);
+  t.assert((p.getComponent("minecraft:health")?.currentValue ?? 0) > 0, "Tester is alive for Hob's talk");
   const { m: hm } = await spawnFor(p, { named: "hob" });
   t.check(hm.wid === "hob", `Hob appears (${hm.wid})`);
   await t.wait(10);

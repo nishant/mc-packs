@@ -150,22 +150,32 @@ Measured with 40 simulated players, Large server took the whole bundle from 9.5 
 
 ## Performance
 
-### Current matched audit (2026-10-19)
+### Latest measurements (October 2026)
 
-On Windows BDS 1.26.52.3, the same harness and declared workload ran master `27f26f6e` and candidate `a1b2a32c` with every declared player retained for the full 900-second steady windows. These figures sum **67 separate behavior-pack script contexts**, not the genuine one-context Realm Bundle run. They are script callback time, not client FPS or all server CPU time.
+The same test workload (simulated players walking, looking and running commands) on master before the October 2026
+fixes and after them, on a Windows server running BDS 1.26.52.3, over a 15-minute steady window (18,000 ticks). These
+add up the 67 behavior packs running as separate packs, not the Realm Bundle as one pack; they are script time, not
+client FPS or all of the server's CPU. Every figure in this table and the two bullets below it comes from that run.
 
-For this release the owner explicitly deferred the remaining soak/load tests to Nish's Claude on 2026-10-20. The later final-bundle 40-player run was interrupted before its full 900 seconds; candidate 100-player, Saga 100-player and the remaining idle-preview measurement are unverified, not passes. The historical `a1b2a32c` figures below are not relabeled as measurements of the later Expedition loader-release/Realm News delta.
+| Players | Before, ms a tick | After, ms a tick |
+|---|---:|---:|
+| 10 | 6.6 | 4.9 |
+| 40 | 9.4 | 8.0 |
 
-| Players | Master, ms/tick | Candidate, ms/tick | Steady window |
-|---|---:|---:|---|
-| 10 | 6.648 | 4.941 | 900 seconds / 18,000 ticks |
-| 40 | 9.429222222222222 | 7.972722222222222 | 900 seconds / 18,000 ticks |
+- **At 40 players the packs are over the 5 ms goal** (about 8 ms a tick, 15% less than before). This is open: the
+  goal stays, and the packs keep getting cheaper wherever a measurement shows a gain.
+- The Minimap is the largest part, 3.7 ms against its 1 ms budget. Over the 0.15 ms typical-pack budget: Easy
+  Building 0.57, Quick Stack & Sort 0.31, Silly Enchants 0.28, Elytra HUD 0.23, Story Questlines 0.23, Stats 0.21,
+  Realm Configuration 0.18 and Realm Calendar 0.15.
+- **A separate, shorter run** (a 4-core Linux test machine, an earlier build of these fixes, 5-minute steady window):
+  the Realm Bundle running as one pack took about 4.8 ms a tick at 10 players, under the goal. It is not the same
+  setup as the table, so do not compare the two directly.
+- **Not measured yet:** 100 players, the story quests at 100 players, and the Realm Bundle as one pack at 40
+  players. Until then, treat 100+ player servers as untested.
+- This Realm keeps the **Small Realm** defaults (10 players, usually 1-4 online). Hardware, workload and how many
+  packs you run all change these numbers; on your own server, measure with `/realm:diag` (below).
 
-**Owner answer (2026-10-19): ACCEPTED_EXCEPTION.** The owner accepts the known 40-player whole-total target miss for this release, with documentation and pending the other gates. The result is about **15.45% lower**, but **does not meet the unchanged under 5 ms/tick target**; the budget evaluator still fails. This is not a blanket waiver of individual budgets. Minimap measured **3.738** against 1 ms/tick. Against the typical-pack limit of 0.15, Easy Building measured **0.574222**, Quick Stack & Sort **0.313889**, Silly Enchants **0.276**, Elytra HUD **0.227944**, Story Questlines **0.227**, Stats **0.212111**, Realm Configuration **0.183667**, and Realm Calendar **0.150444**. See [the complete per-pack table and measurement limits](audits/2026-10-deep-audit/perf-tables.md).
-
-This Realm keeps **Small Realm defaults**: capacity 10, usually 1-4 online. It is not being switched to Large, and those player counts are not evidence that a 40-player budget passed. A further reduction of over 37% from the current result would be needed to get under 5 in this workload. Hardware, workload, context count and synchronous native API work all matter; this does not prove the target impossible or rule out future optimization.
-
-### Historical earlier audit (not the current matched comparator)
+### Earlier measurements (first October 2026 pass)
 
 Measured on a 4-core Linux machine running BDS 1.26.52 with every behavior pack (the Realm Bundle's contents),
 simulated players walking, looking and running a command now and then (`tools/test-bds/examples/perf-soak.js`),
@@ -229,7 +239,7 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 - **Measured with simulated players**, not real clients: no chunk sending, simple movement, no client packets. A
   real server spends more time per player outside the scripts, and a Realm's CPU differs from the test machine.
 - **Current 100-player load acceptance is incomplete.** The current master attempt failed population admission and its only identical retry also could not produce a valid full window; no partial population is a 100-player comparator. Coordinates HUD updates now arrive in bounded parts rather than truncating at 100, but that code change is not a completed current 100-player load or client-rendering test. Minimap keep-alive demand and the separate Saga quest workload still need their actual load evidence.
-- **The measured 40-player separate-pack total is over its under 5 ms target:** **7.972722222222222**, including Minimap **3.738 > 1**. The owner accepted that whole-total miss for this release, not a budget PASS or every individual overrun. It leaves less room for other server work; see the precise scope and exception above.
+- **At 40 players the packs are over their 5 ms goal:** about 8 ms a tick, the Minimap 3.7 ms of it against 1. That is open, not accepted: it leaves less room for other server work. See Performance above.
 - **Ticking areas:** Bedrock allows 10 per world. Farm Loader's farms, Expeditions' dungeon resets (up to `slots`),
   Death Point's `/realm:death_back` and some story and town builds share them, as do any you add with `/tickingarea`.
 - **One cast:** there is one set of twelve townsfolk for the whole world; several towns share them.

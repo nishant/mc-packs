@@ -17,6 +17,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
+import { createSnapGuard, createTether } from "./tether.js";
 import { onScriptEvent } from "./script-events.js";
 
 // A visit is one saved object: where the caravan is, until when, its traders' entity ids and what's left
@@ -63,7 +64,8 @@ const LABEL_TICKS = 10; // how often the name labels are synced
 const AUDIT_TICKS = 200;
 const MAX_SPOTS = 20;
 const BUY_MAX = 16;
-const LLAMA_LEASH = 10; // a llama farther than this from the caravan is brought back
+const LLAMA_LEASH = 10; // a llama farther than this from its spot is brought back (the last resort)
+const LLAMA_SOFT = 5; // past this, a llama is slowed and turned back toward its spot (no teleport)
 const TURN_STEP = 45;
 const TURN_MIN = 4;
 // Where the traders stand around the spot (the first at the spot itself).
@@ -688,9 +690,11 @@ function keepCaravan(vis) {
     const entity = entityById(tr.eid);
     if (entity) {
       st.missing = 0;
-      // Pushed or led away: back to its place.
-      if (tr.at && (entity.dimension.id !== vis.spot.dim || dist(entity.location, tr.at) > 1.5) && blockAt(dim, tr.at)) {
+      // Pushed or led away: back to its place (with a growing wait if it keeps happening: a mob standing on the spot
+      // would push it off again every time).
+      if (tr.at && (entity.dimension.id !== vis.spot.dim || dist(entity.location, tr.at) > 1.5) && blockAt(dim, tr.at) && traderGuard.allow(entity.id, system.currentTick)) {
         entity.teleport(tr.at, { dimension: dim });
+        traderGuard.snapped(entity.id, system.currentTick);
       }
       return;
     }
@@ -736,12 +740,20 @@ function keepCaravan(vis) {
     vis.llamas = ids;
     saveVisit();
   }
-  for (const id of vis.llamas ?? []) {
+}
+
+// Llamas walk with the vanilla AI. Teleporting one back whenever it passed the leash looped (out 10 blocks, back, out
+// again), so they are steered home past LLAMA_SOFT and teleported only as the last resort (tether.js).
+const llamaTether = createTether({ soft: LLAMA_SOFT, hard: LLAMA_LEASH, water: false });
+const traderGuard = createSnapGuard();
+
+/** Every loop (10 ticks): the llamas' tether, around their spot behind the caravan. @param {Visit} vis */
+function tetherLlamas(vis) {
+  if (!vis.placed || !vis.llamas?.length) return;
+  const home = { x: vis.spot.x, y: vis.spot.y, z: vis.spot.z - 3 };
+  for (const id of vis.llamas) {
     const llama = entityById(id);
-    if (llama && dist(llama.location, vis.spot) > LLAMA_LEASH) {
-      const back = { x: vis.spot.x, y: vis.spot.y, z: vis.spot.z - 3 };
-      if (blockAt(dim, back)) llama.teleport(back, { dimension: dim });
-    }
+    if (llama && llama.dimension.id === vis.spot.dim) llamaTether.check(llama, home, system.currentTick);
   }
 }
 
@@ -808,6 +820,7 @@ world.afterEvents.worldLoad.subscribe(() => {
     try {
       if (loops % KEEP_EVERY === 0) upkeep();
       else if (visit) faceTraders(visit);
+      if (visit) tetherLlamas(visit);
     } catch (e) {
       console.warn(`[caravan] ${e}`);
     }
@@ -864,6 +877,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return; // another pack (Land Claims) refused this tap: in the bundle it is still delivered here
   const { player, target } = ev;
   try {
     if (target.typeId !== NPC_TYPE || !target.hasTag(OWNER_TAG)) return;

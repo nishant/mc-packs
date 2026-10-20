@@ -22,8 +22,9 @@ const pack = path.join(temp, "stash_bp");
 try {
   fs.cpSync(path.join(root, "packs", "stash_bp"), pack, { recursive: true });
   fs.appendFileSync(path.join(pack, "scripts", "main.js"), `
-import { carried as testCarried, loadSnapshot as testLoad, saveSnapshot as testSave, stateOf as testState } from "./page-store.js";
-import { STORAGE_SLOTS as testSlots, BUTTON_SLOTS as testButtons } from "./pages.js";
+import { carried as testCarried, exportPending as testExport, loadSnapshot as testLoad, saveSnapshot as testSave, stateOf as testState } from "./page-store.js";
+import { STORAGE_SLOTS as testSlots, BUTTON_SLOTS as testButtons, isButton as testIsButton } from "./pages.js";
+import { Container as TestContainer } from "@minecraft/server";
 import { setFor as testPref } from "./settings.js";
 system.afterEvents.scriptEventReceive.subscribe((event) => {
   if (event.id !== "harness:stash_identity") return;
@@ -71,6 +72,27 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
       const before = testSave(player, keep);
       const after = testSave(player, []);
       player.setDynamicProperty("stash:native", JSON.stringify({ ...state, pending: { before, after } }));
+    } else if (op === "export_fail") {
+      // The real export, with one chest write failing natively part way (the Nth write into a 27-slot chest).
+      const failAt = JSON.parse(event.message).failAt;
+      const original = TestContainer.prototype.setItem;
+      let writes = 0;
+      let fired = false;
+      TestContainer.prototype.setItem = function (slot, item) {
+        if (this.size === 27 && ++writes === failAt) {
+          fired = true;
+          // A plain string: the pack's expected "export incomplete" warning then has no "Error" in it for --strict.
+          throw "injected chest write failure";
+        }
+        return original.call(this, slot, item);
+      };
+      let result;
+      try {
+        result = testExport(player, player, (e) => testButtons.includes(e.s) && testIsButton(e.item));
+      } finally {
+        TestContainer.prototype.setItem = original;
+      }
+      player.sendMessage("stash export_fail " + JSON.stringify({ fired, ok: result.ok, message: result.message, out: testState(player).pending?.out }));
     } else if (op === "status") {
       const state = testState(player);
       player.sendMessage("stash layout status " + JSON.stringify({ layout: state.layout, cur: state.cur, savedPlayerId: world.getDynamicProperty("stash:test:playerId"),

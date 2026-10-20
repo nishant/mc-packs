@@ -72,7 +72,7 @@ function fixture(obj) {
   ].join("\n");
   // The bridge (when it exists) lives next to countItem: its state and functions are loaded from the real file.
   const bridge = [...objectivesSource.matchAll(/^\/\/ stash-bridge:begin\r?\n([\s\S]*?)^\/\/ stash-bridge:end/gm)].map((m) => m[1].replace(/^export /gm, "")).join("\n");
-  const engine = vm.runInNewContext(`${functions}\n${bridge}\n;({ tickPlayer, countItem, reply: typeof stashCountReply === "function" ? stashCountReply : undefined, changed: typeof stashChanged === "function" ? stashChanged : undefined });`, context);
+  const engine = vm.runInNewContext(`${functions}\n${bridge}\n;({ tickPlayer, countItem, reply: typeof stashCountReply === "function" ? stashCountReply : undefined, changed: typeof stashChanged === "function" ? stashChanged : undefined, forget: typeof stashForget === "function" ? stashForget : undefined });`, context);
   const stack = (typeId, amount, nameTag, lore = []) => ({ typeId, amount, nameTag, getLore: () => lore });
   return {
     st,
@@ -99,6 +99,8 @@ function fixture(obj) {
     changed: (rev) => engine.changed?.(JSON.stringify({ player: player.id, rev })),
     reply: (body) => engine.reply?.(JSON.stringify({ player: player.id, ...body })),
     count: () => engine.countItem(player, obj.item, obj.name),
+    forget: () => (engine.forget ? (engine.forget(player.id), true) : false),
+    asks: () => sent.filter((s) => s.id === "realm:stash_count_ask").length,
     progress: () => st.o[0],
   };
 }
@@ -210,4 +212,57 @@ test("a reply computed before a change is stale once the notice names a newer re
   f.reply({ item: SHARDS.item, rev: "b", part: 1, parts: 1, rows: [{ id: SHARDS.item, n: 3 }] });
   f.tick();
   assert.equal(f.progress(), 4);
+});
+
+const MANY = { type: "collect", item: "minecraft:amethyst_shard", count: 20, label: "Gather shards" };
+
+test("F6: an installed stash that stops answering never lowers progress, and is asked again", () => {
+  const f = fixture(MANY);
+  f.hold(f.stack("minecraft:amethyst_shard", 3));
+  f.tick();
+  f.answer([{ id: MANY.item, n: 4 }]);
+  f.tick();
+  assert.equal(f.progress(), 7, "3 live + 4 saved");
+  // The pages change, and the stash can't answer (an unreadable page, a lost message).
+  f.changed("b");
+  f.sent.length = 0;
+  for (let i = 0; i < 4; i++) f.tick();
+  assert.equal(f.progress(), 7, "the missing answer is not counted as zero");
+  f.hold(f.stack("minecraft:amethyst_shard", 9));
+  f.tick();
+  assert.equal(f.progress(), 9, "live items still raise progress");
+  for (let i = 0; i < 10; i++) f.tick();
+  assert.ok(f.asks() >= 2, `asked again after the retry interval (${f.asks()})`);
+});
+
+test("F6: a stash answer of unknown keeps the progress, and a later real answer counts", () => {
+  const f = fixture(MANY);
+  f.hold(f.stack("minecraft:amethyst_shard", 2));
+  f.tick();
+  f.answer([{ id: MANY.item, n: 6 }]);
+  f.tick();
+  assert.equal(f.progress(), 8);
+  f.changed("c");
+  f.sent.length = 0;
+  f.tick();
+  f.reply({ item: MANY.item, unknown: true });
+  for (let i = 0; i < 4; i++) f.tick();
+  assert.equal(f.progress(), 8, "unknown is not zero, however long it lasts");
+  for (let i = 0; i < 12; i++) f.tick();
+  f.reply({ item: MANY.item, rev: "c", part: 1, parts: 1, rows: [{ id: MANY.item, n: 10 }] });
+  f.tick();
+  assert.equal(f.progress(), 12, "2 live + 10 saved, once the stash can answer");
+});
+
+test("F6: the bridge forgets a player who left", () => {
+  const f = fixture(MANY);
+  f.hold(f.stack("minecraft:amethyst_shard", 2));
+  f.tick();
+  f.answer([{ id: MANY.item, n: 6 }]);
+  f.tick();
+  const before = f.asks();
+  assert.equal(f.forget(), true, "the bridge has a leave cleanup");
+  f.hold(f.stack("minecraft:amethyst_shard", 2)); // they come back: counted again
+  f.tick();
+  assert.equal(f.asks(), before + 1, "nothing cached for them after they left: the next count asks again");
 });

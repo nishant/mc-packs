@@ -5,7 +5,7 @@ import { StructureSaveMode, world } from "@minecraft/server";
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {{ s: number, item: ItemStack }} Entry */
 /** @typedef {{ id: string, slots: number[], layout?: 2 }} Ref */
-/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, idx?: Record<string, { r: string, k: Record<string, number> }>, pending?: { before: Ref, after: Ref, out?: { d: string, p: [number, number, number][] } } }} State */
+/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, idx?: Record<string, { r: string, k: Record<string, number> }>, pending?: { before: Ref, after: Ref, out?: { d: string, p: [number, number, number][], x?: [number, number][], f?: number[] } } }} State */
 const STATE = "stash:native";
 const NEXT = "stash:snapshot_next";
 const ENTITY = "realm:stash_page_store";
@@ -414,111 +414,277 @@ export function inventoryReady(player) {
 const CHEST = "minecraft:chest";
 const CHEST_SLOTS = 27;
 
-/** What an operator is told before confirming, or undefined when nothing is pending. @param {Player} target @param {(e: Entry) => boolean} [skip] entries the exporter leaves out (the pack's own buttons) */
+/**
+ * Two stacks the same in every way a script can read except their size. @param {ItemStack} item
+ * @returns {string}
+ */
+export function kindSignature(item) {
+  const parts = JSON.parse(signature(item));
+  parts[1] = 0;
+  return JSON.stringify(parts);
+}
+
+/**
+ * What of the before-image the player no longer carries, as `[before-image slot, how many]`. Every live stack (page
+ * buttons left out by `skip`) cancels the same kind in the before-image, so a stack they kept, or kept part of, is
+ * never exported again. Saved pages are not counted: they stay frozen while a journal is pending (no page reads or
+ * writes), so they still hold exactly what they held before the failed move, and the before-image was never on them.
+ * A live stack whose metadata can't be read cancels nothing (the before-image copy is exported: kept, not lost).
+ * An unstackable before-image item (a tool, armor, a shulker box) that matches nothing exactly but has a live item of
+ * the same type left over was most likely kept and then used, renamed, enchanted or dyed: it goes in `changed`, not in
+ * the plan, unless `withChanged` (the operator chose to export those too).
+ * @param {Entry[]} before @param {Entry[]} live @param {boolean} [withChanged]
+ * @returns {{ plan: [number, number][], changed: [number, number][] }}
+ */
+export function missingPlan(before, live, withChanged = false) {
+  /** @type {Map<string, number>} */
+  const have = new Map();
+  /** @type {Map<string, string>} exact kind -> type id, for unstackable live items */
+  const single = new Map();
+  for (const e of live) {
+    let key;
+    try {
+      key = kindSignature(e.item);
+    } catch {
+      continue;
+    }
+    have.set(key, (have.get(key) ?? 0) + e.item.amount);
+    if (e.item.maxAmount === 1) single.set(key, e.item.typeId);
+  }
+  /** @type {Entry[]} */
+  const unmatched = [];
+  /** @type {Map<number, number>} before-image slot -> how many are missing */
+  const missing = new Map();
+  for (const e of before) {
+    const key = kindSignature(e.item);
+    const kept = Math.min(have.get(key) ?? 0, e.item.amount);
+    if (kept) have.set(key, /** @type {number} */ (have.get(key)) - kept);
+    if (e.item.amount > kept) {
+      missing.set(e.s, e.item.amount - kept);
+      if (!kept && e.item.maxAmount === 1) unmatched.push(e);
+    }
+  }
+  // Unstackable live items no exact match claimed, by type.
+  /** @type {Map<string, number>} */
+  const loose = new Map();
+  for (const [key, typeId] of single) {
+    const left = have.get(key) ?? 0;
+    if (left > 0) loose.set(typeId, (loose.get(typeId) ?? 0) + left);
+  }
+  /** @type {Set<number>} */
+  const changedSlots = new Set();
+  for (const e of unmatched) {
+    const left = loose.get(e.item.typeId) ?? 0;
+    if (!left) continue;
+    loose.set(e.item.typeId, left - 1);
+    changedSlots.add(e.s);
+  }
+  /** @type {[number, number][]} */
+  const plan = [];
+  /** @type {[number, number][]} */
+  const changed = [];
+  for (const e of before) {
+    const n = missing.get(e.s);
+    if (!n) continue;
+    if (changedSlots.has(e.s)) {
+      changed.push([e.s, n]);
+      if (!withChanged) continue;
+    }
+    plan.push([e.s, n]);
+  }
+  return { plan, changed };
+}
+
+/** The armor and offhand slots (EquipmentSlot values; the main hand is an inventory slot). */
+const WORN = ["Head", "Chest", "Legs", "Feet", "Offhand"];
+
+/** @typedef {{ d: string, p: [number, number, number][], x?: [number, number][], f?: number[] }} ExportJournal */
+
+/**
+ * The export as planned: a started export keeps the plan it journaled (an export started by an older version, which
+ * journaled no plan, keeps exporting the whole before-image in the same chest layout); a new one compares the
+ * before-image with what the player carries now.
+ * @param {Player} target @param {State["pending"]} pending @param {(e: Entry) => boolean} [skip]
+ * @param {boolean} [withChanged] also export unstackable items kept but changed since (see missingPlan)
+ */
+function planOf(target, pending, skip, withChanged = false) {
+  if (!pending) throw new Error("nothing pending");
+  let before = loadSnapshot(target, pending.before);
+  if (skip) before = before.filter((e) => !skip(e));
+  const out = /** @type {ExportJournal | undefined} */ (pending.out);
+  /** @type {[number, number][]} */
+  let plan;
+  /** @type {[number, number][]} */
+  let changed = [];
+  if (out?.x) plan = out.x;
+  else if (out) plan = before.map((e) => /** @type {[number, number]} */ ([e.s, e.item.amount]));
+  else {
+    const inv = target.getComponent("minecraft:inventory")?.container;
+    if (!inv) throw new Error("the player's inventory is unavailable");
+    const live = carried(inv).filter((e) => !(skip && skip(e)));
+    // A stack held on the cursor (the inventory screen is open) is still carried.
+    try {
+      const held = target.getComponent("minecraft:cursor_inventory")?.item;
+      if (held) live.push({ s: -1, item: held });
+    } catch {
+      // no cursor component: nothing held
+    }
+    // Worn armor and the offhand are carried too: a before-image stack equipped since is not missing.
+    try {
+      const worn = target.getComponent("minecraft:equippable");
+      if (worn) {
+        for (const slot of WORN) {
+          const item = worn.getEquipment(/** @type {any} */ (slot));
+          if (item && !(skip && skip({ s: -2, item }))) live.push({ s: -2, item });
+        }
+      }
+    } catch {
+      // no equipment component: nothing worn
+    }
+    ({ plan, changed } = missingPlan(before, live, withChanged));
+  }
+  const bySlot = new Map(before.map((e) => [e.s, e.item]));
+  const items = plan.map(([s, n]) => {
+    const item = bySlot.get(s);
+    if (!item || !Number.isInteger(n) || n < 1 || n > item.amount) throw new Error("the export plan does not match the saved image");
+    if (n === item.amount) return item;
+    const part = item.clone();
+    part.amount = n;
+    return part;
+  });
+  const placed = new Set(out?.f ?? []);
+  const changedItems = changed.map(([s, n]) => ({ item: /** @type {ItemStack} */ (bySlot.get(s)), n }));
+  return { plan, items, placed, before, changed: changedItems };
+}
+
+/**
+ * What an operator is told before confirming, or undefined when nothing is pending: what will be exported (only what
+ * the player no longer carries), the unstackable items they kept but changed since (`changed`, exported only when the
+ * operator chooses to), and a key that changes whenever any of that does. `error` is set when the image can't be read.
+ * @param {Player} target @param {(e: Entry) => boolean} [skip] entries the exporter leaves out (the pack's own buttons)
+ */
 export function pendingSummary(target, skip) {
   const pending = stateOf(target).pending;
   if (!pending) return undefined;
-  let items = pending.before.slots.length;
-  if (skip) {
-    try {
-      items = loadSnapshot(target, pending.before).filter((e) => !skip(e)).length;
-    } catch {
-      // the export reports an unreadable image itself
-    }
+  const started = !!pending.out;
+  try {
+    const { plan, items, placed, before, changed } = planOf(target, pending, skip);
+    /** @type {{ id: string, name: string | undefined, n: number }[]} */
+    const lines = [];
+    items.forEach((item, i) => {
+      if (!placed.has(i)) lines.push({ id: item.typeId, name: item.nameTag, n: item.amount });
+    });
+    const changedLines = changed.map(({ item, n }) => ({ id: item.typeId, name: item.nameTag, n }));
+    const key = `${pending.before.id}|${JSON.stringify(plan)}|${[...placed].join(",")}|${JSON.stringify(changedLines)}`;
+    return { id: pending.before.id, key, items: lines.length, kept: before.length, chests: Math.ceil(plan.length / CHEST_SLOTS), chestsWithChanged: Math.ceil((plan.length + changed.length) / CHEST_SLOTS), lines, changed: changedLines, started };
+  } catch (e) {
+    return { id: pending.before.id, key: `${pending.before.id}|error`, items: 0, kept: 0, chests: 0, chestsWithChanged: 0, lines: [], changed: [], started, error: String(e) };
   }
-  return { id: pending.before.id, items, chests: Math.max(1, Math.ceil(items / CHEST_SLOTS)), started: !!pending.out };
-}
-
-/** @param {import("@minecraft/server").Block | undefined} block @param {Entry[]} part */
-function chestMatches(block, part) {
-  if (block?.typeId !== CHEST) return false;
-  const box = block.getComponent("minecraft:inventory")?.container;
-  if (!box) return false;
-  for (let i = 0; i < CHEST_SLOTS; i++) {
-    const want = part[i]?.item;
-    if (signature(box.getItem(i)) !== signature(want)) return false;
-  }
-  return true;
 }
 
 /**
- * A chest whose filled slots all hold what the export put there (an export that stopped half way): finished in place,
- * never touching a chest that holds anything else.
- * @param {import("@minecraft/server").Block} block @param {Entry[]} part
- */
-function chestIsPrefixOf(block, part) {
-  const box = block.getComponent("minecraft:inventory")?.container;
-  if (!box) return false;
-  for (let i = 0; i < CHEST_SLOTS; i++) {
-    const have = box.getItem(i);
-    if (have && signature(have) !== signature(part[i]?.item)) return false;
-  }
-  return true;
-}
-
-/**
- * Operator-confirmed export of a stuck recovery journal: the retained before-image goes into empty chests
- * beside the operator (air blocks only, nothing overwritten), then the journal is cleared and both images
- * discarded. The chest spots are journaled first, so a restart in between finishes the same export instead of
- * making a second copy. Opaque stacks are carried as ItemStacks and never rebuilt from signatures.
- * The target's live inventory is never touched. `skip` leaves out the pack's own page buttons (never real items).
- * An export already started stays in the dimension it began in: from another dimension it is refused, so a second set
- * of chests is never made.
- * @param {Player} operator @param {Player} target @param {(e: Entry) => boolean} [skip]
+ * Operator-confirmed export of a stuck recovery journal. Only what the player no longer carries from the retained
+ * before-image goes into chests on empty floor beside the operator (air blocks only, nothing overwritten); then the
+ * journal is cleared and both images discarded. The plan and the chest spots are journaled before the first chest is
+ * placed, and every stack placed is recorded after each chest, so a re-run (after a failure or a restart) places only
+ * what was never placed: a stack someone took out of a chest in between is never put back. A slot that already holds
+ * the planned kind (placed, but the record was lost) counts as placed. Opaque stacks are carried as
+ * ItemStacks and never rebuilt from signatures. The target's live inventory is never touched. `skip` leaves out the
+ * pack's own page buttons (never real items). An export already started stays in the dimension it began in.
+ * `withChanged` also exports the unstackable items the player kept but changed since (see missingPlan); a started
+ * export keeps its journaled plan either way.
+ * @param {Player} operator @param {Player} target @param {(e: Entry) => boolean} [skip] @param {boolean} [withChanged]
  * @returns {{ ok: boolean, message: string }}
  */
-export function exportPending(operator, target, skip) {
-  const state = stateOf(target);
+export function exportPending(operator, target, skip, withChanged = false) {
+  let state = stateOf(target);
   const pending = state.pending;
   if (!pending) return { ok: false, message: "Nothing is waiting for recovery." };
-  let entries;
+  let planned;
   try {
-    entries = loadSnapshot(target, pending.before);
-    if (skip) entries = entries.filter((e) => !skip(e));
+    planned = planOf(target, pending, skip, withChanged);
   } catch (e) {
     return { ok: false, message: `The saved images could not be read, nothing changed (${e}).` };
   }
-  const parts = [];
-  for (let i = 0; i < entries.length; i += CHEST_SLOTS) parts.push(entries.slice(i, i + CHEST_SLOTS).map((e, j) => ({ s: j, item: e.item })));
-  if (!parts.length) parts.push([]);
+  const { plan, items, placed } = planned;
+  const chests = Math.ceil(plan.length / CHEST_SLOTS);
+  const dim = operator.dimension;
+  /** @type {ExportJournal | undefined} */
+  let out = /** @type {any} */ (pending.out);
+  /** @param {ExportJournal} next */
+  const journal = (next) => {
+    state = { ...state, pending: { ...pending, out: next } };
+    writeState(target, state);
+    out = next;
+  };
   try {
-    const dim = operator.dimension;
-    if (pending.out && pending.out.d !== dim.id) return { ok: false, message: `The export was started in ${pending.out.d}; finish it there. Nothing changed.` };
-    let spots = pending.out?.p;
-    if (!spots) {
-      spots = [];
+    if (out && out.d !== dim.id) return { ok: false, message: `The export was started in ${out.d}; finish it there. Nothing changed.` };
+    if (!out && chests) {
+      /** @type {[number, number, number][]} */
+      const spots = [];
       const o = operator.location;
       const bx = Math.floor(o.x);
       const by = Math.floor(o.y);
       const bz = Math.floor(o.z);
       for (const r of [1, 2, 3, 4]) {
-        for (let dx = -r; dx <= r && spots.length < parts.length; dx++) {
-          for (let dz = -r; dz <= r && spots.length < parts.length; dz++) {
+        for (let dx = -r; dx <= r && spots.length < chests; dx++) {
+          for (let dz = -r; dz <= r && spots.length < chests; dz++) {
             if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
             const at = { x: bx + dx, y: by, z: bz + dz };
             if (dim.getBlock(at)?.isAir && dim.getBlock({ ...at, y: by - 1 })?.isAir === false) spots.push([at.x, at.y, at.z]);
           }
         }
-        if (spots.length >= parts.length) break;
+        if (spots.length >= chests) break;
       }
-      if (spots.length < parts.length) return { ok: false, message: "There is no empty floor space next to you for the chests; move to open ground. Nothing changed." };
-      writeState(target, { ...state, pending: { ...pending, out: { d: dim.id, p: spots } } });
+      if (spots.length < chests) return { ok: false, message: "There is no empty floor space next to you for the chests; move to open ground. Nothing changed." };
+      journal({ d: dim.id, p: spots, x: plan, f: [] });
     }
-    if (spots.length < parts.length) return { ok: false, message: "The saved export spots are incomplete; ask for help. Nothing changed." };
-    for (let i = 0; i < parts.length; i++) {
-      const block = dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] });
-      if (chestMatches(block, parts[i])) continue;
-      const partial = block?.typeId === CHEST && chestIsPrefixOf(block, parts[i]);
-      if (!block?.isAir && !partial) return { ok: false, message: `The export spot ${spots[i].join(" ")} is taken by something else; nothing was overwritten. Ask for help.` };
-      if (!partial) block.setType(CHEST);
-      const box = dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] })?.getComponent("minecraft:inventory")?.container;
+    const spots = out?.p ?? [];
+    if (spots.length < chests) return { ok: false, message: "The saved export spots are incomplete; ask for help. Nothing changed." };
+    for (let c = 0; c < chests; c++) {
+      const first = c * CHEST_SLOTS;
+      const last = Math.min(plan.length, first + CHEST_SLOTS);
+      let todo = false;
+      for (let i = first; i < last; i++) if (!placed.has(i)) todo = true;
+      if (!todo) continue;
+      const at = { x: spots[c][0], y: spots[c][1], z: spots[c][2] };
+      const block = dim.getBlock(at);
+      if (!block) return { ok: false, message: `The export spot ${spots[c].join(" ")} is not loaded; go back to where the export started and run it again.` };
+      if (block.typeId !== CHEST) {
+        if (!block.isAir) return { ok: false, message: `The export spot ${spots[c].join(" ")} is taken by something else; nothing was overwritten. Ask for help.` };
+        block.setType(CHEST);
+      }
+      const box = dim.getBlock(at)?.getComponent("minecraft:inventory")?.container;
       if (!box) throw new Error("chest inventory is unavailable");
-      for (const e of parts[i]) box.setItem(e.s, e.item);
-      if (!chestMatches(dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] }), parts[i])) throw new Error("chest readback failed");
+      const before = placed.size;
+      try {
+        for (let i = first; i < last; i++) {
+          if (placed.has(i)) continue;
+          const want = signature(items[i]);
+          const have = box.getItem(i - first);
+          if (have) {
+            // The planned stack, or part of it (placed, then partly taken, before its record was written): never again.
+            if (kindSignature(have) !== kindSignature(items[i])) return { ok: false, message: `Something else is in the chest at ${spots[c].join(" ")}; nothing was overwritten. Ask for help.` };
+          } else {
+            box.setItem(i - first, items[i]);
+            if (signature(box.getItem(i - first)) !== want) throw new Error("chest readback failed");
+          }
+          placed.add(i);
+        }
+      } finally {
+        if (placed.size !== before) {
+          try {
+            journal({ .../** @type {ExportJournal} */ (out), f: [...placed].sort((a, b) => a - b) });
+          } catch (e) {
+            // A slot holding exactly its planned stack counts as placed on the next run.
+            console.warn(`[stash] recovery export progress not recorded: ${e}`);
+          }
+        }
+      }
     }
   } catch (e) {
     console.warn(`[stash] recovery export incomplete, journal kept: ${e}`);
-    return { ok: false, message: "The export did not finish. The saved images are kept; run it again." };
+    return { ok: false, message: "The export did not finish. The saved images and what was already placed are recorded; run it again." };
   }
   const { pending: _done, ...rest } = state;
   try {
@@ -529,5 +695,6 @@ export function exportPending(operator, target, skip) {
   }
   discardSnapshot(pending.before);
   discardSnapshot(pending.after);
-  return { ok: true, message: `Exported ${entries.length} stacks into ${parts.length} chest(s) next to you. ${target.name}'s journal is cleared. Anything they still carried now exists twice: inspect their inventory and the chests, and back up what you need.` };
+  if (!plan.length) return { ok: true, message: `${target.name} still carries everything from the saved before-image, so nothing was exported. Their journal is cleared.` };
+  return { ok: true, message: `Exported ${plan.length} stacks into ${chests} chest(s) next to you: what ${target.name} no longer carried. Their journal is cleared. Nothing they still carry was copied.` };
 }

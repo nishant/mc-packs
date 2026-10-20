@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 180 commands in 64 packs */
+/** @type {Pack[]} 181 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -436,6 +436,7 @@ export const PACKS = [
       {"name":"realm:saga_place","description":"Story Questlines (operators): set a story place where you stand, or list them","permission":"op","params":[{"name":"realm:saga_place_name","type":"Enum","optional":true,"enum":"realm:saga_place_name"}]},
       {"name":"realm:saga_places","description":"Story Questlines (operators): every story place: set, build with a preview, remove, relocate","permission":"op","params":[]},
       {"name":"realm:saga_reset","description":"Story Questlines (operators): reset a player's stories, choices and progress","permission":"op","params":[{"name":"player","type":"PlayerSelector","optional":false}]},
+      {"name":"realm:saga_step","description":"Story Questlines (operators): finish a stuck player's current step (written to the content log)","permission":"op","params":[{"name":"player","type":"PlayerSelector","optional":false},{"name":"realm:saga_story","type":"Enum","optional":true,"enum":"realm:saga_story"}]},
     ],
   },
   {
@@ -583,6 +584,7 @@ export const ENUMS = {
   "realm:npc_id": ["mara","tobin","reyes","elsie","bram","quill","ida","sol","hollis","moss","wren","bea"],
   "realm:relic_id": ["storm_staff","rain_charm","tide_boots","lantern_deep","storm_meter","compass_echoes","frost_band","sun_pendant","miners_lamp","wayfarer_boots","lantern_shard","choir_mask","hal_compass","vesna_charm","singing_blade","hollow_crown","keeper_lamp"],
   "realm:saga_place_name": ["town","lighthouse","sunken_bell","old_chapel","graveyard","observatory","sea_cave","choir_ring","witch_hut","old_mine","watchtower","meadow","starfall","seal_tide","seal_stone","seal_sky","hollow_gate"],
+  "realm:saga_story": ["drowned_bell","last_map","act1_signs","act2_choir","act3_deep","act4_seals","act5_lantern","inn_ghost","graveyard_shift","vesna_bargain","hollis_faith","lost_lambs","star_kittens","hatchlings","one_that_got_away","hearth_and_table","wardens_oath","smugglers_run","mayors_burden","edges_of_map","singing_forge","listening_deep","heart_tobin","heart_mara","heart_reyes","heart_elsie","heart_bram","heart_quill","heart_ida","heart_sol","heart_hollis","heart_moss","heart_wren","heart_bea","w_pell_road","w_anwen_survey","w_brannoch_deep","w_rook_rival","w_marigold_garden","w_tamsin_storm","w_vesk_home","w_hob_tales","fest_hatchlings","fest_tide_tobin","fest_night_shift","fest_tide_supper","fest_course","fest_sure_thing","fest_water_safety","fest_picnic","fest_judge","fest_lanterns_ida","fest_unremembered","fest_ghost_story","fest_falling_stars","fest_gift_table","fest_speech","fest_clover","the_calling"],
   "realm:sidebar_stat": ["playtime","deaths","mobkills","pvpkills","mined","placed","travelled","flown","joins","cycle","off"],
   "realm:silly_book": ["random","grunt_birthday","hyper_jump","squeak","bubbles","rainbow_trail","hat_trick","disco","moo","confetti_swing","tiny_thunder","fish_slap","glow","duck","hiccups"],
   "realm:town_project": ["well","notice_board","lamps","garden","stall","dock","bell_tower"],
