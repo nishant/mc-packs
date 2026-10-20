@@ -29,7 +29,7 @@ function line(source, name, fallback) {
 const vec = (x, y = 64, z = 0) => ({ x, y, z });
 const OVER = "minecraft:overworld";
 
-function eliteContext({ champions, players, config = {}, tick = 1000 }) {
+function eliteContext({ champions, players, config = {}, tick = 1000, at = (i) => vec(i, 64, 0) }) {
   const touched = new Map();
   const steps = [];
   const puffs = [];
@@ -44,7 +44,7 @@ function eliteContext({ champions, players, config = {}, tick = 1000 }) {
       isValid: true,
       get location() {
         touched.set(id, (touched.get(id) ?? 0) + 1);
-        return vec(i, 64, 0);
+        return at(i);
       },
       dimension: { id: OVER },
     });
@@ -197,6 +197,49 @@ test("approach: an invalid champion is purged and doesn't use a slot", () => {
   ctx.approach();
   assert.equal(ctx.live.has("c0"), false);
   assert.equal(ctx.steps.length, 7);
+});
+
+test("night: champions far from every player take no aura or approach turn, so the near ones come up more often", () => {
+  // 10 champions within 10 blocks of the player, 30 more 5,000 blocks away (a night with many loaded far off).
+  const at = (i) => (i < 10 ? vec(i, 64, 0) : vec(5000 + i, 64, 0));
+  const ctx = eliteContext({ champions: 40, players: [vec(0)], at });
+  for (let r = 0; r < 4; r++) {
+    ctx.system.currentTick += 5;
+    ctx.approach(); // the first runs sort every champion once (12 a run)
+  }
+  ctx.steps.length = 0;
+  for (let r = 0; r < 10; r++) {
+    ctx.system.currentTick += 5;
+    ctx.approach();
+  }
+  const stepped = new Map();
+  for (const s of ctx.steps) stepped.set(s.e.id, (stepped.get(s.e.id) ?? 0) + 1);
+  const far = [...stepped.keys()].filter((id) => Number(id.slice(1)) >= 10);
+  assert.deepEqual(far, [], "no far champion was stepped");
+  for (let i = 0; i < 10; i++) assert.ok((stepped.get(`c${i}`) ?? 0) >= 4, `near c${i} stepped ${stepped.get(`c${i}`) ?? 0} times in 10 runs (every 2 runs with 10 near, not every 5 with 40)`);
+  ctx.puffs.length = 0;
+  for (let r = 0; r < 4; r++) ctx.api.aura();
+  assert.ok(ctx.puffs.length > 0 && ctx.puffs.every((e) => Number(e.id.slice(1)) < 10), "the aura puffs only for champions near a player");
+});
+
+test("night: sorting is bounded per run and a champion that a player walks up to is picked up again", () => {
+  const spots = Array.from({ length: 40 }, (_, i) => vec(5000 + i, 64, 0));
+  const ctx = eliteContext({ champions: 40, players: [vec(0)], at: (i) => spots[i] });
+  ctx.system.currentTick += 5;
+  ctx.approach();
+  assert.ok(ctx.touched.size <= 12, `one run read ${ctx.touched.size} champions' places`);
+  for (let r = 0; r < 4; r++) {
+    ctx.system.currentTick += 5;
+    ctx.approach();
+  }
+  ctx.steps.length = 0;
+  spots[7] = vec(20, 64, 0); // c7 comes within range of the player
+  for (let r = 0; r < 8; r++) {
+    ctx.system.currentTick += 5;
+    ctx.approach();
+  }
+  assert.ok(ctx.steps.some((s) => s.e.id === "c7"), "the champion now near the player is stepped within a few runs");
+  assert.ok(ctx.steps.every((s) => s.e.id === "c7"), "and only it");
 });
 
 test("density: the cap scales with players online (1/10/40/100) under the default ceiling", () => {

@@ -364,13 +364,15 @@ function turnOf(ids, after, cap) {
   return { batch, last: batch[take - 1] };
 }
 
-/** One aura puff for the champions whose turn it is, when a player is within 64 blocks. */
+/**
+ * One aura puff for the champions whose turn it is, among those with a player within 64 blocks when last sorted
+ * (`sortNear`): far champions take no turn.
+ */
 function aura() {
   const started = Date.now();
-  const players = world.getAllPlayers().map((p) => ({ dim: p.dimension.id, at: p.location }));
-  if (!players.length) return;
+  sortNear();
   let n = 0;
-  const turn = turnOf([...live.keys()], auraCursor, AURA_PER_RUN);
+  const turn = turnOf(nearIds("aura"), auraCursor, AURA_PER_RUN);
   auraCursor = turn.last;
   for (const id of turn.batch) {
     const e = live.get(id);
@@ -380,9 +382,6 @@ function aura() {
         live.delete(id);
         continue;
       }
-      const at = e.location;
-      const dim = e.dimension.id;
-      if (!players.some((p) => p.dim === dim && (p.at.x - at.x) ** 2 + (p.at.y - at.y) ** 2 + (p.at.z - at.z) ** 2 < AURA_RANGE_SQ)) continue;
       const trait = known.get(id)?.trait ?? traitOf(e);
       if (!trait) continue;
       puff(e, trait === "shielded" && !shieldUp(e) ? BROKEN.particle : LOOKS[trait].particle, 2);
@@ -952,13 +951,87 @@ function stepFor(speed, elapsed) {
 /** Tick of each champion's last approach step. @type {Map<string, number>} */
 const approachSeen = new Map();
 
+/** How often (ticks) the players' places are read for sorting champions by how near the closest one is. */
+const NEAR_TICKS = 20;
+/** Room (blocks) over the approach range for players and champions moving between two sorts of a champion. */
+const NEAR_MARGIN = 16;
+/** Champions re-sorted per aura or approach run (in a round robin, like the runs themselves): about 70 a second. */
+const SORT_PER_RUN = AURA_PER_RUN;
+/** The players' places, read at most once every NEAR_TICKS. @type {{ at: number, list: { dim: string, x: number, y: number, z: number }[] }} */
+const playersAt = { at: -Infinity, list: [] };
+/**
+ * Whether each champion had a player within the aura's 64 blocks (`aura`) and within the approach range plus
+ * NEAR_MARGIN (`approach`) when it was last sorted. The aura and approach round robins take their turns only from the
+ * champions near someone (an unsorted, new one counts as near), so their cost follows the champions near players and
+ * a far one costs only its sort, not a step or a puff.
+ * @type {Map<string, { aura: boolean, approach: boolean }>}
+ */
+const nearState = new Map();
+/** @type {string | undefined} */
+let sortCursor;
+
+/** Re-sorts the next SORT_PER_RUN loaded champions by the players near them (a fresh read of the players once every NEAR_TICKS). */
+function sortNear() {
+  if (!live.size) return;
+  const tick = system.currentTick;
+  if (tick - playersAt.at >= NEAR_TICKS || tick < playersAt.at) {
+    playersAt.at = tick;
+    playersAt.list = [];
+    for (const p of world.getAllPlayers()) {
+      try {
+        const l = p.location;
+        playersAt.list.push({ dim: p.dimension.id, x: l.x, y: l.y, z: l.z });
+      } catch {
+        // left this tick
+      }
+    }
+  }
+  const reach = (Number(get("approach.range")) || CONFIG.approach.range) + NEAR_MARGIN;
+  const reachSq = reach * reach;
+  const turn = turnOf([...live.keys()], sortCursor, SORT_PER_RUN);
+  sortCursor = turn.last;
+  for (const id of turn.batch) {
+    const e = live.get(id);
+    if (!e) continue;
+    let best = Infinity;
+    try {
+      if (!e.isValid) {
+        live.delete(id);
+        approachSeen.delete(id);
+        nearState.delete(id);
+        continue;
+      }
+      const at = e.location;
+      const dim = e.dimension.id;
+      for (const p of playersAt.list) {
+        if (p.dim !== dim) continue;
+        const d2 = (p.x - at.x) ** 2 + (p.y - at.y) ** 2 + (p.z - at.z) ** 2;
+        if (d2 < best) best = d2;
+      }
+    } catch {
+      continue; // unloaded this tick: sorted next time
+    }
+    const state = { aura: best < AURA_RANGE_SQ, approach: best <= reachSq };
+    nearState.set(id, state);
+    if (!state.approach) {
+      // Nobody near: like an approach step that finds no target, a detour (not a rest) is over.
+      const d = detours.get(id);
+      if (d && d.rest === undefined) detours.delete(id);
+    }
+  }
+}
+
+/** The loaded champions near a player for `kind`, in `live` order (an unsorted one counts as near). @param {"aura" | "approach"} kind */
+const nearIds = (kind) => [...live.keys()].filter((id) => nearState.get(id)?.[kind] !== false);
+
 /** One approach run: a step for the champions whose turn it is (`APPROACH_PER_RUN` at most). */
 function approachRun() {
   if (get("approach.enabled") !== true || !live.size) return;
   const speed = Math.max(0, Number(get("approach.speed")) || 0);
   if (speed <= 0) return;
   const now = system.currentTick;
-  const turn = turnOf([...live.keys()], approachCursor, APPROACH_PER_RUN);
+  sortNear();
+  const turn = turnOf(nearIds("approach"), approachCursor, APPROACH_PER_RUN);
   approachCursor = turn.last;
   for (const id of turn.batch) {
     const e = live.get(id);
@@ -1202,6 +1275,7 @@ function refresh() {
   for (const id of live.keys()) if (!seen.has(id)) live.delete(id);
   for (const id of detours.keys()) if (!seen.has(id)) detours.delete(id);
   for (const id of approachSeen.keys()) if (!seen.has(id)) approachSeen.delete(id);
+  for (const id of nearState.keys()) if (!seen.has(id)) nearState.delete(id);
   for (const id of nextStrike.keys()) if (!seen.has(id)) nextStrike.delete(id);
   const now = Date.now();
   for (const [id, m] of hitters) {

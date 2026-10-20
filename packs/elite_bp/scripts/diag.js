@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "elite_bp";
-const VERSION = "1.3.12";
+const VERSION = "1.3.13";
 const NAME = "Champions";
 /** @type {string[]} */
 const PREFIXES = ["elite"];
