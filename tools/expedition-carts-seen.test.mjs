@@ -14,6 +14,10 @@ function fn(name, isAsync = false) {
   return m[0].replace(/^export /, "");
 }
 
+// The world-side cart marks (O19) cartsOf reads and writes, from the same source.
+const marksSource = source.slice(source.indexOf("const CART_MARKS"), source.indexOf("/**\n * The carts holding a stored record"));
+assert.ok(marksSource.includes("function watchPutDown"), "production cart marks");
+
 function run({ rec, carts, other = [] }) {
   const placed = [];
   const saved = [];
@@ -25,14 +29,23 @@ function run({ rec, carts, other = [] }) {
   };
   const nether = { id: "minecraft:nether", getBlock: () => ({}), getEntities: () => other.slice(), runCommand: (c) => placed.push(c) };
   const player = { isValid: true, location: { x: 1, y: 64, z: 1 }, dimension: dim };
+  const props = new Map();
   const context = {
     console,
-    world: { getDimension: (d) => (d === "minecraft:nether" ? nether : dim), structureManager: { get: () => ({}) } },
+    world: {
+      getDimension: (d) => (d === "minecraft:nether" ? nether : dim),
+      structureManager: { get: () => ({}) },
+      getDynamicProperty: (k) => props.get(k),
+      setDynamicProperty: (k, v) => (v === undefined ? props.delete(k) : props.set(k, v)),
+      beforeEvents: { entityRemove: { subscribe: (f) => f, unsubscribe: () => {} } },
+    },
+    system: { run: (f) => f(), runTimeout: () => {} },
+    saving: true,
     wait: async () => {},
     removeCart: () => {},
   };
   vm.createContext(context);
-  vm.runInContext(`const DIMS = ["minecraft:overworld", "minecraft:nether"];\n${fn("loadedAt")}\n${fn("placeCarts")}\n${fn("cartsOf", true)}\nglobalThis.cartsOf = cartsOf;`, context);
+  vm.runInContext(`const DIMS = ["minecraft:overworld", "minecraft:nether"];\nlet saving = true;\n${marksSource}\n${fn("loadedAt")}\n${fn("placeCarts")}\n${fn("cartsOf", true)}\nglobalThis.cartsOf = cartsOf;`, context);
   return { placed, saved, call: () => context.cartsOf(player, rec, (r) => saved.push(r), 2) };
 }
 
@@ -75,4 +88,4 @@ test("one survivor of two in another dimension is used, never placed over (that 
 test("a seen record with only a survivor in another dimension still returns it, and with none returns null", async () => {
   assert.equal((await run({ rec: { ...base, seen: true }, carts: [], other: [cart] }).call()).length, 1);
   assert.equal(await run({ rec: { ...base, seen: true }, carts: [], other: [] }).call(), null);
-});
+});

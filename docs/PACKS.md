@@ -5256,7 +5256,7 @@ Operators can change `enabled`, `slots`, `maxParty`, `timeLimitMinutes`, `exitSe
 
 ### Saved data
 
-Once a stored-items cart has actually been found, its saved record remembers that fact. If the cart is later broken or goes missing, the pack reports missing items instead of placing the saved structure over a survivor and paying a second copy. A partial hand-back says how many of the expected carts were found. The Nether round-trip scenario is a regression guard, not a claimed fail-before reproduction.
+Once a stored-items cart has actually been found, its saved record remembers that fact. If the cart is later broken or goes missing, the pack reports missing items instead of placing the saved structure over a survivor and paying a second copy. The world remembers it too, without the player (`expedition:cart_marks`): from the tick the structure is put down, the pack looks for its carts at once and then every tick for 2 seconds, notes any of them being broken or unloaded in that time, and notes one loading later (after a restart, say). So a player leaving, a cart broken or a restart in the few ticks before the hand-back finds the carts can't put the structure down a second time once its carts were there; only carts that never appeared are put down again. A partial hand-back says how many of the expected carts were found. The Nether round-trip scenario is a regression guard, not a claimed fail-before reproduction.
 
 | Key | Scope | Contents |
 |---|---|---|
@@ -5273,6 +5273,7 @@ Once a stored-items cart has actually been found, its saved record remembers tha
 | `expedition:stash_next` | World | The next stash number |
 | `expedition:parcels:<player id>` | World | JSON list `{ id, tag, k, c, placed?, at? }` of parcels waiting for that player (`k`: `spoils` treasure left in the chests, `dropped` items dropped dying; `c`: its carts); `placed` once its carts were put down to hand it over, so it's never put down twice |
 | `expedition:parcel_next` | World | The next parcel number |
+| `expedition:cart_marks` | World | JSON `{ <cart tag>: 0 or 1 }`: a stash or parcel whose structure was put down to hand it over (`0`) and whether its carts were in the world since (`1`), kept until that hand-over ends (at most 200, the oldest dropped first) |
 | `expedition:parcel_<n>` | Structure (saved in the world) | A parcel: chest minecarts (tagged `realm:exp_parcel` and `realm:exp_parcel_<n>`) holding the items, made in the sealed pocket in the dungeon box's corner. Deleted once handed over |
 | `expedition:stash_<n>` | Structure (saved in the world) | A Fixed loadout player's own items while they're on a Gauntlet: two chest minecarts (tagged `realm:exp_stash`, `realm:exp_stash_<n>` and `realm:exp_stash_part_<0 or 1>`) holding slots 0 to 26 and 27 to 40 (inventory, then head, chest, legs, feet, offhand). Deleted once the items are back |
 | `expedition:stash` | Player | JSON `{ id, tag, placed?, at? }`: which stash holds the player's items (`id` empty: they carried nothing); `placed` once its carts were put down to give the items back, so they're never put down twice |
