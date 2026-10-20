@@ -233,6 +233,25 @@ function groupOf(id) {
   }
   return g;
 }
+/**
+ * The players in each ticker group (id -> Player), kept up to date by playerSpawn and playerLeave, so a step handles
+ * its own group without listing every player: listing them all 4 times a second cost more than the work it saved
+ * (stats_bp 0.17-0.20 -> 0.22 ms a tick at 40 players). Rebuilt from the player list every ROSTER_TICKS anyway, in
+ * case an event was missed.
+ * @type {Map<string, Player>[]}
+ */
+const tickerRoster = Array.from({ length: TICKER_GROUPS }, () => new Map());
+const ROSTER_TICKS = 100;
+let rosterAt = -Infinity;
+/** @param {number} now */
+function rebuildRoster(now) {
+  for (const group of tickerRoster) group.clear();
+  for (const player of world.getAllPlayers()) {
+    const id = player.id;
+    tickerRoster[groupOf(id)].set(id, player);
+  }
+  rosterAt = now;
+}
 /** player id -> tick until which another pack's action bar message is left alone (realm:actionbar) */
 const pausedUntil = new Map();
 /** Players who see the Coordinates HUD, from its realm:hud_state, and when it last said so. */
@@ -278,7 +297,17 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   tickers.delete(playerId);
   pausedUntil.delete(playerId);
   tickerPrefs.delete(playerId);
+  tickerRoster[groupOf(playerId)].delete(playerId);
   tickerGroups.delete(playerId);
+});
+// A joining player is in its group's next step (within a second), not only after the next roster rebuild.
+world.afterEvents.playerSpawn.subscribe(({ player }) => {
+  try {
+    const id = player.id;
+    tickerRoster[groupOf(id)].set(id, player);
+  } catch (e) {
+    console.warn(`[stats] ticker roster: ${e}`);
+  }
 });
 
 /** @param {unknown} id */
@@ -295,12 +324,12 @@ const fmt = (stat, n) => (stat.format ? stat.format(n) : n.toLocaleString());
  */
 const tickerPrefs = new Map();
 
-/** @param {Player} player */
-function prefsOf(player) {
-  let p = tickerPrefs.get(player.id);
+/** @param {Player} player @param {string} [id] the player's id, when the caller has it (one call into the game less) */
+function prefsOf(player, id = player.id) {
+  let p = tickerPrefs.get(id);
   if (!p) {
     tickerPrefs.set(
-      player.id,
+      id,
       (p = {
         on: get("tickerEnabled") === true && getFor(player, "ticker") === true,
         shown: STATS.filter((s) => getFor(player, `tickerShows.${s.id}`) === true),
@@ -318,10 +347,10 @@ function prefsOf(player) {
 /**
  * Which stat the player's ticker is on, advancing to the next one when its time is up: a stat id, "all" (every
  * chosen stat on one line) or "" (none chosen: nothing to show). Reads no scores.
- * @param {Player} player @param {{ index: number, seconds: number }} t
+ * @param {Player} player @param {{ index: number, seconds: number }} t @param {string} [id]
  */
-function tickerHead(player, t) {
-  const { shown, all, seconds } = prefsOf(player);
+function tickerHead(player, t, id = player.id) {
+  const { shown, all, seconds } = prefsOf(player, id);
   if (!shown.length) return "";
   if (all) return "all";
   if (t.seconds >= seconds) {
@@ -333,10 +362,10 @@ function tickerHead(player, t) {
 
 /**
  * The ticker's text for the stat `head` (from tickerHead). "" = nothing to show.
- * @param {Player} player @param {string} head
+ * @param {Player} player @param {string} head @param {string} [id]
  */
-function tickerText(player, head) {
-  const { shown, lc, vc, full } = prefsOf(player);
+function tickerText(player, head, id = player.id) {
+  const { shown, lc, vc, full } = prefsOf(player, id);
   /** @param {Stat} stat */
   const one = (stat) => {
     const score = scoreOf(stat.id, player.name);
@@ -386,8 +415,8 @@ function tickerPlace(id, name, score) {
   return { rank: score > 0 ? above + 1 : 0, of };
 }
 
-/** @param {Player} player */
-const tickerOn = (player) => prefsOf(player).on;
+/** @param {Player} player @param {string} [id] */
+const tickerOn = (player, id = player.id) => prefsOf(player, id).on;
 
 /** @param {string} playerId @param {string} text */
 const toHud = (playerId, text) => system.sendScriptEvent("realm:hud_line", JSON.stringify({ player: playerId, key: "stats", text, ticks: 80 }));
@@ -403,30 +432,35 @@ system.runInterval(() => {
   const now = system.currentTick;
   const group = Math.floor(now / TICKER_STEP) % TICKER_GROUPS;
   const hudAlive = now - hudHeard < HUD_STALE_TICKS;
-  for (const player of world.getAllPlayers()) {
+  if (now - rosterAt >= ROSTER_TICKS || now < rosterAt) rebuildRoster(now);
+  const members = tickerRoster[group]; // the others' turns come in the other ticks of this second
+  for (const [id, player] of members) {
     try {
-      if (groupOf(player.id) !== group) continue; // its turn comes in another tick of this second
-      let t = tickers.get(player.id);
-      if (!tickerOn(player)) {
+      if (!player.isValid) {
+        members.delete(id);
+        continue;
+      }
+      let t = tickers.get(id);
+      if (!tickerOn(player, id)) {
         if (t) {
           clearTicker(player, t);
-          tickers.delete(player.id);
+          tickers.delete(id);
         }
         continue;
       }
-      if (!t) tickers.set(player.id, (t = { index: 0, seconds: 0, text: "", at: -Infinity }));
+      if (!t) tickers.set(id, (t = { index: 0, seconds: 0, text: "", at: -Infinity }));
       t.seconds++;
       /** @type {"bar" | "hud"} */
-      const via = hudAlive && hudPlayers.has(player.id) ? "hud" : "bar";
-      if (t.via === "hud" && via === "bar") toHud(player.id, ""); // the HUD went off: its line goes too
-      if (via === "bar" && (pausedUntil.get(player.id) ?? 0) > now) continue; // another pack's message is on the bar
-      const head = tickerHead(player, t);
+      const via = hudAlive && hudPlayers.has(id) ? "hud" : "bar";
+      if (t.via === "hud" && via === "bar") toHud(id, ""); // the HUD went off: its line goes too
+      if (via === "bar" && (pausedUntil.get(id) ?? 0) > now) continue; // another pack's message is on the bar
+      const head = tickerHead(player, t, id);
       // The same stat in the same place, drawn less than REFRESH_TICKS ago: unchanged, or only its number moved,
       // which shows with the next refresh. Nothing is read or written for it this second.
       if (head === t.head && via === t.via && now - t.at < REFRESH_TICKS) continue;
-      const text = head ? tickerText(player, head) : "";
+      const text = head ? tickerText(player, head, id) : "";
       if (!text && !t.text) continue; // nothing to show, and nothing of ours to take off
-      if (via === "hud") toHud(player.id, text);
+      if (via === "hud") toHud(id, text);
       else player.onScreenDisplay.setActionBar(text);
       t.text = text;
       t.head = head;

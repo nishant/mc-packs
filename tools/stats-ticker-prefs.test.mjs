@@ -48,7 +48,24 @@ const startup = [];
 const intervals = [];
 const commands = new Map();
 const queue = [];
+const spawnHandlers = [];
+const leaveHandlers = [];
 let tick = 100;
+let listed = 0; // world.getAllPlayers() calls
+/**
+ * Who is online, as in the game: a player who goes is announced by playerLeave, one who comes by playerSpawn (the
+ * ticker keeps its groups from those events, not from listing every player each step).
+ */
+function setPlayers(list) {
+  const gone = players.filter((p) => !list.includes(p));
+  const come = list.filter((p) => !players.includes(p));
+  players.splice(0, players.length, ...list);
+  for (const p of gone) {
+    p.isValid = false;
+    for (const fn of leaveHandlers) fn({ playerId: p.id, playerName: p.name });
+  }
+  for (const p of come) for (const fn of spawnHandlers) fn({ player: p, initialSpawn: true });
+}
 
 class Objective {
   constructor(id) {
@@ -110,11 +127,11 @@ const server = {
   world: {
     beforeEvents: {},
     afterEvents: {
-      playerLeave: { subscribe() {} },
+      playerLeave: { subscribe(fn) { leaveHandlers.push(fn); } },
       playerBreakBlock: { subscribe() {} },
       playerPlaceBlock: { subscribe() {} },
       entityDie: { subscribe() {} },
-      playerSpawn: { subscribe() {} },
+      playerSpawn: { subscribe(fn) { spawnHandlers.push(fn); } },
       worldLoad: { subscribe() {} },
     },
     getDynamicProperty(key) {
@@ -129,6 +146,7 @@ const server = {
       return [...worldProps.keys()];
     },
     getAllPlayers() {
+      listed++;
       return players;
     },
         getEntity(id) {
@@ -215,7 +233,7 @@ function flush() {
 }
 function ann() {
   const player = new Player("Ann");
-  players.splice(0, players.length, player);
+  setPlayers([player]);
   return player;
 }
 /** One second of game ticks: each interval runs as often as it asked (the ticker every 5 ticks, one player group each). */
@@ -337,7 +355,7 @@ const board = (id) => objectives.get(`stats_${id}`) ?? server.world.scoreboard.a
 test("F45: players are spread over the second, and every one is drawn within it", () => {
   onlyStat("deaths");
   const many = Array.from({ length: 40 }, (_, i) => new Player(`P${i}`));
-  players.splice(0, players.length, ...many);
+  setPlayers(many);
   /** @type {Map<number, number>} */
   const perTick = new Map();
   for (const p of many) {
@@ -382,7 +400,7 @@ test("F45: the ranking reads each board at most once every 5 seconds, and a play
     return getScores();
   };
   const many = [new Player("Ann"), new Player("Bob"), ...Array.from({ length: 38 }, (_, i) => new Player(`Q${i}`))];
-  players.splice(0, players.length, ...many);
+  setPlayers(many);
   for (let second = 0; second < 10; second++) tickers();
   assert.ok(reads <= 3, `one board read per 5 seconds for 40 players (${reads} in 10 s)`);
   assert.match(plain(many[0].bars.at(-1)), /Blocks mined 3 #3 of 3/);
@@ -430,7 +448,7 @@ test("tied scores share a place in My stats and the leaderboard, as on the ticke
   mined.scores.set("Bob", 5);
   mined.scores.set("Carl", 2);
   const many = [new Player("Ann"), new Player("Bob"), new Player("Carl")];
-  players.splice(0, players.length, ...many);
+  setPlayers(many);
   tickers();
   assert.match(plain(many[0].bars.at(-1)), /#1 of 3/);
   assert.match(plain(many[1].bars.at(-1)), /#1 of 3/);
@@ -464,5 +482,27 @@ test("tied scores share a place in My stats and the leaderboard, as on the ticke
   assert.match(lb, /1\. Ann  5/, `leaderboard: ${lb}`);
   assert.match(lb, /1\. Bob  5/, `the leaderboard numbers tied scores alike: ${lb}`);
   assert.match(lb, /3\. Carl  2/, `leaderboard: ${lb}`);
+  restoreTicker();
+});
+
+test("F45: the ticker keeps its groups from join and leave events, not a player list every step", () => {
+  onlyStat("deaths");
+  const many = Array.from({ length: 40 }, (_, i) => new Player(`L${i}`));
+  setPlayers(many);
+  tickers(); // the first second may rebuild the groups once
+  const from = listed;
+  for (let s = 0; s < 5; s++) tickers();
+  // The once-a-second tracking pass lists the players 5 times; the ticker at most once more (its 5-second rebuild),
+  // where listing them every step would add 20.
+  assert.ok(listed - from <= 6, `getAllPlayers ran ${listed - from} times in 5 seconds`);
+  // A player who joins is drawn within a second; one who left is no longer drawn.
+  const late = new Player("Late");
+  const left = many[0];
+  setPlayers([...many.slice(1), late]);
+  const leftBars = left.bars.length;
+  tickers();
+  assert.equal(late.bars.length, 1, "the new player is drawn within a second");
+  for (let s = 0; s < 3; s++) tickers();
+  assert.equal(left.bars.length, leftBars, "the player who left is not drawn");
   restoreTicker();
 });
