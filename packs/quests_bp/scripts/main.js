@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { spreadPlayers } from "./spread.js";
 
 // Each player's quests for the day are one small player property: "quests:day" -> JSON
 // { d: day number, q: [{ id, p: progress, done: 0 | 1 }] }. Quests are saved by their pool id.
@@ -393,36 +394,45 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (initialSpawn) joinedAt.set(player.id, system.currentTick);
 });
 
-let seconds = 0;
-system.runInterval(() => {
-  seconds++;
-  for (const player of world.getAllPlayers()) {
-    try {
-      // On joining (after the popups), and when a new day starts while playing.
-      if (system.currentTick - (joinedAt.get(player.id) ?? -NOTICE_DELAY) >= NOTICE_DELAY) notice(player);
-      if (!wants(player, "travel")) {
-        travel.delete(player.id);
-        continue;
-      }
-      let t = travel.get(player.id);
-      if (!t) travel.set(player.id, (t = { blocks: 0, ticks: 0 }));
-      const loc = player.location;
-      const dim = player.dimension.id;
-      if (t.last && t.last.dim === dim) {
-        const dist = Math.hypot(loc.x - t.last.x, loc.y - t.last.y, loc.z - t.last.z);
-        if (dist <= CONFIG.maxSpeed) t.blocks += dist;
-      }
-      t.last = { x: loc.x, y: loc.y, z: loc.z, dim };
-      if (seconds % 5 === 0 && t.blocks >= 1) {
-        const whole = Math.floor(t.blocks);
-        t.blocks -= whole;
-        progress(player, "travel", "", whole);
-      }
-    } catch (e) {
-      console.warn(`[quests] ${e}`);
+// Each player once a second as before, a tenth of them every 2 ticks (scripts/spread.js), so a full server doesn't
+// do everyone on one tick; whole blocks are added on a different second for each tenth.
+spreadPlayers(system, world, {
+  every: 20,
+  parts: 10,
+  visit: (share, { round, part }) => {
+    for (const player of share) {
+      sweep(player, (round + part) % 5 === 0);
     }
+  },
+});
+
+/** One player's second: the day's notice, and travel. @param {Player} player @param {boolean} addWhole */
+function sweep(player, addWhole) {
+  try {
+    // On joining (after the popups), and when a new day starts while playing.
+    if (system.currentTick - (joinedAt.get(player.id) ?? -NOTICE_DELAY) >= NOTICE_DELAY) notice(player);
+    if (!wants(player, "travel")) {
+      travel.delete(player.id);
+      return;
+    }
+    let t = travel.get(player.id);
+    if (!t) travel.set(player.id, (t = { blocks: 0, ticks: 0 }));
+    const loc = player.location;
+    const dim = player.dimension.id;
+    if (t.last && t.last.dim === dim) {
+      const dist = Math.hypot(loc.x - t.last.x, loc.y - t.last.y, loc.z - t.last.z);
+      if (dist <= CONFIG.maxSpeed) t.blocks += dist;
+    }
+    t.last = { x: loc.x, y: loc.y, z: loc.z, dim };
+    if (addWhole && t.blocks >= 1) {
+      const whole = Math.floor(t.blocks);
+      t.blocks -= whole;
+      progress(player, "travel", "", whole);
+    }
+  } catch (e) {
+    console.warn(`[quests] ${e}`);
   }
-}, 20);
+}
 
 // ---------------------------------------------------------------------------
 // Menu

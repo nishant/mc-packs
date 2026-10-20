@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { spreadPlayers } from "./spread.js";
 
 // One world property per player, so anyone's milestones can be shown while they're offline:
 // "milestones:p:<player id>" -> JSON { n: name, c: { stat: count }, g: { milestone id: tiers reached } }.
@@ -105,17 +106,26 @@ function add(player, stat, n = 1) {
   dirty.add(player.id);
 }
 
-/** The Stats pack's score for this name, or 0 without the Stats pack. @param {string} name @param {Stat} stat */
-function statsScore(name, stat) {
+/**
+ * The Stats pack's score for this name, or 0 without the Stats pack. `objectives` keeps the objectives looked up
+ * during one run (the check sweep), so checking several players asks for each objective once.
+ * @param {string} name @param {Stat} stat @param {Map<string, import("@minecraft/server").ScoreboardObjective | null>} [objectives]
+ */
+function statsScore(name, stat, objectives) {
   try {
-    return world.scoreboard.getObjective(`stats_${stat}`)?.getScore(name) ?? 0;
+    let o = objectives?.get(stat);
+    if (o === undefined) {
+      o = world.scoreboard.getObjective(`stats_${stat}`) ?? null;
+      objectives?.set(stat, o);
+    }
+    return o?.getScore(name) ?? 0;
   } catch {
     return 0; // no such participant yet
   }
 }
 
-/** @param {Rec} r @param {Stat} stat */
-const valueOf = (r, stat) => Math.max(r.c[stat] ?? 0, statsScore(r.n, stat)) / STATS[stat].scale;
+/** @param {Rec} r @param {Stat} stat @param {Map<string, import("@minecraft/server").ScoreboardObjective | null>} [objectives] */
+const valueOf = (r, stat, objectives) => Math.max(r.c[stat] ?? 0, statsScore(r.n, stat, objectives)) / STATS[stat].scale;
 
 /** Tiers reached for this value. @param {Milestone} m @param {number} v */
 const tiersFor = (m, v) => m.tiers.filter((t) => v >= t).length;
@@ -153,36 +163,49 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   }
 });
 
-system.runInterval(() => {
-  for (const player of world.getAllPlayers()) {
-    try {
-      let p = pending.get(player.id);
-      if (!p) pending.set(player.id, (p = { seconds: 0, travelled: 0, flown: 0 }));
-      const away = afk(player);
-      if (!away && ++p.seconds >= 60) {
-        p.seconds -= 60;
-        add(player, "playtime");
-      }
-      const loc = player.location;
-      const dim = player.dimension.id;
-      if (!away && p.last && p.last.dim === dim) {
-        const d = Math.hypot(loc.x - p.last.x, loc.y - p.last.y, loc.z - p.last.z);
-        if (d <= CONFIG.maxSpeed) {
-          const key = player.isGliding ? "flown" : "travelled";
-          p[key] += d;
-          const whole = Math.floor(p[key]);
-          if (whole > 0) {
-            p[key] -= whole;
-            add(player, key, whole);
-          }
+// Each player once a second as before, a tenth of them every 2 ticks (scripts/spread.js), so a full server doesn't
+// do everyone on one tick. An AFK player's position isn't read at all: nothing counts while they're away, and the
+// first second back starts from where they are then.
+spreadPlayers(system, world, {
+  every: 20,
+  parts: 10,
+  visit: (share) => {
+    for (const player of share) tally(player);
+  },
+});
+
+/** One player's second of playtime and distance. @param {Player} player */
+function tally(player) {
+  try {
+    let p = pending.get(player.id);
+    if (!p) pending.set(player.id, (p = { seconds: 0, travelled: 0, flown: 0 }));
+    if (afk(player)) {
+      p.last = undefined;
+      return;
+    }
+    if (++p.seconds >= 60) {
+      p.seconds -= 60;
+      add(player, "playtime");
+    }
+    const loc = player.location;
+    const dim = player.dimension.id;
+    if (p.last && p.last.dim === dim) {
+      const d = Math.hypot(loc.x - p.last.x, loc.y - p.last.y, loc.z - p.last.z);
+      if (d <= CONFIG.maxSpeed) {
+        const key = player.isGliding ? "flown" : "travelled";
+        p[key] += d;
+        const whole = Math.floor(p[key]);
+        if (whole > 0) {
+          p[key] -= whole;
+          add(player, key, whole);
         }
       }
-      p.last = { x: loc.x, y: loc.y, z: loc.z, dim };
-    } catch (e) {
-      console.warn(`[milestones] ${e}`);
     }
+    p.last = { x: loc.x, y: loc.y, z: loc.z, dim };
+  } catch (e) {
+    console.warn(`[milestones] ${e}`);
   }
-}, 20);
+}
 
 // ---------------------------------------------------------------------------
 // Unlocks
@@ -216,8 +239,8 @@ function topTier(player, m, quiet) {
 /** Players whose earlier top tiers were sent to the Titles pack this session. @type {Set<string>} */
 const backfilled = new Set();
 
-/** @param {Player} player */
-function check(player) {
+/** @param {Player} player @param {Map<string, import("@minecraft/server").ScoreboardObjective | null>} [objectives] */
+function check(player, objectives) {
   const r = recordOf(player);
   const first = !r.g;
   const got = (r.g ??= {});
@@ -234,8 +257,9 @@ function check(player) {
   /** @type {string[]} */
   const unlocked = [];
   for (const m of milestones) {
-    const now = tiersFor(m, valueOf(r, m.stat));
     const before = got[m.id] ?? 0;
+    if (before >= m.tiers.length) continue; // every tier reached: no score to read
+    const now = tiersFor(m, valueOf(r, m.stat, objectives));
     if (now <= before) continue;
     for (let t = before + 1; t <= now; t++) unlocked.push(`${title(m, t)} (${STATS[m.stat].goal(fmt(m.tiers[t - 1]))})`);
     got[m.id] = now;
@@ -257,30 +281,32 @@ function check(player) {
   player.playSound("random.levelup", { pitch: 1, volume: 0.9 });
 }
 
-// Each player is checked (and their record saved) every checkSeconds, a share of the players each second, so a full
-// server doesn't check and save everyone on the same tick.
-let elapsed = 0;
-system.runInterval(() => {
-  const every = Math.max(1, CONFIG.checkSeconds);
-  const turn = elapsed++ % every;
-  const players = world.getAllPlayers();
-  /** @type {string[]} */
-  const ids = [];
-  for (let i = turn; i < players.length; i += every) {
-    const player = players[i];
+// Each player is checked (and their record saved) every checkSeconds, a share of the players each second
+// (scripts/spread.js, by player id), so a full server doesn't check and save everyone on the same tick.
+const CHECK_EVERY = Math.max(1, Math.floor(CONFIG.checkSeconds) || 1);
+spreadPlayers(system, world, {
+  every: 20 * CHECK_EVERY,
+  parts: CHECK_EVERY,
+  visit: (share) => {
+    /** @type {string[]} */
+    const ids = [];
+    /** @type {Map<string, import("@minecraft/server").ScoreboardObjective | null>} */
+    const objectives = new Map();
+    for (const player of share) {
+      try {
+        check(player, objectives);
+        ids.push(player.id);
+      } catch (e) {
+        console.warn(`[milestones] ${e}`);
+      }
+    }
     try {
-      check(player);
-      ids.push(player.id);
+      flush(ids);
     } catch (e) {
       console.warn(`[milestones] ${e}`);
     }
-  }
-  try {
-    flush(ids);
-  } catch (e) {
-    console.warn(`[milestones] ${e}`);
-  }
-}, 20);
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Menu

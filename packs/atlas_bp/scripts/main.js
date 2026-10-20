@@ -28,6 +28,7 @@ import { PREFABS, turn } from "./prefabs.js";
 import { get, getFor } from "./settings.js";
 import { protectedBox } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { spreadPlayers } from "./spread.js";
 import { spawnFresh } from "./spawn.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -1062,16 +1063,22 @@ function tickPlayer(player) {
       }
 }
 
-system.runInterval(() => {
-  if (!enabled()) return;
-  for (const p of world.getAllPlayers()) {
-    try {
-      tickPlayer(p);
-    } catch (e) {
-      console.warn(`[atlas] ${e}`);
+// Each player every 2 seconds as before, a tenth of them every 4 ticks (scripts/spread.js), so a full server never
+// does every player's cell math on one tick.
+spreadPlayers(system, world, {
+  every: 40,
+  parts: 10,
+  visit: (share) => {
+    if (!enabled()) return;
+    for (const p of share) {
+      try {
+        tickPlayer(p);
+      } catch (e) {
+        console.warn(`[atlas] ${e}`);
+      }
     }
-  }
-}, 40);
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Using a site: taps, hits, breaks
