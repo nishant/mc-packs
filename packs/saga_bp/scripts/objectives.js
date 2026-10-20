@@ -2308,7 +2308,7 @@ function defeatSpawnTick(player, e, i, obj) {
     p.playSound("raid.horn", { volume: 0.5, pitch: 1.2 });
   };
   if (d <= r && mobs.length) warn(player);
-  if (d > r || (obj.night && !isNight()) || now < (s.data.next ?? 0)) return;
+  if (d > r || (obj.night && !nightMet()) || now < (s.data.next ?? 0)) return;
   // Never more than the member furthest from done still has to defeat (each counts their own kills, mates share them).
   let left = target(obj) - progressOf(e, i);
   for (const { m } of membersOf(s, true)) left = Math.max(left, target(obj) - progressOf(m.e, i));
