@@ -319,6 +319,23 @@ test("F64: Delete the copy forgets it; players never get the Old welcome button;
   assert.equal(menu.form.buttons.some((b) => /Old welcome/.test(b)), false, "no button without a copy");
 });
 
+test("F64: Restore keeps a title or button saved after the migration", async () => {
+  const sim = await world({ "welcome:settings": LEGACY, "welcome:revision": 2 });
+  installedPacks(sim, ALL);
+  sim.props.set("welcome:settings", JSON.stringify({ title: "Newer title" })); // an operator's later edit
+  const op = sim.join("Op", { op: true });
+  sim.run("realm:welcome", op);
+  const menu = await sim.nextForm(600);
+  sim.answer({ selection: menu.form.buttons.findIndex((b) => /Old welcome/.test(b)) });
+  await sim.nextForm(600);
+  sim.answer({ selection: 0 });
+  await sim.settle();
+  const saved = JSON.parse(sim.props.get("welcome:settings"));
+  assert.equal(saved.title, "Newer title", "the later title stays");
+  assert.equal(saved.body, LEGACY_BODY, "the old body is back");
+  assert.equal(saved.button, `${S}lLet's go!`, "the old button, with no newer one saved, is back");
+});
+
 // F64 (N11): the retired welcome:profile key is deleted, also in worlds that migrated before this fix.
 test("F64: the retired welcome:profile key is deleted on load", async () => {
   for (const seed of [{ "welcome:profile": "realm" }, { "welcome:profile": "realm", "welcome:migrated": 1 }]) {

@@ -515,7 +515,7 @@ async function legacyPage(player) {
     new ActionFormData()
       .title("Old welcome")
       .body(
-        `§7When the default welcome arrived, it replaced this world's old saved one. This copy was kept. Restore it to use it again (it replaces the body, and the old title and button if they were kept), or delete the copy.§r\n\n${kept.body}`
+        `§7When the default welcome arrived, it replaced this world's old saved one. This copy was kept. Restore it to use it again (it replaces the body; the old title and button come back only where no newer one was saved), or delete the copy.§r\n\n${kept.body}`
       )
       .button("Restore it")
       .button("§cDelete the copy")
@@ -529,8 +529,9 @@ async function legacyPage(player) {
   if (res.selection === 0) {
     const saved = savedOverrides();
     saved.body = now.body;
-    if (typeof now.title === "string") saved.title = now.title;
-    if (typeof now.button === "string") saved.button = now.button;
+    // A title or button an operator saved after the migration wins over the old one.
+    if (typeof now.title === "string" && typeof saved.title !== "string") saved.title = now.title;
+    if (typeof now.button === "string" && typeof saved.button !== "string") saved.button = now.button;
     saveSettings(saved);
     world.setDynamicProperty(PROP_LEGACY, undefined);
     player.sendMessage("§aThe old welcome is back.§r Run §b/realm:welcome§r to preview it.");
