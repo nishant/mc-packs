@@ -438,7 +438,7 @@ export const SIZE_OPTIONS = [
   { pack: "build_bp", key: "allowInfiniteReach", large: false, why: "public-server builds do not reach faraway areas" },
   { pack: "cleanup_bp", key: "threshold", large: 1500, why: "more players drop more items: cleanups stay about as rare" },
   { pack: "find_bp", key: "liveScanRadius", large: 8, why: "each search reads 7 times fewer blocks (17 x 17 x 17 instead of 33 x 33 x 33)" },
-  { pack: "admin_bp", key: "checkSeconds", large: 60, why: "the item check reads every inventory: half as often" },
+  { pack: "admin_bp", key: "checkSeconds", large: 60, why: "the item check reads inventories that need it (new operators, a missing item, every inventory once in 10 rounds): half as often" },
   { pack: "mail_bp", key: "sendCooldownSeconds", large: 30, why: "less letter spam among many strangers" },
   { pack: "afk_bp", key: "sleep.percent", large: 50, why: "with 30 or more players, all of them asleep at once never happens" },
 ];

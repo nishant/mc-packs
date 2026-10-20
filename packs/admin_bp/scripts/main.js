@@ -682,6 +682,10 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   updatingItem.delete(playerId);
   dirtyWhileUpdating.delete(playerId);
   scheduledItem.delete(playerId);
+  missing.delete(playerId);
+  cursorWatch.delete(playerId);
+  lastOp.delete(playerId);
+  sweepSlot.delete(playerId);
 });
 world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
   if (deadEntity.typeId !== "minecraft:player") return;
@@ -725,6 +729,12 @@ const dirtyWhileUpdating = new Set();
 const scheduledItem = new Set();
 /** @type {Set<string>} players already warned about a failed duplicate removal or normalization */
 const toldFailed = new Set();
+/** @type {Set<string>} players who carried no Realm Configuration item at their last reconcile */
+const missing = new Set();
+/** @type {Set<string>} players a real item left a slot for without a real one coming in: it may be on their cursor */
+const cursorWatch = new Set();
+/** @type {Map<string, boolean>} whether each player was an operator at the last round of checks */
+const lastOp = new Map();
 
 /** @param {Player} player */
 function markUpdating(player) {
@@ -989,6 +999,8 @@ function reconcileItems(player, tellFailure = false) {
     toldFailed.delete(player.id);
   }
 
+  if (keptReal || hasAnvilConfig) missing.delete(player.id);
+  else missing.add(player.id);
   return { hasItem: keptReal || hasAnvilConfig, hasReal: keptReal, removedExtras, failedRemovals };
 }
 
@@ -1152,9 +1164,18 @@ world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
   try {
     const player = event.player;
     if (!player?.isValid) return;
-    if (!isRealItem(event.itemStack) && !isRealItem(event.beforeItemStack)) {
+    const after = isRealItem(event.itemStack);
+    const before = isRealItem(event.beforeItemStack);
+    // A real item that left a slot with nothing real in its place may be on the cursor: only then is the cursor
+    // worth reading on the next change that doesn't involve one (an item that comes off the cursor fires its own).
+    if (before && !after) cursorWatch.add(player.id);
+    if (!after && !before) {
+      if (!cursorWatch.has(player.id)) return;
       const cursor = player.getComponent("minecraft:cursor_inventory");
-      if (!isRealItem(cursor?.item)) return;
+      if (!isRealItem(cursor?.item)) {
+        cursorWatch.delete(player.id);
+        return;
+      }
     }
     if (updatingItem.has(player.id)) {
       dirtyWhileUpdating.add(player.id);
@@ -1183,25 +1204,60 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
   }, 40);
 });
 
+/** Every player's whole inventory is also checked once in this many rounds, a share of the players each round. */
+const SAFETY_ROUNDS = 10;
+/** Each player's round (0 to SAFETY_ROUNDS - 1) for the safety check, from a hash of their id. @type {Map<string, number>} */
+const sweepSlot = new Map();
+/** @param {string} id */
+function slotOf(id) {
+  let s = sweepSlot.get(id);
+  if (s !== undefined) return s;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  sweepSlot.set(id, (s = (h >>> 8) % SAFETY_ROUNDS));
+  return s;
+}
+
+/**
+ * Whether this round has to read the player's whole inventory. Inventory changes reconcile at once (above), so a round
+ * only needs it for a player it hasn't seen yet, who became or stopped being an operator, who should get the item and
+ * had none at the last reconcile, or whose last removal failed; everyone else once in SAFETY_ROUNDS rounds, for what
+ * fires no inventory event (the off hand or cursor changed by a command or another pack).
+ * @param {Player} p @param {number} round
+ */
+function needsCheck(p, round) {
+  const id = p.id;
+  const op = isOp(p);
+  const was = lastOp.get(id);
+  lastOp.set(id, op);
+  if (was !== op || toldFailed.has(id)) return true;
+  if (missing.has(id) && (forEveryone() || (op && get("giveToOperators") === true))) return true;
+  return (round + slotOf(id)) % SAFETY_ROUNDS === 0;
+}
+
 let seconds = 0;
+let rounds = 0;
 /** Whether the last round of checks is still going (a round never overlaps the next one). */
 let checking = false;
 system.runInterval(() => {
   if (++seconds < Math.max(5, Number(get("checkSeconds")) || 30) || checking) return;
   seconds = 0;
   checking = true;
-  // One player per tick: a check reads the whole inventory (about 0.2 ms a player), so with every player on the same
-  // tick a big server would hitch every checkSeconds.
+  const round = rounds++;
+  // One full check per tick: a check reads the whole inventory, so with every player on the same tick a big server
+  // would hitch every checkSeconds.
   system.runJob(
     (function* () {
       try {
         for (const p of world.getAllPlayers()) {
           try {
-            check(p);
+            if (needsCheck(p, round)) {
+              check(p);
+              yield;
+            } else if (isOp(p)) remind(p);
           } catch (e) {
             console.warn(`[admin] ${e}`);
           }
-          yield;
         }
       } finally {
         checking = false;

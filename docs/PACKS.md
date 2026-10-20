@@ -332,7 +332,7 @@ Every player carries a **Realm Configuration** item (a nether star with a gold n
 | `giveToPlayers` | `true` | Every player without the item gets one when they join or respawn (once: never a second one). Players who aren't operators see only the commands they can use |
 | `giveToOperators` | `true` | With `giveToPlayers` off: operators without the item get one when they join or respawn, and within `checkSeconds` of becoming an operator |
 | `removeFromOthers` | `true` | With `giveToPlayers` off: take the real item from players who aren't operators (an anvil-renamed item is left alone) |
-| `checkSeconds` | `30` | How often to check who carries the item, in seconds (5 to 300); each round checks one player per tick |
+| `checkSeconds` | `30` | How often to check who carries the item, in seconds (5 to 300). Each round reads the whole inventory of players who became (or stopped being) operators, should get the item and have none, or had a removal fail, one player per tick; every other inventory is read once in 10 rounds (5 minutes by default), for an off hand or cursor changed by a command. Inventory changes are checked at once, not by the round |
 | `itemType` | `"minecraft:nether_star"` | The vanilla item it's made from. It gets the name, lore, keep on death and an inventory lock |
 | `recentSize` | `8` | How many of your last commands **Recent** keeps (1 to 20) |
 | `answerTicks` | `10` | Ticks to wait for the installed packs (and the safe zone lists, for the checklist) to answer (20 = 1 second) |

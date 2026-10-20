@@ -8,7 +8,7 @@ export const CONFIG = {
   /** With giveToPlayers off: take the item away from players who aren't operators (only the real item, not something renamed on an anvil). */
   removeFromOthers: true,
 
-  /** How often to check who carries the item, in seconds (5 to 300). */
+  /** How often to check who carries the item, in seconds (5 to 300): new operators, players missing the item and failed removals each round, every inventory once in 10 rounds (inventory changes are checked at once). */
   checkSeconds: 30,
 
   /** What the item is made from: a vanilla item id. It keeps its name, lore, keep-on-death and inventory lock. */
