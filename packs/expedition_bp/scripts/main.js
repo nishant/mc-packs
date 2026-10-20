@@ -1,4 +1,5 @@
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import {
   BlockPermutation,
   BlockTypes,
@@ -2270,21 +2271,9 @@ function bossAdds(run, count) {
 
 // Town news: at most one piece per in-game hour from this pack, each clear once. Dropped, not queued.
 // The seen list is process memory (cleared on script restart). Crowns, quests and journals stay outside.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg @returns {boolean} */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  send("realm:gossip", msg);
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => send("realm:gossip", msg), () => system.currentTick);
 
 /** The boss fell: clock, leaderboard, progress, rewards, treasure. @param {Run} run */
 function finish(run) {

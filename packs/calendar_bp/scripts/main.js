@@ -18,6 +18,7 @@
 //   realm:calendar_debug  { action, ... } (console, scripts, operators) -> realm:calendar_state
 // See "Realm Calendar" in docs/PACKS.md.
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import { BlockPermutation, CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, GameMode, ItemStack, Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -525,21 +526,9 @@ function festivalEnd(key) {
 
 // Town news: at most one piece per in-game hour from this pack, each event once. Dropped, not queued.
 // The seen list is process memory (cleared on script restart). Titles and Crowns stay outside this gate.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg @returns {boolean} */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  send("realm:gossip", msg);
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => send("realm:gossip", msg), () => system.currentTick);
 
 /** The carve-off's winner: the entry with the most votes (ties: the first entered). @param {string} key */
 function fairResult(key) {

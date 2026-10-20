@@ -1,5 +1,6 @@
 // What players see: offers at the townsfolk, chapter dialogues, hints, rewards, the tracker, the
 // story log menu (current, available, finished, codex, daily favors) and the operators' tools.
+import { createGossip } from "./gossip.js";
 import { Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -63,23 +64,9 @@ import { PACK, across, alive, busy, clock, compass, coords, dialog, dimName, exc
 /** @typedef {import("./places.js").Loc} Loc */
 
 const HINT_MS = 600000; // operator notes about unset places: at most every 10 minutes per place
-const NEWS_GAP = 1000; // town gossip: at most one line per 1000 game ticks
-let newsAt = -NEWS_GAP;
-const newsSeen = new Set(); // keys of the last 64 gossip lines (memory only)
 
-/**
- * Town gossip. A line that comes too soon is dropped, not queued. Each key is told once.
- * @param {string} key @param {Record<string, unknown>} msg
- */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(newsSeen.values().next().value);
-  send("realm:gossip", msg);
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => send("realm:gossip", msg), () => system.currentTick);
 
 // ---------------------------------------------------------------------------
 // Small helpers
