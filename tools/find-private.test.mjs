@@ -238,3 +238,24 @@ test("O28 review: a container replaced by another type without a break event doe
   assert.equal(await w.find(ann, "diamond"), undefined);
   assert.ok(await w.find(bob, "diamond"));
 });
+test("F66: the private index survives a restart: placers and openers still find their containers, strangers don't", async () => {
+  const before = await world({ items: { 10: ["diamond"], 20: ["emerald"] } });
+  before.place(before.mk("Ann"), 10);
+  before.open(before.mk("Bob"), 20);
+  before.sim.step(700); // saved (as on a leave, or every 30 s)
+  const shards = [];
+  for (let i = 0; before.sim.props.has(`find:idx:${i}`); i++) shards.push(before.sim.props.get(`find:idx:${i}`));
+  assert.ok(shards.length, "the index was saved");
+  assert.equal(before.sim.props.get("find:mig"), 1);
+  // A new server start with what was saved; the same players come back with the same ids.
+  const after = await world({ shards, props: { "find:mig": 1 }, items: { 10: ["diamond"], 20: ["emerald"] } });
+  assert.equal(after.sim.props.get("find:cfg"), undefined, "still private: the mode is not decided again");
+  const ann = after.mk("Ann");
+  const bob = after.mk("Bob");
+  const cy = after.mk("Cy");
+  assert.equal((await after.find(ann, "diamond"))?.form.buttons.length, 1, "the placer finds hers");
+  assert.equal((await after.find(bob, "emerald"))?.form.buttons.length, 1, "the opener finds his");
+  assert.equal(await after.find(ann, "emerald"), undefined, "not Bob's");
+  assert.equal(await after.find(cy, "diamond"), undefined, "a stranger finds nothing");
+  assert.equal(await after.find(cy, "emerald"), undefined);
+});

@@ -1,6 +1,7 @@
 // Chest Finder: the saved index across saves and a restart. Run with
 //   node tools/test-bds/run.mjs --quiet --only find_bp --scenario tools/test-bds/examples/find-index.js --timeout 600
-// Checks (phase 1 private index: the player placed both barrels; phase 2 world-wide mode, see below): a container read (by a search nearby), saved
+// Checks (phase 1 private index: the player placed both barrels; phase 2 first the private index after the restart,
+// then world-wide mode, see below): a container read (by a search nearby), saved
 // (a player leaving saves), changed, read and saved again is found after a restart with its new contents, from
 // beyond the live scan radius, and a second container saved once is still there.
 // The private index lists only containers the searcher placed or opened, and a simulated player's open fires no
@@ -54,9 +55,28 @@ export default async function (t) {
     return;
   }
   const { a } = JSON.parse(String(t.world.getDynamicProperty("test:spots")));
-  // A simulated player gets a new id on every spawn, so private ownership cannot be shown to survive a restart here
-  // (find-marker covers ownership and isolation). This half checks the saved index itself under the supported
-  // world-wide mode, switched on through the settings protocol and acknowledged.
+  // A simulated player gets a new id on every spawn, so the owner's own finds cannot be shown after a restart here
+  // (tools/find-private.test.mjs reloads the saved index with the same ids: owners and openers survive, strangers
+  // still find nothing). What this half shows natively: the world is still private after the restart (the mode was
+  // decided once and kept), so a stranger far from the barrels finds nothing and is told the index is private.
+  const p = await t.player("Seeker", { x: a.x + 40, z: a.z });
+  {
+    const since = t.tick;
+    /** @type {any} */
+    let form;
+    t.answerForm(p, (/** @type {any} */ f) => {
+      form = f;
+      return null;
+    });
+    t.assert(t.cmd(p, "/realm:find diamond").ok, "find diamond (private)");
+    await t.waitUntil(() => form || t.messages(p, { since, kind: "chat" }).length, { timeout: 120, message: "a list or a chat answer" });
+    await t.wait(5);
+    const said = t.messages(p, { since, kind: "chat" }).map((m) => m.plain).join(" | ");
+    t.log(`private after restart: form=${form ? JSON.stringify(form.buttons) : "none"} chat=${said}`);
+    t.check(!form && /private/i.test(said), "after the restart the index is still private: a stranger finds nothing");
+  }
+  // Then the saved index itself, under the supported world-wide mode, switched on through the settings protocol and
+  // acknowledged.
   const acks = [];
   t.system.afterEvents.scriptEventReceive.subscribe(
     ({ id, message }) => {
@@ -70,7 +90,6 @@ export default async function (t) {
   );
   t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "wide", pack: "find_bp", key: "privateIndex", value: false }));
   await t.waitUntil(() => acks.find((x) => x.id === "wide" && x.ok), { timeout: 40, message: "world-wide index ack" });
-  const p = await t.player("Seeker", { x: a.x + 40, z: a.z });
   for (const [query, want] of [["diamond", /7 Diamond/], ["emerald", /5 Emerald/]]) {
     const menu = t.waitForm(p);
     t.assert(t.cmd(p, `/realm:find ${query}`).ok, `find ${query}`);
