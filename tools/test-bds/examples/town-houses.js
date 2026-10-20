@@ -32,6 +32,7 @@ export default async function (t) {
   t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "res", pack: "town_bp", key: "residents", value: true }));
   const residents = () => dim.getEntities({ type: "minecraft:villager_v2", tags: ["town:r:elm"] });
   const census = async () => {
+    await t.wait(1); // never take the previous census\'s answer from the same tick
     const since = t.tick;
     town("census", { town: "elm" });
     await t.waitMessage(p, /census of elm/, { since, timeout: 60 });

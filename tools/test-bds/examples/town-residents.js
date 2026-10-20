@@ -21,6 +21,7 @@ export default async function (t) {
     return JSON.parse(m.plain);
   };
   const census = async () => {
+    await t.wait(1); // never take the previous census\'s answer from the same tick
     const since = t.tick;
     town("census", { town: "elm" });
     await t.waitMessage(p, /census of elm/, { since, timeout: 60 });
