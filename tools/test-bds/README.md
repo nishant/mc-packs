@@ -76,7 +76,7 @@ same `this` and arguments and returns their result, so the pack behaves the same
 `system.run`/`runTimeout`/`runInterval`, each step of a `runJob` generator, every
 `world`/`system` `beforeEvents`/`afterEvents` subscription (unsubscribe takes the pack's own function
 as before) and custom command callbacks. It also counts `setDynamicProperty` writes (world, entity,
-item, and the characters written), `setActionBar`, `setTitle` and `runCommand` calls. Each callback
+item, and the characters written), `setActionBar`, `setTitle` and `runCommand` calls, and script events by id: what each pack sends (`system.sendScriptEvent`) and what its `scriptEventReceive` listeners spend per id (calls and ms). The summary prints the most-sent ids per tick; the JSON has them per pack (`scriptEventsSent`, `scriptEventsHandled`) and summed in `bundle.scriptEvents` (`sentPerTick`, `senders`, `handledPerTick`), counted over the whole profiled window. Each callback
 is named by its kind and the `file:line` that handed it over (`runInterval(20) @ main.js:148`). The
 window starts when the scenario starts (startup and module loading are not measured) and ends when
 it finishes; with `t.restart()` only the last phase is reported. The test pack also measures the
@@ -85,7 +85,7 @@ time and memory from `/proc`.
 
 The summary then lists, per pack sorted by cost: ms/tick (average), the p95 and max of a tick's ms,
 calls/tick, `setDynamicProperty`, `setActionBar`, `setTitle` and `runCommand` per tick and the top
-callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, and the
+callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, its 5 longest single calls (`slowest`: a hitch such as one `runJob` step, by `max` ms), and the
 whole-bundle per-tick total (packs summed tick by tick: p50, p95, p99, max).
 
 Limits: Bedrock scripting has no high-resolution clock, so times are `Date.now()` differences: a
@@ -220,6 +220,20 @@ removal the game rejects is logged as `ticking area cleanup: ...` and the run go
 failed with `tickingarea add circle ... failed: the command did not succeed` (the name was taken, and the old area's
 chunks were not readable yet). `lib/harness-lifecycle.test.mjs` runs `harness.js` against a fake game whose areas
 survive a restart; `lib/rain-seabed.test.mjs` runs Rain's real scripts, the scenario's hook and the scenario itself.
+
+## Memory soaks (`rss-soak.mjs`)
+
+`node tools/test-bds/rss-soak.mjs --every 5 --out <file.json> -- <run.mjs arguments>` runs one `run.mjs` command and
+samples the resident memory (VmRSS, and the peak VmHWM) of the `bedrock_server` it starts every 5 seconds, from
+`/proc` (Linux only), without the profiler. The JSON keeps every sample (with its pid) and a summary of one process:
+when `run.mjs` starts more than one server (a template server first, a restart), only the one sampled longest is
+judged, its warm-up counted from its own first sample, and every pid is listed in `summary.pids`. The summary has
+10-minute medians after a 5-minute warm-up, the slope in MiB per minute over the first and second half, and a verdict: `growing` (the second
+half still rises more than 0.5 MiB/min and ends at its highest), `leveled`, `falling or noisy`, or `too short` (under
+30 minutes after the warm-up). For O4: `-- --quiet --no-relay --flat --scenario tools/test-bds/examples/perf-soak.js
+--arg players=40 --arg seconds=3600 --timeout 4500`, then the same with `--only` halves of the pack list to find a
+growing pack. The file is rewritten every 60 samplings while it runs, so a run that dies keeps its samples.
+`rss-soak.test.mjs` checks the verdicts.
 
 ## Inventory persistence regression
 
