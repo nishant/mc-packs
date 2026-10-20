@@ -32,7 +32,7 @@ function run(n) {
     WIND_RANGE: 48, RUMBLE_RANGE: 100, WIND_EVERY: 5, RUMBLE_EVERY: 6, SOUND_BAND: 8,
   };
   vm.createContext(ctx);
-  vm.runInContext([fn("everySecond"), fn("volumeAt"), fn("bandVolume"), fn("soundToward")].join("\n") + "\nglobalThis.everySecond = everySecond;", ctx);
+  vm.runInContext([fn("everySecond"), fn("bandVolume"), fn("soundToward")].join("\n") + "\nglobalThis.everySecond = everySecond;", ctx);
   const t = { x: 0, z: 0, y: 64, groundY: 64, heading: 0, path: [], viewers: [], seen: new Set(), warned: new Set(), hornIn: 5, windIn: 1, rumbleIn: 5 };
   ctx.everySecond(t, dim);
   return log;
@@ -48,10 +48,10 @@ test("one stopsound for all wind listeners, before their new clips", () => {
   assert.ok(log.indexOf(stops[0]) < log.indexOf(winds[0]), "the stop comes before the new clips");
 });
 
-test("volume falls off with distance, never below 0.15", () => {
+test("each wind listener keeps the volume of their distance band", () => {
   const log = run(2);
   const vols = log.filter((l) => l.startsWith("sound wind.loop")).map((l) => Number(l.split(" ")[2]));
-  assert.deepEqual(vols, [0.79, 0.77]);
+  assert.deepEqual(vols, [0.75, 0.75], "10 and 11 blocks: the 8-16 band, 1 - 12/48");
 });
 
 test("no listener in range: no command", () => {
