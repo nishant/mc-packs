@@ -512,3 +512,17 @@ test("non-ASCII text, were a story to carry some, is counted in bytes and never 
   assert.ok(rowsOfBox(r.out) <= BOX_ROWS);
   assert.ok(!r.out.endsWith("§"));
 });
+// F17: the last-resort cut (a step the box must keep, too long on its own) shortens the label and keeps where it is.
+test("a step label too long for the box is cut before its direction and distance, never through them", () => {
+  const story = { id: "t", short: "Test", kind: "side" };
+  for (const tail of [" §eNE 240m", " §c1:20 left", " §c1:20 left §eMara NE 40m", " §7(hint available)"])
+    for (const len of [340, 500, 680]) {
+      const label = "Find the old lantern by the river ".repeat(20).slice(0, len).trim();
+      const chapter = { id: "c", title: "T", objectives: [{ type: "talk", label, npc: "mara" }, { type: "talk", label: "Then rest", npc: "mara" }] };
+      const r = boxes(story, chapter, { at: 0, sequential: false, status: (i) => (i === 0 ? tail : "") });
+      const line = r.out.split("\n").find((l) => l.includes("[>]")) ?? "";
+      assert.ok(rowsOfBox(r.out) <= BOX_ROWS && side.byteLength(r.out) <= BOX_BYTES, `${len}: fits`);
+      assert.ok(line.endsWith(tail), `${len}: the step keeps "${plainOf(tail)}"\n${line}`);
+      assert.match(plainOf(line), /\.\.\. /, `${len}: the label is the part cut`);
+    }
+});
