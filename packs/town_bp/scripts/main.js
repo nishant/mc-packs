@@ -520,7 +520,7 @@ const WATER = new Set(["water", "flowing_water", "seagrass", "kelp", "waterlily"
 /** A block of a design that's only needed where it's open. @param {Project} p @param {Place} pl */
 const isOptional = (p, pl) => isOptionalPlace(p.build, pl);
 /** A project's (or town work's) built-in design: a house with its own job-site block. @param {Project} p */
-const designOf = (p) => design(p.build, /** @type {{ job?: string }} */ (p).job);
+const designOf = (p) => design(p.build, /** @type {any} */ (p).job);
 
 /** @param {string} type @param {Mode} mode */
 function canReplace(type, mode) {
