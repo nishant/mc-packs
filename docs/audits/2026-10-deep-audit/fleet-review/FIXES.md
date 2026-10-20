@@ -12,8 +12,8 @@ fix they found. Each fix has an id (F1...), so PRs and `../OPEN.md` can refer to
 - `stash-fill-locked.probe.test.mjs`: the probe that reproduces F1.
 - `scenarios/autostore-perf.js`: the measurement behind F2.
 - `scenarios/chestpair.js`: shows two adjacent recovery chests stay separate on BDS.
-- The perf and suite comparison of the branch against master at 10 and 40 players is added as `perf-report.md`
-  when it finishes.
+- `perf-report.md`: the perf and suite comparison of the branch (aef10dc) against master (7dac598): 8 valid soaks
+  at 10 and 40 players, the Realm Bundle at 10, the full suite (249 scenarios) and the master reruns.
 
 ## How to run this (instructions for the session)
 
@@ -49,9 +49,10 @@ Run this only after msftMyt's release of that branch is merged to `master` and p
 
 Severity order:
 1. F1-F4, the blockers and highs
-2. F5-F12, the mediums
-3. the lows
-4. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
+2. F5-F14, the mediums
+3. F43-F45 (test regressions, broken new scenarios, the stats ticker cost) with the mediums; the lows (F15-F35); and F42 (wanderers rubber-banding, owner-reported; treat it as a medium)
+4. the living towns feature (F36-F41), after F1-F14
+5. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
 
 ## Blockers and highs
 
@@ -204,6 +205,199 @@ Severity order:
   Rewrite each so it fails on the old code for the right reason.
 - [ ] **F35 missing tests:** there is no native scenario for the moon cache (F5), the elite changes (O3, O58) or the
   build_bp gate (F7). Add them, with perf numbers where they are performance changes.
+
+- [ ] **F42 (medium, owner report October 19) Wanderers rubber-band: Hob Fairweather walks about 10 steps out of
+  his camp, snaps back, and does it again, over and over.**
+  - Code: wander_bp `main.js` `tether()` (around :810-835, `TETHER_MAX = 12` at :60). Walkers (`villager_v2` and
+    wandering traders) stroll with the vanilla AI. Past 12 blocks from home (or in water, lava, or down a hole),
+    they are teleported straight back to `home`. Nothing stops the vanilla AI from walking out again, so on open
+    ground they loop.
+  - Fix: keep them inside the area so the AI doesn't keep leaving it. Pick what the stable API supports, and
+    verify it on BDS:
+    - a soft radius: start steering back before the hard limit
+    - a lower movement speed outside the soft radius (the movement component's value), restored inside
+    - turn them toward home
+    - a camp boundary made of the camp's own blocks (fence, path edge) where it fits the camp's look
+    - make camp wanderers stand or sit at their camp (moving only within a few blocks), like townsfolk at their
+      posts
+  - Keep the teleport only as the last resort (water, lava, a hole, or far beyond the limit), with a cooldown, and
+    send them to a nearby free spot, not the exact center.
+  - **Check every other place that snaps an entity back** and fix the same pattern:
+    - caravan_bp traders and llamas
+    - npc_bp townsfolk posts (the "standing on the floor" lift and the respawn when missing)
+    - the four `name-labels.js` copies that move label helpers (`helper.teleport(anchor)`, :353)
+    - saga_bp actors and escorts
+    - platypus_bp, dolphin_bp, guard_bp, elite_bp champions and town_bp residents (F39, new)
+    - anything else that calls `teleport` on a non-player entity on a timer: `grep -rn "\.teleport(" packs/*/scripts`
+
+    For each, say whether it can loop and fix it.
+  - Test: a BDS scenario that places a camp wanderer on open flat ground for 5 minutes and counts snap-backs:
+    before, many; after, zero or nearly zero. The wanderer must still stay within the camp area.
+
+- [ ] **F43 (high) Scenarios that pass on master and fail twice on the branch** (`perf-report.md`; branch suite: 249
+  scenarios, 230 pass, 17 fail, 2 flaky):
+  - admin-diag-bundle
+  - admin-size-profile
+  - expedition-pending
+  - expedition-slot-spawn
+  - find-index
+  - stash-pages
+  - stats-new-name
+  - stats-ticker
+  - wander-walk
+  - probably atlas (failed twice on the branch, "no message /Beat its three keepers/"; only flaky on master)
+
+  For each, root-cause it: a real regression (fix the pack) or an intended behavior change (update the scenario, and
+  say why in the commit). Clues to check, not confirmed:
+  - stats-ticker and stats-new-name wait for chat text (/Deaths/, /Mined/), and the ticker moved to the action bar
+    (O71).
+  - find-index, wander-walk and the new find-marker and w10-npc-nameless all fail with "no form for <player> within
+    N ticks", which may be one shared cause, possibly in the new event router or the form lifecycle changes.
+
+  Never weaken a scenario just to make it pass.
+- [ ] **F44 (medium, tests) New scenarios that are broken as wired:**
+  - build-beds: the suite passes `--port`, which `build-beds.mjs` rejects.
+  - welcome-generic-bundle: its `<stage>` placeholder is never filled in.
+  - diag-owned-reload: fails at "phase 1: the probe wrote decl:a and has its probe:big".
+
+  Five of the 28 new scenarios fail. Fix their wiring so the suite runs them, then make them pass for the right
+  reason.
+- [ ] **F45 (medium, perf) The stats ticker now writes the action bar for every player every second.**
+  - `stats_bp` `runInterval(20)` at `main.js` :362. setActionBar went from about 0 to 1.1-1.2 per tick at 40
+    players (0.3 at 10), and stats_bp from 0.068 to 0.17 ms/tick. It is the only pack newly over the 0.15 ms budget.
+  - It comes from O71: the ticker defaults on. Keep the behavior the owner chose (on by default, personal off
+    switch). Make it cheaper:
+    - redraw only when the line's text changed (diff per player)
+    - spread players over the second
+    - skip players whose bar is held by another pack (the actionbar protocol)
+  - Re-measure at 10 and 40 players.
+- [ ] **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
+  - map_bp 3.6-3.8 ms against its 1 ms budget
+  - build_bp 0.73-0.78
+  - stash_bp 0.53-0.57
+  - silly_bp 0.26-0.29
+  - elytra_bp 0.22-0.23
+  - admin_bp 0.21-0.23
+  - saga_bp 0.19-0.21
+  - wander_bp 0.17-0.20
+  - stats_bp 0.16-0.18
+
+  The bundle is still over 5 ms at 40 players in both trees. At 10 players only map, build, elytra, stash and saga
+  are over. As one Realm Bundle at 10 players (the owner's case), the branch is under 5 ms: 4.75 in the steady
+  window, 4.27 over the whole run. Use these as the "before" numbers for F2, F7 and F45, and treat calendar and
+  wander (failing in both trees) as known failures to fix or explain.
+
+## Feature: living towns (owner request, October 19)
+
+The owner added a second town and found two problems. Mayor Bram is one NPC for the whole world and only serves
+the town within 96 blocks of him, so a new town has no mayor. Nothing gets built until an operator sets every
+project spot by hand. The owner wants each town to grow on its own as players work with its mayor, and to feel
+alive. This is a feature across town_bp, npc_bp and wander_bp. Build it after F1-F14, and design it first:
+
+1. Write a short design note in this file under the feature, covering:
+   - saved data
+   - new options with their defaults
+   - entity counts
+   - per-tick cost
+   - migration of existing towns
+2. Then build it in steps, each with scenarios.
+
+Packs: town_bp (owner), npc_bp (the mayor townsfolk, the resident labels), wander_bp (reuse its villager spawning
+and the identity checks from the shared spawn module).
+
+- [ ] **F36 A mayor per town.**
+  - Every town gets its own mayor NPC: a named townsfolk generated for that town, with a name from a list, a
+    skin and the `mayor` role, created when the town is added and standing at the town's center or town hall.
+  - Mayor Bram stays the realm's main mayor (the story and the cast use `bram`) and the mayor of the first town.
+  - Each mayor offers **Town projects** for its own town only, wherever the player stands. The 96-block "nearest
+    town" rule is only a fallback for towns without a mayor.
+  - Existing worlds: Bram keeps his town. Every other town gets its mayor the next time a player comes near it.
+  - Mayors are townsfolk:
+    - they follow the same label design
+    - they keep their posts, save their skins and respawn if missing
+    - the "one of each" rule applies (one mayor per town)
+  - Operators can move or rename a town's mayor in `/realm:town`.
+  - Removing a town removes its mayor.
+  - Use namespaced ids (for example `mayor:<townId>`) so npc_bp's fixed cast ids and the stories are untouched.
+- [ ] **F37 Project spots chosen automatically.**
+  - When a town is added (and when it reaches a new level), town_bp picks a spot for each project of that level
+    within the town radius, so operators no longer have to set them.
+  - **Never touch a man-made block.** A build may only replace air, natural terrain (grass, dirt, sand, gravel,
+    stone, plants, snow, leaves only if no log is player-placed) and, for the dock, water.
+  - Reject any spot whose outline (the same outline the spot preview draws) or a 2-block margin around it contains:
+    - a block players place, such as planks, any crafted block, glass, wool, concrete, torches, doors, beds,
+      rails, chests and other containers, signs or farmland
+    - a claim (`realm:access_check`)
+    - another project
+    - a path
+    - a waystone
+    - a townsfolk's house
+  - **Terrain:** a spot may be leveled where a build needs it. Leveling may cut natural terrain down or fill it
+    up (with the surrounding natural block, for example grass on dirt), at most 3 blocks either way, inside the
+    build's footprint plus a 1-2 block apron graded as a gentle slope or steps back to the existing ground. It
+    never levels a man-made block, a claim, a path or a house.
+    - The town must keep its elevation: no clearing a whole area flat. Builds follow the land, as a well on a
+      rise, terraced houses or a dock down at the water. Choose spots in this order:
+      1. ground that needs the least leveling
+      2. ground that is already level
+      3. a different height level of the town, so the projects end up at varied heights
+    - Save the leveled ground with the build's before-image, so Remove spot puts the original terrain back.
+    - Test: a hillside town keeps a spread of build heights (more than one height level), and every apron joins
+      the ground with steps of at most 1 block.
+  - Prefer flat ground near the center, roads between projects, the dock at the nearest shoreline, and the well
+    near the center. Face the build toward the center.
+  - If no valid spot exists, say so in the town menu and let operators set it by hand, as now. Operators can
+    still move any spot (Manage spots) and preview it before the build.
+  - Before a project is built, show its outline to players who are near it for a few seconds, so nobody is
+    surprised.
+- [ ] **F38 The town grows as players progress.**
+  - The mayor drives it. Talking to the mayor shows the town's story so far, what the next project is for ("a
+    well so the families can move in"), and the projects of the current level.
+  - Finishing a level unlocks the next, as now. Each finished project and level adds visible life (F39).
+  - Keep the existing projects, rewards and saved data. New towns pick spots per F37. Existing towns keep spots
+    already set and get automatic spots for the rest.
+- [ ] **F39 Residents move in.**
+  - Ordinary villagers (vanilla `minecraft:villager_v2` with professions, spawned the way wander_bp spawns its
+    villagers, checked with spawnFresh) move into a town as it grows. For example:
+    - 2 at Settlement with a well
+    - 4 at Village
+    - 6 at Town
+    - 8 at City
+    - 10 at Capital
+
+    These are options, with a hard cap per town and per world.
+  - Residents:
+    - stay inside the town radius
+    - get beds and job sites only from blocks the town builds (F37/F40), never by taking players' beds
+    - are named from a list
+    - are tagged as town residents, so other packs (cleanup, elite, Blood Moon) leave them alone
+  - If one dies, a new one moves in after a while, with a message ("A new family moved into Riverside").
+  - They don't trade by default: an option, since vanilla trading would bypass the Crowns economy.
+  - **Cost budget:** residents are vanilla mobs, so their AI cost is the game's. The script side must be event
+    driven (no per-tick loops over residents). Measure 2 towns at Capital at 10 players. Mob count is a known
+    Realm limit, so keep the per-world cap small (default 20) and document it in SERVER_SETUP.md.
+- [ ] **F40 Houses and small life.**
+  - Add a project kind "house": a small built-in cottage with a bed and a job-site block. A town builds one per
+    resident slot at levels 2+, at automatic spots (F37), so residents have homes.
+  - Add small touches when projects finish:
+    - lanterns along the town's paths
+    - a few animals in the garden pen
+    - the notice board listing new residents
+    - gossip from the town's mayor through `realm:gossip`
+  - Keep each touch cheap: blocks placed once, no per-tick work.
+- [ ] **F41 Docs and tests.**
+  - PACKS.md: Town Projects (How to use without the operator spot step, mayors, residents, houses, options,
+    saved data, cost) and Townsfolk (town mayors). Add Town Projects' new behavior to "How the packs work
+    together".
+  - Update the welcome feature list and SERVER_SETUP.md (the resident cap).
+  - Scenarios:
+    - adding a town creates its mayor
+    - spots are picked automatically and never overlap a placed block: build a planks cabin and a path, then
+      check the spots avoid them
+    - a finished level moves residents in, and a dead one is replaced
+    - two towns, each with its own mayor and projects
+    - Bram's town is unchanged on an existing world
+    - perf: 2 towns at Capital, 10 players
 
 ## What the reviews found sound (don't redo it)
 
