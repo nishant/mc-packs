@@ -1505,14 +1505,17 @@ function applySpot(t, p, s, tell) {
   cancelAutoBuild(`${t.id}:${p.id}`);
   // A build stopped half way (bs) is taken away like a finished one.
   const moving = pr.built === 1 || old?.bs === 1;
+  // Its path and lanterns go first, so the ground under a path at a leveled spot is put back with the rest.
+  if (old) clearLife(t, p.id);
   if (moving && old) {
     const why = unbuild(t, p, old);
     if (why) {
+      delete old.pt; // laid again on a later check
+      saveTown(t);
       tell(`§cThe ${p.name} couldn't be moved: ${why}.`);
       return false;
     }
   } else if (old?.snap) deleteStructure(snapId(t, p));
-  if (old) clearLife(t, p.id); // its path and lanterns go with it
   if (moving && pr.built) {
     pr.built = 0;
     saveProgress(t, p, pr);
@@ -1532,15 +1535,20 @@ function removeSpot(t, p, tell) {
   const pr = progressOf(t, p);
   cancelAutoBuild(`${t.id}:${p.id}`);
   const wasBuilt = pr.built === 1 || s.bs === 1;
+  // Its path and lanterns go first, so the ground under a path at a leveled spot is put back with the rest.
+  clearLife(t, p.id);
   if (wasBuilt) {
     const why = unbuild(t, p, s);
-    if (why) return tell(`§cThe ${p.name} couldn't be removed: ${why}.`);
+    if (why) {
+      delete s.pt; // laid again on a later check
+      saveTown(t);
+      return tell(`§cThe ${p.name} couldn't be removed: ${why}.`);
+    }
     if (pr.built) {
       pr.built = 0;
       saveProgress(t, p, pr);
     }
   } else if (s.snap) deleteStructure(snapId(t, p));
-  clearLife(t, p.id); // its path and lanterns go with it
   delete t.spots[p.id];
   saveTown(t);
   tell(`§a${wasBuilt ? `${t.n}'s ${p.name} was taken away` : `${t.n}'s ${p.name} has no spot now`}.${pr.done ? " §7It's finished: set a new spot to build it." : ""}`);

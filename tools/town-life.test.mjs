@@ -259,3 +259,14 @@ test("main.js: a path that met unloaded ground waits (3 tries a session), then l
   assert.equal(s.pt, 1);
   assert.equal(w.read(19, 64, 0), id("grass_path"));
 });
+
+test("main.js takes a build's path away before it puts the ground back (Remove spot and moves)", () => {
+  for (const name of ["removeSpot", "applySpot"]) {
+    const i = mainSrc.indexOf(`function ${name}(`);
+    const body = mainSrc.slice(i, mainSrc.indexOf("\n}\n", i));
+    const a = body.indexOf("clearLife(t, p.id)");
+    const b = body.indexOf("unbuild(t, p,");
+    assert.ok(a > 0 && b > 0 && a < b, `${name}: the path goes first, so the leveled ground under it is restored too`);
+    assert.match(body, /delete (s|old)\.pt/, `${name}: a failed removal lays the path again`);
+  }
+});

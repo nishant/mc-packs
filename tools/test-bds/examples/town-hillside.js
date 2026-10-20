@@ -1,7 +1,7 @@
 // Town Projects, the terrain rule on a hillside (F37): terraces of 1 block every 4 rising to the east, a town on them,
 // every project but the dock finished. The builds stand at more than one pad height (the town keeps its elevation),
 // every apron joins the ground with steps of at most 1, no column is moved more than 3, and nothing outside the
-// spots' regions changed.
+// spots' regions changed (but for the town's lantern posts, townLife; its grass paths keep the ground's height).
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-hillside.js --timeout 6000
 export default async function (t) {
   const dim = t.dimension;
@@ -62,13 +62,20 @@ export default async function (t) {
   t.check(Object.values(d.town.spots).some((s) => s.lv), "some spots were leveled");
   const regions = Object.values(d.regions);
   const inRegion = (x, z) => regions.some(([x1, z1, x2, z2]) => x >= x1 && x <= x2 && z >= z1 && z <= z2);
-  // Nothing outside the regions changed.
+  // Nothing outside the regions changed, but for the town's lantern posts (townLife: a fence and a lantern on the
+  // ground beside a path; the paths themselves keep the ground's height).
+  const posts = new Set();
+  for (const v of Object.values(d.life ?? {}))
+    for (let i = 0; i + 6 <= v[1].length; i += 6) {
+      const r = Math.floor(parseInt(v[1].slice(i, i + 6), 36) / 512);
+      posts.add(`${Math.floor(r / 2048) - 1024 + d.town.x},${(r % 2048) - 1024 + d.town.z}`);
+    }
   let changed = 0;
   for (const [k, y] of before) {
     const [x, z] = k.split(",").map(Number);
-    if (!inRegion(x, z) && top(x, z)?.y !== y) changed++;
+    if (!inRegion(x, z) && !posts.has(k) && top(x, z)?.y !== y) changed++;
   }
-  t.check(changed === 0, `nothing outside the regions changed (${changed} columns did)`);
+  t.check(changed === 0, `nothing outside the regions changed (${changed} columns did; ${posts.size} lantern posts left out)`);
   // Each apron (region minus footprint) joins the ground with steps of at most 1, and no column moved more than 3.
   const ground = (x, z) => {
     for (let y = G + 40; y >= G - 3; y--) {

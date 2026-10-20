@@ -15,6 +15,8 @@ export default async function (t) {
     }
   };
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
+  // Paths and lanterns (townLife) come a few seconds after a build: kept out so both wells are compared alone.
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "nolife", pack: "town_bp", key: "townLife", value: false }));
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
   const dump = async (id) => {
     const since = t.tick;
