@@ -394,7 +394,10 @@ function draw(player) {
     for (const e of slots.values()) if (e.until > last) last = e.until;
     const ver = versions.get(id) ?? 0;
     let made = composed.get(id);
-    if (!made || made.ver !== ver) composed.set(id, (made = { ver, sub: composeSlots(slots) }));
+    if (!made || made.ver !== ver) {
+      made = { ver, sub: composeSlots(slots) };
+      composed.set(id, made);
+    }
     player.onScreenDisplay.setTitle(MARK, { subtitle: made.sub, fadeInDuration: 0, stayDuration: last - now + 2, fadeOutDuration: 0 });
     drewSome.set(id, true);
   } catch {
