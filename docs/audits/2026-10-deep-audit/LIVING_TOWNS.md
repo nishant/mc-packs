@@ -94,18 +94,21 @@ be removed by the audit). `folkOf(id)` replaces `folk.get(id)`: the cast entry, 
   (checked on the existing 100-tick build interval, at most one request per town per 30 s).
 - `/realm:town` (operators, in a town): **Mayor**: move here (where the operator stands, facing their way), rename
   (24 chars, ASCII), and for Bram: move here only (sends the existing `realm:npc_summon`; his name is the story's).
+  A new mayor faces the way the operator faces (as `/realm:npc_add` does); one asked for again because Townsfolk lost
+  its record comes back at the town's center facing south (D15).
 - Remove town: `realm:npc_mayor remove` for `mayor:*`; Bram is never removed (he stays where he is, and the next
   town added becomes his if he has none).
 
 ### Migration of existing worlds (Bram keeps his town)
 
-At load (+100 ticks) a v1 town list has no `m`. town_bp pings `realm:npc_places` and waits up to 40 ticks:
+At load (+100 ticks) a v1 town list has no `m`. town_bp pings `realm:npc_places`; the 100-tick interval migrates as
+soon as a complete answer is in (D12):
 
 1. Bram's town = the town in Bram's dimension whose center is nearest Bram's post, within `townRadius`.
 2. Bram placed but no town within reach, or Bram not placed: the oldest town (smallest `at`) is Bram's
    ("the mayor of the first town"). It gets no `mayor:*`; the fallback rule still lets Bram serve it as today.
-3. No `realm:npc_places` answer (Townsfolk not installed): nothing is written; it is tried again next load. Until
-   then everything works as today.
+3. No `realm:npc_places` answer (Townsfolk not installed): nothing is written. Until an answer comes, everything
+   works as today.
 4. Every other town gets `m = "mayor:<id>"`; its mayor is spawned the next time a player comes within its radius.
 Spots, progress, owed rewards, snapshots and contributors are not touched. `v: 2` is written with `m`.
 
@@ -467,3 +470,11 @@ behavior, versions bumped and `node tools/sync-diag.mjs` run. The lead runs `hel
 | D9 | Residents use the vanilla name tag, no label helper | Fewer entities; villagers show their name natively (C2 was about `minecraft:npc`) |
 | D10 | No ticking areas: scans and builds wait for a player in the town | Ticking areas are limited and cost; the town is loaded when someone is there |
 | D11 | The design note lives here instead of under the feature in FIXES.md | This task may not edit FIXES.md; the lead links it |
+| D12 | Migration runs on the build interval as soon as a complete `realm:npc_places` answer is in, not inside a fixed 40-tick window; no answer, nothing written | Same result, and a late Townsfolk (bundle order, a slow load) still migrates in the same session |
+| D13 | `townMayors` Disabled: no mayors made, asked for again or migrated; mayors already standing stay, and every `mayor`-role NPC offers the town the player is in (the int23 rule) | Turning it off must never delete NPCs or rewrite towns |
+| D14 | Mayor names are `Mayor <first name>` from 20 `mayorNames` that no cast member, wanderer, elite or story character uses; shown as `Mayor Alda of Riverside` (`mayorTemplate.title`) | Players must not mistake a mayor for a story character |
+| D15 | town_bp does not save a mayor's post: npc_bp owns posts (`npc:list`); a mayor whose record is gone comes back at the town center facing south | One owner per piece of state |
+| D16 | `/realm:npc_remove` on a mayor drops it from `npc:mayors` too; with Town Projects it comes back (default skin) when a player is in its town, unless `townMayors` is Disabled | "Respawn if missing"; removing the town is the way to remove a mayor for good |
+| D17 | A corrupt `npc:mayors` keeps every `mayor:` post and entity (the audit leaves them) until Town Projects sets them again | Never remove NPCs on unreadable data (like `loadFailed` for `npc:list`) |
+| D18 | Mayors are left out of `/realm:npc_houses` and `/realm:npc_add`; they appear in Who lives here, `/realm:npc_list` and the Minimap | A mayor belongs to its town, not to the village around the operator |
+| D19 | A town added while older towns still wait for migration takes Bram only when there are no towns at all | Bram's town among the old ones is decided by his post, not by the order of a later add |

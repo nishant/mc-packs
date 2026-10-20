@@ -906,6 +906,7 @@ function tellOps(text) {
 // Townsfolk for it again (mayorCheck).
 system.runInterval(() => {
   try {
+    mayorMigrate();
     const players = world.getAllPlayers();
     if (!players.length) return;
     mayorCheck(players);
@@ -1702,7 +1703,7 @@ onScriptEvent(
 
 // ---------------------------------------------------------------------------
 // Scenario tests (BDS harness): the operator actions without forms. Only from the server console or an operator.
-//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump|mayor_move|mayor_rename|remove_town", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?}
+//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump|mayor_move|mayor_rename|remove_town|v1", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?}
 // ---------------------------------------------------------------------------
 
 onScriptEvent(
@@ -1734,6 +1735,18 @@ onScriptEvent(
       if (m.action === "zones") return broadcastZones();
       if (!t) return tell("no town");
       if (m.action === "dump") return tell(JSON.stringify({ town: t, progress: PROJECTS.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null }));
+      if (m.action === "v1") {
+        // Makes every town look saved before mayors (and forgets their own mayors), until the next load.
+        migrationHeld = true;
+        for (const x of [...allTowns().values()]) {
+          if (isTownMayorId(x.m)) send("realm:npc_mayor", { op: "remove", id: x.m });
+          delete x.v;
+          delete x.m;
+          delete x.mn;
+          saveTown(x);
+        }
+        return tell("towns are v1 until the next load");
+      }
       if (m.action === "remove_town") {
         deleteTown(t);
         return tell(`town ${t.id} removed`);
@@ -1818,6 +1831,33 @@ function mayorCheck(players) {
     if (now - (lastSet.get(t.id) ?? -MAYOR_RESEND_TICKS) < MAYOR_RESEND_TICKS) continue;
     if (!players.some((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= r)) continue;
     mayorSet(t, { x: t.x, y: t.y, z: t.z }, 0);
+  }
+}
+
+/** realm:town_test "v1" (scenarios): no migration until the next load. */
+let migrationHeld = false;
+
+/**
+ * Towns saved before mayors (no `v`) get theirs once Townsfolk has said where everyone is (realm:npc_places, asked
+ * for 5 s after the world loads): Mayor Bram keeps his town (the one nearest his post within townRadius; else, or
+ * with Bram not placed, the oldest), every other town gets its own mayor, made when a player next comes near. With
+ * no answer (Townsfolk not installed) nothing is written. Only `v`, `m` and `mn` change: spots, progress, owed
+ * rewards and snapshots stay as they are.
+ */
+function mayorMigrate() {
+  if (migrationHeld || get("townMayors") !== true || !places || !towns) return;
+  const list = [...allTowns().values()];
+  if (!list.some((t) => t.v !== 2)) return;
+  const plan = planMigration(list, places.get(BRAM), get("townRadius"), CONFIG.mayorNames);
+  for (const c of plan) {
+    const t = allTowns().get(c.id);
+    if (!t) continue;
+    t.v = 2;
+    t.m = c.m;
+    if (c.mn) t.mn = c.mn;
+    else delete t.mn;
+    saveTown(t);
+    console.warn(`[town] ${t.n}: its mayor is ${c.m === BRAM ? "Mayor Bram" : `${c.mn} (${c.m}), made when a player next comes near`}`);
   }
 }
 

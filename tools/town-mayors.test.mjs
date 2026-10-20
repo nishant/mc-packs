@@ -108,3 +108,54 @@ test("main.js: mayors on add, remove with the town, routing through offerTowns",
   assert.match(main, /send\("realm:npc_summon", \{ id: BRAM, player: player\.id \}\)/, "Bram is moved with realm:npc_summon only");
   assert.match(main, /readMayor\(\{ \.\.\.t, spots: t\.spots \?\? \{\}, lvl: t\.lvl \?\? 1 \}\)/);
 });
+
+/** Runs main.js's own mayorMigrate() with these towns and this realm:npc_places answer (undefined: none). */
+async function migrate(townList, places, { enabled = true, held = false } = {}) {
+  const { default: ts } = await import("typescript");
+  const vm = await import("node:vm");
+  const source = ts.createSourceFile("main.js", main, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  let fn = "";
+  ts.forEachChild(source, (n) => {
+    if (ts.isFunctionDeclaration(n) && n.name?.text === "mayorMigrate") fn = n.getText(source);
+  });
+  assert.ok(fn, "the test runs the actual mayorMigrate");
+  const map = new Map(townList.map((t) => [t.id, structuredClone(t)]));
+  const saved = [];
+  const ctx = {
+    migrationHeld: held,
+    places,
+    towns: map,
+    allTowns: () => map,
+    get: (k) => (k === "townMayors" ? enabled : k === "townRadius" ? 96 : undefined),
+    saveTown: (t) => saved.push(structuredClone(t)),
+    planMigration,
+    BRAM,
+    CONFIG,
+    console: { warn() {} },
+  };
+  vm.runInNewContext(`${fn}\nmayorMigrate();`, ctx);
+  return { map, saved };
+}
+
+test("migration at load: Bram keeps his town, the rest get their own, nothing else changes", async () => {
+  const spots = { well: { x: 300, y: 64, z: 3, f: 2, snap: 1, b: [298, 62, 1, 302, 67, 5] } };
+  const v1 = [
+    { id: "riverside", n: "Riverside", dim: "minecraft:overworld", x: 0, y: 64, z: 0, lvl: 2, spots: {}, by: "Ann", at: 100 },
+    { id: "oakfield", n: "Oakfield", dim: "minecraft:overworld", x: 300, y: 64, z: 0, lvl: 1, spots, by: "Ann", at: 200, prot: 0 },
+  ];
+  const bramNearOak = new Map([["bram", { dim: "minecraft:overworld", x: 310, z: 4 }]]);
+  const { map, saved } = await migrate(v1, bramNearOak);
+  assert.equal(saved.length, 2);
+  assert.deepEqual(map.get("oakfield"), { ...v1[1], v: 2, m: "bram" }, "Bram's town: only v and m added");
+  assert.deepEqual(map.get("riverside"), { ...v1[0], v: 2, m: "mayor:riverside", mn: "Mayor Alda" });
+  // Bram not placed: the oldest town is his.
+  assert.equal((await migrate(v1, new Map())).map.get("riverside")?.m, "bram");
+  // No answer from Townsfolk, Disabled, or held: nothing written.
+  for (const r of [await migrate(v1, undefined), await migrate(v1, bramNearOak, { enabled: false }), await migrate(v1, bramNearOak, { held: true })]) {
+    assert.equal(r.saved.length, 0);
+    assert.deepEqual([...r.map.values()], v1);
+  }
+  // Already migrated: nothing again.
+  const again = await migrate([...map.values()], bramNearOak);
+  assert.equal(again.saved.length, 0);
+});
