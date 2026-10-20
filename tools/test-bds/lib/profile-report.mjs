@@ -153,6 +153,17 @@ export class Profile {
     return sum / (to - from);
   }
 
+  /** One pack's ms/tick average, p95 and max over a tick window; null if its per-tick data is incomplete. */
+  packWindowStats(pack, from, to) {
+    const e = this.tickParts.get(pack);
+    if (!e || to <= from || e.parts.filter((x) => x !== undefined).length < e.n) return null;
+    const vals = e.parts.join("").split(",");
+    const per = [];
+    for (let tick = from; tick < to; tick++) per.push(Number(vals[tick - e.startTick]) || 0);
+    const sorted = [...per].sort((a, b) => a - b);
+    return { avg: per.reduce((a, b) => a + b, 0) / per.length, p95: pct(sorted, 0.95), max: sorted[sorted.length - 1] || 0 };
+  }
+
   report() {
     const rows = this.packRows(this.final);
     const L = [];
@@ -185,6 +196,14 @@ export class Profile {
       this.acceptance = evaluatePerf({ args: this.args, workload: this.workload, profile: { ticks, packs: rows } });
       L.push(`  perf acceptance: ${this.acceptance.ok ? "VALID" : "INVALID"} for ${this.acceptance.declared?.players ?? "?"} players over ${this.acceptance.declared?.seconds ?? "?"} s${this.acceptance.ok ? "" : ` - ${this.acceptance.reasons.join("; ")}`}`);
       if (steady) L.push(`  steady soak window only (${steady.ticks} ticks): ${f3(steady.avg)} ms/tick summed over packs, p95 ${steady.p95} / p99 ${steady.p99} / max ${steady.max} ms`);
+      // A scenario may split its window into named phases (night-soak.js: dusk, early, mid and late night, dawn): each
+      // pack's ms/tick and the bundle's per-tick figures per phase, to see how a cost grows through the window.
+      const phases = Array.isArray(this.workload.phases) ? this.workload.phases.filter((ph) => ph && typeof ph.name === "string" && Number.isFinite(ph.startTick) && Number.isFinite(ph.endTick) && ph.endTick > ph.startTick) : [];
+      if (phases.length) {
+        for (const r of rows) r.phases = Object.fromEntries(phases.map((ph) => [ph.name, this.packWindowStats(r.pack, ph.startTick, ph.endTick)]));
+        this.phaseBundle = phases.map((ph) => ({ ...ph, bundle: this.bundleTicks(ph.startTick, ph.endTick) }));
+        for (const ph of this.phaseBundle) L.push(`  phase ${ph.name} (${ph.bundle?.ticks ?? 0} ticks): ${f3(ph.bundle?.avg)} ms/tick summed over packs, p95 ${ph.bundle?.p95 ?? "-"} / max ${ph.bundle?.max ?? "-"} ms; ${rows.slice(0, 8).map((r) => `${r.pack} ${f3(r.phases[ph.name]?.avg)} (p95 ${r.phases[ph.name]?.p95 ?? "-"}, max ${r.phases[ph.name]?.max ?? "-"})`).join(", ")}`);
+      }
     }
     L.push(`  profile JSON: ${this.json}`);
     this.write(rows, bundle, cpu, s, totals, ticks, steady);
@@ -200,7 +219,7 @@ export class Profile {
         // Every figure is time inside callbacks the packs handed to the game; time after an await in an async callback
         // is not attributed (see lib/profile.js), and a run of separate packs sums separate script contexts.
         measurement: { unattributed: ["time after an await inside an async callback"], contexts: rows.length },
-        bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, steadyWindow: steady, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks } : null,
+        bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, steadyWindow: steady, phases: this.phaseBundle ?? undefined, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks } : null,
         packs: rows.map((r) => ({ ...r, dynWritesPerTick: r.dynWrites / r.ticks, actionBarPerTick: r.actionBar / r.ticks, setTitlePerTick: r.titles / r.ticks, runCommandPerTick: r.commands / r.ticks })),
       }, null, 2));
     } catch (e) {
