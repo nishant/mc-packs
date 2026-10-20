@@ -429,7 +429,8 @@ These file defaults apply to every world. They are not extra Realm Settings swit
 | `greeting` | `Hey §b{player}§r, glad you're here! §7({online} online)§r` | Supports the player and online placeholders |
 | `story` | A sleepy harbor town, its bell lost forty winters ago, ringing again, and strange stars | Exact spoiler-free paragraph in `config.js`; shown only with Story Questlines |
 | `storyStart` | `Tap {who} in town to begin §eThe Lantern and the Hollow§r.` | Shown only with Story Questlines and Townsfolk, and only while at least one of `starters` is placed; `{who}` is their names joined with ` or ` |
-| `starters` | `tobin` -> `§bOld Tobin§r`, `mara` -> `§bMara§r` | The prologue givers (Townsfolk ids) the start line may name, in this order |
+| `starters.tobin` | `§bOld Tobin§r` | How the start line names Townsfolk `tobin`, the first prologue giver, when he is placed |
+| `starters.mara` | `§bMara§r` | How the start line names Townsfolk `mara`, the second prologue giver, when she is placed |
 | `noStory` | `A world to explore, build and play in together.` | Used without Story Questlines |
 | `lines.quests_bp` | `Daily quests (§b/realm:quests§r)` | Shown only with Daily Quests |
 | `lines.expedition_bp` | `Expeditions (§b/realm:expedition§r)` | Shown only with Expeditions |
