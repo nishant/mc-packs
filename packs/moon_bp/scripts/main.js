@@ -38,9 +38,7 @@ const CAP_RADIUS = 48; // monsters within this many blocks count toward a player
 const MOTES_EVERY = 3; // seconds between motes around each player
 const SPOT_TRIES = 4; // places tried per monster
 const CLEAR_RADIUS = 12; // no monster appears this close to any player
-const BUILT_CELL = 8; // blocks: the size of one cached "is it built here" cell
 const BUILT_PAD = 4; // blocks around a spot that must hold nothing player-made
-const BUILT_CELLS_MAX = 2048; // cells kept at once (a cell is a short string and a boolean); more starts the cache over
 const MOB_DIMENSIONS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"]; // where the world cap counts Blood Moon monsters
 
 /** @typedef {"blood" | "harvest" | "normal"} State */
@@ -123,7 +121,6 @@ function decide() {
 function startNight(day, state) {
   if (night?.a) stopEffects(night.s);
   seenTonight.clear();
-  dropBuiltCells();
   const players = world.getAllPlayers();
   night = { d: day, s: state, a: 1, alive: state === "blood" ? players.map((p) => p.id) : [] };
   saveNight();
@@ -153,7 +150,6 @@ function startNight(day, state) {
 
 /** Takes off what a moon put on: fogs, extra monsters, the faster growth. @param {State} state */
 function stopEffects(state) {
-  dropBuiltCells();
   for (const p of world.getAllPlayers()) setFog(p, "");
   if (state === "blood") removeMobs();
   if (state === "harvest") restoreTicks();
@@ -551,88 +547,22 @@ function playerMadeBlocks() {
 }
 
 /**
- * Which 8-block cells have nothing player-made within BUILT_PAD blocks, asked once per cell for the night:
- * dimension|cx|cy|cz -> true if something player-made is in the cell's padded box. A cell that reads clear
- * certifies every spot in it (the padded box covers each spot's own 9 x 9 x 9 box); a cell that reads built
- * says nothing about a single spot, which then gets the exact 9 x 9 x 9 check, so protection reaches no further than
- * it always did. A player-made block placed during the night forgets the clear cells it could reach.
- * @type {Map<string, boolean>}
- */
-const builtCells = new Map();
-let builtNight = ""; // the night the cells belong to; another night starts the cache over
-let nightSerial = 0; // bumped at every dusk and dawn, so a night that repeats its day number and moon is still another night
-/** @type {Set<string> | undefined} */
-let playerMadeSet;
-
-function dropBuiltCells() {
-  nightSerial++;
-  builtCells.clear();
-  builtNight = "";
-}
-
-/** Cell origins (multiples of 8) whose padded box holds coordinate `b`. @param {number} b */
-function cellOrigins(b) {
-  const out = [];
-  for (let o = Math.ceil((b - BUILT_CELL + 1 - BUILT_PAD) / BUILT_CELL) * BUILT_CELL; o <= b + BUILT_PAD; o += BUILT_CELL) out.push(o);
-  return out;
-}
-
-world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
-  try {
-    if (!builtCells.size) return;
-    playerMadeSet ??= new Set(playerMadeBlocks());
-    if (!playerMadeSet.has(block.typeId)) return;
-    const { x, y, z } = block.location;
-    const dimId = block.dimension.id;
-    for (const cx of cellOrigins(x)) for (const cy of cellOrigins(y)) for (const cz of cellOrigins(z)) {
-      const key = `${dimId}|${cx}|${cy}|${cz}`;
-      if (builtCells.get(key) === false) builtCells.delete(key);
-    }
-  } catch {
-    // the block or its chunk is gone: the next night starts over anyway
-    builtCells.clear();
-  }
-});
-
-/**
- * Anything player-made in the 9 x 9 x 9 box around the spot? A clear cell answers without a read. Unknown (an unloaded
- * chunk reached by a read, no block list) counts as built and is never cached. allowUnloadedChunks is false in both
- * reads (it was true: an unloaded chunk used to read as empty), so near the edge of the loaded world fewer spots pass.
+ * Anything player-made in the 9 x 9 x 9 box around the spot, read now for every spot. (An "is it built here" cache per
+ * 8-block cell, forgotten only when a player placed a block, kept spots clear after Easy Building, a structure,
+ * /fill or a piston built there during the night, so monsters could appear inside a new shelter. A wave asks at most
+ * SPOT_TRIES spots per monster every blood.spawnSeconds, so the exact read costs little, and the cache saved reads
+ * only when many players stood together while costing more where they didn't.) Unknown (an unloaded chunk reached by
+ * the read, no block list) counts as built. allowUnloadedChunks is false, so an unloaded chunk never reads as empty.
  * @param {Dimension} dim @param {{ x: number, y: number, z: number }} at
  */
 function built(dim, at) {
   const types = playerMadeBlocks();
   if (!types.length) return true; // can't tell: don't spawn
-  const exact = () => {
-    try {
-      return dim.containsBlock(new BlockVolume({ x: at.x - 4, y: at.y - 4, z: at.z - 4 }, { x: at.x + 4, y: at.y + 4, z: at.z + 4 }), { includeTypes: types }, false);
-    } catch {
-      return true;
-    }
-  };
-  const id = night?.a ? `${night.d}:${night.s}:${nightSerial}` : "";
-  if (!id) return exact();
-  if (id !== builtNight) {
-    builtCells.clear();
-    builtNight = id;
+  try {
+    return dim.containsBlock(new BlockVolume({ x: at.x - BUILT_PAD, y: at.y - BUILT_PAD, z: at.z - BUILT_PAD }, { x: at.x + BUILT_PAD, y: at.y + BUILT_PAD, z: at.z + BUILT_PAD }), { includeTypes: types }, false);
+  } catch {
+    return true;
   }
-  const cx = Math.floor(at.x / BUILT_CELL) * BUILT_CELL, cy = Math.floor(at.y / BUILT_CELL) * BUILT_CELL, cz = Math.floor(at.z / BUILT_CELL) * BUILT_CELL;
-  const key = `${dim.id}|${cx}|${cy}|${cz}`;
-  let cell = builtCells.get(key);
-  if (cell === undefined) {
-    try {
-      cell = dim.containsBlock(
-        new BlockVolume({ x: cx - BUILT_PAD, y: cy - BUILT_PAD, z: cz - BUILT_PAD }, { x: cx + BUILT_CELL - 1 + BUILT_PAD, y: cy + BUILT_CELL - 1 + BUILT_PAD, z: cz + BUILT_CELL - 1 + BUILT_PAD }),
-        { includeTypes: types },
-        false,
-      );
-    } catch {
-      return true;
-    }
-    if (builtCells.size >= BUILT_CELLS_MAX) builtCells.clear();
-    builtCells.set(key, cell);
-  }
-  return cell ? exact() : false;
 }
 
 /** Ground monsters can't stand on, or shouldn't. */

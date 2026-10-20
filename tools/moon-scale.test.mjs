@@ -1,6 +1,6 @@
-// Blood Moon at scale (moon_bp): the "is it built here" check is asked once per 8-block cell for the night (never
-// poisoned by an unloaded chunk, never carried into another night, never allowing a spot the 9 x 9 x 9 check
-// refused), and `blood.maxExtraWorld` caps the Blood Moon's monsters in the whole world (every dimension, counted once
+// Blood Moon at scale (moon_bp): the "is it built here" check reads each spot's own 9 x 9 x 9 box when it is asked
+// (F5: no per-cell cache that a block placed by a script, a structure, /fill or a piston could get past; an unloaded
+// chunk counts as built), and `blood.maxExtraWorld` caps the Blood Moon's monsters in the whole world (every dimension, counted once
 // per second for all players' waves together). Runs the REAL packs/moon_bp/scripts/main.js against tools/lib/pack-sim.mjs
 // with a small fake world; the probe counts below are read counts, not milliseconds.
 import assert from "node:assert/strict";
@@ -167,16 +167,32 @@ const cluster = (i) => ({ x: 2000 + (i % 4), z: 2000 + (Math.floor(i / 4) % 4) }
 const apart = (i) => ({ x: 5000 * (i + 1), z: 0 });
 const within = (m, b, d = 4) => Math.abs(Math.floor(m.location.x) - b.x) <= d && Math.abs(m.location.y - 1 - b.y) <= d && Math.abs(Math.floor(m.location.z) - b.z) <= d;
 
-test("built check: each 8-block cell is read once for the whole night, not once per spot", async () => {
-  const w = await night({ players: 40, at: cluster });
+test("built check: one 9 x 9 x 9 read per spot tried, never more (SPOT_TRIES per monster at most)", async () => {
+  const builds = [{ x: 1975, y: 64, z: 2000 }, { x: 2000, y: 66, z: 1972 }, { x: 2010, y: 62, z: 2020 }];
+  const w = await night({ players: 40, at: cluster, builds });
   try {
     w.run(300, () => w.alive().forEach((m) => (m.valid = false)));
     const spawned = w.g.spawned.length;
-    const cells = new Set(w.g.probes.map((p) => `${p.dim}|${p.from.x}|${p.from.y}|${p.from.z}`));
     assert.ok(spawned >= 300, `enough spots were asked (${spawned} monsters)`);
-    assert.equal(w.g.probes.length, cells.size, "no cell is read twice");
-    assert.ok(w.g.probes.length <= 120, `${w.g.probes.length} reads for ${spawned} monsters`);
-    assert.ok(w.g.probes.length * 4 < spawned);
+    for (const p of w.g.probes) assert.deepEqual([p.to.x - p.from.x, p.to.y - p.from.y, p.to.z - p.from.z], [8, 8, 8], "each read is the spot's own 9 x 9 x 9 box");
+    assert.ok(w.g.probes.length <= spawned * 4 + 40 * 15 * 4, `${w.g.probes.length} reads for ${spawned} monsters`);
+  } finally {
+    w.done();
+  }
+});
+
+test("F5 built check: a shelter built during the night without a player placing a block (Easy Building, /fill, a structure) is protected at once", async () => {
+  const w = await night({ players: 40, at: cluster });
+  try {
+    const kill = () => w.alive().forEach((m) => (m.valid = false));
+    w.run(300, kill);
+    // A whole ring of shelters around the players appears by script: no playerPlaceBlock event.
+    const shelters = [];
+    for (let x = 1960; x <= 2045; x += 6) for (let z = 1960; z <= 2045; z += 6) if (Math.hypot(x - 2002, z - 2002) > 12) shelters.push({ x, y: 64, z });
+    w.g.builds.push(...shelters);
+    const from = w.g.spawned.length;
+    w.run(300, kill);
+    for (const m of w.g.spawned.slice(from)) for (const b of shelters) assert.ok(!within(m, b), `${JSON.stringify(m.location)} appeared inside a shelter at ${JSON.stringify(b)}`);
   } finally {
     w.done();
   }
@@ -201,13 +217,13 @@ test("built check: an unloaded chunk throws, counts as built and is never cached
     const kill = () => w.alive().forEach((m) => (m.valid = false));
     w.run(150, kill);
     assert.ok(w.g.spawned.length >= 100);
-    assert.ok(w.g.spawned.every((m) => m.location.x < 2016), "nothing appears beside a chunk that isn't loaded");
+    assert.ok(w.g.spawned.every((m) => Math.floor(m.location.x) + 4 < 2024), "nothing appears where its 9 x 9 x 9 check reaches a chunk that isn't loaded");
     assert.ok(w.g.probes.every((p) => p.allowUnloaded === false), "an unloaded chunk is never read as empty");
     const before = w.g.spawned.length;
     w.g.unloadedFromX = Infinity;
     w.run(300, kill);
     const later = w.g.spawned.slice(before);
-    assert.ok(later.some((m) => m.location.x >= 2016), "the cells that threw are asked again once the chunk loads");
+    assert.ok(later.some((m) => Math.floor(m.location.x) + 4 >= 2024), "the spots that threw are asked again once the chunk loads");
     for (const m of later) assert.ok(!within(m, build), "and the build there is found");
   } finally {
     w.done();
