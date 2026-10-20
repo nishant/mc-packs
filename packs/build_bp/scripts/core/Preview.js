@@ -666,6 +666,13 @@ export function startPreviewLoop() {
                     );
                     continue;
                 }
+                // Checked first: a hidden preview or another item in hand must not keep an anchor from another dimension.
+                if (player.dimension.id !== state.anchor.dimensionId) {
+                    lastPreviewTarget.delete(player.id);
+                    previewCache.delete(player.id);
+                    clearAnchor(player);
+                    continue;
+                }
                 const isDestroy  = state.blockTypeId === "eb:destroy";
                 const previewMode = isDestroy ? getDestroyPreviewMode(player) : getPreviewMode(player);
                 if (previewMode === "disable" && !isDestroy) continue;
@@ -675,12 +682,6 @@ export function startPreviewLoop() {
                 if (isDestroy ? (!held || !isDiggingTool(held.typeId)) : (!held || held.typeId !== state.blockTypeId)) {
                     lastPreviewTarget.delete(player.id);
                     previewCache.delete(player.id);
-                    continue;
-                }
-                if (player.dimension.id !== state.anchor.dimensionId) {
-                    lastPreviewTarget.delete(player.id);
-                    previewCache.delete(player.id);
-                    clearAnchor(player);
                     continue;
                 }
                 const dim            = player.dimension;

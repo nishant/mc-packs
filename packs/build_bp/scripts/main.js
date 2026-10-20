@@ -220,6 +220,7 @@ export async function placeAir(player, target, typeId, blockStates) {
 }
 export function confirmPlacement(player, fallbackTarget) {
     const state = getState(player);
+    if (dropAnchorElsewhere(player, state)) return;
     if (state.mode === "disable" || !state.anchor || !state.blockTypeId) return;
     const anchor = { x: state.anchor.x, y: state.anchor.y, z: state.anchor.z };
     const typeId = state.blockTypeId;
@@ -325,7 +326,17 @@ export function confirmPlacement(player, fallbackTarget) {
  * with a different block or tool replaces it: another block on a block or destroy anchor, or a digging tool on a block
  * anchor. Changing the mode clears it too. Returns true when it was replaced.
  */
+// An anchor set in another dimension is never built from: a shape built here from those coordinates would land in the
+// wrong world and charge the player for it. The preview drops it too, but not while the hand holds something else.
+export function dropAnchorElsewhere(player, state) {
+    const dimId = state.anchor?.dimensionId;
+    if (!dimId || dimId === player.dimension.id) return false;
+    clearAnchor(player);
+    clearPreviewCache(player.id);
+    return true;
+}
 function replaceStaleAnchor(player, state, typeId) {
+    if (dropAnchorElsewhere(player, state)) return true;
     if (!state.anchor || !typeId || state.mode === "copy_paste") return false;
     const destroyAnchor = state.blockTypeId === "eb:destroy";
     const stale = isDiggingTool(typeId)
@@ -357,6 +368,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
     const state = getState(player);
     if (state.mode === "disable") return;
     if (!hasRequiredTag(player)) return;
+    dropAnchorElsewhere(player, state);
     const off = DIR_OFFSET[ev.blockFace] ?? { x: 0, y: 1, z: 0 };
     const loc = ev.block.location;
     const facePos = { x: loc.x + off.x, y: loc.y + off.y, z: loc.z + off.z };
@@ -550,6 +562,7 @@ world.afterEvents.itemUse.subscribe(ev => {
     }
     const state = getState(player);
     if (!hasRequiredTag(player)) return;
+    dropAnchorElsewhere(player, state);
     if (state.mode === "air_build") {
         if (!item) return;
         if (!isValidBlock(item.typeId)) return;
@@ -804,6 +817,9 @@ try {
     swingSupported = true;
 } catch {
 }
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => {
+    if (player?.isValid && anchoredPlayers().has(player.id)) dropAnchorElsewhere(player, getState(player));
+});
 world.afterEvents.playerLeave.subscribe(ev => {
     removeState(ev.playerId);
     removePlayerBuildSpeed(ev.playerId);

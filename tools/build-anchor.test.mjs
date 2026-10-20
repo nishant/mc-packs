@@ -78,3 +78,29 @@ test("F8: another block starts a new anchor, and a digging tool on a block ancho
   mc.flushIntervals(5);
   for (let x = 30; x <= 34; x++) assert.notEqual(dim.getBlock({ x, y: 64, z: 10 }).typeId, "minecraft:stone", `no stone at ${x}`);
 });
+
+test("an anchor from another dimension is dropped, never built from, by a click or a dimension change", async () => {
+  const { confirmPlacement } = await import("../packs/build_bp/scripts/main.js");
+  const nether = mc.world.getDimension("minecraft:nether");
+  const p = builder("survival", [[0, "minecraft:stone"]]);
+  setMode(p, "line");
+  setAnchor(p, { x: 50, y: 64, z: 10 }, "minecraft:stone", {});
+  await wait();
+  // Through a portal with a sword in hand: the hand kept the anchor, and no dimension event has run yet.
+  p.dimension = nether;
+  confirmPlacement(p, { x: 54, y: 64, z: 10 });
+  mc.flushIntervals(5);
+  assert.equal(getState(p).anchor, null, "the overworld anchor is dropped");
+  for (let x = 50; x <= 54; x++) {
+    assert.notEqual(nether.getBlock({ x, y: 64, z: 10 }).typeId, "minecraft:stone", `no stone in the nether at ${x}`);
+    assert.notEqual(dim.getBlock({ x, y: 64, z: 10 }).typeId, "minecraft:stone", `no stone in the overworld at ${x}`);
+  }
+  assert.equal(p.getComponent().container.getItem(0)?.amount, 64, "no stone charged");
+
+  // The dimension change event drops it too, before any click.
+  p.dimension = dim;
+  setAnchor(p, { x: 50, y: 64, z: 20 }, "minecraft:stone", {});
+  p.dimension = nether;
+  mc.fireEvent("world.after.playerDimensionChange", { player: p, fromDimension: dim, toDimension: nether });
+  assert.equal(getState(p).anchor, null, "dropped on the dimension change");
+});
