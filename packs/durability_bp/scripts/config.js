@@ -11,6 +11,6 @@ export const CONFIG = {
   /** Also put critical warnings in chat, so they aren't missed mid-fight. */
   chatOnCritical: true,
 
-  /** How often to check, in ticks (20 = 1s). */
+  /** How often to check, in ticks (20 = 1s): items used, hit with or worn down since the last check; every slot of every player once in 10 checks. */
   checkIntervalTicks: 10,
 };

@@ -9,6 +9,7 @@ import {
   ItemStack,
   MolangVariableMap,
   Player,
+  PlayerInventoryType,
   ScriptEventSource,
   system,
   world,
@@ -22,7 +23,9 @@ import { onScriptEvent } from "./script-events.js";
 // Silly enchants are lore lines on gear ("Silly: Hyper Jump"). They only make particles, sounds and
 // harmless bounces: nothing here changes damage, armor, speed, drops or durability. A Silly Book (an
 // enchanted book with a "Silly Book: <name>" lore line) is applied from /realm:silly to the item in
-// your hand. Effects read a cache of each player's gear, refreshed twice a second, so loops stay cheap.
+// your hand. Effects read a cache of each player's gear, so loops stay cheap: the hand follows the hotbar and
+// inventory events, armor is read again after an inventory change that moves armor, a hit or a death, and every
+// player's gear is read again by a slow sweep (one player a tick, each at most every second) for what fires no event.
 
 /** @typedef {"hand" | "feet" | "head" | "armor"} Slot */
 /** @typedef {{ id: string, name: string, slot: Slot, what: string }} Enchant */
@@ -220,26 +223,123 @@ function has(p, id) {
 /** @param {Player} p */
 const playing = (p) => get("enabled") === true && getFor(p, "effects") !== false;
 
-/** Players wearing Hyper Jump boots at the last refresh: the per-tick jump check only looks at them. @type {Player[]} */
-let jumpers = [];
+/** Players wearing Hyper Jump boots: the per-tick jump check only looks at them. @type {Map<string, Player>} */
+const jumpers = new Map();
+/** Players wearing any silly armor (feet, head or any piece): the ambient effects only look at them. @type {Map<string, Player>} */
+const wearers = new Map();
 
+/** Stores a player's gear and keeps the wearer lists in step. @param {Player} p @param {Gear} g */
+function setGear(p, g) {
+  const id = p.id;
+  gear.set(id, g);
+  if (g.feet.size || g.armor.size || g.head.size) wearers.set(id, p);
+  else if (wearers.delete(id)) lastPos.delete(id);
+  if (g.feet.has("hyper_jump")) jumpers.set(id, p);
+  else jumpers.delete(id);
+}
+
+/** @param {string} id */
+function dropGear(id) {
+  gear.delete(id);
+  wearers.delete(id);
+  jumpers.delete(id);
+  lastPos.delete(id);
+}
+
+/** Reads all of a player's gear now. @param {Player} p */
+function refresh(p) {
+  try {
+    setGear(p, readGear(p));
+  } catch {
+    dropGear(p.id);
+  }
+}
+
+/** The hand enchants on the item now in a player's main hand (from an event: no read). @param {Player} p @param {ItemStack | undefined} item */
+function setHand(p, item) {
+  const g = gear.get(p.id);
+  if (!g) {
+    queue(p);
+    return;
+  }
+  /** @type {Set<string>} */
+  const hand = new Set();
+  for (const e of enchantsOn(item)) if (e.slot === "hand") hand.add(e.id);
+  g.hand = hand;
+}
+
+/** Players whose gear is read in full on the next tick. @type {Map<string, Player>} */
+const queued = new Map();
+/** @param {Player | undefined} p */
+const queue = (p) => {
+  if (p) queued.set(p.id, p);
+};
+
+/** Can be worn as armor (put on from the inventory, or taken off into it). @param {ItemStack | undefined} item */
+const wearable = (item) => {
+  if (!item) return false;
+  const id = item.typeId;
+  return isArmor(id) || id === "minecraft:carved_pumpkin" || /_(head|skull)$/.test(id);
+};
+
+world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player, itemStack }) => {
+  try {
+    setHand(player, itemStack);
+  } catch {
+    queue(player);
+  }
+});
+
+world.afterEvents.playerInventoryItemChange.subscribe(({ player, inventoryType, slot, itemStack, beforeItemStack }) => {
+  try {
+    // A stack of one type that changed size grew, shrank or was swapped for another stack of it: what is worn didn't
+    // change (armor doesn't stack). Armor that left the inventory may be worn now, and armor that came in may have been
+    // taken off.
+    const resized = itemStack && beforeItemStack && itemStack.typeId === beforeItemStack.typeId && itemStack.amount !== beforeItemStack.amount;
+    if (!resized && (wearable(itemStack) || wearable(beforeItemStack))) queue(player);
+    // The selected slot always sets the hand from the event's item (its lore, no equipment read): a swapped stack of
+    // the same type can carry other lore.
+    if (inventoryType === PlayerInventoryType.Hotbar && slot === player.selectedSlotIndex) setHand(player, itemStack);
+  } catch {
+    queue(player);
+  }
+});
+
+world.afterEvents.playerSpawn.subscribe(({ player }) => queue(player));
+// A death drops the armor (unless the world keeps inventories): read it again.
+world.afterEvents.entityDie.subscribe(
+  ({ deadEntity }) => {
+    if (deadEntity instanceof Player) queue(deadEntity);
+  },
+  { entityTypes: ["minecraft:player"] },
+);
+
+/** The sweep: every player's gear read again, one player a tick, each at most every SWEEP_MIN ticks. */
+const SWEEP_MIN = 20;
+/** @type {Player[]} */
+let sweepList = [];
+let sweepAt = 0;
 system.runInterval(() => {
-  /** @type {Player[]} */
-  const wearing = [];
-  for (const p of world.getAllPlayers()) {
-    try {
-      const g = readGear(p);
-      gear.set(p.id, g);
-      if (g.feet.has("hyper_jump")) wearing.push(p);
-    } catch {
-      gear.delete(p.id);
+  if (queued.size) {
+    const list = [...queued.values()];
+    queued.clear();
+    for (const p of list) {
+      if (p.isValid) refresh(p);
+      else dropGear(p.id);
     }
   }
-  jumpers = wearing;
-}, 10);
+  if (sweepAt >= sweepList.length) {
+    if (system.currentTick % SWEEP_MIN !== 0) return;
+    sweepList = world.getAllPlayers();
+    sweepAt = 0;
+  }
+  const p = sweepList[sweepAt++];
+  if (p?.isValid) refresh(p);
+}, 1);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  gear.delete(playerId);
+  dropGear(playerId);
+  queued.delete(playerId);
   lastSneak.delete(playerId);
   lastPos.delete(playerId);
   flights.delete(playerId);
@@ -347,13 +447,12 @@ let beat = 0;
 system.runInterval(() => {
   if (get("enabled") !== true) return;
   beat++;
-  for (const p of world.getAllPlayers()) {
-    const g = gear.get(p.id);
-    if (!g || (!g.feet.size && !g.armor.size && !g.head.size)) {
-      lastPos.delete(p.id);
-      continue;
-    }
+  for (const p of [...wearers.values()]) {
     try {
+      if (!p.isValid) {
+        dropGear(p.id);
+        continue;
+      }
       if (!playing(p)) continue;
       ambient(p);
     } catch {
@@ -441,7 +540,7 @@ world.afterEvents.playerButtonInput.subscribe(
 const wasJumping = new Map();
 system.runInterval(() => {
   if (get("enabled") !== true) return;
-  for (const p of jumpers) {
+  for (const p of jumpers.values()) {
     const g = gear.get(p.id);
     if (!g || !g.feet.has("hyper_jump")) continue;
     try {
@@ -700,17 +799,31 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 });
 
 // Getting hurt: Moo.
-world.afterEvents.entityHurt.subscribe(({ hurtEntity }) => {
-  if (!(hurtEntity instanceof Player) || get("enabled") !== true) return;
-  try {
-    if (!has(hurtEntity, "moo") || !playing(hurtEntity) || !ready(hurtEntity, "moo", 20)) return;
-    // Mostly a moo. Sometimes the wrong animal answers.
-    const voice = Math.random() < 0.75 ? "mob.cow.say" : pick(["mob.pig.say", "mob.sheep.say", "mob.chicken.say", "mob.cat.meow"]);
-    sound(hurtEntity.dimension, voice, hurtEntity.location, 1.5, between(0.9, 1.3));
-  } catch {
-    // gone
-  }
-});
+world.afterEvents.entityHurt.subscribe(
+  ({ hurtEntity }) => {
+    if (!(hurtEntity instanceof Player)) return;
+    // A hit can break worn armor: read it again.
+    if (wearers.has(hurtEntity.id)) queue(hurtEntity);
+    if (get("enabled") !== true) return;
+    try {
+      if (!playing(hurtEntity)) return;
+      // The helmet now: it may have been put on with no event since the last read.
+      const g = gear.get(hurtEntity.id);
+      if (g) {
+        const head = enchantsOn(hurtEntity.getComponent("minecraft:equippable")?.getEquipment(EquipmentSlot.Head));
+        g.head = new Set(head.filter((e) => e.slot === "head").map((e) => e.id));
+        if (head.length) queue(hurtEntity); // and its armor enchants, with the rest
+      }
+      if (!has(hurtEntity, "moo") || !ready(hurtEntity, "moo", 20)) return;
+      // Mostly a moo. Sometimes the wrong animal answers.
+      const voice = Math.random() < 0.75 ? "mob.cow.say" : pick(["mob.pig.say", "mob.sheep.say", "mob.chicken.say", "mob.cat.meow"]);
+      sound(hurtEntity.dimension, voice, hurtEntity.location, 1.5, between(0.9, 1.3));
+    } catch {
+      // gone
+    }
+  },
+  { entityTypes: ["minecraft:player"] },
+);
 
 // ---------------------------------------------------------------------------
 // Menus
@@ -829,7 +942,7 @@ export function applyBook(p, bookSlot) {
   } else h.inv.setItem(bookSlot, undefined);
   const n = Number(p.getDynamicProperty(PROP_APPLIED)) || 0;
   p.setDynamicProperty(PROP_APPLIED, n + 1);
-  gear.set(p.id, readGear(p));
+  refresh(p);
   p.sendMessage(`§dSilly: ${what.name}! §7${what.what}.`);
   const eye = p.getHeadLocation(), look = p.getViewDirection(); // in front of you, where you can see it
   confetti(p.dimension, { x: eye.x + look.x * 1.5, y: eye.y + look.y * 1.5, z: eye.z + look.z * 1.5 }, 20);
@@ -852,7 +965,7 @@ async function removeMenu(p) {
   const now = held(p);
   if (!now?.item || now.slot !== h.slot || !enchantsOn(now.item).includes(e)) return p.sendMessage("§cHold the same item to remove it.");
   now.inv.setItem(now.slot, removeFrom(now.item, e));
-  gear.set(p.id, readGear(p));
+  refresh(p);
   p.sendMessage(`§7Removed ${e.name}.`);
 }
 

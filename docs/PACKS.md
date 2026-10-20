@@ -332,7 +332,7 @@ Every player carries a **Realm Configuration** item (a nether star with a gold n
 | `giveToPlayers` | `true` | Every player without the item gets one when they join or respawn (once: never a second one). Players who aren't operators see only the commands they can use |
 | `giveToOperators` | `true` | With `giveToPlayers` off: operators without the item get one when they join or respawn, and within `checkSeconds` of becoming an operator |
 | `removeFromOthers` | `true` | With `giveToPlayers` off: take the real item from players who aren't operators (an anvil-renamed item is left alone) |
-| `checkSeconds` | `30` | How often to check who carries the item, in seconds (5 to 300); each round checks one player per tick |
+| `checkSeconds` | `30` | How often to check who carries the item, in seconds (5 to 300). Each round reads the whole inventory of players who became (or stopped being) operators, should get the item and have none, or had a removal fail, one player per tick; every other inventory is read once in 10 rounds (5 minutes by default), for an off hand or cursor changed by a command. Inventory changes are checked at once, not by the round; the cursor is read on a change that involves no real item only after a real item left a slot, was seen in the off hand or on the cursor, or the player spawned |
 | `itemType` | `"minecraft:nether_star"` | The vanilla item it's made from. It gets the name, lore, keep on death and an inventory lock |
 | `recentSize` | `8` | How many of your last commands **Recent** keeps (1 to 20) |
 | `answerTicks` | `10` | Ticks to wait for the installed packs (and the safe zone lists, for the checklist) to answer (20 = 1 second) |
@@ -487,7 +487,7 @@ Warns players before a tool, weapon or armor piece breaks.
 | **Warning** | ≤ `warnPercent` (10%) left | Yellow message above the hotbar: `! Diamond Pickaxe is low: 141/1561 (9.0%)` + soft "pling" |
 | **Critical** | ≤ `criticalPercent` (3%) left | Red message `! Diamond Pickaxe is about to break! 31/1561 (2.0%)` above the hotbar **and in chat** (`chatOnCritical`) + anvil sound |
 
-- Checks the **main hand and offhand** every `checkIntervalTicks`, and the **helmet, chestplate (including elytra), leggings and boots** every fourth check (every 2 seconds by default).
+- Checks the **main hand and offhand** at the next check (every `checkIntervalTicks`, half a second by default) after you mine, hit, use an item (a bow, a hoe, flint and steel...), switch hotbar slots or your inventory changes, and the **helmet, chestplate, leggings and boots** after you get hurt or put armor on from your inventory. A worn **elytra** is checked every fourth check (every 2 seconds), since gliding wears it with no event. A hand holding a **shield** or a **brush** is checked at every check, since a shield wears when it blocks a hit (which hurts no one) and a brush when brushing ends, both with no event. Every slot of every player is also checked once every 10 checks (5 seconds), for armor put on by a dispenser or a command.
 - Warns **once per level**. It only warns again when the item drops to the next level.
 - A different kind of item in that slot, emptying the slot, or a repair (Mending, an anvil, grindstone) that lifts it at least 2% of its durability above the level resets it, so a Mending tool hovering right at the line doesn't warn again and again. Another item of the same kind that's just as worn doesn't warn again.
 - Each **hotbar slot** is tracked separately, so switching to another worn tool warns for that one too.
@@ -509,7 +509,7 @@ Warns players before a tool, weapon or armor piece breaks.
 | `criticalPercent` | `3` | Critical level, in % left |
 | `maxUsesForWarning` | `0` | If > 0, never warn while more than this many uses are left, even under the % (useful for netherite). `0` = off |
 | `chatOnCritical` | `true` | Also post critical warnings in chat |
-| `checkIntervalTicks` | `10` | How often to check (20 = 1 s). Read when the world starts, so `/realm:config` only shows it |
+| `checkIntervalTicks` | `10` | How often to check (20 = 1 s) the items players used, hit with or wore down since the last check; every slot of every player is checked once every 10 checks. Read when the world starts, so `/realm:config` only shows it |
 
 Operators can change `warnPercent`, `criticalPercent`, `maxUsesForWarning` and `chatOnCritical` in game with `/realm:config`; they apply at the next check.
 
@@ -4574,7 +4574,7 @@ Fourteen silly "enchantments" for your gear. They only add particles, sounds and
 
 - **Held item** means anything you hold that isn't armor or a book: swords, tools, a bow, even a raw cod. **Helmet** includes the turtle shell; **any armor** includes the elytra.
 - **Applying** says `Silly: Hyper Jump! Sneak and jump: a big bounce, a huge one, or now and then a trip with the Realm Space Program.` with a burst of confetti in front of you. A book that doesn't fit says so (`Hyper Jump goes on boots.`), and an item with 2 already says `An item holds at most 2 silly enchants. Remove one first.` A relic says `Relics can't take silly enchants.` and keeps the book (relics rewrite their lore, which would wipe the line). A Random book picks one that fits the item.
-- The effects follow your worn armor and the item in your main hand, checked twice a second. Other players see and hear them too.
+- The effects follow the item in your main hand as soon as you switch to it, and your worn armor as soon as you put it on or take it off from your inventory, get hurt or die (armor put on by a dispenser or a command is noticed within a second on a small server and a few seconds on a busy one: every player's gear is read again, one player a tick). Other players see and hear them too.
 - **Confetti** flakes burst out, tumble and settle on the ground. Without [Silly Enchants Sounds](#silly-enchants-sounds--silly_rp) you see only vanilla puffs (totem sparkles and colored swirls): no floor, lights, trail dabs or bubbles in the air, and Grunt Birthday makes no sound.
 - **Librarian book lock** (`librarianBookLock`, `true` by default): right-clicking a villager with an Enchanted Book in your hand converts and locks them as a Novice Librarian trading that enchanted book.
 - **For tests:** `/scriptevent realm:silly_trace on` makes every silly particle and sound also send a `realm:silly_fx` script event (`{ kind: "particle" | "sound", id }`), so a test server, which draws and plays nothing, can see them; `off` stops it.
