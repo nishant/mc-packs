@@ -6,6 +6,7 @@ import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./r
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
+import { settleOwed } from "./settle.js";
 
 const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
@@ -582,19 +583,9 @@ function owe(pid, d, n) {
   });
 }
 
-/** Takes up to `n` batches of `d` off what `pid` is owed; returns how many were owed. @param {string} pid @param {Dish} d @param {number} n */
+/** Takes up to `n` batches of `d` off what `pid` is owed; returns how many really left the store (0 when saving failed, so they stay owed for the next join). @param {string} pid @param {Dish} d @param {number} n */
 function settle(pid, d, n) {
-  let due = 0;
-  owedStore.update(pid, (cur) => {
-    if (!cur || typeof cur !== "object" || Array.isArray(cur)) return cur;
-    const have = Math.floor(Number(cur[d.id]) || 0);
-    due = Math.max(0, Math.min(n, have));
-    if (!due) return cur;
-    if (have - due > 0) cur[d.id] = have - due;
-    else delete cur[d.id];
-    return Object.keys(cur).length ? cur : undefined;
-  });
-  return due;
+  return settleOwed(owedStore, pid, d.id, n);
 }
 
 /** Dishes that finished cooking after the player left (or that a restart interrupted). `pid` and `failIds` are for the native test hook. @param {Player} player @param {string} [pid] @param {Set<string>} [failIds] */
