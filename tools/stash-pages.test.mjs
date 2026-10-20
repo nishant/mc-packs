@@ -1843,6 +1843,30 @@ test("F4 recover: a tool kept but used since is listed as changed and exported o
   assert.deepEqual(chestContents(dim), ["diamond:3", "diamond_pickaxe:1"]);
 });
 
+test("F4 recover: an export started by stash_bp 1.8.7 or older (no plan journaled) finishes its old chest without copying twice", async () => {
+  const { p, op, dim } = stuck();
+  lose(p);
+  const native = JSON.parse(p.getDynamicProperty("stash:native"));
+  const own = (/** @type {any} */ e) => BUTTON_SLOTS.includes(e.s) && [BTN_PREV, BTN_MENU, BTN_NEXT].includes(e.item.typeId);
+  const before = storage.loadSnapshot(p, native.pending.before).filter((e) => !own(e));
+  assert.equal(before.length, 3, "diamonds, shulker box, iron");
+  // The old code journaled one spot, placed a chest there and put the first stack in, then stopped.
+  const at = { x: 11, y: 64, z: 10 };
+  dim.getBlock(at).setType("minecraft:chest");
+  const box = dim.getBlock(at).getComponent("minecraft:inventory").container;
+  box.setItem(0, before[0].item.clone());
+  p.setDynamicProperty("stash:native", JSON.stringify({ ...native, pending: { ...native.pending, out: { d: dim.id, p: [[at.x, at.y, at.z]] } } }));
+  const shown = storage.pendingSummary(p, own);
+  assert.equal(shown.started, true);
+  const result = storage.exportPending(op, p, own);
+  assert.equal(result.ok, true, result.message);
+  assert.equal(chestsOf(dim).length, 1, "the old chest is finished, no second one");
+  assert.deepEqual(box.slots.filter(Boolean).map((i) => `${i.typeId}:${i.amount}`), before.map((e) => `${e.item.typeId}:${e.item.amount}`), "every before-image stack once, in the old layout");
+  assert.equal(nativeIndex(p).pending, undefined, "journal cleared");
+  assert.equal(storage.exportPending(op, p).ok, false, "a re-run finds nothing");
+  assert.equal(chestsOf(dim).length, 1);
+});
+
 test("F4 recover: an inventory that changes while the operator decides exports nothing", async () => {
   const { p, op, dim } = stuck();
   mc.formResponses.set(op.id, [() => { p.container.setItem(18, stack("minecraft:diamond", 3)); return { selection: 0 }; }]);
