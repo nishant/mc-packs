@@ -153,3 +153,34 @@ test("titles: distance counts the same and saves spread over the minute, a tenth
   const most = Math.max(...savesAt.values());
   assert.ok(most <= 4, `at most 4 saves a tick, got ${most}`);
 });
+
+test("guilds: travel counts the same spread over the second, saves spread over the 30 seconds, AFK players aren't read", async () => {
+  const sim = createSim();
+  const w = walkers(sim, 40);
+  const idle = w.players[5];
+  idle.addTag("afk");
+  /** @type {Map<number, number>} */
+  const savesAt = new Map();
+  for (const p of w.players) {
+    const set = p.setDynamicProperty.bind(p);
+    p.setDynamicProperty = (k, v) => {
+      if (k === "guilds:prog") savesAt.set(sim.game.tick, (savesAt.get(sim.game.tick) ?? 0) + 1);
+      return set(k, v);
+    };
+  }
+  await loadReal(sim, "guilds_bp");
+  sim.step(700);
+  for (const p of w.players) {
+    const prog = JSON.parse(p.getDynamicProperty("guilds:prog") ?? "null");
+    if (p === idle) {
+      assert.equal(prog?.b ?? 0, 0, "nothing counts while AFK");
+      continue;
+    }
+    // 4 blocks a second, saved once in the first 30 seconds (whole blocks)
+    assert.ok(prog && prog.b >= 75 && prog.b <= 140, `${p.name} traveled ${prog?.b}`);
+  }
+  assert.ok(![...w.perTick.values()].some((s) => s.has(idle.id)), "an AFK player's position isn't read");
+  assert.ok(w.maxPerTick() <= 4, `at most 4 players a tick, got ${w.maxPerTick()}`);
+  const most = Math.max(...savesAt.values());
+  assert.ok(most <= 4, `at most 4 saves a tick, got ${most}`);
+});
