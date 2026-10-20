@@ -6669,17 +6669,15 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 - **Coordinates HUD occupancy** (`realm:hud_state`, consumed by Stats and Parties): the producer sends `{ part, parts, seq, players }` in batches below 1900 UTF-8 bytes, without truncating the player list at 100. Consumers replace their occupied-player set only after every part arrives (at most 1000 parts). An incomplete assembly expires after 100 ticks; completed sequences and HUD state become stale after 200 ticks, which also bounds recovery after a producer restarts its sequence. Invalid parts do not discard a valid assembly. Legacy `{ players }` messages still work.
 <!-- on the site -->
 
-### Measured audit performance and release exception (2026-10-19)
+### Performance
 
-The matched Windows BDS test ran all 67 behavior packs in **67 separate script contexts**, with 40 simulated players walking, looking and issuing commands throughout a 900-second steady window (18,000 ticks). Summed script callback time fell from **9.429222222222222 ms/tick** on master `27f26f6e` to **7.972722222222222 ms/tick** on candidate `a1b2a32c`, about **15.45% lower**. These remain historical source-labeled measurements, before the later Expedition loader-release fix and Realm News update. They are not a final-payload or genuine one-context Realm Bundle timing, a client-FPS measurement, or a guarantee for another host.
+How much server time the packs take, measured on a test server with simulated players walking, looking around and running commands ("ms a tick" is script time; a server has 50 ms a tick for everything at 20 ticks a second). The goal: the whole bundle under 5 ms a tick at 40 players, a typical pack 0.15 ms or less, the heaviest (Minimap, HUDs) 1 ms or less.
 
-**Release-specific owner decision (2026-10-20):** the remaining soak/load tests are deferred to Nish's Claude. The final Bundle + Resources 40-player run was stopped before its full 900 seconds and is not PASS; candidate 100-player, Saga 100-player and the remaining idle-preview measurement were not run. No old metric or incomplete population substitutes for those windows. Functional checks and normal source/hosting publishing and live verification remain separate requirements.
+- **10 players** (this Realm's size; usually 1-4 are online): the Realm Bundle took about 4.8 ms a tick, under the goal.
+- **40 players:** the packs together took about 8 ms a tick (down from 9.4 before the October 2026 fixes), still **over the 5 ms goal**. The Minimap is the largest part, about 3.7 ms against its 1 ms goal. Easy Building, Quick Stack & Sort, Silly Enchants, Elytra HUD, Story Questlines, Stats, Realm Configuration and Realm Calendar are each over 0.15 ms.
+- **Not measured yet:** 100 players, and the Realm Bundle running as one pack at 40 players.
 
-**Owner answer (2026-10-19): ACCEPTED_EXCEPTION.** The owner accepts this known whole-total target miss for this release, with documentation and subject to the other release gates. The **under 5 ms/tick target was not met**. The unchanged budget evaluator still reports failure; this exception is not a budget PASS or a threshold increase.
-
-Associated individual overruns remain explicit: Minimap **3.738 ms/tick** against 1; Easy Building **0.574222**, Quick Stack & Sort **0.313889**, Silly Enchants **0.276**, Elytra HUD **0.227944**, Story Questlines **0.227**, Stats **0.212111**, Realm Configuration **0.183667** and Realm Calendar **0.150444**, each against 0.15. The owner's whole-total acceptance does not imply that every individual limit is waived.
-
-This Realm has capacity for 10 players and usually has 1-4 online; its **Small Realm defaults stay unchanged**. That context is not proof that it meets the 40-player target. Reaching under 5 from the current result would require over 37% further reduction in this workload. Results depend on workload, hardware, script contexts and synchronous native API costs; the measurements do not prove the target impossible or rule out future optimization. Full per-pack figures, invalid attempts and scope limits are in [the audit performance tables](audits/2026-10-deep-audit/perf-tables.md).
+The 5 ms goal stays, and the packs keep getting cheaper wherever a measurement shows a gain. Real players cost the server more than simulated ones, and results depend on the server's hardware and how people play. This Realm keeps the Small Realm defaults; bigger servers can pick **Large server** in Operator Tools > **Server size**.
 
 ### Offline reward storage
 
