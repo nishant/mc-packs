@@ -34,7 +34,7 @@ export function tamerOf(e) {
 /** @param {any} e @param {string} playerId */
 function ridden(e, playerId) {
   try {
-    return (e.getComponent("minecraft:rideable")?.getRiders() ?? []).some((r) => r.id === playerId);
+    return (e.getComponent("minecraft:rideable")?.getRiders() ?? []).some((/** @type {any} */ r) => r.id === playerId);
   } catch {
     return false;
   }
