@@ -82,12 +82,18 @@ export default async function (t) {
   t.check(dim.getEntities({ type: "minecraft:zombie" }).length === 0, "none of those spawns is left");
 
   // 2. A requested champion removed right after it arrives (arrival effects and the announcement run on it).
+  let removedOnArrival = 0;
   for (let i = 0; i < 10; i++) {
     const tag = request(6 + i, 6, "shielded");
-    await t.wait(1);
-    for (const e of champions(tag)) e.remove();
+    // The first tick it is there (script events can arrive a tick later than sent).
+    for (let w = 0; w < 5 && champions(tag).length === 0; w++) await t.wait(1);
+    for (const e of champions(tag)) {
+      e.remove();
+      removedOnArrival++;
+    }
     await t.wait(1);
   }
+  t.check(removedOnArrival >= 8, `requested champions were removed right after they arrived (${removedOnArrival} of 10)`);
 
   // 3. A crowd near the player (aura within 64 blocks, approach within 48): removed and killed one by one between runs.
   const crowd = [];
