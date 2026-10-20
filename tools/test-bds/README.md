@@ -224,6 +224,17 @@ failed with `tickingarea add circle ... failed: the command did not succeed` (th
 chunks were not readable yet). `lib/harness-lifecycle.test.mjs` runs `harness.js` against a fake game whose areas
 survive a restart; `lib/rain-seabed.test.mjs` runs Rain's real scripts, the scenario's hook and the scenario itself.
 
+## Memory soaks (`rss-soak.mjs`)
+
+`node tools/test-bds/rss-soak.mjs --every 5 --out <file.json> -- <run.mjs arguments>` runs one `run.mjs` command and
+samples the resident memory (VmRSS, and the peak VmHWM) of the `bedrock_server` it starts every 5 seconds, from
+`/proc` (Linux only), without the profiler. The JSON keeps every sample and a summary: 10-minute medians after a
+5-minute warm-up, the slope in MiB per minute over the first and second half, and a verdict: `growing` (the second
+half still rises more than 0.5 MiB/min and ends at its highest), `leveled`, `falling or noisy`, or `too short` (under
+30 minutes after the warm-up). For O4: `-- --quiet --no-relay --flat --scenario tools/test-bds/examples/perf-soak.js
+--arg players=40 --arg seconds=3600 --timeout 4500`, then the same with `--only` halves of the pack list to find a
+growing pack. `rss-soak.test.mjs` checks the verdicts.
+
 ## Inventory persistence regression
 
 `node tools/test-bds/stash-persistence.mjs` stages a test-only copy of `stash_bp` and runs
