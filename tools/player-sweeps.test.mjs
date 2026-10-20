@@ -249,3 +249,77 @@ test("nick: name tags are put right on realm:nametag at once and by a 5-second s
   sim.step(100);
   assert.ok(b.nameTag.includes("Nick4"), `after the sweep: ${b.nameTag}`);
 });
+
+/** A tamed dolphin that counts the events it gets. */
+function tamedDolphin(owner) {
+  const props = new Map([["dolphin:owner", owner.id], ["dolphin:ownerName", owner.name]]);
+  return {
+    id: "-77",
+    typeId: "minecraft:dolphin",
+    isValid: true,
+    nameTag: "",
+    isInWater: false,
+    location: { x: 0, y: 60, z: 0 },
+    dimension: { id: "minecraft:overworld" },
+    events: /** @type {string[]} */ ([]),
+    riders: /** @type {any[]} */ ([]),
+    getDynamicProperty: (k) => props.get(k),
+    setDynamicProperty: (k, v) => (v === undefined ? props.delete(k) : props.set(k, v)),
+    getComponent(id) {
+      return id === "minecraft:rideable" ? { getRiders: () => this.riders, ejectRider() {} } : undefined;
+    },
+    triggerEvent(e) {
+      this.events.push(e);
+    },
+    getVelocity: () => ({ x: 0, y: 0, z: 0 }),
+    applyImpulse() {},
+    setRotation() {},
+  };
+}
+
+/** Counts, per tick, which players had their riding component asked for; `mounts` maps a player to what they ride. */
+function countRiding(sim, players, mounts) {
+  /** @type {Map<number, Set<string>>} */
+  const at = new Map();
+  for (const p of players) {
+    p.getComponent = (id) => {
+      if (id !== "minecraft:riding") return undefined;
+      const t = sim.game.tick;
+      if (!at.has(t)) at.set(t, new Set());
+      at.get(t).add(p.id);
+      const on = mounts.get(p);
+      return on ? { entityRidingOn: on } : undefined;
+    };
+  }
+  return { at, total: () => [...at.values()].reduce((n, s) => n + s.size, 0), most: () => Math.max(0, ...[...at.values()].map((s) => s.size)) };
+}
+
+test("dolphin: without a loaded tamed dolphin nobody's ride is looked up; with one, a fifth of 40 players a tick, and a ride without a tap is steered within 5 ticks", async () => {
+  const sim = createSim();
+  const w = walkers(sim, 40);
+  const mounts = new Map();
+  const c = countRiding(sim, w.players, mounts);
+  /** @type {any[]} */
+  let loaded = [];
+  await loadReal(sim, "dolphin_bp");
+  sim.server.world.getDimension = () => ({ getEntities: () => loaded, id: "minecraft:overworld" });
+  sim.server.world.getEntity = () => undefined;
+  sim.step(40); // the first following check counts no tamed dolphin
+  const before = c.total();
+  sim.step(200);
+  assert.equal(c.total() - before, 0, "no ride lookups while no tamed dolphin is loaded");
+  // A tamed dolphin appears (counted at the next following check), and a player gets on it without a tap.
+  const rider = w.players[9];
+  const d = tamedDolphin(w.players[0]);
+  loaded = [d];
+  sim.step(20);
+  c.at.clear();
+  mounts.set(rider, d);
+  d.riders = [rider];
+  const on = sim.game.tick;
+  await sim.until(() => d.events.includes("realm:dolphin_ridden"), 20);
+  assert.ok(d.events.includes("realm:dolphin_ridden"), "the ride was found");
+  assert.ok(sim.game.tick - on <= 5, `found within 5 ticks (${sim.game.tick - on})`);
+  sim.step(40);
+  assert.ok(c.most() <= 9, `at most 9 players a tick, got ${c.most()}`);
+});

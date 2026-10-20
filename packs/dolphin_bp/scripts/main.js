@@ -10,6 +10,7 @@ import {
   world,
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
+import { spreadPlayers } from "./spread.js";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
@@ -140,8 +141,15 @@ const saveIndex = (idx) => {
   writeKnown();
 };
 
+/**
+ * Tamed dolphins loaded at the last following check (every second), or -1 before the first one. Taming one makes it
+ * at least 1 at once.
+ */
+let tamedLoaded = -1;
+
 /** @param {Entity} e @param {string} owner @param {string} ownerName */
 function remember(e, owner, ownerName) {
+  tamedLoaded = Math.max(1, tamedLoaded);
   const idx = index();
   const l = e.location;
   idx[e.id] = { o: owner, on: ownerName, n: e.nameTag || "", d: e.dimension.id, x: Math.round(l.x), y: Math.round(l.y), z: Math.round(l.z) };
@@ -448,7 +456,13 @@ function setRidden(d, on) {
   }
 }
 
-/** Players riding a tamed dolphin, steered every tick. Everyone else is looked at every 5 ticks, and at once when they tap a dolphin. @type {Map<string, { p: Player, d: Entity }>} */
+/**
+ * Players riding a tamed dolphin, steered every tick. Everyone else is found at once when they tap a dolphin (the way
+ * on), and otherwise looked at every 5 ticks, a fifth of the players each tick (scripts/spread.js), for a ride that
+ * started any other way (a /ride command; the stable API has no ride event). While no tamed dolphin is loaded nobody
+ * can be riding one, so nobody is looked at (the following check below counts them every second).
+ * @type {Map<string, { p: Player, d: Entity }>}
+ */
 const riders = new Map();
 
 /** @param {string} id */
@@ -458,16 +472,20 @@ function dropRider(id) {
   if (r) setRidden(r.d, false);
 }
 
-system.runInterval(() => {
-  if (get("enabled") !== true) return;
-  for (const p of world.getAllPlayers()) {
-    if (riders.has(p.id)) continue;
-    const d = mountOf(p);
-    if (!d) continue;
-    riders.set(p.id, { p, d });
-    setRidden(d, true);
-  }
-}, 5);
+spreadPlayers(system, world, {
+  every: 5,
+  parts: 5,
+  visit: (share) => {
+    if (tamedLoaded === 0 || get("enabled") !== true) return;
+    for (const p of share) {
+      if (riders.has(p.id)) continue;
+      const d = mountOf(p);
+      if (!d) continue;
+      riders.set(p.id, { p, d });
+      setRidden(d, true);
+    }
+  },
+});
 
 system.runInterval(() => {
   if (!riders.size) return;
@@ -525,7 +543,9 @@ system.runInterval(() => {
   const follow = Math.max(2, Number(CONFIG.followDistance) || 8);
   const idx = index();
   let changed = false;
-  for (const d of loadedTamed()) {
+  const tamed = loadedTamed();
+  tamedLoaded = tamed.length;
+  for (const d of tamed) {
     try {
       const owner = ownerOf(d);
       const k = idx[d.id];
