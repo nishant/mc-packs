@@ -4,7 +4,8 @@
 //  - every world/system beforeEvents and afterEvents subscribe,
 //  - custom command callbacks (CustomCommandRegistry.registerCommand),
 // and counts world/entity/item setDynamicProperty writes (and their string size), setActionBar,
-// setTitle and runCommand calls. Callbacks are identified by kind plus the pack's file:line where they were handed
+// setTitle and runCommand calls, and script events by id: sent by this pack (system.sendScriptEvent) and handled by its
+// scriptEventReceive listeners (calls and ms per id; which events a tick's listener time goes to). Callbacks are identified by kind plus the pack's file:line where they were handed
 // over (new Error().stack). The pack's behavior is unchanged: wrappers call the original with the
 // same this/arguments and return its result; exceptions pass through.
 // Bedrock scripting has no high-resolution clock (no performance.now), so times are Date.now()
@@ -25,6 +26,10 @@ let curTick = -1, curMs = 0;
 /** key -> { ms, calls, max } */
 let cbs = new Map();
 let counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0 };
+/** script event id -> times this pack sent it */
+let sent = new Map();
+/** script event id -> { calls, ms } of this pack's scriptEventReceive listeners */
+let handled = new Map();
 
 function reset() {
   startTick = system.currentTick;
@@ -33,6 +38,8 @@ function reset() {
   curTick = -1; curMs = 0;
   cbs = new Map();
   counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0 };
+  sent = new Map();
+  handled = new Map();
 }
 
 function flushTick() {
@@ -63,12 +70,24 @@ function site() {
 
 const wrapped = new WeakMap(); // original callback -> wrapper (for unsubscribe)
 
-function timed(fn, key) {
+function timed(fn, key, byEvent = false) {
   if (typeof fn !== "function") return fn;
-  const w = function (...a) {
-    const s = now();
-    try { return fn.apply(this, a); } finally { record(key, now() - s); }
-  };
+  const w = byEvent
+    ? function (...a) {
+        const s = now();
+        try { return fn.apply(this, a); } finally {
+          const ms = now() - s;
+          record(key, ms);
+          const id = String(a[0] && a[0].id);
+          let h = handled.get(id);
+          if (!h) handled.set(id, (h = { calls: 0, ms: 0 }));
+          h.calls++; h.ms += ms;
+        }
+      }
+    : function (...a) {
+        const s = now();
+        try { return fn.apply(this, a); } finally { record(key, now() - s); }
+      };
   wrapped.set(fn, w);
   return w;
 }
@@ -116,7 +135,8 @@ function patchSignals(owner, prefix) {
     if (!sig || typeof sig.subscribe !== "function") continue;
     const sub = sig.subscribe, unsub = sig.unsubscribe;
     try {
-      sig.subscribe = function (cb, ...rest) { return sub.call(this, timed(cb, label(`${prefix}.${name}`, cb)), ...rest); };
+      const byEvent = name === "scriptEventReceive";
+      sig.subscribe = function (cb, ...rest) { return sub.call(this, timed(cb, label(`${prefix}.${name}`, cb), byEvent), ...rest); };
       if (typeof unsub === "function") sig.unsubscribe = function (cb, ...rest) { return unsub.call(this, (cb && wrapped.get(cb)) || cb, ...rest); };
     } catch (e) { console.warn(`[harness-profile] could not wrap ${prefix}.${name}: ${e}`); }
   }
@@ -148,6 +168,10 @@ function patchCounters() {
   if (ScreenDisplay) count(ScreenDisplay.prototype, "setTitle", () => counters.titles++);
   count(Entity.prototype, "runCommand", () => counters.commands++);
   if (Dimension) count(Dimension.prototype, "runCommand", () => counters.commands++);
+  count(System.prototype, "sendScriptEvent", (a) => {
+    const id = String(a[0]);
+    sent.set(id, (sent.get(id) || 0) + 1);
+  });
 }
 
 function percentile(sorted, p) {
@@ -175,6 +199,8 @@ function dump(final) {
     calls, callsPerTick: calls / n, callbacks: list.length,
     ...counters,
     top: list.slice(0, 5).map((c) => ({ key: c.key.slice(0, 160), ms: c.ms, calls: c.calls, max: c.max })),
+    scriptEventsSent: Object.fromEntries(sent),
+    scriptEventsHandled: Object.fromEntries([...handled].map(([id, h]) => [id, { calls: h.calls, ms: h.ms }])),
   });
   if (final) {
     // Per-tick ms for the whole-bundle per-tick total (run.mjs sums the packs tick by tick).
