@@ -471,7 +471,7 @@ function planOf(target, pending, skip) {
   /** @type {[number, number][]} */
   let plan;
   if (out?.x) plan = out.x;
-  else if (out) plan = before.map((e) => [e.s, e.item.amount]);
+  else if (out) plan = before.map((e) => /** @type {[number, number]} */ ([e.s, e.item.amount]));
   else {
     const inv = target.getComponent("minecraft:inventory")?.container;
     if (!inv) throw new Error("the player's inventory is unavailable");
