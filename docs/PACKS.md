@@ -1132,7 +1132,7 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 | `maxContainers` | `2000` | Most containers remembered; the ones seen longest ago are forgotten first |
 | `maxResults` | `20` | Rows in the results menu |
 | `highlightSeconds` | `10` | How long the bright arrow and direction line show |
-| `privateIndex` | `true` | Players find only containers they opened themselves (or that were shared with them). `false` = the old world-wide index, where anyone finds any remembered container they may open. A world that already had an index before this option was added is set to `false` once, so it keeps the world-wide index until an operator turns this on |
+| `privateIndex` | `true` | Players find only containers they opened themselves (or that were shared with them). `false` = the old world-wide index, where anyone finds any remembered container they may open. A world where Chest Finder had already saved an index or its settings before this option was added is set to `false` once, so it keeps the world-wide index until an operator turns this on. Only Chest Finder's own saved data counts: other packs' data (in the Realm Bundle they share one store and write when a world loads) never makes a new world look old |
 | `containerTypes` | chest, trapped chest, copper chest (all 8: every stage, waxed or not), barrel, placed shulker boxes (all 17 colors) | Block ids that are remembered and searched. Ids this game version doesn't have are skipped |
 
 Operators can change `liveScanRadius`, `maxResults` and `highlightSeconds` in game with `/realm:config`; they apply to the next search.
@@ -1142,7 +1142,7 @@ Operators can change `liveScanRadius`, `maxResults` and `highlightSeconds` in ga
 | Key | Scope | Contents |
 |---|---|---|
 | `find:cfg` | World | Settings changed in `/realm:config` |
-| `find:mig` | World | Set once the world's index mode (private or world-wide) was decided. Old worlds keep the world-wide index until an operator changes `privateIndex` |
+| `find:mig` | World | Set once the world's index mode (private or world-wide) was decided, from `find:idx:0` and `find:cfg` alone. Old worlds keep the world-wide index until an operator changes `privateIndex` |
 | `find:idx:0`, `find:idx:1`, ... | World | The index as JSON shards under 30,000 characters each: `{ "<dimension>:<x>,<y>,<z>": { t: [[itemId, count], …], at: epochMs, b: blockId, w: [openers], o: [placers] } }`, ids without the `minecraft:` prefix. `w` (who opened it) and `o` (who placed it) are kept separately, up to 8 each. Written at most once every 30 seconds, and whenever a player leaves |
 
 ### How it works

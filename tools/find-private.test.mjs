@@ -112,7 +112,9 @@ test("an operator can switch an existing world to private; old entries then wait
   const old = JSON.stringify({ "overworld:10,64,0": { t: [["diamond", 5]], at: 1700000000000, b: "chest" } });
   const w = await world({ shards: [old] });
   const ann = w.mk("Ann");
-  w.sim.props.set("find:cfg", JSON.stringify({ privateIndex: true }));
+  // Through the settings protocol, as /realm:config does (Chest Finder is the only writer of find:cfg and caches it).
+  w.sim.game.deliver("realm:cfg_set", JSON.stringify({ id: "op", pack: "find_bp", key: "privateIndex", value: true }));
+  assert.equal(w.sim.props.get("find:cfg"), undefined, "private is config.js's default, so the override is cleared");
   const f = await w.find(ann, "diamond");
   assert.equal(f, undefined);
 });
@@ -137,9 +139,34 @@ test("migration: a world with only load-time data from other packs is new, so pr
   assert.equal(w.sim.props.get("find:mig"), 1);
 });
 
-test("migration: an existing world with no find shard (other packs' player data) keeps the world-wide index", async () => {
-  const w = await world({ props: { "stats:p1": "{}" } });
+test("migration (F11): other packs' data proves nothing, so a world without Chest Finder data of its own starts private", async () => {
+  // In the Realm Bundle every pack shares one store and many write on world load before Chest Finder decides
+  // (claims:next, crowns:names, party:*, stash:snapshot_next, owed indexes); a world where Chest Finder never saved
+  // anything has no index to keep world-wide either.
+  const w = await world({
+    items: { 10: ["diamond"] },
+    props: { "stats:p1": "{}", "claims:next": "1", "crowns:names": "{}", "party:list": "[]", "stash:snapshot_next": "1", "cooking:owed_idx": "[]" },
+  });
+  assert.equal(w.sim.props.get("find:cfg"), undefined, "no world-wide override written");
+  assert.equal(w.sim.props.get("find:mig"), 1);
+  const ann = w.mk("Ann");
+  const bob = w.mk("Bob");
+  w.open(bob, 10);
+  assert.equal(await w.find(ann, "diamond"), undefined, "the index is private: Ann never opened Bob's chest");
+  assert.ok(ann.messages.some((m) => /private/.test(m)), ann.messages.join("|"));
+});
+
+test("migration (F11): a settings value read before the decision is replaced, so an existing world is world-wide at once", async () => {
+  const w = await world({ shards: [oldShard], load: false });
+  // Something reads Chest Finder's settings before its world-load handler runs (another pack's world-load
+  // handler asking for the settings schema, in the bundle): the settings module caches what it read then.
+  w.sim.game.deliver("realm:cfg_ping", JSON.stringify({ id: "early" }));
+  w.sim.game.emit("world.after.worldLoad", {});
   assert.equal(JSON.parse(w.sim.props.get("find:cfg")).privateIndex, false);
+  const ann = w.mk("Ann");
+  const f = await w.find(ann, "diamond");
+  assert.ok(f, "Ann finds the old entry right away, not only after a restart");
+  assert.equal(f.form.buttons.length, 1);
 });
 
 test("migration: saved find settings alone mean an existing world, other settings kept", async () => {
