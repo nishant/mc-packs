@@ -113,12 +113,13 @@ export function planMigration(towns, bram, radius, names) {
 }
 
 /**
- * The mayor of a town being added: Bram for the realm's first town (when no town has him), else its own.
+ * The mayor of a town being added: Bram when no town has him (the realm's first town, or the next one after his town
+ * was removed), else its own. While an older town still waits for migration (no `v: 2`) Bram stays free for it (D19).
  * @param {TownLike[]} existing @param {string} townId @param {string} townName @param {string[]} names
  * @returns {{ m: string, mn?: string }}
  */
 export function newTownMayor(existing, townId, townName, names) {
-  if (!existing.length) return { m: BRAM };
+  if (existing.every((t) => t.v === 2 && t.m !== BRAM)) return { m: BRAM };
   const used = existing.flatMap((t) => (t.mn ? [t.mn] : []));
   return { m: mayorIdFor(townId), mn: pickMayorName(names, used, townName) };
 }

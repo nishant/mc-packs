@@ -41,6 +41,11 @@ test("newTownMayor: Bram for the first town, then each its own", () => {
   assert.deepEqual(newTownMayor([], "riverside", "Riverside", ["Alda"]), { m: BRAM });
   assert.deepEqual(newTownMayor([town("riverside", { m: BRAM, v: 2 })], "oakfield", "Oakfield", ["Alda", "Corwin"]), { m: "mayor:oakfield", mn: "Mayor Alda" });
   assert.deepEqual(newTownMayor([town("riverside", { m: BRAM, v: 2 }), town("oakfield", { m: "mayor:oakfield", mn: "Mayor Alda", v: 2 })], "elm", "Elm", ["Alda", "Corwin"]), { m: "mayor:elm", mn: "Mayor Corwin" });
+  // Bram's town was removed: the next town added is his again (design note section 3, review).
+  assert.deepEqual(newTownMayor([town("oakfield", { m: "mayor:oakfield", mn: "Mayor Alda", v: 2 })], "elm", "Elm", ["Alda", "Corwin"]), { m: BRAM });
+  // An older town still waits for migration (no v): Bram stays free for it (D19).
+  assert.deepEqual(newTownMayor([town("riverside")], "elm", "Elm", ["Alda"]), { m: "mayor:elm", mn: "Mayor Alda" });
+  assert.deepEqual(newTownMayor([town("riverside"), town("oakfield", { m: "mayor:oakfield", mn: "Mayor Corwin", v: 2 })], "elm", "Elm", ["Alda", "Corwin"]), { m: "mayor:elm", mn: "Mayor Alda" });
 });
 
 test("offerTowns: its own town anywhere, the nearest-town rule only as a fallback", () => {
