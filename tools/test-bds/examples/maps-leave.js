@@ -66,8 +66,11 @@ export default async function (t) {
     // The pack checks every second; once it starts, the search reads 300 blocks a second for several seconds.
     await t.wait(20 + delays[k]);
     const early = t.messages(p, { since }).some((m) => /grows warm|ink shifts|washed up/i.test(m.plain));
-    t.server(`/tickingarea remove ${area.name}`);
+    // Loaded land, then the player actually away, and only then the land unloads: the search must not end up moving the treasure.
     p.teleport({ x: home.x + 0.5, y: home.y, z: home.z + 0.5 });
+    await t.wait(1);
+    await t.waitUntil(() => Math.hypot(p.location.x - spot.x, p.location.z - spot.z) > 200, { timeout: 40, message: "the player is away from the spot" });
+    t.server(`/tickingarea remove ${area.name}`);
     if (early) {
       t.log(`  ${spot.x}, ${spot.z}: settled before the player left (delay ${delays[k]})`);
       continue;
