@@ -225,9 +225,9 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
   stored inventory pages and saved ground of town projects as structures inside it.
 - **Versions:** every pack's version is in its `manifest.json`. The bundles' versions are their build time in UTC
   (`YYYY.MMDD.HHMM`), so every build is higher than the last; a single pack counts up (`1.4.2`).
-- **Updating:** It is assumed the Realm Bundle and Realm Resources get uploaded to the Realm after each release; the owner does it.
-  On a Realm, the owner then checks that the Realm's active pack shows the new version
-  (if not, deactivate and activate it again). On BDS, stop the server, replace the folders and the `version` in the
+- **Updating:** on a Realm, the Realm's owner opens the new Realm Bundle and Realm Resources `.mcpack` files (Minecraft
+  imports them), activates both in the Realm's settings, then checks that the Realm's active packs show the new versions
+  (if not, deactivate and activate them again). On BDS, stop the server, replace the folders and the `version` in the
   two world JSON files, start it. Settings and progress stay: they are in the world, and the bundles keep their uuid.
 - **Update both bundles together.** Realm Resources draws what the Realm Bundle's scripts send: the Minimap's icon
   font and the side boxes' layout must match the scripts that fill them, and the rain and sky effects need their
