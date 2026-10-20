@@ -3,7 +3,10 @@
 // world or one busy spot no longer fills up with champions as night falls. Before O3 (4b79281^) a fixed maxAlive of 8
 // let one player meet four here and a fourth join three neighbors: this fails there at "one player online: 1 champion".
 // Hostile spawns are made by the scenario at chosen spots 50+ blocks apart (natural ones keep areaSpacing, 48 blocks),
-// with every spawn a champion candidate (chance 0.25 x the Blood Moon multiplier 4).
+// with every spawn a champion candidate (chance 0.25 x the Blood Moon multiplier 4). Every spot has a player within 40
+// blocks for the whole run: BDS 1.26 despawns a hostile mob 44 or more blocks from every player within 2 ticks (measured),
+// before the pack's conversion a tick later could see it, and would take a champion from its spot. Where the players
+// stand changes no cap (those count players online, and champions near a spot).
 //   node tools/test-bds/run.mjs --quiet --flat --only elite_bp --scenario tools/test-bds/examples/elite-density.js --timeout 600
 export default async function (t) {
   const dim = t.dimension;
@@ -11,13 +14,13 @@ export default async function (t) {
   t.server("/gamerule doMobSpawning false");
   t.server("/time set midnight");
   t.server("/gamerule doDaylightCycle false");
-  const first = await t.player("Solo", { x: 0, z: -120, gameMode: "creative" });
+  const first = await t.player("Solo", { x: 25, z: 25, gameMode: "creative" }); // 35 blocks from spots 1 and 2
   cfg("chance", 0.25);
   cfg("bloodMoonMultiplier", 4);
   t.system.sendScriptEvent("realm:moon", JSON.stringify({ state: "blood" }));
   await t.wait(10);
-  // Spots: P4 has P1-P3 within 64 blocks; every two are at least 48 apart; P5 is far from all.
-  const P = { 1: [50, 0], 2: [0, 50], 3: [-50, 0], 4: [0, 0], 5: [200, 200] };
+  // Spots: P4 has P1-P3 within 64 blocks; every two are at least 48 apart; P5 is more than 64 from all.
+  const P = { 1: [50, 0], 2: [0, 50], 3: [-50, 0], 4: [0, 0], 5: [0, -110] };
   const ground = {};
   for (const [k, [x, z]] of Object.entries(P)) ground[k] = (await t.loadArea(x, z, { radius: 2 })).top.location.y + 1;
   const champions = () => dim.getEntities({ tags: ["realm:champion"] });
@@ -40,7 +43,9 @@ export default async function (t) {
   t.check(count() === 1 && at(1), `one player online: 1 champion (${count()})`);
 
   // Five players: 5 x 0.8 = 4 at most; spots 2 and 3 become champions, spot 4 already has three neighbors.
-  for (const name of ["Ann", "Bob", "Cid", "Dee"]) await t.player(name, { x: 0, z: -120, gameMode: "creative" });
+  // Each by a spot the first player is too far from (Dee stays with Solo).
+  const stand = { Ann: [-50, -10], Bob: [0, -10], Cid: [0, -100], Dee: [25, 25] };
+  for (const [name, [x, z]] of Object.entries(stand)) await t.player(name, { x, z, gameMode: "creative" });
   await t.wait(10);
   await spawnAt(2);
   await spawnAt(3);
