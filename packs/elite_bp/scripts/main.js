@@ -731,9 +731,30 @@ const WALK_THROUGH =
 /** Ground it never steps onto: what mobs can't climb over, what burns or pricks, and fluids. */
 const NO_STEP_ON = /fence|wall|_gate|magma|campfire|fire|cactus|sweet_berry|powder_snow|lava|water|scaffolding|pointed_dripstone/;
 
-/** Can a mob stand in this block (feet or head)? @param {import("@minecraft/server").Block | undefined} b */
+/** @typedef {{ isAir: boolean, isLiquid: boolean, typeId: string }} BlockLook */
+/**
+ * The blocks read during one approach run, by dimension and place: a step tries several angles and each looks at the
+ * same few columns (its center, its leading edge, both corners, from head height down), so a block is read once a run
+ * instead of once per look. Only within a run (one tick): nothing is kept between runs. @type {Map<string, BlockLook | undefined> | undefined}
+ */
+let runBlocks;
+/**
+ * A block's air, liquid and type, read once per approach run (`runBlocks`), or straight from the game outside a run.
+ * Undefined where `getBlock` gives nothing; an unloaded chunk throws, as `getBlock` does.
+ * @param {Dimension} dim @param {Vector3} at @returns {BlockLook | undefined}
+ */
+function lookAt(dim, at) {
+  const key = runBlocks && `${dim.id}|${at.x}|${at.y}|${at.z}`;
+  if (key && runBlocks?.has(key)) return runBlocks.get(key);
+  const b = dim.getBlock(at);
+  const look = b ? { isAir: b.isAir, isLiquid: b.isLiquid, typeId: b.typeId } : undefined;
+  if (key) runBlocks?.set(key, look);
+  return look;
+}
+
+/** Can a mob stand in this block (feet or head)? @param {BlockLook | undefined} b */
 const open = (b) => !!b && !b.isLiquid && (b.isAir || WALK_THROUGH.test(b.typeId));
-/** Can a mob stand on this block? @param {import("@minecraft/server").Block | undefined} b */
+/** Can a mob stand on this block? @param {BlockLook | undefined} b */
 const ground = (b) => !!b && !b.isAir && !b.isLiquid && !WALK_THROUGH.test(b.typeId) && !NO_STEP_ON.test(b.typeId);
 
 /**
@@ -752,7 +773,7 @@ function stepTo(dim, from, x, z) {
   const fy = Math.floor(from.y + 0.01);
   /** Are blocks y1..y2 of column (cx, cz) all open? @param {number} cx @param {number} cz @param {number} y1 @param {number} y2 */
   const clear = (cx, cz, y1, y2) => {
-    for (let y = y1; y <= y2; y++) if (!open(dim.getBlock({ x: cx, y, z: cz }))) return false;
+    for (let y = y1; y <= y2; y++) if (!open(lookAt(dim, { x: cx, y, z: cz }))) return false;
     return true;
   };
   for (const dy of [0, 1, -1, -2, -3]) {
@@ -760,14 +781,14 @@ function stepTo(dim, from, x, z) {
     if (y - from.y > 1.01) continue; // no higher than a jump
     const top = Math.max(y, fy) + 1; // the highest block it passes through: its head, at the higher of the two heights
     if (!clear(bx, bz, y, top)) continue; // a step down needs the whole column clear, a wall in front stops it
-    const below = dim.getBlock({ x: bx, y: y - 1, z: bz });
+    const below = lookAt(dim, { x: bx, y: y - 1, z: bz });
     if (!ground(below)) {
       // Air below: only fine further down (the drop is checked by the next dy).
       if (below && (below.isAir || WALK_THROUGH.test(below.typeId))) continue;
       return undefined;
     }
     // A step up also needs room above its own head.
-    if (dy > 0 && !open(dim.getBlock({ x: fx, y: fy + 2, z: fz }))) return undefined;
+    if (dy > 0 && !open(lookAt(dim, { x: fx, y: fy + 2, z: fz }))) return undefined;
     if (bx !== fx && bz !== fz && !clear(bx, fz, Math.max(y, fy), top) && !clear(fx, bz, Math.max(y, fy), top)) return undefined;
     return { x, y, z };
   }
@@ -842,7 +863,7 @@ function feet(e) {
   const v = e.getVelocity();
   if (v.y < -0.5 || Math.hypot(v.x, v.z) > 0.4) return undefined;
   for (let y = Math.floor(at.y + 0.01); y >= Math.floor(at.y) - 2; y--) {
-    const b = e.dimension.getBlock({ x: Math.floor(at.x), y: y - 1, z: Math.floor(at.z) });
+    const b = lookAt(e.dimension, { x: Math.floor(at.x), y: y - 1, z: Math.floor(at.z) });
     if (!b || b.isLiquid) return undefined;
     if (ground(b)) return at.y - y <= 1.3 ? { x: at.x, y, z: at.z } : undefined;
     if (!open(b)) return undefined;
@@ -1033,7 +1054,17 @@ function approachRun() {
   sortNear();
   const turn = turnOf(nearIds("approach"), approachCursor, APPROACH_PER_RUN);
   approachCursor = turn.last;
-  for (const id of turn.batch) {
+  runBlocks = new Map();
+  try {
+    approachTurns(turn.batch, speed, now);
+  } finally {
+    runBlocks = undefined;
+  }
+}
+
+/** The approach steps of one run's champions. @param {string[]} batch @param {number} speed @param {number} now */
+function approachTurns(batch, speed, now) {
+  for (const id of batch) {
     const e = live.get(id);
     if (!e) continue;
     if (!e.isValid) {

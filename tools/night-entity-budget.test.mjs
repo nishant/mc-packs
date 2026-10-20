@@ -26,6 +26,13 @@ function line(source, name, fallback) {
   return `const ${name} = ${fallback};`;
 }
 
+/** A top-level `const NAME = ...;` that may span lines. @param {string} source @param {string} name */
+function stmt(source, name) {
+  const m = source.match(new RegExp(`^const ${name} =[\\s\\S]*?;$`, "m"));
+  assert.ok(m, `production ${name}`);
+  return m[0];
+}
+
 const vec = (x, y = 64, z = 0) => ({ x, y, z });
 const OVER = "minecraft:overworld";
 
@@ -108,6 +115,8 @@ function eliteContext({ champions, players, config = {}, tick = 1000, at = (i) =
     /^const nearIds = /m.test(elite) ? line(elite, "nearIds") : "",
     fn(elite, "aura"),
     optFn(elite, "approachRun"),
+    optFn(elite, "approachTurns"),
+    /^let runBlocks;/m.test(elite) ? "let runBlocks;" : "",
     fn(elite, "convert").replace(/\n {2}if \(get\("surfaceOnly"\)[\s\S]*$/, "\n  return true;\n}"),
     "globalThis.api = { aura, convert, set loaded(v) { loaded = v; }, detours };",
   ].join("\n");
@@ -373,4 +382,37 @@ test("wander upkeep: no camps, or the pack disabled, reads no player's place", (
   ctx.enabled = false;
   run();
   assert.equal(reads, 0, "disabled: no reads");
+});
+test("approach: one run reads each block once, however many angles its steps try", () => {
+  // A champion boxed in by a wall: every angle of a step and of its detour looks at the same few columns.
+  const code = [
+    stmt(elite, "WALK_THROUGH"),
+    line(elite, "NO_STEP_ON"),
+    /^let runBlocks;/m.test(elite) ? "let runBlocks;" : "let runBlocks;",
+    optFn(elite, "lookAt"),
+    line(elite, "open"),
+    line(elite, "ground"),
+    line(elite, "BODY"),
+    line(elite, "SIDE"),
+    fn(elite, "stepTo"),
+    fn(elite, "bodyStep"),
+    "globalThis.run = (dim, at, angles) => { if (typeof lookAt === 'function') runBlocks = new Map(); try { return angles.map((a) => bodyStep(dim, at, a, 0.5)); } finally { runBlocks = undefined; } };",
+  ].join("\n");
+  let reads = 0;
+  const dim = {
+    id: OVER,
+    getBlock: ({ x, y }) => {
+      reads++;
+      const wall = x >= 2; // a wall from x 2 on, ground below y 64
+      return { isAir: !(y < 64 || wall), isLiquid: false, typeId: y < 64 || wall ? "minecraft:stone" : "minecraft:air" };
+    },
+  };
+  const ctx = { Math };
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  const angles = [-2, -1, 0, 1, 2, 3, 4].map((k) => (k * Math.PI) / 4);
+  const at = { x: 1.5, y: 64, z: 0.5 };
+  const result = ctx.run(dim, at, angles);
+  assert.ok(result.some((r) => r === undefined) && result.some((r) => r !== undefined), "the wall blocks some angles and not others");
+  assert.ok(reads <= 60, `7 angles of one step read ${reads} blocks`);
 });
