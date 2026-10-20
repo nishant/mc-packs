@@ -5,8 +5,14 @@ A dedicated server draws nothing, so these checks need a real game. Run them on 
 townsfolk's floor. Each check says what to do, what you should see (PASS) and what counts as a problem (FAIL).
 Write the result in the table at the end, one line per check, with a screenshot when something looks wrong.
 
-Time: about 90 minutes for everything. The checks are independent; do them in any order and skip what you can't
-do today (write "not run").
+**Run it only after the fix campaign's release is live.** The last release before it is Realm Bundle and Realm
+Resources `2026.1020.532` (Welcome Message `1.5.10`). On https://mc.nish.software/realm/ both bundles must show a
+version later than `2026.1020.532` and Welcome Message `1.5.11` or later; with an older build the fixed items still
+fail and get reported as broken.
+
+Time: about 90 minutes for everything. Do **A5 first**, in the fresh world before anyone places a townsfolk
+(`/realm:npc_add`) or accepts a story: it checks who the welcome names before and after placing. The other checks
+are independent; do them in any order and skip what you can't do today (write "not run").
 
 ## 0. Set up the test world (once, about 10 minutes)
 
@@ -14,7 +20,7 @@ do today (write "not run").
    open both files: Minecraft imports them.
 2. Create a new world: **Survival**, a normal (not flat) world, **Activate cheats: on** (needed for `/time`,
    `/gamemode` and `/scriptevent`). Under **Behavior Packs** activate **Realm Bundle**, under **Resource Packs**
-   **Realm Resources**. Check both list the version the realm page shows.
+   **Realm Resources**. Check both list the version the realm page shows (later than `2026.1020.532`, see above).
 3. Start the world on the PC. Open it to LAN / friends.
 4. On the phone, sign in with **a second account** (a family or alt account; the phone can't join as the same
    account) and join the PC's world over the same Wi-Fi. Without a second account, do every check on each device in
@@ -76,7 +82,9 @@ Useful commands (operator):
 - FAIL: a black square after turning the radar off; a strip or radar that stops updating; a stutter you only see at
   one level (say which).
 
-### A5. Welcome popup and Realm News on a phone
+### A5. Welcome popup and Realm News on a phone (do this one first)
+0. Run it before any other check: nobody may be placed with `/realm:npc_add` yet (if Old Tobin or Mara already
+   stands in the world, start a new test world for this check).
 1. Join the test world with an account that hasn't joined before (or run `/realm:welcome_show`).
 2. Then `/realm:npc_add tobin` somewhere, and run `/realm:welcome_show` again a few seconds later.
 - PASS: one popup, three short bold gold headings (`The World`, `What You Can Do`, `Where To Go Next`), normal-size
