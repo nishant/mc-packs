@@ -6,12 +6,27 @@ const periods = new Map();
 let respectPeriods = false;
 let nextId = 1;
 
-function events() {
+/** event key ("world.before.playerInteractWithBlock") -> subscribed callbacks, for tests that fire events */
+const handlers = new Map();
+function events(scope) {
   return new Proxy({}, {
-    get() {
-      return { subscribe() { return { unsubscribe() {} }; } };
+    get(_, name) {
+      return {
+        subscribe(fn) {
+          const key = `${scope}.${String(name)}`;
+          if (!handlers.has(key)) handlers.set(key, []);
+          handlers.get(key).push(fn);
+          return fn;
+        },
+        unsubscribe() {},
+      };
     },
   });
+}
+/** Calls every callback subscribed to `key` (e.g. "world.before.playerInteractWithBlock") with ev. */
+export function fireEvent(key, ev) {
+  for (const fn of handlers.get(key) ?? []) fn(ev);
+  return ev;
 }
 
 export class Player {}
@@ -112,8 +127,8 @@ export const world = {
   },
   getDimension: dimension,
   getAllPlayers() { return players.slice(); },
-  afterEvents: events(),
-  beforeEvents: events(),
+  afterEvents: events("world.after"),
+  beforeEvents: events("world.before"),
   getLootTableManager() { return undefined; },
 };
 export const system = {
@@ -128,8 +143,8 @@ export const system = {
   run(fn) { fn(); },
   clearRun(id) { intervals.delete(id); },
   sendScriptEvent() {},
-  afterEvents: events(),
-  beforeEvents: events(),
+  afterEvents: events("system.after"),
+  beforeEvents: events("system.before"),
 };
 /** Off by default (every interval runs every tick, as the older tests expect); on: each runs every `every` ticks. */
 export function setRespectPeriods(on) { respectPeriods = !!on; }

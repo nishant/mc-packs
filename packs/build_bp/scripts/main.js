@@ -41,7 +41,7 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, allPlayers, buildingBookHands, handKnown, markHandDirty, refreshHand } from "./utils/Items.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, allPlayers, buildingBookHands, handKnown, handTypeId, markHandDirty, refreshHand } from "./utils/Items.js";
 import { createIdleClock, idleDue } from "./utils/idle-cadence.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 import { bedPartnerPos, dropIncompleteBeds, expandDestroyForClaims, expandForClaims, isBedType } from "./core/beds.js";
@@ -319,6 +319,22 @@ export function confirmPlacement(player, fallbackTarget) {
         }
     });
 }
+/**
+ * F8: a build anchor stays while the player holds something else (a sword, food), it is just not drawn. Starting over
+ * with a different block or tool replaces it: another block on a block or destroy anchor, or a digging tool on a block
+ * anchor. Changing the mode clears it too. Returns true when it was replaced.
+ */
+function replaceStaleAnchor(player, state, typeId) {
+    if (!state.anchor || !typeId || state.mode === "copy_paste") return false;
+    const destroyAnchor = state.blockTypeId === "eb:destroy";
+    const stale = isDiggingTool(typeId)
+        ? !destroyAnchor
+        : isValidBlock(typeId) && typeId !== state.blockTypeId;
+    if (!stale) return false;
+    clearAnchor(player);
+    clearPreviewCache(player.id);
+    return true;
+}
 const DIR_OFFSET = {
     Up: { x: 0, y: 1, z: 0 },
     Down: { x: 0, y: -1, z: 0 },
@@ -405,6 +421,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
         system.run(() => showCopyCutPrompt(player, corner1, corner2));
         return;
     }
+    replaceStaleAnchor(player, state, item?.typeId);
     if (isDiggingTool(item?.typeId)) {
         if (state.mode === "air_build") {
             if (!state.anchor) {
@@ -621,6 +638,8 @@ world.afterEvents.itemUse.subscribe(ev => {
         system.run(() => showCopyCutPrompt(player, airCorner1, airCorner2));
         return;
     }
+    // In the air a new anchor needs Infinite Reach, so only then does a different block or tool replace the old one.
+    if (state.mode !== "disable" && state.mode !== "air_build" && getInfiniteReach(player)) replaceStaleAnchor(player, state, item?.typeId);
     if (isDiggingTool(item?.typeId) && state.mode !== "disable") {
         if (!state.anchor) {
             if (!getAllowDestroy()) {
@@ -838,7 +857,10 @@ system.runInterval(() => {
         try {
             if (player.isValid === false) { zoomedPlayers.delete(player.id); continue; }
             const state = getState(player);
-            const selecting = state.mode !== "disable" && state.mode !== "copy_paste" && !!state.anchor && getFovZoomEnabled(player);
+            // Zoom only while the anchor is drawn: an anchor kept while holding a sword or food (F8) does not zoom.
+            const typeId = state.anchor ? handTypeId(player) : null;
+            const drawn = state.blockTypeId === "eb:destroy" ? isDiggingTool(typeId) : !!typeId && typeId === state.blockTypeId;
+            const selecting = state.mode !== "disable" && state.mode !== "copy_paste" && !!state.anchor && drawn && getFovZoomEnabled(player);
 
             if (!selecting) {
                 zoomedPlayers.delete(player.id);

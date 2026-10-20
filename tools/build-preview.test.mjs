@@ -151,6 +151,29 @@ test("F7: survival players holding blocks with building off keep the preview asl
   for (const p of crowd) p.isValid = false;
 });
 
+test("F8: switching to a sword or food keeps the anchor, and switching back draws it again", () => {
+  const p = builder(2000, "minecraft:stone");
+  setMode(p, "line");
+  setAnchor(p, { x: 2002, y: 64, z: 0 }, "minecraft:stone", {});
+  mc.flushIntervals(30);
+  for (const other of ["minecraft:diamond_sword", "minecraft:apple", null]) {
+    switchTo(p, other);
+    mc.flushIntervals(10);
+    assert.ok(getState(p).anchor, `the anchor survives holding ${other ?? "nothing"}`);
+    assert.equal(getState(p).blockTypeId, "minecraft:stone");
+  }
+  switchTo(p, "minecraft:stone");
+  particles.length = 0;
+  mc.flushIntervals(30);
+  assert.ok(particles.some((q) => q.at.x > 2002 && q.at.x < 2030), "the anchored line is drawn again");
+  const count = Number(/§f(\d+) blocks/.exec(text(p.bars.at(-1)))?.[1]);
+  assert.ok(count > 1, "and counted");
+  // Ending the mode still clears it.
+  setMode(p, "disable");
+  assert.equal(getState(p).anchor, null);
+  p.isValid = false;
+});
+
 test("F48: every loop that asks in the same tick sees the same released players", () => {
   const gate = gateMod.createToolGate();
   const a = { id: "a" }, b = { id: "b" };

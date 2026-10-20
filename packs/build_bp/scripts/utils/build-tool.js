@@ -1,8 +1,8 @@
 // A building tool is in hand when the player is actually building (F7): the Building Book or the Tutorial Book, Copy /
 // Paste mode (an empty hand is still a valid paste), or a placeable block or digging tool while a build mode is on or a
 // Mirror, Array or Radial modifier is (the arms show where hand-placed blocks go). A survival player holding dirt with
-// building off holds no tool, so the preview loops stay asleep. An anchor alone is not a tool: the preview must notice
-// a lost tool and clear it.
+// building off holds no tool, so the preview loops stay asleep. An anchor alone is not a tool either (F8: the anchor is
+// kept while the player holds something else, it is just not drawn).
 import { BlockPermutation } from "@minecraft/server";
 import { getState, anyModifierEnabled } from "../core/PlayerState.js";
 import { isDiggingTool } from "../core/BlockDestroyer.js";

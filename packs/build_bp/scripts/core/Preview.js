@@ -350,14 +350,14 @@ function previewBedPositions(positions, typeId, player, blockStates) {
     return expanded.map((p) => ({ x: p.x, y: p.y, z: p.z, states: p._resolvedStates }));
 }
 
-/** A player stopped holding a tool: forget what was drawn for them and clear their anchor. */
+/** A player stopped holding a tool: forget what was drawn for them, and clear an anchor only in "Disable". */
 function releasePreview(player) {
     try {
         lastPreviewTarget.delete(player.id);
         previewCache.delete(player.id);
         previewBusy.delete(player);
         const state = getState(player);
-        if (state.anchor) clearAnchor(player);
+        if (state.anchor && state.mode === "disable") clearAnchor(player);
     } catch {}
 }
 
@@ -368,7 +368,9 @@ export function startPreviewLoop() {
 
         if (visualizationIdle()) return;
         const open = beginVisualizationTick(allPlayers(), holdsBuildTool, system.currentTick);
-        // Put away what this preview drew for players who just stopped holding a tool, and their anchor.
+        // Put away what this preview drew for players who just stopped holding a tool. Their anchor stays (F8): it
+        // is drawn again when they hold the block or tool it was set with. Only an anchor left over in "Disable"
+        // (which never builds) is cleared.
         for (const player of visualizationReleased()) releasePreview(player);
         if (!open) return;
         tpsPart.text = `  §8-  ${tpsText()}`;
@@ -669,10 +671,10 @@ export function startPreviewLoop() {
                 if (previewMode === "disable" && !isDestroy) continue;
                 // The hand cache is dropped on every hotbar or selected-slot change, so a few ticks old is still current.
                 const held = heldItemCached(player, IDLE_EVERY);
+                // Holding something else: the anchor is kept and just not drawn (F8).
                 if (isDestroy ? (!held || !isDiggingTool(held.typeId)) : (!held || held.typeId !== state.blockTypeId)) {
                     lastPreviewTarget.delete(player.id);
                     previewCache.delete(player.id);
-                    clearAnchor(player);
                     continue;
                 }
                 if (player.dimension.id !== state.anchor.dimensionId) {
