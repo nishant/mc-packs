@@ -25,7 +25,7 @@ import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } f
 import { PEN_ID, addLog, cleanText, houseCount, isWorkId, logLine, makePen, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
 import { CLEARABLE, POSTS_MAX, boardTexts, packCells, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
-import { TICKS_PER_MINUTE, addNew, allocate, homeAt, homesFor, livingOf, lookEvent, lookFor, pickName, plan, readResidents, reconcile, ridOf, ridTag, slotCount } from "./residents.js";
+import { HOME_LEASH, TICKS_PER_MINUTE, addNew, allocate, homeAt, homesFor, livingOf, lookEvent, lookFor, pickName, plan, readResidents, reconcile, ridOf, ridTag, slotCount } from "./residents.js";
 import { spawnFresh } from "./spawn.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
@@ -3350,6 +3350,7 @@ const RESIDENT_TAG = "realm:resident";
 const RESIDENT_PROP = "realm:resident"; // the entity property town_bp's villager_v2 file adds; true once a resident
 const CENSUS_TICKS = 600;
 const MOVE_CLEAR = 24; // a family moves house only while no player is this close to its old or new home
+const WATCHED = 16; // a resident strayed past HOME_LEASH is brought home only while no player is this close to it
 const SPAWNS_PER_CENSUS = 2; // new families, replacements and moves at most per census
 /** Each town's residents (town:r:<town>), cached; this pack is the only writer. @type {Map<string, import("./residents.js").Residents>} */
 const resCache = new Map();
@@ -3549,7 +3550,10 @@ function census(t) {
       // unloaded meanwhile
     }
   }
-  const res = reconcile({ rs, town: t.id, found, loaded: (r) => isLoaded(dim, anchorOf(t, r.h, r.s)), center, radius: get("townRadius"), now, replaceTicks: replaceTicks() });
+  // A player within WATCHED of a stray: it isn't brought home before their eyes (the next census tries again).
+  const near = world.getAllPlayers().filter((pl) => pl.dimension.id === t.dim).map((pl) => pl.location);
+  const watched = (/** @type {number} */ x, /** @type {number} */ z) => near.some((v) => Math.hypot(v.x - x, v.z - z) <= WATCHED);
+  const res = reconcile({ rs, town: t.id, found, loaded: (r) => isLoaded(dim, anchorOf(t, r.h, r.s)), center, radius: get("townRadius"), now, replaceTicks: replaceTicks(), home: (r) => (r.h ? anchorOf(t, r.h, r.s) : undefined), leash: HOME_LEASH, watched });
   rs = res.rs;
   let changed = res.changed;
   const entity = new Map(ents.map((e) => [e.id, e]));

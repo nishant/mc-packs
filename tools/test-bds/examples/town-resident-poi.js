@@ -1,6 +1,6 @@
 // Town Projects, residents never take a player's bed (gate D2, F39): the well's 2 residents and a player's bed 5 blocks
-// from it, through a night (from time 13000, 1,600 ticks: the villagers' bed time): the bed is never occupied and the
-// residents stay within 24 blocks of their home. Then the control: an ordinary villager spawned beside the same bed
+// from it, through a night (from time 13000, 1,600 ticks: the villagers' bed time): no resident ever sleeps (on that
+// bed or any) and one that strays more than 32 blocks from home is brought back by the next census. Then the control: an ordinary villager spawned beside the same bed
 // claims it and sleeps in it that night, so the check can tell a claim. Passing this is what lets `residents` default
 // to Enabled (decision D2/D42); a failure means residents stay Disabled.
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-resident-poi.js --timeout 6000
@@ -53,27 +53,32 @@ export default async function (t) {
   const onBed = (e) => [foot, head].some((v) => Math.hypot(e.location.x - (v.x + 0.5), e.location.z - (v.z + 0.5)) <= 1.5);
   const occupied = () => dim.getEntities({ type: "minecraft:villager_v2" }).some((e) => e.isSleeping && onBed(e));
   let residentSlept = false;
-  const homes = residents().map((e) => ({ id: e.id, x: e.location.x, z: e.location.z }));
 
   // Night: the residents' bed time.
   t.server("/time set 13000");
   let claimed = false;
-  let far = 0;
+  // How far each resident is from its home (beside the well), and for how long in a row past the census's leash
+  // (residents.js HOME_LEASH, 32, plus 4 for where beside the well it stands): a census (every 600 ticks) brings a
+  // stray back, so none stays past it for more than 40 readings (800 ticks).
+  const LEASH = 32 + 4;
+  const past = new Map();
+  let longest = 0;
   let farthest = 0;
   for (let k = 0; k < 80; k++) {
     await t.wait(20);
     if (occupied()) claimed = true;
     if (residents().some((e) => e.isSleeping)) residentSlept = true;
     for (const e of residents()) {
-      const h = homes.find((x) => x.id === e.id);
-      const dist = h ? Math.hypot(e.location.x - h.x, e.location.z - h.z) : 0;
+      const dist = Math.hypot(e.location.x - (s.x + 0.5), e.location.z - (s.z + 0.5));
       farthest = Math.max(farthest, dist);
-      if (dist > 24) far++;
+      const n = dist > LEASH ? (past.get(e.id) ?? 0) + 1 : 0;
+      past.set(e.id, n);
+      longest = Math.max(longest, n);
     }
   }
   t.check(!claimed, "no resident slept in the player's bed through the night");
   t.check(!residentSlept, "no resident slept anywhere (they claim no bed)");
-  t.check(far === 0, `the residents stayed within 24 blocks of home (${far} readings past it, farthest ${farthest.toFixed(1)})`);
+  t.check(longest <= 40, `a stray is brought home: none stayed past ${LEASH} blocks from the well for more than 40 readings (longest ${longest}, farthest ${farthest.toFixed(1)})`);
   t.check(residents().length === 2, "both still there");
 
   // The control: an ordinary villager claims the same bed, so the check above can tell a claim.

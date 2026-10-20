@@ -9,6 +9,8 @@ export const WELL_HOMES = 2;
 export const RESIDENT_MAX = 10;
 /** Censuses in a row a resident may be missing (while its home is loaded) before it counts as gone. */
 export const MISS_LIMIT = 2;
+/** Blocks a resident may stray from its home before a census brings it back (vanilla villagers explore the outskirts at dusk). */
+export const HOME_LEASH = 32;
 /** Newest residents' names kept for the notice board. */
 export const NEW_KEEP = 5;
 /** In-game ticks in an in-game minute (20 minutes are one in-game day of 24,000 ticks). */
@@ -166,12 +168,14 @@ export function ridOf(town, tags) {
  * - A found entity is a record's resident when its rid matches, the record is alive, and no other entity with the same
  *   rid is that record's entity id; every other one loses the town's tags (a cured zombie villager, a stray left from
  *   a move or a replaced family): never killed.
- * - A resident found resets its missing count and, farther than `radius` from the center, is sent home (`teleport`).
+ * - A resident found resets its missing count and, farther than `radius` from the center, is sent home (`teleport`);
+ *   so is one farther than `leash` from its `home`, unless a player is near it (`watched`).
  * - A living resident not found while its home is loaded is missing; MISS_LIMIT censuses in a row and it is gone: a new
  *   family replaces it at `now + replaceTicks`.
  * Returns the records (changed copies) and what to do.
  * @param {{ rs: Residents, town: string, found: { id: string, rid?: number, x: number, z: number }[], loaded: (r: Resident) => boolean,
- *   center: { x: number, z: number }, radius: number, now: number, replaceTicks: number }} o
+ *   center: { x: number, z: number }, radius: number, now: number, replaceTicks: number,
+ *   home?: (r: Resident) => { x: number, z: number } | undefined, leash?: number, watched?: (x: number, z: number) => boolean }} o
  * @returns {{ rs: Residents, untag: string[], teleport: { id: string, s: number }[], gone: number[], changed: boolean }}
  */
 export function reconcile(o) {
@@ -204,7 +208,9 @@ export function reconcile(o) {
     if (rec.e !== keep.id || rec.m) changed = true;
     rec.e = keep.id;
     delete rec.m;
-    if (Math.hypot(keep.x - o.center.x, keep.z - o.center.z) > o.radius) teleport.push({ id: keep.id, s: rec.s });
+    const home = o.home?.(rec);
+    const strayed = !!home && o.leash !== undefined && Math.hypot(keep.x - home.x, keep.z - home.z) > o.leash && !o.watched?.(keep.x, keep.z);
+    if (strayed || Math.hypot(keep.x - o.center.x, keep.z - o.center.z) > o.radius) teleport.push({ id: keep.id, s: rec.s });
   }
   for (const rec of rs.r) {
     if (rec.d !== undefined || matched.has(rec.s) || !o.loaded(rec)) continue;

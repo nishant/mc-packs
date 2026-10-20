@@ -12,6 +12,7 @@ import { CONFIG } from "../packs/town_bp/scripts/config.js";
 import {
   LOOKS,
   MISS_LIMIT,
+  HOME_LEASH,
   NEW_KEEP,
   RESIDENT_MAX,
   TICKS_PER_MINUTE,
@@ -105,6 +106,17 @@ test("census: missing twice while home is loaded is gone; found resets; unloaded
   assert.equal(census(base([rec(0, 1)]), [], { loaded: () => false }).changed, false);
   // Far from the center: sent home.
   assert.deepEqual(census(base([rec(0, 1)]), [{ id: "e1", rid: 1, x: 200, z: 0 }]).teleport, [{ id: "e1", s: 0 }]);
+});
+
+test("census: a resident strayed past the leash from its home is brought back, unless a player is near it", () => {
+  const home = () => ({ x: 50, z: 0 });
+  const o = { home, leash: HOME_LEASH, watched: () => false };
+  assert.equal(HOME_LEASH, 32);
+  assert.deepEqual(census(base([rec(0, 1)]), [{ id: "e1", rid: 1, x: 50, z: 30 }], o).teleport, [], "30 blocks from home: stays");
+  assert.deepEqual(census(base([rec(0, 1)]), [{ id: "e1", rid: 1, x: 50, z: 40 }], o).teleport, [{ id: "e1", s: 0 }], "40 from home (and 64 inside the town): back home");
+  assert.deepEqual(census(base([rec(0, 1)]), [{ id: "e1", rid: 1, x: 50, z: 40 }], { ...o, watched: () => true }).teleport, [], "a player near it: it stays (no villager vanishing in front of someone)");
+  assert.deepEqual(census(base([rec(0, 1)]), [{ id: "e1", rid: 1, x: 200, z: 0 }], { ...o, watched: () => true }).teleport, [{ id: "e1", s: 0 }], "past the town radius: always");
+  assert.deepEqual(census(base([rec(0, 1)]), [{ id: "e1", rid: 1, x: 50, z: 40 }], { ...o, home: () => undefined }).teleport, [], "no home known: only the town radius counts");
 });
 
 test("census: duplicates and strays lose the tags, the record's own entity stays", () => {
