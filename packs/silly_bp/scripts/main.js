@@ -292,10 +292,13 @@ world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player, itemStack 
 
 world.afterEvents.playerInventoryItemChange.subscribe(({ player, inventoryType, slot, itemStack, beforeItemStack }) => {
   try {
-    // A stack that only grew or shrank holds the same item (stacks only merge when they are alike).
-    if (itemStack && beforeItemStack && itemStack.typeId === beforeItemStack.typeId && itemStack.amount !== beforeItemStack.amount) return;
-    // Armor that left the inventory may be worn now, and armor that came in may have been taken off.
-    if (wearable(itemStack) || wearable(beforeItemStack)) queue(player);
+    // A stack of one type that changed size grew, shrank or was swapped for another stack of it: what is worn didn't
+    // change (armor doesn't stack). Armor that left the inventory may be worn now, and armor that came in may have been
+    // taken off.
+    const resized = itemStack && beforeItemStack && itemStack.typeId === beforeItemStack.typeId && itemStack.amount !== beforeItemStack.amount;
+    if (!resized && (wearable(itemStack) || wearable(beforeItemStack))) queue(player);
+    // The selected slot always sets the hand from the event's item (its lore, no equipment read): a swapped stack of
+    // the same type can carry other lore.
     if (inventoryType === PlayerInventoryType.Hotbar && slot === player.selectedSlotIndex) setHand(player, itemStack);
   } catch {
     queue(player);

@@ -382,6 +382,40 @@ test("silly: gear is read by a slow sweep and on events, not every half second, 
   assert.ok(!fx.includes("realm:silly_floor"), `no Disco once it is off: ${fx.join(", ")}`);
 });
 
+test("silly: swapping the held stack for a plain stack of the same item, but another size, drops its hand enchants at once", async () => {
+  const sim = createSim();
+  const calls = { equip: 0 };
+  const fx = [];
+  const gearOf = { a: {} };
+  const a = sillyPlayer(sim, "a", gearOf.a, calls, fx);
+  class MolangVariableMap {
+    setFloat() {}
+    setColorRGBA() {}
+  }
+  await loadReal(sim, "silly_bp", { MolangVariableMap, PlayerInventoryType: { Hotbar: "Hotbar", Inventory: "Inventory" } });
+  sim.boot();
+  sim.step(40);
+  const hit = () => sim.game.emit("world.after.entityHitEntity", { damagingEntity: a, hitEntity: { isValid: true, location: { x: 1, y: 64, z: 0 } } });
+  const sillyCod = { ...sillyItem("minecraft:cod", "Confetti Swing"), amount: 3 };
+  gearOf.a.Mainhand = sillyCod;
+  sim.game.emit("world.after.playerHotbarSelectedSlotChange", { player: a, itemStack: sillyCod, newSlotSelected: 0, previousSlotSelected: 1 });
+  hit();
+  assert.ok(fx.includes("realm:silly_confetti"), `confetti from the silly cod: ${fx.join(", ")}`);
+  // A cursor swap in the selected slot: 10 plain cod in, the 3 silly cod out (same type, another size).
+  const plainCod = { typeId: "minecraft:cod", amount: 10, getLore: () => [] };
+  gearOf.a.Mainhand = plainCod;
+  sim.game.emit("world.after.playerInventoryItemChange", { player: a, inventoryType: "Hotbar", slot: 0, itemStack: plainCod, beforeItemStack: sillyCod });
+  fx.length = 0;
+  hit();
+  assert.ok(!fx.includes("realm:silly_confetti"), `no confetti from plain cod: ${fx.join(", ")}`);
+  // A stack that only grew keeps its enchants.
+  const more = { ...sillyItem("minecraft:cod", "Confetti Swing"), amount: 4 };
+  gearOf.a.Mainhand = more;
+  sim.game.emit("world.after.playerInventoryItemChange", { player: a, inventoryType: "Hotbar", slot: 0, itemStack: more, beforeItemStack: sillyCod });
+  hit();
+  assert.ok(fx.includes("realm:silly_confetti"), `confetti again after the silly stack grew: ${fx.join(", ")}`);
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // saga_bp
 // ---------------------------------------------------------------------------------------------------------------
