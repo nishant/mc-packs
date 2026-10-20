@@ -33,6 +33,7 @@ export default async function (t) {
   };
   const cfg = (key, value) => t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `c_${key}_${t.tick}`, pack: "crowns_bp", key, value }));
   const mod = await t.player("Mod", { op: true });
+  const joined = t.tick;
   const payer = await t.player("Payer");
   const payee = await t.player("Payee");
   const score = (p) => {
@@ -43,8 +44,10 @@ export default async function (t) {
     }
   };
   cfg("dailyPayLimit", 5000);
-  // The daily join bonus lands a little after joining: wait it out, so the balances below move only by the payments.
-  await t.wait(100);
+  // The daily login bonus lands JOIN_DELAY (200 ticks) after each player's first spawn: wait for both, so the balances
+  // below move only by the payments.
+  for (const p of [payer, payee]) await t.waitMessage(p, /\(Daily login bonus/, { since: joined, timeout: 300 });
+  await t.wait(2);
   let since = t.tick;
   t.cmd(mod, "/realm:crowns_give Payer 10000");
   await t.waitMessage(payer, /from an operator/, { since, timeout: 60 });
