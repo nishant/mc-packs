@@ -449,13 +449,21 @@ export function sideBoxes(from, options = {}) {
     /**
      * Keeps this pack's readouts up `ticks` longer without changing them, and draws. A compositor sends nothing and
      * reuses the subtitle it made (nothing changed); another pack sends its readout again.
-     * @param {Player} player @param {number} ticks @returns {boolean} false: none of this pack's readouts is up (show them)
+     * `parts`: the parts ("" for the readout itself) that must all still be up; if one ran out, nothing is kept and
+     * the caller shows them again (keeping only the rest would leave the missing one off for good).
+     * @param {Player} player @param {number} ticks @param {string[]} [parts]
+     * @returns {boolean} false: none of this pack's readouts is up, or one of `parts` isn't (show them)
      */
-    keep(player, ticks) {
+    keep(player, ticks, parts) {
       const tick = system.currentTick;
       prune(player.id, tick);
       const slots = picture.get(player.id);
       if (!slots || !hasOwn(player.id)) return false;
+      if (parts) {
+        const up = new Set();
+        for (const e of slots.values()) if (mine(e.from)) up.add(e.from);
+        for (const part of parts) if (!up.has(part ? `${me}/${part}` : me)) return false;
+      }
       const span = Math.min(Math.max(Math.round(ticks), 1), MAX_TICKS);
       const quiet = compositor && composing.has(player.id) && drawsFor(player.id, tick);
       for (const [slot, e] of slots) {

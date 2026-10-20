@@ -1308,8 +1308,16 @@ function keepAlive(player, v, now) {
   const sent = lastSent.get(player.id);
   if (!sent || side.held(player)) return false;
   const t1 = Date.now();
-  // None of its parts is up any more (they ran out): build and send them again.
-  if (!side.keep(player, HOLD)) return render(player, v, now, true);
+  // One of its parts isn't up any more (it ran out, e.g. during a real title or a late refresh): build and send both
+  // again. Keeping only the part still up would stamp the other as sent while it stays off for good.
+  /** @type {string[]} */
+  const parts = [];
+  if (sent.compass) parts.push("");
+  if (sent.radar) parts.push("radar");
+  if (!side.keep(player, HOLD, parts)) {
+    sent.ctext = sent.rtext = "";
+    return render(player, v, now, true);
+  }
   if (sent.compass) sent.cat = now;
   if (sent.radar) sent.rat = now;
   v.drawn = now;

@@ -163,6 +163,37 @@ function functionSource(name) {
   return mainSource.slice(at + 1, end + 2);
 }
 
+test("the real keepAlive builds both parts again when one of them ran out, instead of keeping only the other (W1/O5)", () => {
+  // The strip was sent at 0 and the radar at 15; a real title held the screen until after the strip ran out (40).
+  const sent = { ctext: "c", cat: 0, rtext: "r", rat: 15, compass: true, radar: true };
+  const up = new Set(["radar"]);
+  const renders = [];
+  const sandbox = {
+    lastSent: new Map([["p", sent]]), HOLD: 40, Date, drawMs: 0,
+    side: {
+      held: () => false,
+      // side.keep: false when nothing of ours is up, or (with parts) when one named part isn't.
+      keep: (_p, _t, parts) => (parts ? parts.every((x) => up.has(x || "top")) : up.size > 0),
+      // render() shows a part whose text differs from what was sent, or that is due its refresh.
+    },
+    render: (_p, _v, now, refresh) => (renders.push({ now, refresh, ctext: sent.ctext, rtext: sent.rtext }), true),
+  };
+  const keepAlive = vm.runInNewContext(`${functionSource("keepAlive")}\nkeepAlive`, sandbox);
+  const v = { drawn: 0 };
+  assert.equal(keepAlive({ id: "p" }, v, 50), true);
+  assert.equal(renders.length, 1, "the strip is built and sent again");
+  assert.notEqual(renders[0].ctext, "c", "render sees the strip as not sent, so it shows it");
+  assert.equal(sent.cat, 0, "the strip is not stamped as kept");
+  // Both up: a plain keep, no build.
+  up.add("top");
+  sent.ctext = "c";
+  sent.rtext = "r";
+  assert.equal(keepAlive({ id: "p" }, v, 80), true);
+  assert.equal(renders.length, 1, "kept without building");
+  assert.equal(sent.cat, 80);
+  assert.equal(sent.rat, 80);
+});
+
 test("the real pass draws again only when it found something new: a still player's pass builds no strip and radar (W1/O5)", () => {
   const helpers = mainSource.includes("function sameMarkers(") ? `${mainSource.match(/^const MARKER_SLACK = .+;$/m)[0]}\n${functionSource("sameMarkers")}` : "";
   const markers = () => [{ kind: "mob", x: 10.2, z: -4, clamp: true }, { kind: "folk", x: 3, z: 3, clamp: false }];

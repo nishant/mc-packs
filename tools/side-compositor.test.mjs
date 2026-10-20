@@ -268,6 +268,33 @@ test("a compositor's keep-alive reuses its title: no message and no new subtitle
   assert.equal(s.sent.filter((e) => e.id === "realm:side").length, sides, "no realm:side");
 });
 
+test("a keep-alive that names its parts keeps nothing when one of them ran out, so the caller shows it again", () => {
+  const s = server();
+  const map = s.pack("map", { compositor: true });
+  s.pack("hud");
+  const p = s.join("100");
+  // The strip is sent at 0 (up until 40), the radar at 15 (until 55); a real title holds the screen in between.
+  map.api.show(p, "top", "strip", 40, "", false);
+  map.api.redraw(p);
+  s.step(15);
+  map.api.show(p, "radar", RADAR, 40, "radar", false);
+  map.api.redraw(p);
+  s.step(35);
+  // Tick 50: the strip ran out, the radar is still up.
+  const titles = p.titles.length;
+  assert.equal(map.api.keep(p, 40, ["", "radar"]), false, "not kept: the strip is gone");
+  assert.equal(p.titles.length, titles, "nothing drawn");
+  s.step(6);
+  // Tick 56: the radar ran out too, so it was not extended by the refused keep.
+  assert.equal(map.api.keep(p, 40, ["radar"]), false, "the radar was not kept either");
+  // Shown again, both are in the title and a keep naming both now holds.
+  map.api.show(p, "top", "strip", 40, "", false);
+  map.api.show(p, "radar", RADAR, 40, "radar", false);
+  map.api.redraw(p);
+  assert.equal(map.api.keep(p, 40, ["", "radar"]), true, "both up: kept");
+  assert.equal(cut(p.titles.at(-1).sub, SLOT.top), "strip", "the strip is back");
+});
+
 test("realm:side traffic per tick with a minimap drawing 40 players", () => {
   const s = server();
   const map = s.pack("map", { compositor: true });
