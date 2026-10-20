@@ -21,7 +21,6 @@ const WIND_RANGE = 48;
 const RUMBLE_RANGE = 100;
 const WIND_EVERY = 5; // seconds
 const RUMBLE_EVERY = 6;
-const SOUND_BAND = 8; // blocks: players this far apart hear the same volume
 const CAPTURE_RADIUS = 5.5; // once pulled within this distance of the funnel axis, the player spins up inside the vortex
 const SPIN_TICKS = 56; // ticks (~2.8 s) spent spiraling up the funnel before shooting out the top into the sky
 const LAUNCH_COOLDOWN = 110; // ticks (~5.5 s) after being shot out the top before the funnel can grab the same player again
@@ -361,8 +360,8 @@ function everySecond(t, dim) {
   const horn = CONFIG.hornEvery > 0 && t.hornIn <= 0;
   const wind = t.windIn <= 0;
   const rumble = t.rumbleIn <= 0;
-  /** @type {(Record<string, number> | undefined)[]} volumes per distance band, worked out once this second */
-  const bandVolumes = [];
+  /** @type {{ player: Player, dist: number }[]} who hears the wind this second */
+  const windTo = [];
   for (const player of dim.getPlayers()) {
     try {
       if (!player.isValid) continue;
@@ -376,25 +375,34 @@ function everySecond(t, dim) {
         }
       }
       if (dist > warn) continue;
-      const band = Math.floor(dist / SOUND_BAND);
-      const volumes = (bandVolumes[band] ??= {
-        horn: bandVolume(0.45, band, warn),
-        wind: bandVolume(1, band, WIND_RANGE),
-        rumble: bandVolume(0.8, band, RUMBLE_RANGE),
-      });
       if (!t.warned.has(player.id)) {
         t.warned.add(player.id);
         const m = Math.max(10, Math.round(dist / 10) * 10);
         player.sendMessage(`§cTornado! ${m}m to the ${compass(t.x - l.x, t.z - l.z)}, moving ${heading}.`);
       }
-      if (horn) soundToward(player, t, dist, CONFIG.sounds.horn, volumes.horn, 1);
-      if (wind && dist <= WIND_RANGE) {
-        player.runCommand(`stopsound @s ${CONFIG.sounds.wind}`); // the clips overlap otherwise
-        soundToward(player, t, dist, CONFIG.sounds.wind, volumes.wind, 0.7);
-      }
-      if (rumble && dist <= RUMBLE_RANGE) soundToward(player, t, dist, CONFIG.sounds.rumble, volumes.rumble, 0.5);
+      if (horn) soundToward(player, t, dist, CONFIG.sounds.horn, volumeAt(0.45, dist, warn), 1);
+      if (wind && dist <= WIND_RANGE) windTo.push({ player, dist });
+      if (rumble && dist <= RUMBLE_RANGE) soundToward(player, t, dist, CONFIG.sounds.rumble, volumeAt(0.8, dist, RUMBLE_RANGE), 0.5);
     } catch (e) {
       console.warn(`[tornado] ${e}`);
+    }
+  }
+  if (windTo.length) {
+    // One command stops the last wind clip for everyone who hears the next one (the clips overlap otherwise): every
+    // player whose column is within WIND_RANGE, plus a few in the box's corners, who are out of the wind's range
+    // anyway. Once per wind instead of once per listener; then each listener gets the new clip from their direction.
+    try {
+      const r = WIND_RANGE;
+      dim.runCommand(`stopsound @a[x=${Math.floor(t.x - r)},y=-64,z=${Math.floor(t.z - r)},dx=${2 * r + 1},dy=384,dz=${2 * r + 1}] ${CONFIG.sounds.wind}`);
+    } catch (e) {
+      console.warn(`[tornado] ${e}`);
+    }
+    for (const { player, dist } of windTo) {
+      try {
+        soundToward(player, t, dist, CONFIG.sounds.wind, volumeAt(1, dist, WIND_RANGE), 0.7);
+      } catch (e) {
+        console.warn(`[tornado] ${e}`);
+      }
     }
   }
   if (horn) t.hornIn = CONFIG.hornEvery;
@@ -403,19 +411,17 @@ function everySecond(t, dim) {
 }
 
 /**
- * The volume of a sound for players in one distance band (SOUND_BAND blocks wide, measured at the band's middle):
- * louder when close, never below 0.15. Players in a band share it, so it is worked out once per band each second.
- * @param {number} volume at the funnel @param {number} band @param {number} range
+ * The volume of a sound `dist` blocks from the funnel: louder when close, never below 0.15.
+ * @param {number} volume at the funnel @param {number} dist @param {number} range
  */
-function bandVolume(volume, band, range) {
-  const middle = Math.min(range, (band + 0.5) * SOUND_BAND);
-  return Math.max(0.15, volume * (1 - middle / range));
+function volumeAt(volume, dist, range) {
+  return Math.max(0.15, volume * (1 - Math.min(dist, range) / range));
 }
 
 /**
  * Plays a sound to one player from the tornado's direction, a few blocks away. Player.playSound is the only call that
  * reaches just that player (World.playSound would reach everyone, in every dimension) and its spot differs per
- * player, so each listener still costs one call; the bands only share the volume.
+ * player, so each listener costs one call per sound; only the wind's stopsound is shared (everySecond).
  * @param {Player} player @param {Tornado} t @param {number} dist @param {string} id @param {number} volume @param {number} pitch
  */
 function soundToward(player, t, dist, id, volume, pitch) {
