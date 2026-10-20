@@ -245,3 +245,19 @@ test("a jump keeps a roofed player's cave layer, so the scanner doesn't read a n
   planFor(p, 130);
   assert.equal(playerStore.get("p").id, "minecraft:nether|layer30");
 });
+
+test("a title about to fade is refreshed on time even when it isn't the player's turn to be checked (O5, 100 players)", () => {
+  const kept = [];
+  const mkView = (id) => ({ player: { id, isValid: true, dimension: { id: "d" }, location: { x: 0, y: 0, z: 0 } }, dim: "d", px: 0, pz: 0, heading: 0, x: 0, y: 0, z: 0, radar: true, terrain: false, drawn: 0 });
+  const views = new Map(Array.from({ length: 100 }, (_, i) => [`p${i}`, mkView(`p${i}`)]));
+  // Everyone was sent a moment ago but p90, whose parts are 30 ticks old.
+  const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: id === "p90" ? 20 : 49, rtext: "r", rat: id === "p90" ? 20 : 49, compass: true, radar: true }]));
+  const sandbox = {
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
+    wrap: (a) => a, headingOf: () => 0, render: () => true, keepAlive: (p) => (kept.push(p.id), true),
+  };
+  const run = vm.runInNewContext(`let turnFirst = 0, turnMs = 0, turnTicks = 0, turnDraws = 0, turnSends = 0, refreshSends = 0, keepSends = 0, turnCheckMs = 0;\n(${callbackSource(1)})`, sandbox);
+  run();
+  assert.deepEqual(kept, ["p90"], "p90 (outside this tick's 12 checks) is refreshed now");
+});

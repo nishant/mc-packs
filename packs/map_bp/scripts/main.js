@@ -1377,8 +1377,11 @@ system.runInterval(() => {
   for (const v of views.values()) {
     k++;
     const p = v.player;
-    // A new pass or a radar waiting for its terrain is always due; the others are looked at in turns.
-    if (!v.dirty && !v.lag && (k - turnFirst + n) % n >= checks) continue;
+    const sent = lastSent.get(p.id);
+    const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
+    // A new pass, a radar waiting for its terrain or a title about to fade (the refresh: with many players their turn
+    // could come after HOLD ran out, O5) is always due; the others are looked at in turns.
+    if (!v.dirty && !v.lag && !refresh && (k - turnFirst + n) % n >= checks) continue;
     try {
       if (!p.isValid) continue;
       // Another dimension (a portal) or far from where the pass looked (a teleport): wait for the next pass.
@@ -1388,8 +1391,6 @@ system.runInterval(() => {
       }
       const at = p.location;
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
-      const sent = lastSent.get(p.id);
-      const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
       /** @type {number | undefined} read only when a new pass didn't already settle it; render() reads it otherwise, inside the draw budget */
       let heading;
       const changed = !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
