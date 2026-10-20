@@ -210,6 +210,31 @@ test("relics: a player carrying nothing costs no location or dimension reads, an
   assert.deepEqual(idle.added, []);
 });
 
+test("relics: a player with no relics is rescanned every 5 s and otherwise skipped, and a helmet put on with no event still works", async () => {
+  const sim = createSim();
+  const reads = { location: 0, dimension: 0 };
+  let helmet;
+  const p = relicPlayer(sim, "Idle", undefined, reads);
+  const getComponent = p.getComponent;
+  p.getComponent = (id) => (id === "minecraft:equippable" ? { getEquipment: (slot) => (slot === "Head" ? helmet : undefined), setEquipment() {} } : getComponent(id));
+  let slotReads = 0;
+  Object.defineProperty(p, "selectedSlotIndex", { get: () => (slotReads++, 0) });
+  await sim.load("relics_bp");
+  sim.boot();
+  sim.step(20 * 100);
+  // Once a second for 100 s used to read the selected slot over 100 times; a rescan every 5 s reads it twice.
+  assert.ok(slotReads <= 45, `${slotReads} selected slot reads in 100 s for a player with no relics`);
+  helmet = minersLamp(); // put on by a dispenser: no inventory event
+  sim.step(20 * 6);
+  assert.ok(p.added.some(([t]) => t === "haste"), `the helmet is found by the 5 s rescan: ${JSON.stringify(p.added)}`);
+  helmet = undefined;
+  p.effects.clear();
+  sim.game.emit("world.after.playerInventoryItemChange", { player: p, slot: 0 });
+  const before = p.added.length;
+  sim.step(20 * 6);
+  assert.equal(p.added.length, before, "no effect once the helmet is gone");
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // saga_bp
 // ---------------------------------------------------------------------------------------------------------------

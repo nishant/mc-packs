@@ -695,6 +695,9 @@ const lastScan = new Map();
 world.afterEvents.playerInventoryItemChange?.subscribe(({ player }) => {
   if (player) rescan.add(player.id);
 });
+world.afterEvents.playerHotbarSelectedSlotChange?.subscribe(({ player }) => {
+  if (player) rescan.add(player.id);
+});
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   rescan.delete(playerId);
   lastScan.delete(playerId);
@@ -705,7 +708,7 @@ function carriedNow(player) {
   const c = carried.get(player.id);
   const last = lastScan.get(player.id);
   const now = system.currentTick;
-  const fresh = c && last && !rescan.has(player.id) && last.slot === player.selectedSlotIndex && now - last.tick < 100 && !(c.hand && get("autoRepair") === true);
+  const fresh = c && last && !rescan.has(player.id) && now - last.tick < 100 && last.slot === player.selectedSlotIndex && !(c.hand && get("autoRepair") === true);
   if (fresh) return c;
   rescan.delete(player.id);
   lastScan.set(player.id, { slot: player.selectedSlotIndex, tick: now });
@@ -850,9 +853,24 @@ function sealReading(player) {
   return `§f${best.name} pulls ${Math.round(bestD)}m ${direction(best.x - player.location.x, best.z - player.location.z)}`;
 }
 
+/**
+ * A player with nothing to do this second: no relic at the last scan, no effect of ours left to remove, their empty
+ * set list already sent, and no rescan due. passives() would read nothing and change nothing for them.
+ * @param {Player} player
+ */
+function idle(player) {
+  const id = player.id;
+  const c = carried.get(id);
+  if (!c || c.carry.size > 0 || c.head !== undefined || c.feet !== undefined) return false;
+  if (rescan.has(id) || (kept.get(id)?.size ?? 0) > 0 || setsSent.get(id) !== "") return false;
+  const last = lastScan.get(id);
+  return !!last && system.currentTick - last.tick < 100;
+}
+
 system.runInterval(() => {
   for (const player of world.getAllPlayers()) {
     try {
+      if (idle(player)) continue;
       if (player.isValid) passives(player);
     } catch (e) {
       console.warn(`[relics] ${e}`);
