@@ -1595,8 +1595,8 @@ Operators can change every option but `intervalTicks` in game with `/realm:confi
 | `map:marks` | Player | JSON list of `{ n, dim, x, z }`: the marked spots, oldest first |
 | `map:pref` | Player | The player's choices in `/realm:prefs`, when they differ from the realm's |
 | `map:cfg` | World | Settings changed in `/realm:config` |
-| `map:reset` | World | Reset generation advanced by `/realm:map_reset confirm` |
-| `map:gen` | Player | The last reset generation applied to this player, so an offline player resets once without erasing later marks |
+| `map:reset` | World | The reset generation, a whole number set by each `/realm:map_reset confirm` to the larger of the previous value plus 1 and the time in Unix seconds (so it is not a count of resets: it stays above every player's `map:gen` even if this property was forgotten). Missing or 0 means no reset has run |
+| `map:gen` | Player | The `map:reset` generation last applied to this player (written on their first join after a reset even when they had nothing to clear), so an offline player resets once without erasing later marks; a player whose value is lower than `map:reset` is reset on their next join |
 
 Everything else (townsfolk, waystones, towns, camps, sites, regions, death points, story goals, the rainbow's pot) is what the other packs send; it lives in memory and is asked for again when the world loads and when a player joins.
 
