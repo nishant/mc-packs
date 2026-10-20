@@ -65,6 +65,7 @@ const SPECIAL = {
   "npc-name-capability": { args: ["--flat", "--only", "npc_bp,build_rp", "--strict"], note: "capability probe (header's native run)" },
   "saga-lighthouse": { args: ["--flat", "--only", "saga_bp", "--timeout", "300"], note: "no command in header" },
   "perf-soak": { args: ["--no-relay", "--profile", "--profile-every", "0", "--arg", "players=6", "--arg", "seconds=60", "--timeout", "400"], note: "short soak (6 players, 60 s)" },
+  "gear-perf": { args: ["--no-relay", "--profile", "--profile-every", "0", "--only", "silly_bp,admin_bp,durability_bp,relics_bp,skills_bp", "--arg", "players=6", "--arg", "seconds=60", "--timeout", "400"], note: "short gear soak (6 players, 60 s)" },
   "stash-pages-persistence": { runner: "stash-persistence.mjs", note: "custom runner stash-persistence.mjs" },
   "stash-recover-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-recover-restart.js")], note: "owning-addon pending journal recovery across a restart" },
   "stash-recover-worn": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-recover-worn.js")], note: "recovery counts worn armor and offhand, lists a used tool as changed" },
