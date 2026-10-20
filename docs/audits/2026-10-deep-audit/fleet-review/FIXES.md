@@ -155,6 +155,35 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - [ ] **F69 (high) Root-cause the 3 failing scenarios at 8aa5cf06:** atlas, wander-walk and wander (above). Run them
   alone first to rule out load. Fix the pack or the scenario, without weakening what it checks.
 
+- [ ] **F70 (high, scope) Finish the plan items that are still open in `../OPEN.md`, not only the F-items.**
+  - #96 marked several plan items WON'T FIX or DONE without the work (F58): O1, O2, O4, O5, O10-O15, O19, O47 and
+    O48. Others are marked DONE although open F-items cover them: O3, O7, O17, O71.
+  - After F58 re-marks them honestly, implement every one that is still open, as `../PLAN.md` describes:
+    - W1 performance: O1-O10
+    - the stash cart window: O19
+    - Easy Building beds in every mode: O47
+    - the build gate measurement: O48
+    - anything else not DONE with a sha
+  - An item becomes WON'T FIX only with an owner answer recorded in OPEN.md.
+- [ ] **F71 (high, owner on devices) The real-client checklist (W2, O11-O16) and checks of the owner's reports.**
+  - Prepare one checklist the owner runs on a phone and a PC in a private test world (never the live Realm), with
+    exact steps and what to look for. Cover:
+    - name label resend timing
+    - quest box size and placement, and no "..." cut-off (O68, F17)
+    - the one-line HUD width on a phone
+    - the tornado funnel at 64+ blocks
+    - Minimap `budgetLevel` low, normal and high, and no black square when it's off (O69)
+    - the Chest Finder marker being easy to see (O70)
+    - the stats ticker on by default with a personal off switch (O71)
+    - shift-click chest sorting (O72) and moving items between pages (O73)
+    - the camera and respawn screen after the graveyard fix (O75)
+    - the Gray Ring with a party (F47) and wanderers not rubber-banding (F42)
+  - Put it on a page or doc the owner can follow. Then fix whatever he reports and record each result in OPEN.md.
+- [ ] **F72 (high, release) Publish what is merged but not live.** Master 8aa5cf06 (#96) was not published to
+  hosting when this re-review ran (hosting's last publish was #107). Before the first fix release, check hosting
+  `site/packs/packs.json` and run check-live. If #96 isn't live, publish it, either alone first or together with the
+  first fixes. The final report names the live bundle versions.
+
 ## Blockers and highs
 
 - [x] (FIXED on master in 4a9e3b85 (unit probe passes; still add a BDS scenario)) **F1 (blocker, item loss) stash_bp: "Fill earlier pages" deletes slot-locked stacks.**
@@ -681,6 +710,9 @@ So nothing is omitted, this maps each source to its items:
 | rereview-8aa5cf06/new-review.md | N18 | F67 |
 | rereview-8aa5cf06/new-review.md | N19 | F68 |
 | rereview-8aa5cf06/tests.md | 3 failing scenarios | F69 |
+| ../OPEN.md | plan items still open or wrongly closed | F58, F70 |
+| ../OPEN.md (W2), owner reports O68-O75 | real-client checks | F71 |
+| release state | #96 merged but not published | F72 |
 
 Tracked elsewhere: the plan's own items O1-O75 (`../OPEN.md`, `../PLAN.md`), including the W2 real-client checks
 (O11-O16), which need the owner on a phone and a PC. The owner's decisions are in `../OPEN.md`. The one still open
