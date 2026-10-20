@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, onChange, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, exportPending, indexedEntries, InventoryRecoveryError, inventoryReady, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, saveSnapshot, signature, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, exportPending, indexedEntries, indexedRoom, InventoryRecoveryError, inventoryReady, kindKey, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, roomOfRecs, saveSnapshot, signature, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -210,7 +210,11 @@ function readPage(player, page) {
     const state = stateOf(player);
     if (state.pending) throw new Error("inventory recovery is pending; tell an operator");
     const ref = state.pages[page];
-    if (ref) return loadSnapshot(player, ref).map(({ s, item }) => ({ s: pageSlot(s, ref.layout), ...toRecord(item) }));
+    if (ref) {
+      const recs = loadSnapshot(player, ref).map(({ s, item }) => ({ s: pageSlot(s, ref.layout), ...toRecord(item) }));
+      learnRoom(ref.id, roomOfRecs(recs, maxOf));
+      return recs;
+    }
     const key = PAGE_PROP + page;
     const raw = player.getDynamicProperty(key);
     if (raw === undefined) return [];
@@ -242,6 +246,18 @@ function readPage(player, page) {
     console.warn(`[stash] reading page ${page}: ${e}`);
     return undefined;
   }
+}
+
+/**
+ * Per snapshot id, the kinds that page could top up (a stack that isn't full). A snapshot never changes and its id is
+ * never reused, so this stays true; it covers pages whose committed index was written before it recorded room.
+ * @type {Map<string, Set<string>>}
+ */
+const roomByRef = new Map();
+/** @param {string} refId @param {string[] | Set<string>} room */
+function learnRoom(refId, room) {
+  if (roomByRef.size >= 2000) roomByRef.clear();
+  roomByRef.set(refId, new Set(room));
 }
 
 /** @param {Rec[]} entries @returns {import("./page-store.js").Entry[]} */
@@ -370,7 +386,9 @@ function commitPages(player, edits, after, cur = curPage(player), decorate) {
       ref.layout = 2;
       created.push(ref);
       next.pages[page] = ref;
-      recordIndex(next, page, ref, kindsOfRecs(entries));
+      const room = roomOfRecs(entries, maxOf);
+      learnRoom(ref.id, room);
+      recordIndex(next, page, ref, kindsOfRecs(entries), room);
     }
     pruneIndex(next);
     decorate?.(next, edits);
@@ -413,17 +431,26 @@ function addToEntries(entries, rec, mode) {
 }
 
 /**
- * Could a saved page take this item (a matching stack or a free slot)? False only when the committed index and the
- * page's saved stack count prove it can't; an unknown page is read, never skipped.
- * @param {Player} player @param {number} page @param {string} id
+ * Could a saved page take this item? "merge" needs a stack of its kind with room left; "fill" also takes a free slot.
+ * False only when the page's saved stack count and what is known about its stacks (the committed index's room list, or
+ * what this script saw when it last loaded that snapshot) prove it can't, so a full page of full stacks is never
+ * loaded for nothing. An unknown page is read, never skipped.
+ * @param {Player} player @param {number} page @param {{ id: string, name?: string }} rec @param {"merge" | "fill"} mode
  */
-function mayTake(player, page, id) {
+function mayTake(player, page, rec, mode) {
   try {
     const state = stateOf(player);
-    if (state.pending || !state.pages[page]) return true;
+    const ref = state.pages[page];
+    if (state.pending || !ref) return true;
+    const free = !Array.isArray(ref.slots) || ref.slots.length < PAGE_SIZE;
+    let room = roomByRef.get(ref.id);
+    if (!room) {
+      room = indexedRoom(state, page);
+      if (room) learnRoom(ref.id, room);
+    }
+    if (room) return room.has(kindKey(rec.id, rec.name)) || (mode === "fill" && free);
     if (!indexedEntries(state, page)) return true;
-    const held = savedStacks(player, page);
-    return held === undefined || held < PAGE_SIZE || mayHold(player, page, id);
+    return free || mayHold(player, page, rec.id);
   } catch {
     return true;
   }
@@ -447,7 +474,7 @@ function storeOnPages(player, item, pages, edits = new Map(), perPage = false) {
   /** @param {number} p @param {"merge" | "fill"} mode */
   const put = (p, mode) => {
     if (!left) return;
-    if (!loaded.has(p) && !edits.has(p) && !mayTake(player, p, rec.id)) return;
+    if (!loaded.has(p) && !edits.has(p) && !mayTake(player, p, rec, mode)) return;
     if (!loaded.has(p)) loaded.set(p, edits.get(p) ?? readPage(player, p));
     const entries = loaded.get(p);
     if (!entries) throw new Error(`page ${p} can't be read; nothing moved`);

@@ -3190,3 +3190,77 @@ test("F6 count: a row too long for one message still goes out, every message und
     unload();
   }
 });
+
+// ---------------------------------------------------------------------------
+// F3: the index records which kinds a page could top up, so a full page of full stacks is never loaded for nothing
+// ---------------------------------------------------------------------------
+
+const fullOf = (/** @type {string} */ id) => Object.fromEntries(STORAGE_SLOTS.map((s) => [s, stack(id, 64)]));
+
+test("F3: auto-store never loads a saved page full of full stacks of the mined item; the next page with room takes it", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: fullOf("minecraft:dirt"), 2: { 9: stack("minecraft:emerald", 3) } });
+  switchPage(p, 3);
+  nearlyFull(p, [20, 21]);
+  const page1 = pageRefIds(p).get(1);
+  const watch = recordPlaces();
+  try {
+    for (let i = 0; i < 5; i++) pickup(p, 20, stack("minecraft:dirt", 3));
+    assert.equal(watch.ids.filter((id) => id === page1).length, 0, "page 1 (24 x 64 dirt) was never restored");
+  } finally {
+    watch.stop();
+  }
+  assert.equal(p.container.getItem(20), undefined, "every pickup left the open page");
+  assert.equal(savedPage(p, 2).get(10)?.amount, 15, "page 2 took all 15 dirt in one stack");
+  assert.equal(pageRefIds(p).get(1), page1, "page 1 unchanged");
+  assert.deepEqual(nativeIndex(p).idx[1].p, [], "page 1's index says it can top up nothing");
+  assertIndexExact(p, "after F3 routing");
+});
+
+test("F3: a full page with one partial stack of the item still takes the pickup, and only that page is read", () => {
+  const p = joined();
+  mc.players = [p];
+  const layout = fullOf("minecraft:dirt");
+  layout[STORAGE_SLOTS[23]] = stack("minecraft:dirt", 60);
+  arrange(p, { 1: layout, 2: { 9: stack("minecraft:emerald", 3) } });
+  switchPage(p, 3);
+  nearlyFull(p, [20, 21]);
+  const [page1, page2] = [pageRefIds(p).get(1), pageRefIds(p).get(2)];
+  assert.deepEqual(nativeIndex(p).idx[1].p, ["dirt"]);
+  const watch = recordPlaces();
+  try {
+    pickup(p, 20, stack("minecraft:dirt", 3));
+    assert.equal(watch.ids.filter((id) => id === page1).length, 1, "page 1 has room for dirt, so it was read once");
+    assert.equal(watch.ids.filter((id) => id === page2).length, 0, "page 2 was not needed");
+  } finally {
+    watch.stop();
+  }
+  assert.equal(savedPage(p, 1).get(STORAGE_SLOTS[23])?.amount, 63);
+  assert.equal(p.container.getItem(20), undefined);
+  assertIndexExact(p, "after topping up");
+});
+
+test("F3: an index written before room was recorded (after a restart) costs one read of that page, then none", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: fullOf("minecraft:dirt"), 2: { 9: stack("minecraft:emerald", 3) } });
+  switchPage(p, 3);
+  nearlyFull(p, [20, 21]);
+  // Page 1 as stash_bp 1.8.8 left it, in a snapshot this script heap never saw: no `p` in its index entry.
+  const state = nativeIndex(p);
+  const old = "stash:page_88888";
+  mc.structures.set(old, mc.structures.get(state.pages[1].id));
+  state.pages[1] = { ...state.pages[1], id: old };
+  state.idx[1] = { r: old, k: state.idx[1].k };
+  p.setDynamicProperty("stash:native", JSON.stringify(state));
+  const watch = recordPlaces();
+  try {
+    for (let i = 0; i < 4; i++) pickup(p, 20, stack("minecraft:dirt", 2));
+    assert.equal(watch.ids.filter((id) => id === old).length, 1, "read once to learn it can't take dirt, then skipped");
+  } finally {
+    watch.stop();
+  }
+  assert.equal(savedPage(p, 2).get(10)?.amount, 8);
+  assert.equal(nativeIndex(p).pages[1].id, old, "page 1 itself was never rewritten");
+});
