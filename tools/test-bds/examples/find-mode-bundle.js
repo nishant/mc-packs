@@ -20,18 +20,18 @@ export default async function (t) {
   }
   t.assert(dim.getBlock(at).typeId === "minecraft:barrel", "the barrel is there");
 
-  /** Searches; returns the form if one opened (closed at once), and what Chest Finder said in chat. */
+  /** Searches; returns the form if one opened (closed at once), and what Chest Finder said in chat. No answer is
+   *  queued: a queued answer that no form uses would stay in the player's queue and be taken by the next search's form. */
   async function search() {
     const since = t.tick;
-    /** @type {any} */
-    let form;
-    t.answerForm(p, (/** @type {any} */ f) => {
-      form = f;
-      return null;
-    });
+    const before = t.forms(p).length;
+    const opened = () => t.forms(p)[before];
     t.assert(t.cmd(p, "/realm:find diamond").ok, "/realm:find diamond runs");
-    await t.waitUntil(() => form || t.messages(p, { since, kind: "chat" }).length, { timeout: 120, message: "a list or a chat answer" });
+    await t.waitUntil(() => opened() || t.messages(p, { since, kind: "chat" }).length, { timeout: 120, message: "a list or a chat answer" });
     await t.wait(5);
+    /** @type {any} */
+    const form = opened();
+    if (form && !form.answered) form.answer(null);
     const said = t.messages(p, { since, kind: "chat" }).map((m) => m.plain).join(" | ");
     return { form, said };
   }
