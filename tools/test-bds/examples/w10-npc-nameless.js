@@ -19,6 +19,10 @@ export default async function (t) {
   sys.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "g1", pack: "npc_bp", key: "gossipChance", value: 100 }));
   await t.waitUntil(() => acks.has("g1"), { timeout: 40, message: "cfg gossipChance" });
   t.assert(t.cmd(p, "/realm:npc_add bea").ok, "npc_add bea");
+  // Townsfolk sharing one spot push each other (the pack warns about it): Tobin gets his own.
+  const l = p.location;
+  p.teleport({ x: l.x + 4, y: l.y, z: l.z });
+  await t.wait(5);
   t.assert(t.cmd(p, "/realm:npc_add tobin").ok, "npc_add tobin");
   await t.wait(10);
 
@@ -31,6 +35,7 @@ export default async function (t) {
   t.check(f.body.includes("Something's going on in town. Everyone's talking about it."), "nameless news line");
   t.check(!f.body.includes("{name}") && !f.body.includes(" cut down"), "no empty name");
   f.answer(null);
+  await t.wait(12); // past the pack's 10-tick tap cooldown and the closed menu's busy flag (npc-hearth spaces taps the same way)
 
   sys.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "caravan", place: "the docks" }));
   await t.wait(5);
