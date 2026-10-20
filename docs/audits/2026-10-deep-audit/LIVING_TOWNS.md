@@ -326,7 +326,7 @@ Settings (`town_bp/scripts/settings.js`, world scope, Realm Configuration):
 | `autoSpots` | Enabled | bool | Pick project spots automatically (Disabled: today's operator spots only) |
 | `levelDepth` | 3 | 0-3 | Most blocks a spot's ground is cut or filled (0 = never level) |
 | `outlineSeconds` | 5 | 0-15 | Outline shown before a build |
-| `residents` | Enabled (D2) | bool | Residents move in |
+| `residents` | Disabled until the D2 gate passes on BDS (D42) | bool | Residents move in |
 | `residentCapWorld` | 20 | 0-40, step 2 | Most residents in the world |
 | `residentsTrade` | Disabled | bool | Residents trade (bypasses the Crowns economy) |
 | `replaceMinutes` | 20 | 5-120 | In-game minutes before a new family replaces one that died |
@@ -388,7 +388,7 @@ baseline; the scan's transient cost is reported separately.
 
 Every behavior has a unit test or a BDS scenario that fails before its step and passes after.
 
-Unit tests (`node --test`, the pure modules `town_bp/scripts/sites.js`, `designs.js`, `residents-core.js` and
+Unit tests (`node --test`, the pure modules `town_bp/scripts/sites.js`, `designs.js`, `residents.js` (D43) and
 npc_bp's `mayors.js`, with no `@minecraft` import):
 
 - `tools/town-sites.test.mjs`: the allow list (every id exists in vanilla-data), persistent leaves, overhang
@@ -504,3 +504,16 @@ behavior, versions bumped and `node tools/sync-diag.mjs` run. The lead runs `hel
 | D39 | `saveTown` drops the oldest story entries should a town record ever pass `PROP_LIMIT`; the unit test's worst case (18 spots with full plans, every list, a full story) is under 12,000 characters | The log is the only part that can be given up |
 | D40 | Houses are listed in **Set a project spot** once due and in **Manage spots** with a spot; `/realm:town_spot`'s enum stays the config projects | Operators can place or move a house that found no spot without a new command enum |
 | D41 | The house is 7 x 7 (x -3..3, z 1..7) with the floor at y -1 and the roof at y 3; its region is 11 x 11 | The note's 15 x 17 plan bound was for a larger house |
+| D42 | `residents` ships Disabled: the D2 gate (`town-resident-poi.js`) couldn't run on BDS in step 4 (code-only while the suite ran); once it passes, `residents: true` in config.js and the PACKS.md and SERVER_SETUP.md defaults flip together | "Never by taking players' beds" outranks residents; an unproven gate is a failed gate |
+| D43 | The pure module is `residents.js` (not `residents-core.js`), beside `sites.js` and `growth.js` | Same pattern as the other pure modules |
+| D44 | `town:r:<town>` is `{ n, r: [{ s, i, n, h, e, p, d?, m? }], new }`: `s` the slot (houses go up in any order, so slots can have gaps), `i` a resident number from the town's counter `n` (every spawn takes a new one, also a move), `m` the misses in a row. A found villager counts only when its rid is a living record's (and, when two share it, its id is the record's `e`); every other one loses the tags | A cured zombie villager, a family replaced meanwhile and one from a removed and re-added town all become ordinary villagers, never killed |
+| D45 | The override is checked per spawn by the entity property `realm:resident`, defined only in town_bp's `villager_v2.json`: a villager spawned without it is removed before it gets a tag, residents stop and operators are told. A census triggers `realm:become_resident` again on a resident whose property isn't true | Another add-on's `villager_v2` would otherwise give villagers that claim players' beds |
+| D46 | The look's `minecraft:become_<profession>` event goes before `realm:become_resident` | Every profession group carries its own `minecraft:dweller` (`can_find_poi: true`); the group added last wins |
+| D47 | Homes stand at (0, 0, 4) inside a house (in front of the bed) and at (-3, 0, 3) / (3, 0, 3) beside the well; the spawn takes the nearest place within 3 up or 2 down with feet and head free on solid ground. The well's two are a farmer and a fisherman | Free blocks in both designs, on the leveled pad or its apron |
+| D48 | Level 1 has `min(residentsPerLevel[0], 2)` families; slots 0 and 1 live at the well until house_1 and house_2 are built, the other slots wait for their own house; with `houses` Disabled the well's pair stay at the well | "2 at Settlement with a well"; a family needs a home |
+| D49 | Replacements and new families are both new mobs under the world cap, replacements first; at most 2 spawns or moves per census; a dead record past the town's slots is dropped, a living resident never | "Lowering a cap never removes anyone", and the census stays cheap |
+| D50 | A removed town's loaded residents lose the tags; a far one loses them on its first tap (its town is gone). The `realm:town_resident` group stays on them | Removing a group that overrides a component removes the component (the dolphin note), so they would lose their dweller altogether |
+| D51 | A move spawns the family at its new home first and only then removes the old villager, after dropping what it carries where it stood | No family lost when the spawn fails; no item lost on the remove |
+| D52 | `residents` Disabled: no census, spawns, replacements or teleports; residents already living stay; taps still follow `residentsTrade` | Turning it off never removes mobs |
+| D53 | New and replacement families both say `A new family moved into <town>: <name>.` to players in the town; one story line per census (`A new family moved in (Tilly)` or `2 new families moved in`) | The story keeps only 12 entries |
+| D54 | A canceled tap tells the player once per 10 seconds `<name> lives in <town> and doesn't trade.` | Otherwise a tap seems broken |
