@@ -371,6 +371,7 @@ Group 1 of `fleet-review/FIXES.md`, merged for one release; each F-item there ha
   F72 (#96 live through hosting #108).
 - Still open: F35 (elite O3/O58 and build gate F7 scenarios), F57 (the deferred soaks, run by the release process),
   O7 (timing at scale, with F57).
+- Measurements (F57's deferred soaks, before and after release 1): [fleet-review/perf-after-2026-10-20.md](fleet-review/perf-after-2026-10-20.md).
 
 ## Final release dispositions (2026-10-20)
 

@@ -108,7 +108,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     against 5). None of the owner's recorded answers says this.
   - Ask the owner. Until he answers, record it as "open: over budget at 40 players", not accepted. The Realm
     (10 players, 1-4 online) is under budget as one bundle (4.75 ms at 10).
-- [ ] PARTIAL, still open (14b6158, 303bb12): the attribution is corrected everywhere (contributor msftMyt); the deferred soaks are run by the release process. **F57 (high, process) The soak deferral is recorded as the owner's but was the contributor's** (N2).
+- [x] DONE (14b6158, 303bb12; measurements October 20): the attribution is corrected everywhere (contributor msftMyt); the deferred soaks ran before and after release 1 and are in [perf-after-2026-10-20.md](perf-after-2026-10-20.md): 15 min at 10 and 40, 5 min at 100, the Realm Bundle at 10 and 40, saga quests at 100, the weather crowd at 40 and the 60-minute unprofiled memory soak at 40. Follow-ups: F73 (spawn flake), F74 (memory growth), F75 (flaky scenarios). **F57 (high, process) The soak deferral is recorded as the owner's but was the contributor's** (N2).
   - The quote "lets skip the soak tests, let nishs claude do that later" refers to Nish in the third person.
     OPEN.md :346 calls it "User-directed"; five other places call it an owner override.
   - Correct the attribution everywhere.
@@ -183,6 +183,20 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   hosting when this re-review ran (hosting's last publish was #107). Before the first fix release, check hosting
   `site/packs/packs.json` and run check-live. If #96 isn't live, publish it, either alone first or together with the
   first fixes. The final report names the live bundle versions.
+- [ ] **F73 (high, tests) perf-soak and harness spawn flake: "chunk at x,z did not load in 400 ticks".**
+  - Seen at the second group (~190,180) and elsewhere, together with stash_bp's "storage staging chunk is not
+    loaded" warning, on both trees (master 5422aac and release 1). It invalidated 4 soaks on October 20
+    ([perf-after-2026-10-20.md](perf-after-2026-10-20.md)).
+  - Root-cause it (ticking areas, chunk loading order, the stash staging chunk) and fix the harness or the pack.
+- [ ] **F74 (medium, perf) Memory growth in the 60-minute soak at 40 players.**
+  - bedrock_server RSS from minute 10 to 60: +100 MB before (master 5422aac), +145 MB with release 1, one run each
+    ([perf-after-2026-10-20.md](perf-after-2026-10-20.md)).
+  - Find whether any pack leaks: bisect by pack with `tools/test-bds/rss-soak.mjs`.
+- [ ] **F75 (medium, tests) Root-cause the flaky scenarios of the October 20 suites.**
+  - New in the release 1 suite (they passed on master): cooking-restart ("the interrupted dish is owed to its
+    cook"), expedition-climb ("a fall in the shaft doesn't hurt (20 -> 13)") and maps-hunt (TIMEOUT after 900 s).
+  - Flaky on master: expedition-restart, saga-escort and saga-perf-quests (atlas was fixed by F69).
+  - Root-cause each one; fix the pack or the scenario without weakening what it checks.
 
 ## Decisions made in the fix campaign (October 20)
 
