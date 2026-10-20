@@ -1,7 +1,9 @@
 // Minimap: a compass strip at the top of the screen, an optional radar, destinations and Mara's Field Map.
 // Scripts can't draw on the HUD or on map items, so the picture is made of glyphs (glyphs.js, drawn by the
 // glyph page in Side HUD, hud_rp) sent in the Side HUD title (side.js: the strip in slot "top", the radar in
-// slot "radar" as the part "map/radar"). The land itself is Bedrock's own locator map, held in the offhand.
+// slot "radar" as the part "map/radar"). The Minimap is the side boxes' compositor: it draws the title of the players
+// it shows something to, with every other pack's box in it, and never broadcasts its own parts (side.js, the
+// compositor claim). The land itself is Bedrock's own locator map, held in the offhand.
 //
 // Every intervalTicks per player who has the strip or the radar on (the pass, spread over the ticks between): one
 // entity search for monsters within their mob radius (the nearest maxMobs), one for realm:npc within npcRange;
@@ -97,7 +99,7 @@ const FRIEND_ARR = [G.Q_FRIEND_0, G.Q_FRIEND_1, G.Q_FRIEND_2, G.Q_FRIEND_3, G.Q_
 const PARTY_ARR = [G.Q_PARTY_0, G.Q_PARTY_1, G.Q_PARTY_2, G.Q_PARTY_3, G.Q_PARTY_4, G.Q_PARTY_5, G.Q_PARTY_6, G.Q_PARTY_7];
 const STAR_ARR = [G.Q_STAR_0, G.Q_STAR_1, G.Q_STAR_2, G.Q_STAR_3, G.Q_STAR_4, G.Q_STAR_5, G.Q_STAR_6, G.Q_STAR_7];
 
-const side = sideBoxes("map");
+const side = sideBoxes("map", { compositor: true });
 const isOp = (/** @type {Player} */ p) => p.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 /** @param {string} id @param {unknown} msg */
 const send = (id, msg) => {
@@ -387,7 +389,7 @@ const lastSent = new Map();
 /** One shared render snapshot drives both compass and radar (realm:map_debug). @type {Map<string, { strip: string, line2: string, radar: string, dest?: string, target?: Spot, at: Vector3, dim: string, heading: number, radius: number, north: boolean }>} */
 const lastText = new Map();
 let costMs = 0;
-/** Of costMs, the time spent sending the title (side.js: two realm:side events and setTitle). */
+/** Of costMs, the time spent sending the title (side.js: setTitle; the compositor sends no realm:side). */
 let drawMs = 0;
 let costPasses = 0;
 let costPlayers = 0;
@@ -1257,9 +1259,8 @@ const MOVE_MIN = 0.5;
 /** Moved farther than this (blocks) since the pass: a teleport, so the markers wait for the next pass. */
 const FAR_MOVE = 256;
 /**
- * Titles sent per tick at most by the per-tick redraw. Each one is also two realm:side messages that every other
- * pack with side boxes reads, so with many players turning at once the ones drawn longest ago go first and the rest
- * follow a tick later.
+ * Titles sent per tick at most by the per-tick redraw (the compositor sends no realm:side for them), so with many
+ * players turning at once the ones drawn longest ago go first and the rest follow a tick later.
  */
 const TURN_BUDGET = 8;
 /** Strips and radars built per tick at most (building one whose text didn't change is the cost without the send). */

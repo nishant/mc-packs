@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "maps_bp";
-const VERSION = "1.8.11";
+const VERSION = "1.8.12";
 const NAME = "Treasure Maps & Riddles";
 /** @type {string[]} */
 const PREFIXES = ["maps"];
