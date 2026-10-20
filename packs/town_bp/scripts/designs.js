@@ -3,7 +3,7 @@
 // spots keep the box (`b`) and the structure snapshot of the ground they covered when they were built.
 
 /** The built-in designs a project's `build` can name. */
-export const BUILDS = /** @type {const} */ (["well", "lamps", "stall", "bell_tower", "dock", "garden", "notice_board", "house"]);
+export const BUILDS = /** @type {const} */ (["well", "lamps", "stall", "bell_tower", "dock", "garden", "notice_board", "house", "pen"]);
 
 /** The job-site block a house gets when none is named. */
 export const DEFAULT_JOB = "minecraft:composter";
@@ -123,6 +123,16 @@ export function design(kind, job) {
       at(-2, 0, 2, "minecraft:lantern", "air", { hanging: false });
       break;
     }
+    case "pen":
+      // The garden pen: a 5 x 5 ring of oak fence, x -2..2, z 1..5, with a gate in the middle of the front side (facing
+      // the spot, so it opens toward the town's center). Its animals are spawned once it is built (main.js).
+      for (let x = -2; x <= 2; x++)
+        for (let z = 1; z <= 5; z++) {
+          if (Math.abs(x) !== 2 && z !== 1 && z !== 5) continue;
+          if (x === 0 && z === 1) out.push({ x, y: 0, z, block: "minecraft:fence_gate", mode: "air", states: { in_wall_bit: false, open_bit: false }, dir: 0 });
+          else at(x, 0, z, "minecraft:oak_fence");
+        }
+      break;
   }
   return out;
 }
@@ -151,7 +161,7 @@ export function toWorld(s, x, y, z) {
 const CARDINAL = ["south", "west", "north", "east"];
 
 /**
- * A place's block states in the world at a spot facing `f`: a bed's `direction` and a door's
+ * A place's block states in the world at a spot facing `f`: a bed's `direction` and a door's (or a fence gate's)
  * `minecraft:cardinal_direction` turned with the spot (both use 0 south, 1 west, 2 north, 3 east, as FORWARD), and a
  * glass pane connected along the wall it sits in. Every other place keeps its states as they are.
  * @param {Place} pl @param {number} f @returns {Record<string, string | number | boolean> | undefined}

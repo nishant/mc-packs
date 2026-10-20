@@ -23,8 +23,8 @@ const EXPECTED = {
 const OLD = Object.keys(EXPECTED);
 
 test("the 7 designs keep their blocks and local boxes", () => {
-  assert.deepEqual(BUILDS.filter((k) => k !== "house").sort(), OLD.sort());
-  assert.deepEqual(BUILDS.slice(0, 7), ["well", "lamps", "stall", "bell_tower", "dock", "garden", "notice_board"], "the house is added after the 7");
+  assert.deepEqual(BUILDS.filter((k) => k !== "house" && k !== "pen").sort(), OLD.sort());
+  assert.deepEqual(BUILDS.slice(0, 7), ["well", "lamps", "stall", "bell_tower", "dock", "garden", "notice_board"], "the house and the pen are added after the 7");
   for (const kind of OLD) {
     const places = design(kind);
     const box = localBox(kind);
@@ -152,4 +152,29 @@ test("house blocks, states and job sites exist in vanilla-data, and their states
   assert.equal(placeStates(side, 0)["minecraft:connection_north"], true);
   // The 7 older designs keep their states exactly (placeStates leaves them alone).
   for (const kind of OLD) for (const p of design(kind)) assert.equal(placeStates(p, 2), p.states);
+});
+
+// --- The garden pen (F40 small life): a 5 x 5 fence ring with a gate facing the spot ---
+
+test("the pen: a 5 x 5 fence ring, its gate in the front side facing the spot, every state a vanilla one", () => {
+  const places = design("pen");
+  assert.deepEqual(localBox("pen"), { min: { x: -2, y: 0, z: 1 }, max: { x: 2, y: 0, z: 5 } });
+  assert.equal(places.length, 16, "the ring");
+  const gate = places.filter((p) => p.block === "minecraft:fence_gate");
+  assert.equal(gate.length, 1);
+  assert.deepEqual([gate[0].x, gate[0].z, gate[0].dir], [0, 1, 0], "the gate in the middle of the front side");
+  assert.equal(places.filter((p) => p.block === "minecraft:oak_fence").length, 15);
+  assert.ok(places.every((p) => blockIds.has(p.block) && p.mode === "air" && !isOptionalPlace("pen", p)));
+  const keys = places.map((p) => `${p.x},${p.z}`);
+  assert.equal(new Set(keys).size, 16);
+  // The inside (3 x 3) is open for the animals.
+  for (let x = -1; x <= 1; x++) for (let z = 2; z <= 4; z++) assert.ok(!keys.includes(`${x},${z}`), `open at ${x},${z}`);
+  const names = statesOf(camel("minecraft:fence_gate"));
+  for (let f = 0; f < 4; f++) {
+    const st = placeStates(gate[0], f);
+    assert.ok(Object.keys(st).every((k) => names.includes(k)), `f${f}: ${Object.keys(st)} are fence gate states (${names})`);
+    assert.equal(st["minecraft:cardinal_direction"], ["south", "west", "north", "east"][f], `f${f}: the gate turns with the spot`);
+  }
+  // The 7 older designs are unchanged by it.
+  assert.equal(design("garden").length, EXPECTED.garden.n);
 });
