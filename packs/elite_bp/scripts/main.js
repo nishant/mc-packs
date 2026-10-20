@@ -796,7 +796,13 @@ function stepTo(dim, from, x, z) {
 }
 
 /** Is this champion one the approach leaves alone (an Expedition's)? @param {Entity} e */
-const ownedElsewhere = (e) => e.getTags().some((t) => t.startsWith("realm:exp"));
+const ownedElsewhere = (e) => {
+  let owned = ownedSeen.get(e.id);
+  if (owned === undefined) ownedSeen.set(e.id, (owned = e.getTags().some((t) => t.startsWith("realm:exp"))));
+  return owned;
+};
+/** Whether each champion is an Expedition's, read from its tags once per refresh (every 5 seconds) instead of every step. @type {Map<string, boolean>} */
+const ownedSeen = new Map();
 
 /** How far ahead of its center a step looks: the mob's body reaches past its center, and a wall or a
  * step that only its body touches stopped it for good (the game pushed it back out every step). */
@@ -885,17 +891,26 @@ function approachStep(e, step, units = 1) {
   const range = Number(get("approach.range")) || CONFIG.approach.range;
   const stop = CONFIG.approach.stopDistance;
   // Players in a safe zone, land claim or town are left alone (no crowd of champions at its edge).
-  const target = dim
-    .getPlayers({ location: at, maxDistance: range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], excludeTags: ["afk"] })
-    .filter((p) => !isProtected(dim.id, p.location.x, p.location.z))
-    .sort((a, b) => dist(a.location, at) - dist(b.location, at))[0];
+  // Each player's place is read once (the steps below look at the target's for every angle they try).
+  /** @type {Vector3 | undefined} */
+  let target;
+  let best = Infinity;
+  for (const p of dim.getPlayers({ location: at, maxDistance: range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], excludeTags: ["afk"] })) {
+    const l = p.location;
+    if (isProtected(dim.id, l.x, l.z)) continue;
+    const d = dist(l, at);
+    if (d < best) {
+      best = d;
+      target = l;
+    }
+  }
   let d = detours.get(e.id);
   if (!target) {
     if (d && d.rest === undefined) detours.delete(e.id);
     return;
   }
-  const dx = target.location.x - at.x;
-  const dz = target.location.z - at.z;
+  const dx = target.x - at.x;
+  const dz = target.z - at.z;
   const flat = Math.hypot(dx, dz);
   if (flat <= stop) {
     detours.delete(e.id);
@@ -915,10 +930,10 @@ function approachStep(e, step, units = 1) {
     if (!inZone && isProtected(dim.id, at.x + Math.cos(a) * (step + BODY), at.z + Math.sin(a) * (step + BODY))) return false; // safe zones and claims: not by our hand
     const to = bodyStep(dim, at, a, step);
     if (!to) return false;
-    const after = Math.hypot(target.location.x - to.x, target.location.z - to.z);
+    const after = Math.hypot(target.x - to.x, target.z - to.z);
     if (after > reach && after > flat) return false;
     const y = to.y === Math.floor(at.y + 0.01) ? at.y : to.y; // same height: keep a slab's half
-    e.teleport({ x: to.x, y, z: to.z }, { facingLocation: { x: target.location.x, y: y + 1.5, z: target.location.z }, keepVelocity: false });
+    e.teleport({ x: to.x, y, z: to.z }, { facingLocation: { x: target.x, y: y + 1.5, z: target.z }, keepVelocity: false });
     return true;
   };
   if (!d || d.heading === undefined || d.hit === undefined) {
@@ -1307,6 +1322,7 @@ function refresh() {
   for (const id of detours.keys()) if (!seen.has(id)) detours.delete(id);
   for (const id of approachSeen.keys()) if (!seen.has(id)) approachSeen.delete(id);
   for (const id of nearState.keys()) if (!seen.has(id)) nearState.delete(id);
+  ownedSeen.clear();
   for (const id of nextStrike.keys()) if (!seen.has(id)) nextStrike.delete(id);
   const now = Date.now();
   for (const [id, m] of hitters) {

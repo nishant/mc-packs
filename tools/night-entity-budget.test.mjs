@@ -416,3 +416,64 @@ test("approach: one run reads each block once, however many angles its steps try
   assert.ok(result.some((r) => r === undefined) && result.some((r) => r !== undefined), "the wall blocks some angles and not others");
   assert.ok(reads <= 60, `7 angles of one step read ${reads} blocks`);
 });
+
+test("approach: a step reads each nearby player's place once and a champion's tags once per refresh", () => {
+  const code = [
+    stmt(elite, "WALK_THROUGH"),
+    line(elite, "NO_STEP_ON"),
+    "let runBlocks;",
+    optFn(elite, "lookAt"),
+    line(elite, "open"),
+    line(elite, "ground"),
+    line(elite, "BODY"),
+    line(elite, "SIDE"),
+    line(elite, "DETOUR_STEPS"),
+    line(elite, "REST_STEPS"),
+    line(elite, "LEASH"),
+    line(elite, "LEASH_GRACE"),
+    line(elite, "LEASH_MAX"),
+    "const detours = new Map();",
+    /^const ownedSeen = /m.test(elite) ? line(elite, "ownedSeen") : "",
+    (elite.match(/^const ownedElsewhere = [^\n]*;$/m) ?? elite.match(/^const ownedElsewhere = [\s\S]*?^\};$/m))[0],
+    line(elite, "dist"),
+    fn(elite, "stepTo"),
+    fn(elite, "bodyStep"),
+    fn(elite, "feet"),
+    fn(elite, "approachStep"),
+    "globalThis.step = (e) => approachStep(e, 0.5, 1);",
+  ].join("\n");
+  const counts = { playerPlace: 0, tags: 0, teleports: 0 };
+  const dim = {
+    id: OVER,
+    getBlock: ({ x, y }) => ({ isAir: !(y < 64 || x >= 3), isLiquid: false, typeId: y < 64 || x >= 3 ? "minecraft:stone" : "minecraft:air" }),
+    getPlayers: () =>
+      [0, 1, 2, 3, 4].map((i) => ({
+        get location() {
+          counts.playerPlace++;
+          return vec(30, 64, 4 + i);
+        },
+      })),
+  };
+  const champ = {
+    id: "c0",
+    isValid: true,
+    isInWater: false,
+    isOnGround: true,
+    location: vec(1.5, 64, 0.5),
+    dimension: dim,
+    getTags() {
+      counts.tags++;
+      return ["realm:champion"];
+    },
+    teleport() {
+      counts.teleports++;
+    },
+  };
+  const ctx = { Math, GameMode: { Creative: "c", Spectator: "s" }, CONFIG: { approach: { range: 48, stopDistance: 10 } }, get: () => 48, isProtected: () => false };
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  for (let i = 0; i < 4; i++) ctx.step(champ);
+  assert.ok(counts.teleports > 0, "the champion stepped round the wall");
+  assert.ok(counts.playerPlace <= 4 * 5, `4 steps with 5 players read ${counts.playerPlace} player places`);
+  assert.equal(counts.tags, 1, "tags read once");
+});
