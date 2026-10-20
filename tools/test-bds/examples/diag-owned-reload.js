@@ -30,8 +30,10 @@ export default async function (t) {
     for (const k of ["decl:a", "help:orphan", "mystery:z"]) send("realm:probe_set", k);
     await t.wait(10);
     const b = await ping("p1");
-    // Written through the probe's own wrapper, so while it is running all 3 seeded keys plus probe:big are the probe's.
-    t.check(b.probe_bp.props === 4, `phase 1: the probe wrote decl:a, help:orphan and mystery:z and has its probe:big (${b.probe_bp.props})`);
+    // The probe wrote all three. decl:a (its declared namespace) and mystery:z (a namespace nobody declares, so the
+    // writer's) are the probe's, plus its probe:big; help:orphan's namespace is declared by help_bp and the probe, so it
+    // stays unowned whoever writes it (F23).
+    t.check(b.probe_bp.props === 3, `phase 1: the probe owns decl:a, mystery:z and probe:big, not help:orphan (${b.probe_bp.props})`);
     t.restart("seeded three keys; restarting so no pack has touched them");
   }
 
