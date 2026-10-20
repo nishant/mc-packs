@@ -35,8 +35,10 @@ export default async function (t) {
 
   const dim = ann.dimension;
   const mobs = () => dim.getEntities({ tags: ["realm:moon_mob"] });
-  /** Monsters seen each second, then cleared, so the per-player cap never stops a wave. */
+  /** Monsters seen each second, then cleared, so the per-player cap never stops a wave. Ann is put back on her spot
+   * each second: monsters knock a simulated player around, and waves spawn up to 32 blocks from where she stands. */
   const sweep = (seen) => {
+    t.server(`/tp Ann ${home.x} -60 ${home.z}`);
     for (const m of mobs()) {
       try {
         seen.push({ x: Math.floor(m.location.x), y: Math.floor(m.location.y), z: Math.floor(m.location.z) });
@@ -58,6 +60,7 @@ export default async function (t) {
 
   // The shelter appears by command: no playerPlaceBlock event. The ground of the whole ring becomes planks.
   const r = 36;
+  t.log(`Ann is at ${Math.floor(ann.location.x)}, ${Math.floor(ann.location.z)} when the shelter appears`);
   t.server(`/fill ${home.x - r} ${ground} ${home.z - r} ${home.x + r} ${ground} ${home.z + r} oak_planks`);
   await t.seconds(1);
   sweep([]);
