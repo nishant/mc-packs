@@ -53,14 +53,51 @@ test("a feed that doesn't tame stops being watched, and a later taming by someon
   assert.equal(tamerOf(wolf), undefined);
 });
 
-test("the last player to feed it gets it", () => {
+test("the one player who fed it since it was last seen wild gets it", () => {
   const w = createTamerWatch();
   const cat = animal("c1");
   w.tap(cat, "ann", 0);
-  w.tap(cat, "bob", 2);
+  w.step(5); // still wild after Ann's feed
+  w.tap(cat, "bob", 7);
   cat.tamed = true;
-  w.step(5);
+  w.step(10);
   assert.equal(tamerOf(cat), "bob");
+});
+
+test("two players feeding it with no wild check between: neither is recorded (review: B's tap must not take A's pet)", () => {
+  const w = createTamerWatch();
+  const wolf = animal("w4");
+  w.tap(wolf, "ann", 0); // Ann's bone tames it ...
+  w.tap(wolf, "bob", 0); // ... and Bob taps in the same tick, before the tamed state shows
+  wolf.tamed = true;
+  w.step(5);
+  assert.equal(tamerOf(wolf), undefined);
+  assert.equal(w.size, 0);
+});
+
+test("a second player's tap on a horse someone is riding doesn't replace the rider's watch (review)", () => {
+  const w = createTamerWatch();
+  const horse = animal("h4", "tamemount");
+  w.tap(horse, "ann", 0);
+  horse.riders = [{ id: "ann" }];
+  w.step(5);
+  assert.equal(w.tap(horse, "bob", 6), true);
+  w.step(10);
+  horse.tamed = true;
+  w.step(15);
+  assert.equal(tamerOf(horse), "ann", "Ann tamed it by riding; Bob's tap changes nothing");
+});
+
+test("a third tap from the rider keeps what the watch saw", () => {
+  const w = createTamerWatch();
+  const horse = animal("h5", "tamemount");
+  w.tap(horse, "ann", 0);
+  horse.riders = [{ id: "ann" }];
+  w.step(5);
+  w.tap(horse, "ann", 8);
+  horse.tamed = true;
+  w.step(10);
+  assert.equal(tamerOf(horse), "ann");
 });
 
 test("a horse is the rider's when it turns tame under them, not when someone else rides it", () => {
