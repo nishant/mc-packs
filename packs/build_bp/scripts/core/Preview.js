@@ -962,8 +962,10 @@ export function startPreviewLoop() {
                     : isDestroy ? previewDestroyBeds(positions, dim)
                     : previewBedPositions(positions, state.blockTypeId, player, state.blockStates);
                 if (!shown.length) continue;
-                positions.length = 0;
-                for (const p of shown) positions.push(p);
+                if (shown !== positions) {
+                    positions.length = 0;
+                    for (const p of shown) positions.push(p);
+                }
                 const cap = getMaxBlocks(player);
                 if (positions.length > cap) {
                     const last = previewCache.get(player.id);
