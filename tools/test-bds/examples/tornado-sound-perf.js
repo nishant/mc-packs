@@ -1,4 +1,4 @@
-// F19 measurement: players (default 30, --arg players=N: 5, 10 and 40 are the measured counts) near a tornado for a
+// F19 measurement: players (default 30, --arg players=N: 10 and 40 are the measured counts) near a tornado for a
 // minute, so every wind pulse reaches the listeners within its range.
 // Profile it before and after (one stopsound per wind instead of one per listener):
 //   node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json <out.json> --only tornado_bp --scenario tools/test-bds/examples/tornado-sound-perf.js --timeout 3000
