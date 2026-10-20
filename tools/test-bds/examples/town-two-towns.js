@@ -29,6 +29,7 @@ export default async function (t) {
   };
   /** Taps an NPC as Ann and picks `pick` (a button label) or Goodbye; returns the offer keys and the next form. */
   const tap = async (npc, pick) => {
+    await t.wait(12); // Townsfolk ignores a player's taps for 10 ticks after the last (TAP_COOLDOWN)
     const since = t.tick;
     const form = t.waitForm(p, { timeout: 100 });
     sys.sendScriptEvent("realm:npc_debug", JSON.stringify({ action: "tap", npc, player: "Ann" }));
