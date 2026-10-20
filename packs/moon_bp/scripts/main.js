@@ -1,4 +1,5 @@
 import "./diag.js";
+import { planNow } from "./weather-plan.js";
 import { createGossip } from "./gossip.js";
 import {
   BlockTypes,
@@ -316,19 +317,6 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
     console.warn(`[moon] ${e}`);
   }
 });
-
-/** The overworld weather a realm:weather_plan names right now, or undefined (the Almanac is off, another dimension, garbage). @param {string} message */
-function planNow(message) {
-  try {
-    const m = JSON.parse(message);
-    if (!m || m.off === true) return undefined;
-    const dim = m.dim ?? m.dimension;
-    if (typeof dim === "string" && dim.replace(/^minecraft:/, "") !== "overworld") return undefined;
-    return m.now === WeatherType.Clear || m.now === WeatherType.Rain || m.now === WeatherType.Thunder ? /** @type {WeatherType} */ (m.now) : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 // The Weather Almanac (if it's installed) knows the weather now: it sends its plan when it changes and answers
 // realm:weather_ask. Until a real weatherChange has come in, a pack added in the middle of a storm takes it from there.
