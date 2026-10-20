@@ -832,3 +832,27 @@ test("an inventory change that involves no Realm Configuration item reads the cu
     cleanup();
   }
 });
+
+test("giving the item back in a round reads the inventory twice (before and after), not three times", async () => {
+  const { world, system, cleanup } = await createAdminHarness();
+  try {
+    const p = new MockPlayer("g1", "Giver", false);
+    world.players.push(p);
+    for (let i = 0; i < 30; i++) system.stepInterval(); // first round: gets the item
+    assert.equal(countRealTools(p).count, 1);
+    p.container.slots[0] = undefined; // gone with no event: the round after next finds it missing
+    let reads = 0;
+    const getItem = p.container.getItem.bind(p.container);
+    p.container.getItem = (slot) => (reads++, getItem(slot));
+    const has = () => p.container.slots.some((it) => it?.nameTag === "§r§6Realm Configuration");
+    for (let r = 0; r < 12 && !has(); r++) {
+      reads = 0;
+      for (let i = 0; i < 30; i++) system.stepInterval();
+    }
+    const inRound = reads;
+    assert.equal(countRealTools(p).count, 1, "given back");
+    assert.ok(inRound <= 2 * 36 + 4, `${inRound} slot reads in the round that gave it back`);
+  } finally {
+    cleanup();
+  }
+});

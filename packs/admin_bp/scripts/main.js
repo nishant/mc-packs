@@ -1012,9 +1012,12 @@ function carries(player) {
 /** Players told their inventory was too full for the item (the 30 s check doesn't repeat it). @type {Set<string>} */
 const toldFull = new Set();
 
-/** Gives the item unless they carry one. @param {Player} player @param {boolean} tell say so if they already have one */
-function giveItem(player, tell) {
-  const before = reconcileItems(player, tell);
+/**
+ * Gives the item unless they carry one.
+ * @param {Player} player @param {boolean} tell say so if they already have one
+ * @param {ReturnType<typeof reconcileItems>} [before] a reconcile the caller ran just now (this tick, no change since)
+ */
+function giveItem(player, tell, before = reconcileItems(player, tell)) {
   if (before.hasItem) {
     if (tell && before.failedRemovals === 0) {
       if (before.removedExtras > 0) {
@@ -1118,8 +1121,8 @@ function check(player) {
   if (!player.isValid) return;
   const all = forEveryone();
   if (all || isOp(player)) {
-    const { hasItem } = reconcileItems(player);
-    if ((all || get("giveToOperators") === true) && !hasItem) giveItem(player, false);
+    const now = reconcileItems(player);
+    if ((all || get("giveToOperators") === true) && !now.hasItem) giveItem(player, false, now); // no second read of the same inventory
   } else if (get("removeFromOthers") === true) {
     takeItem(player);
   } else {
