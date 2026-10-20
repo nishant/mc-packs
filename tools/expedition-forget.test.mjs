@@ -1,7 +1,8 @@
 // O62: a confirmed realm:diag_forget for Expeditions deletes its own parcel structures (never another pack's or a
 // player's structures), keeps every stash structure (players' own data still points at them), refuses new saves
 // afterwards, and answers ONCE, after the clean-up. The real generated diag.js, the real gauntlet.js and the forget hook
-// block of main.js run against one fake server. EXPEDITION_SRC points at another copy of the pack's scripts folder.
+// module (forget.js, imported as it ships) run against one fake server. EXPEDITION_SRC points at another copy of the
+// pack's scripts folder.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +14,8 @@ import vm from "node:vm";
 const scripts = new URL("../packs/expedition_bp/scripts/", import.meta.url);
 const srcDir = process.env.EXPEDITION_SRC ? `${process.env.EXPEDITION_SRC}/` : undefined;
 const read = (f) => readFileSync(srcDir ? `${srcDir}${f}` : new URL(f, scripts), "utf8");
-const mainSource = read("main.js");
+const mainSource = read("main.js").replace(/\r\n/g, "\n");
+const { createForget } = await import(srcDir ? pathToFileURL(`${srcDir}forget.js`).href : new URL("forget.js", scripts).href);
 const gauntletSource = read("gauntlet.js");
 const diagSource = readFileSync(new URL("diag.js", scripts), "utf8");
 
@@ -98,12 +100,8 @@ async function setup({ ids, failDelete = [], keepAfterDelete = [], failList = fa
   const gsrc = gauntletSource.replace(/^import .*$/gm, "").replace(/^export /gm, "");
   vm.runInContext(`${gsrc}\nglobalThis.api = { saveStash, saveParcel, forgetStructures, setSaving };`, gctx);
 
-  const start = mainSource.indexOf("// forget hook begin");
-  const end = mainSource.indexOf("// forget hook end");
-  assert.ok(start >= 0 && end > start, "production forget hook block");
-  const mctx = {
-    console: { warn: (m) => warnings.push(String(m)) },
-    String, Set,
+  const hook = createForget({
+    warn: (m) => warnings.push(String(m)),
     isOp: (p) => p.isOp,
     forgetStructures: gctx.api.forgetStructures,
     setSaving: gctx.api.setSaving,
@@ -114,10 +112,9 @@ async function setup({ ids, failDelete = [], keepAfterDelete = [], failList = fa
     },
     system: mc.system,
     world: mc.world,
-  };
-  vm.createContext(mctx);
-  vm.runInContext(mainSource.slice(start, end), mctx);
-  globalThis.__realmDiagForgetHooks = mctx.__realmDiagForgetHooks;
+  });
+  // Registered the way main.js registers it (checked below against the production source).
+  globalThis.__realmDiagForgetHooks = { expedition_bp: hook.onForget };
 
   const dir = mkdtempSync(join(tmpdir(), "o62-"));
   mkdirSync(join(dir, "expedition_bp"), { recursive: true });
@@ -228,4 +225,10 @@ test("after a confirmed forget no stash or parcel is made and the inventory is l
   assert.equal(w.structures.size, 0);
   assert.equal(inv.items.get(0), "diamond");
   assert.equal(w.mc.world.props.size, 0, "no counter was written");
+});
+test("wiring: main.js makes the hook from forget.js with the pack's own parts and registers it for realm:diag", () => {
+  assert.match(mainSource, /^import \{ createForget \} from "\.\/forget\.js";$/m);
+  assert.match(mainSource, /const forget = createForget\(\{ world, system, isOp, forgetStructures, handingOver, setSaving, clearQueue: \(text\) => clearQueue\(text\) \}\);/);
+  assert.match(mainSource, /__realmDiagForgetHooks \?\?= \{\}\)\.expedition_bp = forget\.onForget;/);
+  assert.doesNotMatch(mainSource, /forget hook begin|expedition queue begin/, "no code between test markers");
 });

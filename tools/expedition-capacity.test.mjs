@@ -1,19 +1,19 @@
 // O8: expeditions stay at 3 dungeons (the world's 10 ticking areas are shared) and a real, bounded line takes over: a
 // party that finds every dungeon busy waits, and the next waiting party starts by itself when a slot genuinely frees.
-// The production queue block of main.js (between its begin/end markers) runs against fakes of the game and of the
-// parts of main.js it calls; the wiring of the rest is checked against the production source.
+// The production queue module (queue.js) is imported as it ships and runs against fakes of the game and of the parts
+// of main.js it calls; the wiring of the rest is checked against the production source.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import vm from "node:vm";
 
 const scripts = new URL("../packs/expedition_bp/scripts/", import.meta.url);
 const srcDir = process.env.EXPEDITION_SRC ? `${process.env.EXPEDITION_SRC}/` : undefined;
 const mainSource = readFileSync(srcDir ? `${srcDir}main.js` : new URL("main.js", scripts), "utf8").replace(/\r\n/g, "\n");
-const begin = mainSource.indexOf("// expedition queue begin");
-const end = mainSource.indexOf("// expedition queue end");
-assert.ok(begin >= 0 && end > begin, "production queue block");
-const block = mainSource.slice(begin, end);
+const moduleUrl = (f) => (srcDir ? pathToFileURL(`${srcDir}${f}`).href : new URL(f, scripts).href);
+const { createQueue, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY } = await import(moduleUrl("queue.js"));
+const { createForget } = await import(moduleUrl("forget.js"));
 const fnSrc = (name) => {
   const m = new RegExp(`^(async )?function ${name}\\(`, "m").exec(mainSource);
   assert.ok(m, `production function ${name}`);
@@ -23,8 +23,6 @@ const fnSrc = (name) => {
   assert.ok(src.length > 40, `production function ${name} is not empty`);
   return src;
 };
-const forgetBegin = mainSource.indexOf("// forget hook begin");
-const forgetBlock = mainSource.slice(forgetBegin, mainSource.indexOf("// forget hook end"));
 
 // The production start, cantStart, freeSlot, leave, preview, show, resetPending, prepare and the forget hook, run against fakes of
 // what they call; start stops at layout() (after the sigil and the slot), which is all the queue decisions need.
@@ -95,7 +93,13 @@ function realParts(w, ctx, players, runs) {
     refundSigil: () => {},
   });
   vm.runInContext("let resettingPending; const toldPending = new Set();", ctx);
-  vm.runInContext(["freeSlot", "cantStart", "start", "leave", "show", "preview", "resetPending", "prepare"].map(fnSrc).join("\n") + `\n${forgetBlock}`, ctx);
+  vm.runInContext(["freeSlot", "cantStart", "start", "leave", "show", "preview", "resetPending", "prepare"].map(fnSrc).join("\n"), ctx);
+  // The production forget hook (forget.js), wired the way main.js wires it.
+  ctx.forget = createForget({
+    world: ctx.world, system: ctx.system, isOp: ctx.isOp, forgetStructures: ctx.forgetStructures, handingOver: ctx.handingOver,
+    setSaving: ctx.setSaving, clearQueue: (text) => ctx.clearQueue(text), warn: ctx.console.warn,
+  });
+  ctx.__realmDiagForgetHooks = { expedition_bp: ctx.forget.onForget };
 }
 
 function world({ slots = 3, site = true, real = false } = {}) {
@@ -137,7 +141,25 @@ function world({ slots = 3, site = true, real = false } = {}) {
     },
   };
   vm.createContext(ctx);
-  if (!real) vm.runInContext("let forgotten = false;", ctx);  vm.runInContext(`${block}\nglobalThis.q = { queue, enqueue, dequeue, clearQueue, pumpQueue, slotBusy, freeRun, queuePlace, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY };`, ctx);
+  // Every dependency is looked up in ctx when it is called, so a test can swap one (freeSlot) and the sliced
+  // production functions (real: start, cantStart...) are the ones the line calls.
+  const q = createQueue({
+    system, runs,
+    get: (k) => ctx.get(k),
+    site: () => ctx.site(),
+    online: (id) => ctx.online(id),
+    runOf: (id) => ctx.runOf(id),
+    statusLine: (r) => ctx.statusLine(r),
+    sigilsOf: (p) => ctx.sigilsOf(p),
+    freeSlot: () => ctx.freeSlot(),
+    start: (...a) => ctx.start(...a),
+    resetPending: () => ctx.resetPending(),
+    cantStart: (p) => ctx.cantStart(p),
+    forgotten: () => (ctx.forget ? ctx.forget.forgotten() : false),
+  });
+  system.runInterval(q.pumpQueue, 100);
+  Object.assign(ctx, q);
+  ctx.q = { ...q, QUEUE_MAX, QUEUE_TICKS, QUEUE_RETRY };
   if (real) realParts(w, ctx, players, runs);
   w.q = ctx.q;
   w.ctx = ctx;
@@ -330,6 +352,11 @@ test("wiring: the line is the only wait; slots stay 1-3, the release is the queu
   assert.match(mainSource, /system\.run\(pumpQueue\);/, "a finished reset starts the next party");
   assert.match(mainSource, /if \(!Array\.isArray\(kept\) \|\| \(kept\.length === affixes\.length[\s\S]{0,160}delete rolls\[levelKey\(L\)\]/, "a newer roll isn't deleted by a start that used older affixes");
   assert.match(mainSource, /async function opReset[\s\S]{0,200}clearQueue\(/);
+  // The line is queue.js as it ships (imported above), made once in main.js with the pack's own parts and pumped every 5 s.
+  assert.match(mainSource, /^import \{ createQueue \} from "\.\/queue\.js";$/m);
+  assert.match(mainSource, /= createQueue\(\{\n(?: {2}\w+(?:: [\w.]+)?,\n)+\}\);\nsystem\.runInterval\(pumpQueue, 100\);/);
+  assert.match(mainSource, /forgotten: forget\.forgotten,/);
+  assert.doesNotMatch(mainSource, /^const QUEUE_|^let queueHold/m, "no second copy of the line in main.js");
 });
 
 const startReal = async (w, p, L = 1, affixes = [], sigil, g) => {

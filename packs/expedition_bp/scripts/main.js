@@ -18,6 +18,8 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { RARITY, boonEffects, boonOf, dropStrayCart, forgetStructures, giveKit, handingOver, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, setSaving, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
+import { createForget } from "./forget.js";
+import { createQueue } from "./queue.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -367,65 +369,9 @@ onScriptEvent(
   },
 );
 
-// forget hook begin
-/** True from a confirmed forget until /reload: a parcel structure is still being swept (a hand-over was running). */
-let sweepPending = false;
-/** True from a confirmed forget until /reload: no run starts (its run record and counters can't be saved) and the line is closed. */
-let forgotten = false;
-
-/** Tells the operators online (and the log) how a deferred sweep ended. @param {string} text */
-function tellOps(text) {
-  console.warn(text.replace(/§./g, ""));
-  for (const p of world.getAllPlayers()) if (isOp(p)) p.sendMessage(text);
-}
-
-/** One sweep of this pack's parcel structures (their records went with the forgotten world data, so nothing can hand them over). Stash structures stay: see onForget. */
-const sweepParcels = () => forgetStructures("parcel", handingOver);
-
-/** Retries a sweep that had to wait for a running hand-over, and says how it ended. */
-function retrySweep() {
-  const r = sweepParcels();
-  if (r.failed) {
-    sweepPending = false;
-    tellOps(`§c[Expeditions] Forgot the saved data, but the parcel clean-up failed: ${r.failed < 0 ? "" : `${r.failed} parcel structure${r.failed === 1 ? "" : "s"} couldn't be deleted. `}${r.error}`);
-  } else if (r.kept) system.runTimeout(retrySweep, 40);
-  else {
-    sweepPending = false;
-    tellOps(`§e[Expeditions] The waiting parcel clean-up finished: ${r.deleted} more parcel structure${r.deleted === 1 ? "" : "s"} deleted.`);
-  }
-}
-
-/**
- * realm:diag's forget cleanup for this pack, run once after the saved world data is gone and this pack's world saves are
- * blocked until /reload. It stops new stashes and parcels (their counters can't be saved, and a stash without its record
- * would strip an inventory with no way back), deletes the parcel structures (nothing can hand them over any more) and
- * keeps every stash structure: players' own data still points at them, offline players included, so each one is deleted
- * when its owner gets their items back. Returns the one answer's note or error.
- * @returns {{ note?: string, error?: string }}
- */
-function onForget() {
-  forgotten = true;
-  setSaving(false);
-  clearQueue("§eThe expedition data was forgotten, so the line for a dungeon is closed until the realm reloads.");
-  const r = sweepParcels();
-  const stashes = (() => {
-    try {
-      return world.structureManager.getWorldStructureIds().filter((id) => /^expedition:stash_\d+$/.test(id)).length;
-    } catch {
-      return 0;
-    }
-  })();
-  const stashNote = stashes ? ` ${stashes} stash structure${stashes === 1 ? " stays" : "s stay"} because players' own data still points at ${stashes === 1 ? "it" : "them"}; each is deleted when its owner gets their items back.` : "";
-  if (r.failed) return { error: `${r.failed < 0 ? r.error : `${r.failed} parcel structure${r.failed === 1 ? "" : "s"} couldn't be deleted (${r.error}); ${r.deleted} deleted`}.${stashNote}` };
-  if (r.kept) {
-    sweepPending = true;
-    system.runTimeout(retrySweep, 40);
-    return { note: `${r.deleted} parcel structures deleted, ${r.kept} waiting for a hand-over to end (operators are told when done).${stashNote}` };
-  }
-  return { note: `${r.deleted} parcel structure${r.deleted === 1 ? "" : "s"} deleted.${stashNote}` };
-}
-(/** @type {any} */ (globalThis).__realmDiagForgetHooks ??= {}).expedition_bp = onForget;
-// forget hook end
+// realm:diag's forget cleanup (forget.js). clearQueue is looked up when a forget runs: the line is made further down.
+const forget = createForget({ world, system, isOp, forgetStructures, handingOver, setSaving, clearQueue: (text) => clearQueue(text) });
+(/** @type {any} */ (globalThis).__realmDiagForgetHooks ??= {}).expedition_bp = forget.onForget;
 
 
 /**
@@ -1340,107 +1286,23 @@ function slotFits(at, slot) {
   return Math.hypot(at.x + slot * SPACING - spawn.x, at.z - spawn.z) >= CONFIG.avoidSpawn + 50;
 }
 
-// expedition queue begin
-// Three dungeons is the most the world's 10 ticking areas can spare (Farm Loader, Siege, Death Point, Town Houses and
-// the builders share them), so a fourth party waits in line and its run starts by itself when a dungeon is free.
-/** Parties that can wait at once. */
-const QUEUE_MAX = 8;
-/** Game ticks a party may wait (30 minutes) before it is dropped from the line. */
-const QUEUE_TICKS = 36000;
-/** Game ticks the line holds after a dungeon failed to open (a minute), so one bad site doesn't fail every party in turn. */
-const QUEUE_RETRY = 1200;
-
-/**
- * One party waiting for a dungeon. Memory only and nothing is debited while it waits: the sigil is used up, and a
- * Fixed loadout stored, only when the run really starts; the party is asked then, so who comes along is who is there.
- * @typedef {{ id: string, name: string, d: Dungeon, L: number, affixes: string[], sigilLine: string | undefined, g: { loadout: boolean } | undefined, at: number }} Queued
- */
-/** @type {Queued[]} */
-const queue = [];
-/** The line doesn't start anyone before this tick. */
-let queueHold = 0;
-
-/** @param {string} id */
-const queuePlace = (id) => queue.findIndex((q) => q.id === id);
-
-/** Takes a leader out of the line; true when they were in it. @param {string} id */
-function dequeue(id) {
-  const i = queuePlace(id);
-  if (i < 0) return false;
-  queue.splice(i, 1);
-  return true;
-}
-
-/** Empties the line and tells each leader why; returns how many parties were waiting. @param {string} text */
-function clearQueue(text) {
-  const n = queue.length;
-  for (const q of queue.splice(0)) online(q.id)?.sendMessage(text);
-  return n;
-}
-
-/** No dungeon for this request right now: all taken, or others are already waiting (they go first). @param {boolean} [fromQueue] the line itself is starting it */
-function slotBusy(fromQueue = false) {
-  return freeSlot() === undefined || (!fromQueue && queue.length > 0);
-}
-
-/**
- * Puts a confirmed request in line (asking again replaces the earlier request and keeps the place).
- * @param {Player} leader @param {Dungeon} d @param {number} L @param {string[]} affixes @param {string | undefined} sigilLine @param {{ loadout: boolean } | undefined} g
- */
-function enqueue(leader, d, L, affixes, sigilLine, g) {
-  if (forgotten) return leader.sendMessage(cantStart(leader));
-  if (sigilLine && !sigilsOf(leader).some((s) => s.sig.line === sigilLine)) return leader.sendMessage("§cThat sigil isn't in your inventory any more.");
-  const had = queuePlace(leader.id);
-  if (had < 0 && queue.length >= QUEUE_MAX) return leader.sendMessage(`§eAll dungeons are busy and ${QUEUE_MAX} parties are already waiting. Try again later.`);
-  /** @type {Queued} */
-  const entry = { id: leader.id, name: leader.name, d, L, affixes: [...affixes], sigilLine, g: g ? { ...g } : undefined, at: system.currentTick };
-  if (had >= 0) {
-    entry.at = queue[had].at;
-    queue[had] = entry;
-  } else queue.push(entry);
-  const busy = [...runs.values()].map(statusLine).join("; ");
-  leader.sendMessage(
-    `§eEvery dungeon is busy${busy ? ` (${busy})` : ""}. You're number ${queuePlace(leader.id) + 1} of ${queue.length} in line: your ${g ? "Gauntlet" : "expedition"} starts by itself when a dungeon is free, with whoever is in your party then. Leave the line with /realm:expedition_leave.`,
-  );
-  if (!runs.size) resetPending().catch((e) => console.warn(`[expedition] ${e}`));
-}
-
-/** Drops parties that can't go on, then starts the next waiting parties while a dungeon is free. */
-function pumpQueue() {
-  if (forgotten) return void clearQueue("§eThe expedition data was forgotten, so the line for a dungeon is closed until the realm reloads.");
-  if (!queue.length) return;
-  const now = system.currentTick;
-  const on = get("enabled") === true;
-  for (const q of [...queue]) {
-    const p = online(q.id);
-    let why = "";
-    if (!p) why = "";
-    else if (runOf(q.id)) why = "§7You joined an expedition, so you're out of the line for a dungeon.";
-    else if (!on) why = "§eNew expeditions are disabled right now, so you're out of the line for a dungeon.";
-    else if (q.g && get("gauntletEnabled") !== true) why = "§eGauntlets are disabled right now, so you're out of the line for a dungeon.";
-    else if (now - q.at >= QUEUE_TICKS) why = "§eNo dungeon was free for 30 minutes, so you're out of the line. Ask again when you're ready.";
-    else continue;
-    dequeue(q.id);
-    if (p && why) p.sendMessage(why);
-  }
-  if (now < queueHold || !site()) return;
-  while (queue.length && freeSlot() !== undefined) {
-    const q = queue.shift();
-    const p = q && online(q.id);
-    if (!q || !p) continue;
-    p.sendMessage("§aAn expedition dungeon is free now: starting yours.");
-    start(p, q.d, q.L, q.affixes, q.sigilLine, q.g, true).catch((e) => console.warn(`[expedition] queued start: ${e}`));
-  }
-}
+// The line for a dungeon (queue.js): a fourth party waits and starts by itself when a dungeon is free.
+const { queue, queuePlace, dequeue, clearQueue, slotBusy, enqueue, pumpQueue, freeRun } = createQueue({
+  system,
+  get,
+  site,
+  online,
+  runs,
+  runOf,
+  statusLine,
+  sigilsOf,
+  freeSlot,
+  start,
+  resetPending,
+  cantStart,
+  forgotten: forget.forgotten,
+});
 system.runInterval(pumpQueue, 100); // a slot opened by the operators' settings, a hold that ended, an expired party
-
-/** A run's slot is free again (its box reset, or it never got one): the next waiting party starts. @param {number} slot @param {boolean} [failed] the dungeon couldn't be opened: the line holds a minute */
-function freeRun(slot, failed = false) {
-  runs.delete(slot);
-  if (failed) queueHold = system.currentTick + QUEUE_RETRY;
-  system.run(pumpQueue);
-}
-// expedition queue end
 
 /** @returns {number | undefined} */
 function freeSlot() {
@@ -1498,7 +1360,7 @@ async function ask(p, leader, d, L, affixes, g) {
 
 /** Why a new run can't be asked for at all right now, or "". A full house isn't one: the request waits in line. @param {Player} leader */
 function cantStart(leader) {
-  if (forgotten) return "§cExpedition data was forgotten by the operators: new runs wait until the realm reloads.";
+  if (forget.forgotten()) return "§cExpedition data was forgotten by the operators: new runs wait until the realm reloads.";
   if (get("enabled") !== true) return "§cNew expeditions are disabled on this realm right now.";
   if (!site()) return "§cThe operators haven't picked an expedition site yet (/realm:expedition_site).";
   if (runOf(leader.id)) return "§cYou're already on an expedition.";
