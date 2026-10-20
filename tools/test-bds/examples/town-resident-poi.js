@@ -9,6 +9,7 @@ export default async function (t) {
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
   await t.loadArea(0, 0, { radius: 4 });
   t.server("/gamerule dodaylightcycle true");
+  t.server("/gamerule domobspawning false"); // no zombies at night: they would scatter or kill the villagers being watched
   t.server("/time set 1000");
   t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "res", pack: "town_bp", key: "residents", value: true }));
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
@@ -38,30 +39,41 @@ export default async function (t) {
   // The player's bed: 5 blocks in front of the well (the way it faces, away from it), on the ground at the spot's height.
   const FWD = [[0, 1], [-1, 0], [0, -1], [1, 0]][s.f];
   const foot = { x: s.x - FWD[0] * 5, y: s.y, z: s.z - FWD[1] * 5 };
-  const head = { x: foot.x - FWD[0], y: foot.y, z: foot.z - FWD[1] };
+  let head = { x: foot.x - FWD[0], y: foot.y, z: foot.z - FWD[1] };
   for (const v of [foot, head, { ...foot, y: foot.y + 1 }, { ...head, y: head.y + 1 }]) dim.getBlock(v)?.setType("minecraft:air");
   const dir = (s.f + 2) % 4; // its head away from the well (designs.js: direction 0 south .. 3 east, as FORWARD)
-  dim.getBlock(foot).setPermutation(t.mc.BlockPermutation.resolve("minecraft:bed", { direction: dir, head_piece_bit: false, occupied_bit: false }));
-  dim.getBlock(head).setPermutation(t.mc.BlockPermutation.resolve("minecraft:bed", { direction: dir, head_piece_bit: true, occupied_bit: false }));
+  // Placed with /setblock (as a player's bed is): it places both halves. A villager asleep never sets occupied_bit,
+  // so a claim shows as a villager asleep (isSleeping) on the bed.
+  t.server(`/setblock ${foot.x} ${foot.y} ${foot.z} bed ["direction"=${dir}]`);
   await t.wait(5);
+  // Where /setblock put the head half (the 4 neighbors of the foot).
+  head = [[0, 1], [-1, 0], [0, -1], [1, 0]].map(([dx, dz]) => ({ x: foot.x + dx, y: foot.y, z: foot.z + dz })).find((v) => dim.getBlock(v)?.typeId === "minecraft:bed") ?? head;
+  t.log(`bed: foot ${JSON.stringify(foot)}, head ${JSON.stringify(head)}, direction ${dir}`);
   t.check(dim.getBlock(foot)?.typeId === "minecraft:bed" && dim.getBlock(head)?.typeId === "minecraft:bed", "the player's bed is whole");
-  const occupied = () => [foot, head].some((v) => dim.getBlock(v)?.permutation.getState("occupied_bit") === true);
+  const onBed = (e) => [foot, head].some((v) => Math.hypot(e.location.x - (v.x + 0.5), e.location.z - (v.z + 0.5)) <= 1.5);
+  const occupied = () => dim.getEntities({ type: "minecraft:villager_v2" }).some((e) => e.isSleeping && onBed(e));
+  let residentSlept = false;
   const homes = residents().map((e) => ({ id: e.id, x: e.location.x, z: e.location.z }));
 
   // Night: the residents' bed time.
   t.server("/time set 13000");
   let claimed = false;
   let far = 0;
+  let farthest = 0;
   for (let k = 0; k < 80; k++) {
     await t.wait(20);
     if (occupied()) claimed = true;
+    if (residents().some((e) => e.isSleeping)) residentSlept = true;
     for (const e of residents()) {
       const h = homes.find((x) => x.id === e.id);
-      if (h && Math.hypot(e.location.x - h.x, e.location.z - h.z) > 24) far++;
+      const dist = h ? Math.hypot(e.location.x - h.x, e.location.z - h.z) : 0;
+      farthest = Math.max(farthest, dist);
+      if (dist > 24) far++;
     }
   }
   t.check(!claimed, "no resident slept in the player's bed through the night");
-  t.check(far === 0, `the residents stayed within 24 blocks of home (${far} readings past it)`);
+  t.check(!residentSlept, "no resident slept anywhere (they claim no bed)");
+  t.check(far === 0, `the residents stayed within 24 blocks of home (${far} readings past it, farthest ${farthest.toFixed(1)})`);
   t.check(residents().length === 2, "both still there");
 
   // The control: an ordinary villager claims the same bed, so the check above can tell a claim.
