@@ -14,6 +14,7 @@ const check = process.argv.includes("--check");
 // folder -> the scripts that must import from ./tether.js
 const CONSUMERS = {
   wander_bp: ["main.js"],
+  caravan_bp: ["main.js"],
 };
 
 const problems = [];

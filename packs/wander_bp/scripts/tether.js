@@ -243,10 +243,10 @@ export function createTether(o = {}) {
       if (why) {
         if (guard.allow(id, now)) {
           low.delete(id);
-          let to;
-          try {
-            to = freeSpotNear(ent.dimension, home, spot, hashId(id)) ?? home;
-          } catch {
+          // A free spot near home, else home itself, but never into a chunk that isn't loaded.
+          let to = freeSpotNear(ent.dimension, home, spot, hashId(id));
+          if (!to) {
+            if (!block(ent.dimension, Math.floor(home.x), Math.floor(home.y), Math.floor(home.z))) return "skip";
             to = home;
           }
           try {
