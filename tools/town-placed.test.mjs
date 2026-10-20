@@ -60,11 +60,13 @@ test("boxes: realm:blocks_placed boxes, bounded; touches", () => {
   assert.equal(CELL, 4);
 });
 
-test("main.js: natural kinds placed inside a town are marked, and other packs can report boxes", () => {
+test("main.js: natural kinds and wild plants placed inside a town are marked, and other packs can report boxes", () => {
   const main = fs.readFileSync(path.join(import.meta.dirname, "..", "packs", "town_bp", "scripts", "main.js"), "utf8");
   const handler = main.slice(main.indexOf("world.afterEvents.playerPlaceBlock.subscribe"));
   assert.ok(handler.length > 0, "playerPlaceBlock is subscribed");
   assert.match(handler.slice(0, 600), /NATURAL\.has\(/, "only natural kinds (the rest is man-made anyway)");
+  // Wild plants too: a flower bed looks like wild ground to the scan, and builds and paths would remove it (F40 review).
+  assert.match(handler.slice(0, 600), /!NATURAL\.has\(block\.typeId\) && !WILD\.has\(block\.typeId\)/, "and wild plants");
   assert.match(main, /"realm:blocks_placed"/);
   assert.match(main, /town:pl:/);
 });

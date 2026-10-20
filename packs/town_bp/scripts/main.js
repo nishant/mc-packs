@@ -2961,7 +2961,8 @@ const dimId = (d) => (typeof d === "string" ? (d.startsWith("minecraft:") ? d : 
 
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
-    if (!NATURAL.has(block.typeId)) return; // anything else is man-made anyway
+    // Natural kinds and wild plants (a flower bed looks like wild ground to the scan); anything else is man-made anyway.
+    if (!NATURAL.has(block.typeId) && !WILD.has(block.typeId)) return;
     const { x, y, z } = block.location;
     const dim = block.dimension.id;
     const r = get("townRadius");

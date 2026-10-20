@@ -40,6 +40,9 @@ test("ids are vanilla ones, and only single-block wild plants are cleared", () =
   const ids = new Set(Object.values(MinecraftBlockTypes));
   for (const b of CLEARABLE) assert.ok(ids.has(b), b);
   for (const b of ["tall_grass", "large_fern", "sunflower", "lilac", "rose_bush", "peony", "wheat", "oak_sapling", "snow_layer", "sweet_berry_bush"]) assert.ok(!CLEARABLE.has(id(b)), `${b} stops a path`);
+  // Flowers and the like may be someone's flower bed: a path stops at them instead of clearing them (F40 review).
+  for (const b of ["poppy", "dandelion", "cornflower", "red_tulip", "torchflower", "pink_petals", "wildflowers", "fern", "red_mushroom", "open_eyeblossom", "firefly_bush"]) assert.ok(!CLEARABLE.has(id(b)), `${b} stops a path`);
+  assert.ok(CLEARABLE.has(id("short_grass")), "a grass tuft is cleared");
   for (const b of ["grass_path", "grass_block", "oak_fence", "lantern"]) assert.ok(ids.has(id(b)), b);
 });
 
@@ -109,10 +112,12 @@ test("planPath stops at anything else: a step of 2, a man-made block, a path, a 
   assert.equal(len(new Map(), { stop: (x) => x === 50 }), 10, "a column stop() refuses (another build, a claim, a placed block)");
   const unl = run(planPath({ start: { x: 60, y: 64, z: 0 }, cx: 0, cz: 0 }), worldOf(flat, new Map(), (x) => x === 50));
   assert.deepEqual([unl.cells.length, unl.unloaded], [10, true], "an unloaded column ends it, marked");
-  // A single wild plant is cleared; the cell says so.
-  const flower = run(planPath({ start: { x: 60, y: 64, z: 0 }, cx: 0, cz: 0, max: 20 }), worldOf(flat, new Map([["55,65,0", id("poppy")]])));
-  assert.equal(flower.cells.length, 20);
-  assert.deepEqual(flower.cells.filter((c) => c.c).map((c) => c.x), [55]);
+  // A grass tuft is cleared; the cell says so. A flower stops the path (F40 review: it may be someone's flower bed).
+  const tuft = run(planPath({ start: { x: 60, y: 64, z: 0 }, cx: 0, cz: 0, max: 20 }), worldOf(flat, new Map([["55,65,0", id("short_grass")]])));
+  assert.equal(tuft.cells.length, 20);
+  assert.deepEqual(tuft.cells.filter((c) => c.c).map((c) => c.x), [55]);
+  assert.equal(len(new Map([["50,65,0", id("poppy")]])), 10, "a flower");
+  assert.equal(len(new Map([["50,65,0", id("pink_petals")]])), 10, "petals");
   // Nothing but grass ever becomes a cell: sand, stone, snow on top all stop it at once.
   for (const top of ["sand", "stone", "dirt", "snow_layer"]) {
     const set = new Map([[top === "snow_layer" ? "60,65,0" : "60,64,0", id(top)]]);

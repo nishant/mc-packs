@@ -20,16 +20,11 @@ const mc = (a) => a.map((b) => `minecraft:${b}`);
 const AIR = "minecraft:air";
 const GRASS = "minecraft:grass_block";
 /**
- * Single-block wild plants a path may clear from the grass it lays (two-block plants, crops, saplings and snow stop it:
- * taking half of a tall plant away would drop the other half).
+ * Single-block grass tufts a path may clear from the grass it lays (never given back: they grow wild everywhere).
+ * Flowers, mushrooms, ferns, petals, two-block plants, crops, saplings and snow stop it: a flower may be someone's
+ * flower bed, and taking half of a tall plant away would drop the other half.
  */
-export const CLEARABLE = new Set(
-  mc([
-    "short_grass", "fern", "deadbush", "leaf_litter", "pink_petals", "wildflowers", "bush", "firefly_bush", "short_dry_grass", "tall_dry_grass",
-    "brown_mushroom", "red_mushroom", "poppy", "dandelion", "cornflower", "azure_bluet", "oxeye_daisy", "allium", "lily_of_the_valley",
-    "orange_tulip", "red_tulip", "white_tulip", "pink_tulip", "blue_orchid", "torchflower", "open_eyeblossom", "closed_eyeblossom",
-  ]),
-);
+export const CLEARABLE = new Set(mc(["short_grass", "short_dry_grass", "tall_dry_grass", "deadbush", "bush", "leaf_litter"]));
 
 /** @typedef {{ x: number, y: number, z: number }} Cell a path block (its y is the grass turned to path), or a post's fence */
 /** @typedef {{ x: number, y: number, z: number, c?: 1 }} PathCell c: 1 where a wild plant on it was cleared */
