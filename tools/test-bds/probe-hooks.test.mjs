@@ -1,4 +1,4 @@
-// The harness-only probe hooks (tools/test-bds/hooks/owed-probe.mjs, milestones-rejoin.mjs, stash-loads.mjs) build
+// The harness-only probe hooks (tools/test-bds/hooks/owed-probe.mjs, milestones-rejoin.mjs, stash-loads.mjs, elite-remove.mjs) build
 // test copies whose scripts parse, put the probe where it runs (right after diag.js, so it sees what the pack
 // subscribes), leave the shipped packs alone, and work on a source tree given as their last argument (how a scenario
 // is run on the code from before a fix).
@@ -83,6 +83,42 @@ test("stash-loads: the page-load counter comes right after diag.js and counts st
     assert.match(fs.readFileSync(probe, "utf8"), /startsWith\("structure load "\)/);
     assert.match(fs.readFileSync(path.join(ROOT, "packs", "stash_bp", "scripts", "page-store.js"), "utf8"), /runCommand\(`structure load /, "stash_bp still loads its saved pages with the structure load command");
     assert.ok(fs.existsSync(path.join(dir, "packs", "refill_bp", "manifest.json")), "refill_bp is copied along");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("elite-remove: the spawn remover comes right after diag.js and subscribes after the pack's own entitySpawn handler", () => {
+  const dir = tmp();
+  try {
+    run([path.join(HOOKS, "elite-remove.mjs"), path.join(dir, "packs")]);
+    const main = fs.readFileSync(path.join(dir, "packs", "elite_bp", "scripts", "main.js"), "utf8").split("\n");
+    assert.equal(main[0], 'import "./diag.js";');
+    assert.equal(main[1], 'import "./harness_elite_remove.js";');
+    const shipped = fs.readFileSync(path.join(ROOT, "packs", "elite_bp", "scripts", "main.js"), "utf8");
+    assert.deepEqual([main[0], ...main.slice(2)], shipped.split("\n"), "nothing else changes");
+    assert.match(shipped, /^world\.afterEvents\.entitySpawn\.subscribe\(/m, "elite_bp subscribes its spawn handler while loading (so the probe's, on the first tick, runs after it)");
+    assert.match(shipped, /system\.runTimeout\(\(\) => \{\s*try \{\s*convert\(entity\);/, "elite_bp still converts a tick after the spawn");
+    const probe = path.join(dir, "packs", "elite_bp", "scripts", "harness_elite_remove.js");
+    parses(probe);
+    const text = fs.readFileSync(probe, "utf8");
+    assert.match(text, /system\.run\(\(\) => \{\s*world\.afterEvents\.entitySpawn\.subscribe/, "subscribes on the first tick");
+    assert.match(text, /ScriptEventSource\.Server/, "console only");
+    assert.match(text, /namespaces: \["harness"\]/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("elite-remove: works on a source tree from before the guards", () => {
+  const dir = tmp();
+  try {
+    const src = path.join(dir, "src", "packs", "elite_bp", "scripts");
+    fs.mkdirSync(src, { recursive: true });
+    fs.writeFileSync(path.join(src, "main.js"), 'import "./diag.js";\nimport { world } from "@minecraft/server";\nworld;\n');
+    run([path.join(HOOKS, "elite-remove.mjs"), path.join(dir, "out"), path.join(dir, "src")]);
+    const main = fs.readFileSync(path.join(dir, "out", "elite_bp", "scripts", "main.js"), "utf8").split("\n");
+    assert.deepEqual(main.slice(0, 3), ['import "./diag.js";', 'import "./harness_elite_remove.js";', 'import { world } from "@minecraft/server";']);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

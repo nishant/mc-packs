@@ -3,9 +3,16 @@
 // conversion a tick after a spawn, the aura and approach round robins, the hurt and hit handlers, the Stormcaller's
 // strikes, the 5-second recount and the arrival and announcement of a requested champion.
 // Run with --strict: a caught error the pack logs as a warning fails the run, which is what O58 is about (the guards
-// from 6f85410; before them these paths logged "InvalidEntityError ... dimension" warnings). The checks below only make
+// from 6f85410; before them these paths logged "InvalidEntityError ... dimension" warnings). The checks below make
 // sure every stress really happened.
-//   node tools/test-bds/run.mjs --quiet --strict --flat --only elite_bp --scenario tools/test-bds/examples/elite-invalid.js --timeout 900
+// The conversion a tick after a spawn needs the mob removed after elite_bp's entitySpawn handler scheduled it and before
+// that timeout fires. A scenario can't time that from its own script context, so a harness-only probe in a copy of
+// elite_bp (tools/test-bds/hooks/elite-remove.mjs) removes chosen spawns in the pack's own flush, after its handler. The
+// probe uses nothing of the guards, so the same recipe runs the code from before them (6f85410^ as its second argument,
+// where the same-tick removals of stress 1a reach the unguarded spawn handler) or a copy without convert()'s guard.
+//   mkdir -p /tmp/elite-invalid
+//   node tools/test-bds/hooks/elite-remove.mjs /tmp/elite-invalid/packs
+//   node tools/test-bds/run.mjs --quiet --strict --flat --packs /tmp/elite-invalid/packs --only elite_bp --scenario tools/test-bds/examples/elite-invalid.js --timeout 900
 export default async function (t) {
   const dim = t.dimension;
   const cfg = (key, value) => t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `i_${key}_${t.tick}`, pack: "elite_bp", key, value }));
@@ -30,12 +37,50 @@ export default async function (t) {
     return tag;
   };
 
-  // 1. A night spawn removed in the same tick: the conversion a tick later finds it gone.
-  for (let i = 0; i < 20; i++) {
-    const e = dim.spawnEntity("minecraft:zombie", { x: 20.5 + (i % 5) * 50, y, z: 60.5 + Math.floor(i / 5) * 50 });
+  const reports = new Map();
+  t.system.afterEvents.scriptEventReceive.subscribe(
+    ({ id, message }) => {
+      if (id !== "harness:elite_remove_report") return;
+      try {
+        const r = JSON.parse(message);
+        reports.set(r.id, r);
+      } catch {}
+    },
+    { namespaces: ["harness"] },
+  );
+  let seq = 0;
+  /** Sends a console script event to the probe in elite_bp and waits for its report. */
+  const probe = async (event, payload) => {
+    const id = `e${++seq}`;
+    await t.console(`scriptevent harness:${event} ${payload(id)}`);
+    return t.waitUntil(() => reports.get(id), { timeout: 60, message: `the spawn remover in elite_bp answered ${event}` });
+  };
+
+  // 1a. A night spawn removed in the same tick by the scenario: the pack's spawn handler finds it gone (or, if it ran
+  // first, the conversion a tick later does).
+  let spawned = 0;
+  for (let i = 0; i < 10; i++) {
+    const e = dim.spawnEntity("minecraft:zombie", { x: -29.5 + i * 6, y, z: -30.5 });
+    if (e.isValid) spawned++;
     e.remove();
     await t.wait(2);
   }
+  t.check(spawned === 10, `the same-tick spawns were made and removed (${spawned} of 10)`);
+  // 1b. A night spawn removed after elite_bp's handler scheduled its conversion (chance 0.25 x 4 on a blood moon = every
+  // spawn), before that timeout fires: the conversion a tick later finds it gone. The probe removes them in the pack's
+  // own flush and counts the ones it removed while they were still valid.
+  // Within the simulated player's loaded chunks (spawnEntity throws in an unloaded one), away from the later crowds.
+  const box = { x0: -40, x1: 40, z0: 30, z1: 41 };
+  const armed = await probe("elite_arm", (id) => JSON.stringify({ id, box, n: 20 }));
+  t.assert(armed.armed === 20, "the spawn remover is armed");
+  for (let i = 0; i < 20; i++) {
+    dim.spawnEntity("minecraft:zombie", { x: -37.5 + (i % 10) * 8, y, z: 32.5 + Math.floor(i / 10) * 6 });
+    await t.wait(2);
+  }
+  const done = await probe("elite_report", (id) => id);
+  t.check(done.removed === 20, `the probe removed every spawn after the pack's handler, while still valid (${done.removed} of 20)`);
+  t.check(dim.getEntities({ type: "minecraft:zombie" }).length === 0, "none of those spawns is left");
+
   // 2. A requested champion removed right after it arrives (arrival effects and the announcement run on it).
   for (let i = 0; i < 10; i++) {
     const tag = request(6 + i, 6, "shielded");
