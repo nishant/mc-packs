@@ -50,7 +50,7 @@ Run this only after msftMyt's release of that branch is merged to `master` and p
 Severity order:
 1. F1-F4, the blockers and highs
 2. F5-F14, the mediums
-3. F47 (party catch-up at the Gray Ring, owner-reported, high) with the highs; F43-F45 (test regressions, broken new scenarios, the stats ticker cost) with the mediums; the lows (F15-F35); and F42 (wanderers rubber-banding, owner-reported; treat it as a medium)
+3. F47 and F54 with the highs; F48-F53 with their stated severities; F55 before any measurement; F43-F45 (test regressions, broken new scenarios, the stats ticker cost) with the mediums; the lows (F15-F35); and F42 (wanderers rubber-banding, owner-reported; treat it as a medium)
 4. the living towns feature (F36-F41), after F1-F14
 5. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
 
@@ -318,12 +318,83 @@ Severity order:
     - Review every other `SOLO` step type (meet, inspect, escort, lead, defend, follow, vision, answer, wait,
       sleep, wear) for the same "helper is invisible or the scene is per player" problem with a party. Say per
       type whether it works with a party, and fix the ones that don't.
+  - **Observations from the owner's later attempts (October 20), on the live Realm, Story Questlines 1.16.4:**
+    1. With the helper (the owner) nearby: nothing happened. No watchers spotted or sent back anyone, and entering
+       the ring did nothing.
+    2. With the owner gone, the mate alone: at first, still nothing.
+    3. The owner then set the time to midnight, with the mate still alone, and the watchers worked: they spotted
+       him and sent him back. Neither step requires night in the code (`stealthTick` has no `night` check, and
+       `dark` on the "Listen to the Cantor" vision only adds a darkness effect while it plays). So the time change
+       is probably not the cause.
+
+    Likely factors to test:
+    - a helper nearby
+    - old watcher state per owner (`sceneFor`, `removeActors({ owner, key })`) left over from earlier attempts or
+      from the owner's own run
+    - the time it took for that state to clear
+    - the 32-block `near` margin (`r + 32`) when players approach and leave
+  - **Workaround the owner can use until the fix ships (operators only; `/scriptevent` may need cheats on):**
+    `/scriptevent realm:saga_debug {"player":"<name>","action":"bump","story":"act1_signs","i":1,"n":1}` completes
+    "Creep close to the Gray Ring" (chapter `song`: 0 follow, 1 stealth, 2 vision). Use `"i":2` for "Listen to the
+    Cantor" if it doesn't start.
+  - **Docs:** add the "no regular way to skip a stuck step" gap to the operator docs. Consider an operator command
+    or menu button to complete a player's current step, logged in the content log, so owners don't need
+    `/scriptevent` and cheats.
   - **Test:** a BDS scenario with 3 players in a party: a helper who finished the chapter, and two mates on the
-    step. Check that:
+    step. Also run a separate case with one mate alone after an earlier player's run of the same step. Check that:
     - watchers spawn once
     - spotting a mate and spotting the helper each send that player back
     - both mates complete the step at the goal and get the vision
     - no watcher snaps back more than a few times in 2 minutes
+
+- [ ] **F48 (low, bug) build_bp: the shared tool gate drops a "released" anchor** (`utils/tool-gate.js` :45-95,
+  engine review #5). Three loops share one gate. When the mirror loop (every tick) or the array loop (every 20
+  ticks) calls `begin` first in a tick, it consumes `dirty` and `released`. Preview's closed-gate branch then sees an
+  empty `released` and never clears a stale anchor, and `visualizationIdle()` short-circuits every loop until
+  someone holds a tool again. Fix: make `begin` once per tick (cache by `system.currentTick`), or keep `released`
+  until Preview reads it. Fix it together with F7 and F8.
+- [ ] **F49 (low, perf) stash_bp: `storedCount` reads every legacy page property on each `realm:stash_count_ask`**
+  (`pages.js` :314-322, item review #14). Up to 25 `stash:page_<n>` properties, some chunked to 30 KB, are read
+  only to measure their length. Build the cache signature from the native index alone; a legacy page is migrated
+  on its first load anyway.
+- [ ] **F50 (low, quality) Test parameters in production code** (item review #17):
+  - cooking `applyOwed(player, pid, failIds)` (:600) with `failIds` throwing "test: grant failed"
+  - find's `world.afterEvents.playerPlaceBlock?.subscribe` (optional chaining kept for an older mock)
+  - milestones' `recheck`/`report` hooks
+
+  All are limited to `ScriptEventSource.Server`, so players can't reach them, and `realm:cooking_owed_ping` has no
+  source check (read-only, harmless). Keep the gates; move test switches to a module-level test flag; fix the find
+  mock instead of using optional chaining.
+- [ ] **F51 (low, docs) Descriptions that don't match the code** (item review #18):
+  - `crowns_audit`'s description says "the last 200 pays and gives", but the form shows the newest 50.
+  - claims_bp's comment and OPEN.md O27 say there is no tame-owner getter (fixed by F29).
+- [ ] **F52 (low, quality) The weather plan code is copied three times** (`planNow` in storm_bp, moon_bp and
+  tornado_bp, engine review). Make it one shared module with a sync tool, or read `realm:weather_plan` as O57
+  intended.
+- [ ] **F53 (medium, tests) Failing and flaky scenarios not covered by F43** (`perf-report.md`):
+  - calendar and wander fail on both master and the branch.
+  - cleanup-keep and guilds-placed-restart are flaky only on the branch.
+
+  Root-cause each (pack bug or scenario timing). Fix it, or make the scenario robust without weakening what it
+  checks. The suite must end with 0 unexplained failures and 0 flakes.
+- [ ] **F54 (high, merge safety) Keep the story fight fix from PR #97 when msftMyt's #96 merges.**
+  - #97 (published as Story Questlines 1.16.4 and Realm News 1.7.70, hosting #107) makes story defeat steps spawn
+    their own mobs at places mobs never reach by themselves: the Choir ambush at the Haddock farm, the Smugglers'
+    Cove, the Gray Ring, the Hollow Gate and three more.
+  - #96 conflicts with master in exactly those files (saga_bp and news_bp manifests, diag.js, release.js,
+    docs/NEWS.md).
+  - In the re-review (step 1), check that #97's code in `saga_bp/scripts/objectives.js` and its story edits
+    (`act2_choir.js`, `act4_seals.js`) are on master after #96. Its scenario must pass. Versions must be above
+    saga 1.16.4 and news 1.7.70.
+- [ ] **F55 (process) Comparable measurements.** Every number in `perf-report.md` comes from Claude's cloud
+  container, so any later "before" or "after" has to be measured the same way to compare:
+  - Ubuntu 24.04, 4 vCPUs Xeon 2.8 GHz, 15 GiB
+  - Node 22.22, Linux BDS 1.26.52.3
+  - nothing else running, at most 2 BDS jobs at once
+
+  Calibrate first: master 7dac598 at 10 players, separate packs, should give about 6.39 ms/tick in the steady
+  window. msftMyt's #96 says its own baseline was contaminated by another BDS process on the host. If the machine
+  differs, compare only runs on that machine.
 
 ## Feature: living towns (owner request, October 19)
 
@@ -357,6 +428,9 @@ and the identity checks from the shared spawn module).
   - Operators can move or rename a town's mayor in `/realm:town`.
   - Removing a town removes its mayor.
   - Use namespaced ids (for example `mayor:<townId>`) so npc_bp's fixed cast ids and the stories are untouched.
+  - Until this ships, the owner's workaround for a second town: turn on `deliverWithCommand` (Town Projects in
+    Realm Configuration), so `/realm:town` takes deliveries inside any town's radius, and set its level 1 spots
+    (`well`, `notice_board`) by hand.
 - [ ] **F37 Project spots chosen automatically.**
   - When a town is added (and when it reaches a new level), town_bp picks a spot for each project of that level
     within the town radius, so operators no longer have to set them.
@@ -436,6 +510,70 @@ and the identity checks from the shared spawn module).
     - two towns, each with its own mayor and projects
     - Bram's town is unchanged on an existing world
     - perf: 2 towns at Capital, 10 players
+
+## Coverage: every review finding has an F-item
+
+So nothing is omitted, this maps each source to its items:
+
+| Source | Finding | F-item |
+|---|---|---|
+| review-items.md | #1 Fill earlier pages deletes slot-locked stacks | F1 |
+| review-items.md | #2 auto-store 5x slower | F2 |
+| review-items.md | #3 page index loads pages it could skip | F3 |
+| review-items.md | #4 recovery duplicates | F4 |
+| review-items.md | #5 recovery form without UserBusy retry | F4 |
+| review-items.md | #6 find_bp `decideMode` | F11 |
+| review-items.md | #7 native acceptance not run (W5, W4) | F14 |
+| review-items.md | #8 cooking `settle` | F12 |
+| review-items.md | #9 `liveTotals` | F13 |
+| review-items.md | #10 claims pets | F29 |
+| review-items.md | #11 mail full | F30 |
+| review-items.md | #12 dish lore stacking | F31 |
+| review-items.md | #13 milestones `tf` | F32 |
+| review-items.md | #14 `storedCount` | F49 |
+| review-items.md | #15 broken edits | F33 |
+| review-items.md | #16 copied prune.js | F26 |
+| review-items.md | #17 test seams | F50 |
+| review-items.md | #18 comments and descriptions | F51 |
+| review-items.md | #19 tests that don't test | F34 |
+| review-engine.md | #1 Blood Moon cache | F5 |
+| review-engine.md | #2 elite density (owner decision) | F10 |
+| review-engine.md | #3 build gate | F7 |
+| review-engine.md | #4 anchor cleared | F8 |
+| review-engine.md | #5 gate race | F48 |
+| review-engine.md | #6 bed reads | F9 |
+| review-engine.md | #7 saga stash bridge | F6 |
+| review-engine.md | #8 hud_state encoding | F15 |
+| review-engine.md | #9 map reset message | F16 |
+| review-engine.md | #10 quest box tail | F17 |
+| review-engine.md | #11 dead branch | F18 |
+| review-engine.md | #12 tornado batching | F19 |
+| review-engine.md | #13 actionbar allowlist | F20 |
+| review-engine.md | #14 ticker choices | F21 |
+| review-engine.md | #15 elite O58 unverified | F22 |
+| review-engine.md | #16 diag `claim` | F23 |
+| review-engine.md | #17 marker tests | F24 |
+| review-engine.md | #18 inner guards | F25 |
+| review-engine.md | #19 gossip limiter copies | F26 |
+| review-engine.md | #20 `sessionChampions` | F27 |
+| review-engine.md | #21 expedition queue | F28 |
+| review-engine.md | three `planNow` copies | F52 |
+| review-engine.md | missing native tests | F35 |
+| review-engine.md | quest-wrap test is server-only | F34 |
+| perf-report.md | 9 regressions plus atlas | F43 |
+| perf-report.md | broken new scenarios | F44 |
+| perf-report.md | stats ticker action bar | F45 |
+| perf-report.md | over-budget packs | F46 |
+| perf-report.md | calendar/wander failing in both trees, two flakes on the branch | F53 |
+| Owner, October 19-20 | Hob Fairweather rubber-banding | F42 |
+| Owner, October 19-20 | Gray Ring with a party | F47 |
+| Owner, October 19-20 | mayor per town, automatic spots, terrain, residents | F36-F41 |
+| Owner, October 19-20 | farm quest mobs | released in #97; protect it when merging #96: F54 |
+| This session | measurement environment | F55 |
+
+Tracked elsewhere: the plan's own items O1-O75 (`../OPEN.md`, `../PLAN.md`), including the W2 real-client checks
+(O11-O16), which need the owner on a phone and a PC. The owner's decisions are in `../OPEN.md`. The one still open
+here is F10.
 
 ## What the reviews found sound (don't redo it)
 
