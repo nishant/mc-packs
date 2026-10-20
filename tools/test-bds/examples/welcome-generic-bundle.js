@@ -25,8 +25,11 @@ export default async function (t) {
   t.check(f.buttons.length === 1, `one button (phase ${t.phase})`);
   if (expect === "default") {
     t.check(!(f.elements ?? []).some((e) => e.kind === "header"), "section titles are labels, never headers");
-    const heads = labels.filter((l) => l.startsWith("§l§6"));
-    t.check(heads.join(",") === "§l§6The World,§l§6What You Can Do,§l§6Where To Go Next", `sections in order: ${heads.map(plain).join(", ")}`);
+    // The official form observer strips formatting codes; producer tests check bold/gold, not client pixels.
+    const headingNames = ["The World", "What You Can Do", "Where To Go Next"];
+    const heads = labels.map(plain).filter((l) => headingNames.includes(l));
+    t.check(heads.join(",") === headingNames.join(","), `sections in order: ${heads.join(", ")}`);
+    t.check(f.type === "action" && text.length <= 1800 && text.split(/\s+/).filter(Boolean).length <= 200, "one action form stays within the documented text budget, not a client-fit proof");
     t.check(/Old Tobin/.test(text) && /realm:help/.test(text) && /realm:prefs/.test(text), "the story start and where to go next, for the installed packs");
     t.check(!/Rules|griefing|== /.test(text), "the old Realm text is gone");
     t.check(plain(f.buttons[0]) === "Close", "the Close button");
