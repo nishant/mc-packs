@@ -236,6 +236,62 @@ test("relics: a player with no relics is rescanned every 5 s and otherwise skipp
 });
 
 // ---------------------------------------------------------------------------------------------------------------
+// skills_bp
+// ---------------------------------------------------------------------------------------------------------------
+
+test("skills: travel reads a player's game mode and dimension once and after their change events, and exploration XP still follows them", async () => {
+  const sim = createSim();
+  const p = sim.join("Walker");
+  const reads = { mode: 0, dim: 0 };
+  let mode = "Survival";
+  let dimId = "minecraft:overworld";
+  let x = 0;
+  p.getGameMode = () => (reads.mode++, mode);
+  p.getEffect = () => undefined;
+  p.addEffect = () => {};
+  Object.defineProperty(p, "location", { get: () => ({ x, y: 64, z: 0 }) });
+  Object.defineProperty(p, "dimension", { get: () => (reads.dim++, { id: dimId }) });
+  const scores = new Map();
+  const objectives = new Map();
+  sim.server.world = sim.server.world ?? {};
+  const scoreboard = {
+    getObjective: (id) => objectives.get(id),
+    addObjective: (id) => {
+      const o = { id, getScore: (pl) => scores.get(`${id}:${pl.id}`), setScore: (pl, v) => scores.set(`${id}:${pl.id}`, v), addScore: (pl, v) => scores.set(`${id}:${pl.id}`, (scores.get(`${id}:${pl.id}`) ?? 0) + v) };
+      objectives.set(id, o);
+      return o;
+    },
+  };
+  await sim.load("skills_bp");
+  sim.server.world.scoreboard = scoreboard;
+  sim.boot();
+  const xp = () => scores.get(`skill_exploration:${p.id}`) ?? 0;
+  const walk = (seconds) => {
+    for (let i = 0; i < seconds; i++) {
+      x += 5;
+      sim.step(20);
+    }
+  };
+  walk(25);
+  // Once a second each used to be 25 reads of each; now one, until a change event or the 30 s refresh.
+  assert.ok(reads.mode <= 3 && reads.dim <= 3, `${reads.mode} game mode and ${reads.dim} dimension reads in 25 s`);
+  const walked = xp();
+  assert.ok(walked > 0, "walking into new chunks gives exploration XP");
+  mode = "Spectator";
+  sim.game.emit("world.after.playerGameModeChange", { player: p, fromGameMode: "Survival", toGameMode: "Spectator" });
+  walk(10);
+  assert.equal(xp(), walked, "no exploration XP in spectator mode, right after the change event");
+  mode = "Survival";
+  sim.game.emit("world.after.playerGameModeChange", { player: p, fromGameMode: "Spectator", toGameMode: "Survival" });
+  dimId = "minecraft:nether";
+  sim.game.emit("world.after.playerDimensionChange", { player: p, toDimension: { id: dimId } });
+  const before = reads.dim;
+  walk(10);
+  assert.ok(xp() > walked, "exploration XP again in survival");
+  assert.equal(reads.dim, before, "the new dimension comes from the event");
+});
+
+// ---------------------------------------------------------------------------------------------------------------
 // saga_bp
 // ---------------------------------------------------------------------------------------------------------------
 

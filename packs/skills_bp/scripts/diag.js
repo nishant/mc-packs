@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "skills_bp";
-const VERSION = "1.1.8";
+const VERSION = "1.1.9";
 const NAME = "Skills";
 /** @type {string[]} */
 const PREFIXES = ["skills"];

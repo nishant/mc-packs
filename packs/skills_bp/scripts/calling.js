@@ -1128,14 +1128,27 @@ onScriptEvent(
 
 let lastPing = -100;
 let ticks = 0;
+/** Each player's second (0-29) to send their Calling, from a hash of their id. @type {Map<string, number>} */
+const sendSlots = new Map();
+/** @param {string} id */
+function sendSlot(id) {
+  let s = sendSlots.get(id);
+  if (s !== undefined) return s;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  sendSlots.set(id, (s = (h >>> 8) % 30));
+  return s;
+}
+
 system.runInterval(() => {
   ticks++;
+  const enabled = on();
   for (const player of world.getAllPlayers()) {
     try {
-      if (!player.isValid) continue;
-      if (on() && stateOf(player).c) holdTick(player);
+      if (enabled && stateOf(player).c) holdTick(player);
       else if (kept.has(player.id)) holdTick(player); // releases what Callings kept, after a switch-off
-      if (ticks % 30 === 0) sendCalling(player); // only when changed: a level that crossed a point, a setting
+      // Every 30 s, a share of the players each second; only sent when changed: a level that crossed a point, a setting.
+      if ((ticks + sendSlot(player.id)) % 30 === 0) sendCalling(player);
     } catch (e) {
       console.warn(`[skills] calling: ${e}`);
     }
@@ -1156,6 +1169,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 /** @param {string} playerId */
 export function forget(playerId) {
   states.delete(playerId);
+  sendSlots.delete(playerId);
   sent.delete(playerId);
   kept.delete(playerId);
   glows.delete(playerId);
