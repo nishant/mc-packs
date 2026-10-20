@@ -157,6 +157,7 @@ function onForm(raw) {
   const form = describe(raw);
   form.answer = (a) => reply(form, toResponse(form, a));
   forms.push(form);
+  if (forms.length > 5000) forms.splice(0, 1000); // a long soak shows thousands: keep memory flat, like messages
   out({ type: "form", player: form.player, pack: form.pack, form: form.type, title: form.title, body: form.body.slice(0, 300), buttons: form.buttons, elements: form.type === "modal" ? form.elements : undefined });
   const queue = answers.get(form.player);
   if (queue && queue.length) {
