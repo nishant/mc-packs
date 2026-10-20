@@ -20,7 +20,7 @@ const { startPlacementQueue } = await import("../packs/build_bp/scripts/core/Pla
 startPlacementQueue();
 const { getState, setMode, setAnchor, setMirrorState, setArrayState, setRadialState } = await import("../packs/build_bp/scripts/core/PlayerState.js");
 const { MODE_LIST, getModeHandler } = await import("../packs/build_bp/scripts/modes/ModeRegistry.js");
-const { confirmPlacement, placeAir } = await import("../packs/build_bp/scripts/main.js");
+const { confirmPlacement, placeAir, readPlaced } = await import("../packs/build_bp/scripts/main.js");
 const { bedPartnerPos } = await import("../packs/build_bp/scripts/core/beds.js");
 
 let seq = 0;
@@ -143,4 +143,23 @@ test("beds in air_build: one bed, both halves, one item", async () => {
   assert.deepEqual(audit.orphans, []);
   assert.equal(audit.feet, 1);
   assert.equal(beds(p), 1);
+});
+
+test("F9: confirming a destroy reads block states only for beds", () => {
+  const p = bedPlayer(0);
+  const dim = p.dimension;
+  dim.getBlock({ x: 6000, y: 64, z: 0 }).setType("minecraft:stone");
+  dim.getBlock({ x: 6001, y: 64, z: 0 }).setPermutation(mc.BlockPermutation.resolve("minecraft:bed", { direction: 0, head_piece_bit: false }));
+  let states = 0;
+  for (const x of [6000, 6001]) {
+    const perm = dim.getBlock({ x, y: 64, z: 0 }).permutation;
+    const all = perm.getAllStates;
+    perm.getAllStates = () => { states++; return all.call(perm); };
+  }
+  assert.deepEqual(readPlaced(p, { x: 6000, y: 64, z: 0 }), { typeId: "minecraft:stone" });
+  assert.equal(states, 0, "no states for a plain block");
+  const bed = readPlaced(p, { x: 6001, y: 64, z: 0 });
+  assert.equal(bed.typeId, "minecraft:bed");
+  assert.equal(bed.states.direction, 0);
+  assert.equal(states, 1, "one states read for the bed");
 });

@@ -195,11 +195,13 @@ world.afterEvents.playerSpawn.subscribe(ev => {
 function yawOf(player) {
     try { return player.getRotation().y; } catch { return 0; }
 }
-function readPlaced(player, pos) {
+/** What a destroy would break at pos: the type, and the states only for a bed (the only block that needs them). */
+export function readPlaced(player, pos) {
     try {
         const block = player.dimension.getBlock(pos);
         if (!block) return null;
-        return { typeId: block.typeId, states: block.permutation.getAllStates() };
+        const typeId = block.typeId;
+        return isBedType(typeId) ? { typeId, states: block.permutation.getAllStates() } : { typeId };
     } catch { return null; }
 }
 export async function filterBuildPositions(player, positions, typeId, blockStates, isDestroy) {

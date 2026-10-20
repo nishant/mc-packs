@@ -302,20 +302,33 @@ function bboxCorners(minX, maxX, minY, maxY, minZ, maxZ) {
 
 const tpsPart = { text: "" };
 
-function previewDestroyBeds(positions, dim) {
-    const out = positions.slice();
-    const seen = new Set(positions.map((p) => `${p.x},${p.y},${p.z}`));
+/**
+ * The blocks a destroy preview outlines: every breakable block in the shape (no air, no bedrock outside creative),
+ * plus the other half of each bed. Each block is read once, and its states only when it is a bed.
+ */
+export function destroyPreviewPositions(positions, dim, creative) {
+    const out = [];
+    const partners = [];
     for (const pos of positions) {
         try {
             const block = dim.getBlock(pos);
-            if (!block || !isBedType(block.typeId)) continue;
+            if (!block || block.isAir) continue;
+            const typeId = block.typeId;
+            if (!creative && typeId === "minecraft:bedrock") continue;
+            out.push(pos);
+            if (!isBedType(typeId)) continue;
             const partner = bedPartnerPos(pos, block.permutation.getAllStates());
-            if (!partner) continue;
+            if (partner) partners.push(partner);
+        } catch {}
+    }
+    if (partners.length) {
+        const seen = new Set(out.map((p) => `${p.x},${p.y},${p.z}`));
+        for (const partner of partners) {
             const k = `${partner.x},${partner.y},${partner.z}`;
             if (seen.has(k)) continue;
             seen.add(k);
             out.push(partner);
-        } catch {}
+        }
     }
     return out;
 }
@@ -939,14 +952,7 @@ export function startPreviewLoop() {
                 const allPositions = applyModifiers(player, rawPositions);
                 if (!allPositions?.length) continue;
                 const positions = isDestroy
-                    ? allPositions.filter(p => {
-                        try {
-                            const block = dim.getBlock(p);
-                            if (!block || block.isAir) return false;
-                            if (!creative && block.typeId === "minecraft:bedrock") return false;
-                            return true;
-                        } catch { return false; }
-                    })
+                    ? destroyPreviewPositions(allPositions, dim, creative)
                     : allPositions.filter(p => {
                         try {
                             const block = dim.getBlock(p);
@@ -959,7 +965,7 @@ export function startPreviewLoop() {
                         catch { return true; }
                     });
                 const shown = !positions.length ? positions
-                    : isDestroy ? previewDestroyBeds(positions, dim)
+                    : isDestroy ? positions
                     : previewBedPositions(positions, state.blockTypeId, player, state.blockStates);
                 if (!shown.length) continue;
                 if (shown !== positions) {
