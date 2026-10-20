@@ -13,7 +13,7 @@
 //
 //   const tether = createTether({ soft: 4, hard: 12 });   // options below
 //   // every few ticks, for each mob (its dimension is the caller's to check):
-//   const what = tether.check(ent, home, system.currentTick);   // "in" | "steer" | "snap" | "held" | "skip"
+//   const what = tether.check(ent, home, system.currentTick);   // "in" | "steer" | "rest" | "snap" | "held" | "skip"
 //   tether.release(ent);       // speed back to normal now (before a scene, a talk or removal takes the mob over)
 //   tether.forget(entityId);   // on entityRemove / entityDie: drops what it keeps for that id
 //   tether.snaps, tether.steers, tether.stats(id)   // counters (tests and /realm:diag-style reports read them)
@@ -28,6 +28,9 @@
 //     holeDrop (3), holeChecks (6)   this far below home for this many checks in a row: stuck down a hole
 //     cooldown (20), maxCooldown (600), window (400)   the snap guard below
 //     spot (soft - 1)   a snap lands within this of home, on a free standable block
+//     stall (80), rest (200), rests (3)   steered this long without getting half a block closer, with a wall or fence
+//                       right ahead of it toward home: the push stops and it walks at its own speed for `rest` ticks,
+//                       so its AI can find the way around; stuck like that `rests` times in a row: the last resort
 //
 //   const guard = createSnapGuard({ cooldown: 20, maxCooldown: 600, window: 400 });
 //   if (guard.allow(id, now)) { ent.teleport(at); guard.snapped(id, now); }
@@ -51,6 +54,8 @@
 /** Blocks a mob stands in, not on (plants, torches, signs, carpets, rails...). */
 const PASSABLE =
   /(^|:|_)(air|short_grass|tall_grass|grass|fern|large_fern|deadbush|bush|vine|vines|sapling|propagule|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|rose|lilac|peony|sunflower|petals|leaf_litter|torchflower|crimson_roots|warped_roots|hanging_roots|sprouts|fungus|mushroom|wheat|carrots|potatoes|beetroot|torch|candle|sign|banner|carpet|rail|button|lever|pressure_plate|tripwire|redstone_wire|string|snow_layer|light_block(_\d+)?|structure_void)$/;
+/** Blocks a mob can't step up onto from the side (taller than a block, or a gate). */
+const NO_STEP = /fence|wall|gate|iron_bars|pane|border_block/;
 /** Floors nobody should be put on. */
 const BAD_FLOOR = /lava|fire|magma|cactus|campfire|powder_snow|sweet_berry|leaves|scaffolding/;
 
@@ -69,9 +74,6 @@ function block(dim, x, y, z) {
     return undefined;
   }
 }
-
-/** Blocks a mob can't step up onto from the side (taller than a block, or a gate). */
-const NO_STEP = /fence|wall|gate|iron_bars|pane|border_block/;
 
 /**
  * A standable spot within `radius` of `home` that a mob can walk to from home: floor under, feet and head free, no
@@ -165,7 +167,7 @@ export function settledBelow(ent, anchor) {
  * @property {number} steers times a mob started being steered home
  * @property {number} soft
  * @property {number} hard
- * @property {(ent: any, home: Vec, now: number) => "in" | "steer" | "snap" | "held" | "skip"} check
+ * @property {(ent: any, home: Vec, now: number) => "in" | "steer" | "rest" | "snap" | "held" | "skip"} check
  * @property {(ent: any) => void} release
  * @property {(id: string) => void} forget
  * @property {(id?: string) => { snaps: number, steers: number, steering: number }} stats
@@ -212,6 +214,7 @@ export function createSnapGuard(o = {}) {
  * @property {number} [soft] @property {number} [hard] @property {number} [slow] @property {number} [pull]
  * @property {boolean} [water] @property {boolean} [lava] @property {number} [holeDrop] @property {number} [holeChecks]
  * @property {number} [cooldown] @property {number} [maxCooldown] @property {number} [window] @property {number} [spot]
+ * @property {number} [stall] @property {number} [rest] @property {number} [rests]
  */
 
 /** @param {TetherOptions} [o] @returns {Tether} */
@@ -225,7 +228,12 @@ export function createTether(o = {}) {
   const holeDrop = o.holeDrop ?? 3;
   const holeChecks = o.holeChecks ?? 6;
   const spot = Math.max(1.5, o.spot ?? soft - 1);
+  const stall = o.stall ?? 80;
+  const rest = o.rest ?? 200;
+  const rests = o.rests ?? 3;
   const guard = createSnapGuard(o);
+  /** Progress while outside: closest yet, when it last got closer, a rest's end, rests in a row. @type {Map<string, { best: number, at: number, until: number, n: number }>} */
+  const prog = new Map();
   /** Entities slowed by us (id -> true). @type {Set<string>} */
   const steering = new Set();
   /** Entities whose speed was put back at least once since the world loaded (a slowed one saved mid-steer). @type {Set<string>} */
@@ -258,10 +266,10 @@ export function createTether(o = {}) {
     hard,
     /**
      * One check of a mob against its home. Returns "in" (inside, at its own speed), "steer" (outside the soft radius:
-     * slowed and pushed home), "snap" (teleported back: water, lava, a hole or past the hard radius), "held" (it should
+     * slowed and pushed home), "rest" (outside but stuck against a wall toward home: left to its own AI a while), "snap" (teleported back: water, lava, a hole or past the hard radius), "held" (it should
      * snap but its cooldown runs: slowed and pushed meanwhile) or "skip" (unloaded or gone).
      * @param {any} ent @param {Vec} home @param {number} now the game tick
-     * @returns {"in" | "steer" | "snap" | "held" | "skip"}
+     * @returns {"in" | "steer" | "rest" | "snap" | "held" | "skip"}
      */
     check(ent, home, now) {
       /** @type {Vec} */
@@ -289,6 +297,30 @@ export function createTether(o = {}) {
         low.set(id, n);
         why = n >= holeChecks;
       } else if (!why) low.delete(id);
+      if (!why && flat > soft) {
+        // Not getting closer with a wall or fence right ahead toward home (behind a tent or a house): pushing it into
+        // the wall at a crawl would pin it there for good, so it walks at its own speed for a while to find the way
+        // around. Stuck like that a few times in a row: the last resort.
+        const p = prog.get(id);
+        if (!p) prog.set(id, { best: flat, at: now, until: 0, n: 0 });
+        else if (now < p.until) return "rest";
+        else if (flat < p.best - 0.5) {
+          p.best = flat;
+          p.at = now;
+        } else if (now - p.at >= stall) {
+          if (!walled(ent.dimension, l, dx, dz, flat)) p.at = now;
+          else if (p.n >= rests) why = true;
+          else {
+            p.n++;
+            p.until = now + rest;
+            p.best = flat;
+            p.at = p.until;
+            steering.delete(id);
+            speed(ent, undefined);
+            return "rest";
+          }
+        }
+      }
       if (why) {
         if (guard.allow(id, now)) {
           low.delete(id);
@@ -306,6 +338,7 @@ export function createTether(o = {}) {
           }
           guard.snapped(id, now);
           tether.snaps++;
+          prog.delete(id);
           if (steering.delete(id) || !seen.has(id)) speed(ent, undefined);
           seen.add(id);
           return "snap";
@@ -318,6 +351,7 @@ export function createTether(o = {}) {
         return "steer";
       }
       // Back inside (with a block of room, so it doesn't flip at the edge): its own speed again.
+      if (flat <= soft - 1) prog.delete(id);
       if ((steering.has(id) && flat <= soft - 1) || !seen.has(id)) {
         steering.delete(id);
         seen.add(id);
@@ -341,6 +375,7 @@ export function createTether(o = {}) {
       steering.delete(id);
       seen.delete(id);
       low.delete(id);
+      prog.delete(id);
       steerN.delete(id);
       guard.forget(id);
     },
@@ -375,6 +410,25 @@ export function createTether(o = {}) {
   }
 
   return tether;
+}
+
+/**
+ * Is there a wall or fence right ahead of a mob, toward home (it can't walk on that way)? @param {any} dim
+ * @param {Vec} l where it stands @param {number} dx @param {number} dz home to it @param {number} flat their length
+ */
+function walled(dim, l, dx, dz, flat) {
+  if (flat < 0.01) return false;
+  const y = Math.floor(l.y + 0.01);
+  for (const ahead of [0.8, 1.3]) {
+    const x = Math.floor(l.x - (dx / flat) * ahead);
+    const z = Math.floor(l.z - (dz / flat) * ahead);
+    if (x === Math.floor(l.x) && z === Math.floor(l.z)) continue;
+    const feet = block(dim, x, y, z);
+    if (!feet) return false; // not loaded: no verdict
+    if (open(feet)) continue;
+    if (NO_STEP.test(feet.typeId) || !open(block(dim, x, y + 1, z)) || !open(block(dim, x, y + 2, z))) return true;
+  }
+  return false;
 }
 
 /** @param {string} s */

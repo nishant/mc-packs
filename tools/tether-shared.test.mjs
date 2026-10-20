@@ -245,3 +245,37 @@ test("freeSpotNear never picks a spot behind a fence (a closed pen next to home)
     assert.ok(s && Math.floor(s.x) <= 0, `seed ${seed}: on home's side of the fence (${JSON.stringify(s)})`);
   }
 });
+
+test("a mob in a nook behind a wall is not pinned against it forever: it rests to find the way around, then the last resort", () => {
+  // A nook open away from home (like the back of a tent): a wall at x 3 and sides at z -3 and 3 out to x 8.
+  const extra = new Map();
+  for (const y of [64, 65]) {
+    for (let z = -3; z <= 3; z++) extra.set(`3,${y},${z}`, "minecraft:oak_planks");
+    for (let x = 3; x <= 8; x++) for (const z of [-3, 3]) extra.set(`${x},${y},${z}`, "minecraft:oak_planks");
+  }
+  const dim = builtDim(extra);
+  const { e } = walker(dim, { x: 5.5, y: 64, z: 0.5 });
+  // Walls stop it: a step into a column whose feet block isn't air is undone.
+  const tick = e.tick.bind(e);
+  e.tick = (target) => {
+    const was = { ...e.location };
+    tick(target);
+    if (!dim.getBlock({ x: Math.floor(e.location.x), y: 64, z: Math.floor(e.location.z) }).isAir) {
+      e.location = was;
+      e.velocity = { x: 0, y: 0, z: 0 };
+    }
+  };
+  const tether = createTether({ soft: 3, hard: 12 });
+  const rand = rng(7);
+  let target = { x: 5.5, z: 0.5 };
+  let back = -1;
+  for (let t = 0; t < FIVE_MINUTES && back < 0; t++) {
+    // Its own AI: a stroll target within 5 blocks of where it stands, every 100 ticks.
+    if (t % 100 === 0) target = { x: e.location.x + (rand() - 0.5) * 10, z: e.location.z + (rand() - 0.5) * 10 };
+    e.tick(target);
+    if (t % 10 === 0) tether.check(e, home, t);
+    if (Math.hypot(e.location.x - home.x, e.location.z - home.z) <= 3) back = t;
+  }
+  assert.ok(back >= 0, `back inside its radius (at tick ${back}), not wedged behind the wall for 5 minutes (at ${JSON.stringify(e.location)})`);
+  assert.ok(tether.snaps <= 1, `${tether.snaps} snaps`);
+});
