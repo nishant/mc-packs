@@ -17,7 +17,20 @@ export const CONFIG = {
    */
   townRadius: 96,
 
-  /** The NPC role whose townsfolk offer "Town projects" (Townsfolk pack). The nearest town within `townRadius` of the player answers. */
+  /**
+   * A mayor for each town (Townsfolk pack): adding a town makes its own mayor at the town's center, who offers
+   * "Town projects" for that town wherever the player stands. The realm's first town has Mayor Bram. Disabled:
+   * no new mayors, and every NPC with `npcRole` offers the nearest town within `townRadius` of the player.
+   */
+  townMayors: true,
+
+  /** First names for new towns' mayors ("Mayor Alda"), each used once; when all are taken, "Mayor <Town>". */
+  mayorNames: ["Alda", "Corwin", "Fenna", "Garrick", "Halden", "Imogen", "Joss", "Kestrel", "Linnea", "Marten", "Nessa", "Oswin", "Perrin", "Rowena", "Sorrel", "Thea", "Ulla", "Verity", "Wendell", "Ysolde"],
+
+  /**
+   * The NPC role whose townsfolk offer "Town projects" (Townsfolk pack): a town's own mayor offers its town; any NPC
+   * with this role also offers the town the player stands in (within `townRadius`) when that town's mayor isn't placed.
+   */
   npcRole: "mayor",
 
   /** Guild reputation for each contributor when a project is finished (Guilds pack): growers for wood and crops, miners for stone and metal. */

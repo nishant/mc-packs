@@ -20,6 +20,7 @@ import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
 import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, toWorld } from "./designs.js";
+import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
@@ -42,8 +43,11 @@ const NEAR_SPOT = 64; // a waiting build goes up when a player is this close to 
  * built before snapshots existed (so what's there is never saved as the ground).
  * @typedef {{ x: number, y: number, z: number, f: number, snap?: number, b?: number[], old?: number }} Spot
  */
-/** prot: 0 when "Protect from world events" is Disabled (missing means Enabled). */
-/** @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number }} Town */
+/**
+ * prot: 0 when "Protect from world events" is Disabled (missing means Enabled). v: 2 once the town has a mayor `m`
+ * ("bram", or "mayor:<id>" named `mn`; mayors.js); records saved before mayors (v1) have neither and still read.
+ */
+/** @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string }} Town */
 /** @typedef {{ min: Vector3, max: Vector3 }} Box inclusive block corners */
 /** @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number }} Progress */
 /** @typedef {{ cr: number, q: [string, string, string][] }} Owed crowns, and [quest id, label, guild] per finished project */
@@ -115,7 +119,7 @@ function allTowns() {
     for (const key of world.getDynamicPropertyIds()) {
       if (!key.startsWith(TOWN_PREFIX)) continue;
       const t = readJson(key);
-      if (t && typeof t.id === "string" && typeof t.x === "number") map.set(t.id, { ...t, spots: t.spots ?? {}, lvl: t.lvl ?? 1 });
+      if (t && typeof t.id === "string" && typeof t.x === "number") map.set(t.id, readMayor({ ...t, spots: t.spots ?? {}, lvl: t.lvl ?? 1 }));
     }
   } catch {
     return map; // the world isn't loaded yet: read again next time
@@ -898,11 +902,13 @@ function tellOps(text) {
   for (const p of world.getAllPlayers()) if (isOp(p)) p.sendMessage(text);
 }
 
-// Finished projects waiting to be built go up when someone is near their spot.
+// Finished projects waiting to be built go up when someone is near their spot; towns whose mayor is missing ask
+// Townsfolk for it again (mayorCheck).
 system.runInterval(() => {
   try {
     const players = world.getAllPlayers();
     if (!players.length) return;
+    mayorCheck(players);
     for (const t of allTowns().values()) {
       for (const p of PROJECTS) {
         const s = t.spots[p.id];
@@ -979,7 +985,7 @@ async function townMenu(player, townId, canDeliver) {
     t.lvl >= MAX_LEVEL || !open.length
       ? "Every project is done. Thank you, everyone!"
       : `Finish these to make ${t.n} a ${levelName(t.lvl + 1)}:\n\n${open.map((p) => projectLine(t, p)).join("\n\n")}`,
-    canDeliver ? "Pick a project to see what it needs and deliver from your inventory." : "Deliver materials through the town's mayor.",
+    canDeliver ? "Pick a project to see what it needs and deliver from your inventory." : `Deliver materials through ${mayorName(t)}.`,
   ].join("\n\n");
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = open
@@ -1105,6 +1111,7 @@ async function mainMenu(player) {
     else {
       actions.push({ text: "§4Set a project spot\n§8Operators: with a preview", run: () => pickProject(player, here.id, "spot") });
       if (Object.keys(here.spots).length) actions.push({ text: "§4Manage spots\n§8Operators: remove, rebuild, relocate", run: () => pickProject(player, here.id, "manage") });
+      actions.push({ text: `§4Mayor\n§8Operators: ${here.m ? `${mayorName(here)}, move or rename` : "none yet"}`, run: () => mayorMenu(player, here.id) });
       actions.push({ text: `§4Protect from world events\n§8Operators: ${isProtected(here) ? "Enabled" : "Disabled"}`, run: () => protectForm(player, here.id) });
       actions.push({ text: "§4Remove town\n§8Operators", run: () => removeTown(player) });
     }
@@ -1169,12 +1176,21 @@ function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
     by: player.name,
     at: Date.now(),
   };
+  // Its own mayor (Townsfolk): Mayor Bram for the realm's first town, else a new one standing here.
+  const mayors = get("townMayors") === true;
+  if (mayors) Object.assign(t, { v: 2 }, newTownMayor([...allTowns().values()], t.id, t.n, CONFIG.mayorNames));
   saveTown(t);
   zonesChanged();
+  if (mayors && isTownMayorId(t.m)) mayorSet(t, { x: t.x, y: t.y, z: t.z }, player.getRotation().y);
   levelUp(t); // only if the config has no projects for level 1
   const first = projectsAt(t.lvl);
+  const who = !mayors
+    ? `Mayors (NPCs with the role ${CONFIG.npcRole}) within ${get("townRadius")} blocks take deliveries.`
+    : t.m === BRAM
+      ? "Its mayor is Mayor Bram (Townsfolk): wherever he lives, he takes deliveries for it."
+      : `Its mayor, ${t.mn}, stands here (Townsfolk) and takes deliveries for it; move or rename them in /realm:town.`;
   tell(
-    `§aTown ${name} added here (${t.x}, ${t.z}), a ${levelName(t.lvl)}. ${first.length ? `Its first projects: ${first.map((p) => p.name).join(", ")}.` : ""} §7Mayors (NPCs with the role ${CONFIG.npcRole}) within ${get("townRadius")} blocks take deliveries. Set where each project is built from /realm:town or with /realm:town_spot <project>. World events don't break blocks here (Protect from world events is Enabled).`,
+    `§aTown ${name} added here (${t.x}, ${t.z}), a ${levelName(t.lvl)}. ${first.length ? `Its first projects: ${first.map((p) => p.name).join(", ")}.` : ""} §7${who} Set where each project is built from /realm:town or with /realm:town_spot <project>. World events don't break blocks here (Protect from world events is Enabled).`,
   );
   if (get("announce") === true) world.sendMessage(`§6A new town: §e${name}§6! Bring materials to its mayor to build it up. /realm:town`);
 }
@@ -1583,6 +1599,9 @@ function deleteTown(t) {
   }
   allTowns().delete(t.id);
   world.setDynamicProperty(TOWN_PREFIX + t.id, undefined);
+  // Its own mayor goes with it (Mayor Bram stays where he lives).
+  if (isTownMayorId(t.m)) send("realm:npc_mayor", { op: "remove", id: t.m });
+  lastSet.delete(t.id);
   zonesChanged();
 }
 
@@ -1655,6 +1674,14 @@ world.afterEvents.worldLoad.subscribe(() =>
   system.runTimeout(() => {
     zonesChanged();
     send("realm:town_state_ping", {});
+    // Townsfolk: where the mayors are, and every mayor id (it drops mayors of towns removed meanwhile).
+    try {
+      allTowns();
+      sendMayorList();
+    } catch (e) {
+      console.warn(`[town] mayors: ${e}`);
+    }
+    send("realm:npc_places_ping", {});
   }, 100),
 );
 onScriptEvent(
@@ -1675,7 +1702,7 @@ onScriptEvent(
 
 // ---------------------------------------------------------------------------
 // Scenario tests (BDS harness): the operator actions without forms. Only from the server console or an operator.
-//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?}
+//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump|mayor_move|mayor_rename|remove_town", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?}
 // ---------------------------------------------------------------------------
 
 onScriptEvent(
@@ -1706,7 +1733,19 @@ onScriptEvent(
       }
       if (m.action === "zones") return broadcastZones();
       if (!t) return tell("no town");
-      if (m.action === "dump") return tell(JSON.stringify({ town: t, progress: PROJECTS.map((x) => [x.id, progressOf(t, x)]) }));
+      if (m.action === "dump") return tell(JSON.stringify({ town: t, progress: PROJECTS.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null }));
+      if (m.action === "remove_town") {
+        deleteTown(t);
+        return tell(`town ${t.id} removed`);
+      }
+      if (m.action === "mayor_rename") return mayorRename(t, cleanName(m.name) || "Mayor Test", tell);
+      if (m.action === "mayor_move") {
+        const at = m.spot && typeof m.spot === "object" ? { x: Number(m.spot.x), y: Number(m.spot.y), z: Number(m.spot.z) } : player?.location;
+        if (!at || ![at.x, at.y, at.z].every(Number.isFinite)) return tell("no spot");
+        if (!isTownMayorId(t.m)) return tell("no town mayor");
+        mayorSet(t, at, Number(m.spot?.yaw) || 0, tell);
+        return tell(`mayor ${t.m} asked to move to ${Math.floor(at.x)}, ${Math.floor(at.y)}, ${Math.floor(at.z)}`);
+      }
       if (m.action === "protect") return setProtected(t, m.on !== false, tell);
       if (!p) return tell("no project");
       if (m.action === "spot") {
@@ -1734,7 +1773,157 @@ onScriptEvent(
 );
 
 // ---------------------------------------------------------------------------
-// Townsfolk (npc_bp): mayors offer the nearest town's projects
+// Mayors (Townsfolk, npc_bp; mayors.js): a mayor per town. town_bp asks with realm:npc_mayor { op: set | rename |
+// remove } (answered with realm:npc_mayor_ack) and learns who stands where from realm:npc_places.
+// ---------------------------------------------------------------------------
+
+const MAYOR_RESEND_TICKS = 600; // a missing mayor is asked for again at most every 30 s per town
+/** Placed townsfolk (realm:npc_places), id -> { dim, x, z }; undefined until Townsfolk answers. @type {Map<string, import("./mayors.js").Place> | undefined} */
+let places;
+const placesParts = createPlacesAssembler();
+/** Town id -> tick of the last set request. @type {Map<string, number>} */
+const lastSet = new Map();
+/** Mayor id -> who to tell if Townsfolk refuses an operator's request. @type {Map<string, { tell: (msg: string) => void, until: number }>} */
+const pendingAcks = new Map();
+
+/** Is this townsfolk placed (as far as Townsfolk said)? @param {string | undefined} id */
+const mayorPlaced = (id) => !!id && !!places?.has(id);
+
+/** "Mayor Alda", "Mayor Bram" or "the town's mayor". @param {Town} t */
+const mayorName = (t) => (t.m === BRAM ? "Mayor Bram" : isTownMayorId(t.m) && t.mn ? t.mn : "the town's mayor");
+
+/**
+ * Asks Townsfolk to put the town's own mayor at `at` (creates it, or moves it there).
+ * @param {Town} t @param {Vector3} at @param {number} yaw @param {(msg: string) => void} [tell] told if it is refused
+ */
+function mayorSet(t, at, yaw, tell) {
+  if (!isTownMayorId(t.m)) return;
+  lastSet.set(t.id, system.currentTick);
+  if (tell) pendingAcks.set(t.m, { tell, until: system.currentTick + 100 });
+  const r = (/** @type {number} */ n) => Math.round(n * 100) / 100;
+  send("realm:npc_mayor", { op: "set", id: t.m, name: t.mn ?? mayorName(t), town: t.id, tn: t.n, dim: t.dim, x: r(at.x), y: r(at.y), z: r(at.z), yaw: Math.round(yaw) });
+}
+
+/**
+ * Every 100 ticks: a town whose own mayor Townsfolk doesn't have placed is asked for again when a player is in the
+ * town (at most every 30 s per town), at the town's center.
+ * @param {Player[]} players
+ */
+function mayorCheck(players) {
+  if (get("townMayors") !== true || !places) return;
+  const now = system.currentTick;
+  const r = get("townRadius");
+  for (const t of allTowns().values()) {
+    if (!isTownMayorId(t.m) || places.has(t.m)) continue;
+    if (now - (lastSet.get(t.id) ?? -MAYOR_RESEND_TICKS) < MAYOR_RESEND_TICKS) continue;
+    if (!players.some((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= r)) continue;
+    mayorSet(t, { x: t.x, y: t.y, z: t.z }, 0);
+  }
+}
+
+/** Every mayor id the towns have, for Townsfolk to drop mayors of towns removed while it wasn't listening. */
+function sendMayorList() {
+  if (!towns) return; // the towns couldn't be read: no list rather than an empty one
+  const ids = [...allTowns().values()].flatMap((t) => (isTownMayorId(t.m) ? [t.m] : []));
+  for (const m of mayorParts(ids)) send("realm:npc_mayors", m);
+}
+
+/** Operators: the town's mayor, moved where they stand or renamed. @param {Player} player @param {string} townId */
+async function mayorMenu(player, townId) {
+  const t = allTowns().get(townId);
+  if (!t) return;
+  const at = t.m ? places?.get(t.m) : undefined;
+  const where = at ? `${mayorName(t)} lives at ${Math.floor(at.x)}, ${Math.floor(at.z)}.` : places ? `${mayorName(t)} isn't placed yet.` : "Townsfolk hasn't said where the townsfolk are (is it installed?).";
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [];
+  /** @type {string[]} */
+  const lines = [];
+  if (t.m === BRAM) {
+    lines.push(`Mayor Bram (Townsfolk) is ${t.n}'s mayor, the realm's main mayor: he offers its projects wherever he lives.`, where, "His name belongs to the stories, so he can only be moved.");
+    actions.push({
+      text: "Move Bram here\n§8Where you stand, facing your way",
+      run: () => {
+        if (!player.isValid || !stillOp(player)) return;
+        send("realm:npc_summon", { id: BRAM, player: player.id });
+      },
+    });
+  } else if (isTownMayorId(t.m)) {
+    lines.push(`${mayorName(t)} is ${t.n}'s mayor (Townsfolk): they offer its projects wherever the player stands.`, where);
+    if (!at && !mayorPlaced(t.m)) lines.push("§7They arrive at the town's center when a player is in the town, or move them here now.");
+    actions.push({ text: "Move here\n§8Where you stand, facing your way", run: () => mayorMoveHere(player, t.id) });
+    actions.push({ text: "Rename\n§8Up to 24 letters", run: () => mayorRenameForm(player, t.id) });
+  } else {
+    lines.push(`${t.n} has no mayor yet.`, get("townMayors") === true ? "§7Its mayor is picked once Townsfolk answers (every town gets one; the first one Mayor Bram)." : "§7Town mayors (townMayors) is Disabled in /realm:config: NPCs with the mayor role offer the nearest town.");
+  }
+  actions.push({ text: "Back", run: () => mainMenu(player) });
+  await menu(player, `§l${t.n}: mayor`, lines.join("\n\n"), actions);
+}
+
+/** @param {Player} player @param {string} townId */
+function mayorMoveHere(player, townId) {
+  const t = allTowns().get(townId);
+  if (!t || !player.isValid || !stillOp(player) || !isTownMayorId(t.m)) return;
+  if (player.dimension.id !== t.dim) return player.sendMessage(`§c${t.n} is in another dimension.`);
+  if (Math.hypot(player.location.x - t.x, player.location.z - t.z) > get("townRadius")) return player.sendMessage(`§cStand inside ${t.n} (within ${get("townRadius")} blocks of its center).`);
+  mayorSet(t, player.location, player.getRotation().y, (m) => player.sendMessage(m));
+  player.sendMessage(`§a${mayorName(t)} now lives where you stand, facing your way.`);
+}
+
+/** @param {Player} player @param {string} townId */
+async function mayorRenameForm(player, townId) {
+  const t0 = allTowns().get(townId);
+  if (!t0) return;
+  const res = await show(player, new ModalFormData().title(`§l${t0.n}: mayor`).textField("Name (up to 24 letters)", "Mayor Alda", { defaultValue: t0.mn ?? "" }).submitButton("Rename"));
+  if (!res || res.canceled || !res.formValues || !player.isValid || !stillOp(player)) return;
+  const t = allTowns().get(townId);
+  if (!t || !isTownMayorId(t.m)) return player.sendMessage("§cThat town was removed.");
+  const name = cleanName(res.formValues.find((v) => typeof v === "string"));
+  if (!name) return player.sendMessage("§cGive the mayor a name (letters, digits and spaces).");
+  mayorRename(t, name, (m) => player.sendMessage(m));
+}
+
+/** @param {Town} t @param {string} name @param {(msg: string) => void} tell */
+function mayorRename(t, name, tell) {
+  if (!isTownMayorId(t.m)) return tell("§cOnly a town's own mayor can be renamed (Mayor Bram's name is the story's).");
+  t.mn = name;
+  saveTown(t);
+  // A mayor that isn't placed yet gets the new name when it arrives (set carries it).
+  if (mayorPlaced(t.m)) {
+    pendingAcks.set(t.m, { tell, until: system.currentTick + 100 });
+    send("realm:npc_mayor", { op: "rename", id: t.m, name, tn: t.n });
+  }
+  tell(`§a${t.n}'s mayor is now ${name}.`);
+}
+
+onScriptEvent(
+  ["realm:npc_places", "realm:npc_mayor_ack"],
+  ({ id, message }) => {
+    if (id !== "realm:npc_places" && id !== "realm:npc_mayor_ack") return;
+    /** @type {any} */
+    let msg;
+    try {
+      msg = JSON.parse(message);
+    } catch {
+      return;
+    }
+    if (id === "realm:npc_places") {
+      const got = placesParts.add(msg);
+      if (got) places = got;
+      return;
+    }
+    if (!msg || typeof msg.id !== "string") return;
+    const wait = pendingAcks.get(msg.id);
+    if (wait) pendingAcks.delete(msg.id);
+    if (msg.ok === true) return;
+    const why = typeof msg.error === "string" ? msg.error.slice(0, 120) : "refused";
+    console.warn(`[town] Townsfolk didn't ${String(msg.op).slice(0, 8)} ${msg.id}: ${why}`);
+    if (wait && wait.until >= system.currentTick) wait.tell(`§cTownsfolk couldn't do that: ${why}.`);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Townsfolk (npc_bp): a town's own mayor offers its projects anywhere; any mayor offers the town the player stands
+// in when that town's own mayor isn't placed
 // ---------------------------------------------------------------------------
 
 onScriptEvent(
@@ -1752,10 +1941,14 @@ onScriptEvent(
       const player = online(msg.player);
       if (!player) return;
       if (id === "realm:npc_talk") {
-        if (!Array.isArray(msg.roles) || !msg.roles.includes(CONFIG.npcRole)) return;
-        const t = nearestTown(player, get("townRadius"));
-        if (!t) return;
-        send("realm:npc_offer", { req: msg.req, pack: "town_bp", key: `town:${t.id}`, label: `Town projects (${t.n})`, order: 30 });
+        const roles = Array.isArray(msg.roles) ? msg.roles.filter((/** @type {unknown} */ r) => typeof r === "string") : [];
+        const npc = typeof msg.npc === "string" ? msg.npc : "";
+        const list = [...allTowns().values()];
+        const ids = offerTowns({ towns: list, npc, roles, role: CONFIG.npcRole, here: nearestTown(player, get("townRadius"))?.id, placed: mayorPlaced, enabled: get("townMayors") === true });
+        ids.forEach((townId, i) => {
+          const t = allTowns().get(townId);
+          if (t) send("realm:npc_offer", { req: msg.req, pack: "town_bp", key: `town:${t.id}`, label: `Town projects (${t.n})`, order: 30 + i });
+        });
       } else if (msg.pack === "town_bp" && typeof msg.key === "string" && msg.key.startsWith("town:")) {
         const townId = msg.key.slice(5);
         system.run(() => townMenu(player, townId, true).catch((e) => console.warn(`[town] ${e}`)));
