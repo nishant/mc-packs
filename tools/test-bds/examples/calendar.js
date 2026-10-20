@@ -232,6 +232,8 @@ export default async function (t) {
   t.check(of("realm:town_state", (m) => m.town === town.id && m.mood === "heartened" && m.until > Date.now(), since).length === 1, "realm:town_state Heartened");
   const heldNews = of("realm:gossip", (m) => m.kind === "siege", since);
   t.assert(heldNews.length === 1, "the held siege tells one piece of town news (gap was open)");
+  const heldNewsTick = ev.find((e) => e.id === "realm:gossip" && e.m.kind === "siege" && e.tick >= since)?.tick;
+  t.assert(Number.isFinite(heldNewsTick), "the held siege's news has an observed event tick");
   t.check(of("realm:gossip", (m) => m.kind === "siege" && m.player === sam.id, since).length === 0, "Sam (no hit, not 3 minutes near) isn't a participant");
   await t.wait(10);
   st = await state();
@@ -250,7 +252,7 @@ export default async function (t) {
   await t.waitUntil(() => of("realm:siege", (m) => m.state === "end", since).length > 0, { timeout: 100, message: "second siege end" });
   t.check(of("realm:siege", (m) => m.state === "end", since)[0].result === "failed", "the second siege failed");
   t.check(of("realm:town_state", (m) => m.town === town.id && m.mood === "shaken", since).length === 1, "realm:town_state Shaken");
-  t.check(sys.currentTick - heldNews[0].tick < 1000, "the second siege ends inside the calendar news gap");
+  t.check(sys.currentTick - heldNewsTick < 1000, "the second siege ends inside the calendar news gap");
   t.check(of("realm:gossip", (m) => m.kind === "siege_lost" && m.player === p.id, since).length === 0, "the news gap (the held siege's line was under 1000 ticks ago) drops the second cosmetic line without changing its result or town mood");
 
   // --- A third siege, left running for the restart.
