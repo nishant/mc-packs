@@ -574,8 +574,10 @@ function usedOnPage(inv) {
 const switching = new Set();
 /** @type {Set<string>} */
 const recoveryWarned = new Set();
-/** @type {Map<string, { page: number, amounts: Map<string, number>, live: Map<string, number> }>} what each player's page, and everything they carry, held at the last auto-store look */
+/** @type {Map<string, { page: number, amounts: Map<string, number>, live: Map<string, number> | undefined }>} what each player's page, and everything they carry (only near a full page), held at the last auto-store look */
 const snapshots = new Map();
+/** Free page slots at or below which an auto-store look also totals everything carried (see autoStore). */
+const LIVE_MARGIN = 4;
 /**
  * Saves the active page and shows another. The page being left is saved and read back before anything
  * is cleared; whatever of the new page doesn't fit (a carried item is in its slot) stays saved on that page.
@@ -1261,15 +1263,19 @@ function autoStore(player) {
   const total = totalPages(player);
   const cur = curPage(player);
   const now = lookAtPage(inv);
-  const live = liveTotals(player, inv, now.amounts);
+  // Everything carried is only compared on a page down to one free slot, against the look before it; a page with
+  // more room than LIVE_MARGIN can't get there by the next look short of several new stacks at once, so its look
+  // skips the hotbar, cursor and worn gear. A look with no carried totals before it is only a baseline.
+  const live = now.empty <= LIVE_MARGIN ? liveTotals(player, inv, now.amounts) : undefined;
   const before = snapshots.get(player.id);
   snapshots.set(player.id, { page: cur, amounts: now.amounts, live });
-  if (!before || before.page !== cur || now.empty > 1) return;
+  if (!before || before.page !== cur || now.empty > 1 || !before.live || !live) return;
+  const was = before.live;
 
   /** @type {Map<string, number>} */
   const gains = new Map();
   for (const [k, n] of now.amounts) {
-    const gain = Math.min(n - (before.amounts.get(k) ?? 0), (live.get(k) ?? 0) - (before.live.get(k) ?? 0));
+    const gain = Math.min(n - (before.amounts.get(k) ?? 0), (live.get(k) ?? 0) - (was.get(k) ?? 0));
     if (gain > 0) gains.set(k, gain);
   }
   if (!gains.size) return;
@@ -1330,7 +1336,7 @@ function autoStore(player) {
     return;
   }
   const look = lookAtPage(inv);
-  snapshots.set(player.id, { page: cur, amounts: look.amounts, live: liveTotals(player, inv, look.amounts) });
+  snapshots.set(player.id, { page: cur, amounts: look.amounts, live: look.empty <= LIVE_MARGIN ? liveTotals(player, inv, look.amounts) : undefined });
   const dest = [...perPage.entries()].sort((a, b) => a[0] - b[0]).sort((a, b) => b[1] - a[1])[0][0];
   hooks.bar(player, `§8[§bPage #${dest}§8] §7Auto-stored §f${movedCount}x ${name} §7(${freeEverywhere(player, inv)} slots left)`);
 }

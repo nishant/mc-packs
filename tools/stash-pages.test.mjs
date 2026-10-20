@@ -3264,3 +3264,62 @@ test("F3: an index written before room was recorded (after a restart) costs one 
   assert.equal(savedPage(p, 2).get(10)?.amount, 8);
   assert.equal(nativeIndex(p).pages[1].id, old, "page 1 itself was never rewritten");
 });
+
+// ---------------------------------------------------------------------------
+// F13: a look at a page with room doesn't total the hotbar, cursor and worn gear
+// ---------------------------------------------------------------------------
+
+/** Counts how often the player's worn gear is read (only the carried totals read it). */
+function countWornReads(/** @type {any} */ p) {
+  const real = p.getComponent;
+  const counter = { n: 0, stop: () => void (p.getComponent = real) };
+  p.getComponent = (/** @type {string} */ name) => {
+    if (name === "minecraft:equippable") counter.n++;
+    return real(name);
+  };
+  return counter;
+}
+
+test("F13: auto-store looks at a page with room without totaling everything carried", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  advance(30);
+  const reads = countWornReads(p);
+  try {
+    for (let i = 0; i < 6; i++) pickup(p, 20 + i, stack("minecraft:dirt", 1 + i));
+    assert.equal(reads.n, 0, `a page with ${STORAGE_SLOTS.length - 6} free slots needs no carried totals (${reads.n} reads)`);
+  } finally {
+    reads.stop();
+  }
+  for (let i = 0; i < 6; i++) assert.equal(p.container.getItem(20 + i)?.amount, 1 + i, "pickups with room stay on the page");
+});
+
+test("F13: near a full page the carried totals come back, so a pickup is still routed and a move still isn't", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  nearlyFull(p, [19, 20, 21, 22]);
+  p.container.setItem(19, stack("minecraft:emerald", 2));
+  advance(30);
+  p.container.setItem(21, stack("minecraft:redstone", 2));
+  advance(30);
+  const reads = countWornReads(p);
+  try {
+    pickup(p, 20, stack("minecraft:iron_ingot", 5));
+    assert.ok(reads.n > 0, "the totals are read near a full page");
+  } finally {
+    reads.stop();
+  }
+  assert.equal(p.container.getItem(20), undefined, "the pickup that left one free slot went to page 1");
+  assert.equal(savedPage(p, 1).get(10)?.typeId, "minecraft:iron_ingot");
+  p.container.setItem(3, stack("minecraft:gold_ingot", 4));
+  advance(30);
+  const gold = p.container.getItem(3);
+  p.container.setItem(3, undefined);
+  p.container.setItem(20, gold);
+  advance(30);
+  assert.equal(p.container.getItem(20)?.amount, 4, "a hotbar to page move is not a pickup");
+});
