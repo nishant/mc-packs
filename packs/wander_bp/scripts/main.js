@@ -1111,6 +1111,7 @@ async function accuseForm(player, wid) {
 // ---------------------------------------------------------------------------
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return; // another pack (Land Claims) refused this tap: in the bundle it is still delivered here
   const { player, target } = ev;
   try {
     if (!target.hasTag(OWNER_TAG) || target.typeId === LABEL_TYPE) return;
@@ -1165,20 +1166,25 @@ function ourNames() {
   return out;
 }
 
-/** True when a transformed entity carries the unique per-wanderer format-code marker of one of our road or camp wanderers whose entity just turned. @param {Entity} entity */
+/**
+ * True when a transformed entity carries the unique per-wanderer format-code marker of one of our road or camp
+ * wanderers. The marker is unique to that wanderer, so a witch or zombie villager wearing it is always theirs, even when
+ * `again` already spawned the wanderer anew in the tick between the lightning and this check (that race left a named
+ * witch standing: wander-walk's "no named witch left"). @param {Entity} entity
+ */
 function isOurTurnedWanderer(entity) {
   const name = entity.nameTag;
   if (!name || name === SUPPRESSED_NAME || name === `${SUPPRESSED_NAME}§r`) return false;
   if (ourNames().has(name) && !isSuppressedName(name)) return true;
   const dimId = entity.dimension.id;
   for (const rec of Object.values(live)) {
-    if (rec.d !== dimId || (rec.e && entityById(rec.e))) continue;
+    if (rec.d !== dimId) continue;
     const key = `road:${rec.w}`;
     const m = wandererMarker(key);
     if (matchesHiddenMarker(name, m, wandererLabel(rec.w, rec.n))) return true;
   }
   for (const [wid, c] of Object.entries(camps)) {
-    if (c.d !== dimId || (c.e && entityById(c.e))) continue;
+    if (c.d !== dimId) continue;
     const n = NAMED_BY_ID.get(wid);
     const key = `camp:${wid}`;
     const m = wandererMarker(key);
