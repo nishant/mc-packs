@@ -595,7 +595,7 @@ function usedOnPage(inv) {
 const switching = new Set();
 /** @type {Set<string>} */
 const recoveryWarned = new Set();
-/** @type {Map<string, { page: number, amounts: Map<string, number>, live: Map<string, number> | undefined }>} what each player's page, and everything they carry (only near a full page), held at the last auto-store look */
+/** @type {Map<string, { page: number, amounts: Map<string, number>, empty: number, live: Map<string, number> | undefined }>} what each player's page, its free slots and everything they carry (only near a full page) held at the last auto-store look */
 const snapshots = new Map();
 /** Free page slots at or below which an auto-store look also totals everything carried (see autoStore). */
 const LIVE_MARGIN = 4;
@@ -1286,17 +1286,23 @@ function autoStore(player) {
   const now = lookAtPage(inv);
   // Everything carried is only compared on a page down to one free slot, against the look before it; a page with
   // more room than LIVE_MARGIN can't get there by the next look short of several new stacks at once, so its look
-  // skips the hotbar, cursor and worn gear. A look with no carried totals before it is only a baseline.
+  // skips the hotbar, cursor and worn gear. When such a burst (a broken chest, mob loot) does fill a roomy page
+  // within one look, there are no carried totals to compare with: every new stack on the page counts as arrived,
+  // as if nothing else carried changed. Otherwise a full page and a full hotbar could never see another pickup
+  // and would stay stuck. A misread move only sends the player's own stack to another of their pages.
   const live = now.empty <= LIVE_MARGIN ? liveTotals(player, inv, now.amounts) : undefined;
   const before = snapshots.get(player.id);
-  snapshots.set(player.id, { page: cur, amounts: now.amounts, live });
-  if (!before || before.page !== cur || now.empty > 1 || !before.live || !live) return;
+  snapshots.set(player.id, { page: cur, amounts: now.amounts, empty: now.empty, live });
+  if (!before || before.page !== cur || now.empty > 1 || !live) return;
+  const burst = !before.live;
+  if (burst && !(before.empty > LIVE_MARGIN)) return;
   const was = before.live;
 
   /** @type {Map<string, number>} */
   const gains = new Map();
   for (const [k, n] of now.amounts) {
-    const gain = Math.min(n - (before.amounts.get(k) ?? 0), (live.get(k) ?? 0) - (was.get(k) ?? 0));
+    const onPage = n - (before.amounts.get(k) ?? 0);
+    const gain = was ? Math.min(onPage, (live.get(k) ?? 0) - (was.get(k) ?? 0)) : onPage;
     if (gain > 0) gains.set(k, gain);
   }
   if (!gains.size) return;
@@ -1357,7 +1363,7 @@ function autoStore(player) {
     return;
   }
   const look = lookAtPage(inv);
-  snapshots.set(player.id, { page: cur, amounts: look.amounts, live: look.empty <= LIVE_MARGIN ? liveTotals(player, inv, look.amounts) : undefined });
+  snapshots.set(player.id, { page: cur, amounts: look.amounts, empty: look.empty, live: look.empty <= LIVE_MARGIN ? liveTotals(player, inv, look.amounts) : undefined });
   const dest = [...perPage.entries()].sort((a, b) => a[0] - b[0]).sort((a, b) => b[1] - a[1])[0][0];
   hooks.bar(player, `§8[§bPage #${dest}§8] §7Auto-stored §f${movedCount}x ${name} §7(${freeEverywhere(player, inv)} slots left)`);
 }

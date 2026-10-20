@@ -3324,6 +3324,27 @@ test("F13: near a full page the carried totals come back, so a pickup is still r
   assert.equal(p.container.getItem(20)?.amount, 4, "a hotbar to page move is not a pickup");
 });
 
+test("F13: a burst that fills a roomy page at once is still routed, not left stuck on a full page", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  const burst = [20, 21, 22, 23, 24, 25];
+  nearlyFull(p, burst);
+  advance(30);
+  // A broken chest: six new stacks land within one look, taking the page from 6 free slots to none.
+  for (const s of burst) p.container.setItem(s, stack("minecraft:dirt", 64));
+  advance(30);
+  const free = burst.filter((s) => !p.container.getItem(s)).length;
+  assert.ok(free >= 2, `routing frees two slots on the viewed page (${free} free)`);
+  let onPage1 = 0;
+  for (const it of savedPage(p, 1).values()) if (it?.typeId === "minecraft:dirt") onPage1 += it.amount;
+  let left = 0;
+  for (const s of burst) left += p.container.getItem(s)?.amount ?? 0;
+  assert.equal(onPage1 + left, 6 * 64, "every dirt is kept exactly once");
+  assert.equal(onPage1, free * 64, "what left the page is on page 1");
+});
+
 // ---------------------------------------------------------------------------
 // F49: a count request doesn't read every old JSON page property
 // ---------------------------------------------------------------------------
