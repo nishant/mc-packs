@@ -36,10 +36,10 @@ export default async function (t) {
   const bystander = await t.player("Bystander", { x: seeker.location.x + 4, z: seeker.location.z + 1, gameMode: "survival" });
   const dim = t.dimension;
   const chest = { x: Math.floor(seeker.location.x) + 2, y: Math.floor(seeker.location.y), z: Math.floor(seeker.location.z) + 2 };
-  const barrel = { x: chest.x + 3, y: chest.y, z: chest.z };
+  const barrel = { x: chest.x - 4, y: chest.y, z: chest.z };
   const theirs = { x: Math.floor(bystander.location.x), y: Math.floor(bystander.location.y), z: Math.floor(bystander.location.z) + 4 };
   await place(t, seeker, chest, "minecraft:chest");
-  await place(t, seeker, barrel, "minecraft:barrel");
+  await place(t, seeker, barrel, "minecraft:chest");
   await place(t, bystander, theirs, "minecraft:chest");
   dim.getBlock(theirs).getComponent("minecraft:inventory").container.setItem(0, new t.mc.ItemStack("minecraft:diamond", 1));
   dim.getBlock(chest).getComponent("minecraft:inventory").container.setItem(0, new t.mc.ItemStack("minecraft:diamond", 4));
@@ -79,7 +79,7 @@ export default async function (t) {
   const again = t.waitForm(seeker);
   t.assert(t.cmd(seeker, "/realm:find emerald").ok, "find emerald");
   (await again).answer(0);
-  const next = await t.waitMessage(seeker, /Barrel/, { kind: "actionbar", pack: "find_bp", timeout: 80 });
+  const next = await t.waitMessage(seeker, /\d+ blocks SW/, { kind: "actionbar", pack: "find_bp", timeout: 80 });
   t.check(/blocks/.test(next.plain), `replacement guide: ${next.plain}`);
 
   sys.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "hs2", pack: "find_bp", key: "highlightSeconds", value: 3 }));
