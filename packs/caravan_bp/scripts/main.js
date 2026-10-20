@@ -1,4 +1,5 @@
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import {
   CommandPermissionLevel,
   CustomCommandParamType,
@@ -175,21 +176,9 @@ function broadcast(msg) {
 
 // Town news: a caravan arriving is Townsfolk gossip about nobody in particular (no `player`), at most once per
 // in-game hour, once per visit.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => system.sendScriptEvent("realm:gossip", JSON.stringify(msg)), () => system.currentTick);
 
 // ---------------------------------------------------------------------------
 // Crowns (the shared `crowns` scoreboard; works without the Crowns pack)

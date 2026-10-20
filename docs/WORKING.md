@@ -81,7 +81,7 @@ From two weeks of history (728 commits, 161 of them fixes): the same classes cam
 | C11 | Dimension ids | `weatherChange`, `dimension ===` | `id.replace(/^minecraft:/, "")` before comparing |
 | C12 | Scores | `\.getScore\(` | A try/catch helper that returns 0 |
 | C13 | Canceled `beforeEvents` in the bundle | `beforeEvents\.(playerInteractWithBlock\|playerBreakBlock\|itemUse\|playerInteractWithEntity)` | First line `if (ev.cancel) return;`; a pack loaded before claims asks `realm:access_check` |
-| C14 | Duplicated modules | `md5sum packs/*/scripts/<file>` | A `tools/*-shared.js` with a `sync-*.mjs` and its `--check` |
+| C14 | Duplicated modules | `md5sum packs/*/scripts/<file>`, a helper pasted into several `main.js` | A `tools/*-shared.js` with a `sync-*.mjs` and its `--check` in `npm run check` (a plain copy needs only `tools/lib/shared-copy.mjs`, like `sync-gossip`, `sync-prune` and `sync-weather`) |
 | C15 | Water | `getTopmostBlock`, `getBlockBelow` | Check the block above for water (`waterOver`, `dryGround`); `includeLiquidBlocks: true` |
 | C16 | Unloaded chunks | `getTopmostBlock`, `getBlock(` | try/catch around the call **and** the reads (`typeId`, `isLiquid`); y 319 or undefined means not loaded: retry later, never drop the job; spawning far away needs a ticking area |
 | C17 | Leave, death, dimension change mid-operation | `await`, `runTimeout`, `form.show` | Validity, health and an owned lifecycle generation after every await and timeout, spanning parent/child dialogs; leave/death/respawn/dimension cleanup; old callbacks cannot clear a newer lock; `UserBusy` retried, `UserClosed` stops |

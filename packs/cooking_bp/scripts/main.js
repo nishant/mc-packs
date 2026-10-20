@@ -29,7 +29,8 @@ const owedStore = createOwedStore(world, {
     return v;
   },
   summarize: (v) => `dishes ${JSON.stringify(v)}`,
-});const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
+});
+const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
 const PROP_STAR = "cooking:star"; // world: ms of the last aurora or meteor (realm:sky_event)
 const MINUTE = 60000;
 const MOON_MAX_MS = 20 * MINUTE; // a moon night lasts about 10 minutes; forget a moon that never set (saved before game ticks were)
@@ -588,8 +589,16 @@ function settle(pid, d, n) {
   return settleOwed(owedStore, pid, d.id, n);
 }
 
-/** Dishes that finished cooking after the player left (or that a restart interrupted). `pid` and `failIds` are for the native test hook. @param {Player} player @param {string} [pid] @param {Set<string>} [failIds] */
-function applyOwed(player, pid = player.id, failIds) {
+/**
+ * Set only for the length of one realm:cooking_owed_test claim (console only), never in play: the stored id whose debt
+ * is handed to the named player, and dish ids whose grant throws, so the test sees failed parts stay owed.
+ * @type {{ pid: string, fail: Set<string> } | null}
+ */
+let owedTest = null;
+
+/** Dishes that finished cooking after the player left (or that a restart interrupted). @param {Player} player */
+function applyOwed(player) {
+  const pid = owedTest?.pid ?? player.id;
   const mine = owedStore.take(pid);
   if (!mine || typeof mine !== "object" || Array.isArray(mine)) return;
   const parts = Object.entries(mine)
@@ -598,7 +607,7 @@ function applyOwed(player, pid = player.id, failIds) {
   applyParts(
     parts,
     ([id, n]) => {
-      if (failIds?.has(id)) throw new Error("test: grant failed");
+      if (owedTest?.fail.has(id)) throw new Error("test: grant failed");
       deliver(player, /** @type {Dish} */ (dishById.get(id)), n);
     },
     (failed) => {
@@ -1236,7 +1245,14 @@ onScriptEvent(
         if (msg.seed && typeof msg.seed === "object") world.setDynamicProperty("cooking:owed", JSON.stringify(msg.seed));
         if (typeof msg.claim === "string" && typeof msg.as === "string") {
           const who = world.getPlayers({ name: msg.as })[0];
-          if (who) applyOwed(who, msg.claim, Array.isArray(msg.fail) ? new Set(msg.fail.map(String)) : undefined);
+          if (who) {
+            owedTest = { pid: msg.claim, fail: new Set(Array.isArray(msg.fail) ? msg.fail.map(String) : []) };
+            try {
+              applyOwed(who);
+            } finally {
+              owedTest = null;
+            }
+          }
         }
         const ids = owedStore.ids().slice(0, 10);
         /** @type {Record<string, unknown>} */

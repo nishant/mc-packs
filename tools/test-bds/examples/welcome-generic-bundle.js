@@ -11,7 +11,9 @@
 //      node tools/test-bds/run.mjs --quiet --flat --packs <d> --arg expect=default --scenario tools/test-bds/examples/welcome-generic-bundle.js
 // 3. An operator's saved welcome stays (the same with --first-value '{"body":"Saved old body"}' and --arg expect=saved).
 // Phase 2 repeats the check after a restart: the migration must not run again and the text must be the same.
-// The saved fields themselves (welcome:settings, welcome:migrated) are add-on scoped: the harness cannot read them, so the offline\n// tests (tools/operator-welcome.test.mjs) hold those checks.\n// Limit: a form's title, labels and buttons are the server's proof; whether the client draws them without cutting
+// The saved fields themselves (welcome:settings, welcome:migrated) are add-on scoped: the harness cannot read them, so the offline
+// tests (tools/operator-welcome.test.mjs) hold those checks.
+// Limit: a form's title, labels and buttons are the server's proof; whether the client draws them without cutting
 // text off is not tested here (no client input).
 export default async function (t) {
   const expect = String(t.args?.expect ?? "default");

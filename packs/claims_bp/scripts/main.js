@@ -230,7 +230,7 @@ function isStory(target) {
   }
 }
 
-/** A tamed pet of anyone, by the stable `minecraft:is_tamed` component (there is no stable getter for who tamed it). @param {import("@minecraft/server").Entity} target */
+/** A tamed pet of anyone, by the stable `minecraft:is_tamed` component (the stable `tamedToPlayerId` is on `minecraft:tameable`, which a mob loses once tamed, so the tamer cannot be read here). @param {import("@minecraft/server").Entity} target */
 function isTamed(target) {
   try {
     return target.getComponent("minecraft:is_tamed") !== undefined;

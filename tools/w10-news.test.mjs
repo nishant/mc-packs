@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import vm from "node:vm";
 import ts from "typescript";
 import { GOSSIP, HEARTH } from "../packs/npc_bp/scripts/hearth.js";
@@ -12,11 +13,15 @@ import { CONFIG as GUILD_CONFIG } from "../packs/guilds_bp/scripts/config.js";
 const root = path.join(import.meta.dirname, "..");
 const pack = (folder, file = "main.js") => path.join(root, "packs", folder, "scripts", file);
 
-const GATE = [
-  "const NEWS_GAP = 1000;",
-  "let newsAt = -NEWS_GAP;",
-  "const newsSeen = new Set();",
-].join("\n");
+/** Each sender's own copy of the shared gate (scripts/gossip.js, kept equal to tools/gossip-shared.js by sync-gossip). */
+const gateOf = async (file) => import(pathToFileURL(path.join(path.dirname(file), "gossip.js")).href);
+
+/** The sender's wiring line: `const gossip = createGossip(<post>, <tick>);`. @param {string} file */
+function gossipWiring(file) {
+  const text = fs.readFileSync(file, "utf8");
+  const m = /^import \{ createGossip \} from "\.\/gossip\.js";$/m.test(text) ? text.match(/^const gossip = createGossip\(.*\);$/m) : null;
+  return m?.[0];
+}
 
 /** @param {string} file @param {string} name */
 function extractFunction(file, name) {
@@ -44,8 +49,11 @@ function evalPack(file, required, optional, sandbox, extra = "", footer = "") {
   const missing = required.filter((name) => !extractFunction(file, name));
   assert.deepEqual(missing, [], path.basename(path.dirname(path.dirname(file))) + " missing " + missing.join(","));
   const names = [...required, ...optional.filter((name) => extractFunction(file, name))];
-  const code = ['"use strict";', GATE, extra, ...names.map((name) => extractFunction(file, name)), footer || "({" + names.join(",") + "})"].join("\n");
-  return vm.runInNewContext(code, sandbox, { filename: path.basename(file) });
+  // gossip is the pack's own wiring of its gossip.js gate (the real copy, imported once below).
+  const wiring = optional.includes("gossip") ? gossipWiring(file) : undefined;
+  if (optional.includes("gossip")) assert.ok(wiring, path.basename(path.dirname(path.dirname(file))) + " gossip gate wiring missing");
+  const code = ['"use strict";', wiring ?? "", extra, ...names.map((name) => extractFunction(file, name)), footer || "({" + names.join(",") + "})"].join("\n");
+  return vm.runInNewContext(code, { createGossip: gates.get(file), ...sandbox }, { filename: path.basename(file) });
 }
 
 function recorder() {
@@ -76,27 +84,33 @@ const SENDERS = [
   ["skills_bp", pack("skills_bp", "calling.js")],
 ];
 
+/** Every sender's real gate, by file. @type {Map<string, Function>} */
+const gates = new Map();
+for (const file of [...SENDERS.map(([, f]) => f), pack("calendar_bp"), pack("milestones_bp"), pack("goals_bp")]) gates.set(file, (await gateOf(file)).createGossip);
+
 test("each owned sender gates town news at 1000 game ticks, once per key, 64 remembered", () => {
   for (const [name, file] of SENDERS) {
-    const src = extractFunction(file, "gossip");
-    assert.equal(typeof src, "string", name + " gossip gate missing");
-    assert.equal(src.includes("Date.now"), false, name + " must not time the gate with Date.now");
-    assert.equal(src.includes("getDynamicProperty"), false, name + " gate is process memory, not saved data");
+    const wiring = gossipWiring(file);
+    assert.equal(typeof wiring, "string", name + " gossip gate missing");
+    assert.match(wiring, /"realm:gossip"/, name + " posts realm:gossip");
+    assert.match(wiring, /, \(\) => system\.currentTick\);$/, name + " times the gate with game ticks");
+    const gateSrc = fs.readFileSync(path.join(path.dirname(file), "gossip.js"), "utf8");
+    assert.equal(gateSrc.includes("Date.now"), false, name + " must not time the gate with Date.now");
+    assert.equal(gateSrc.includes("getDynamicProperty"), false, name + " gate is process memory, not saved data");
+    /** @type {string[]} */
+    const sent = [];
     const api = vm.runInNewContext(
       [
         '"use strict";',
-        GATE,
-        "const sent = [];",
         "const system = { currentTick: 0, sendScriptEvent(id, payload) { sent.push(payload); } };",
         "const send = (id, msg) => system.sendScriptEvent(id, JSON.stringify(msg));",
-        src,
+        wiring,
         "({",
         "  go(key, tick) { system.currentTick = tick; return gossip(key, { kind: 'x', player: 'p' }); },",
         "  sent: () => sent.length,",
-        "  size: () => newsSeen.size,",
         "})",
       ].join("\n"),
-      {},
+      { createGossip: gates.get(file), sent },
       { filename: name + "-gate.js" },
     );
     assert.equal(api.go("a", 0), true, name + " first event");
@@ -106,21 +120,23 @@ test("each owned sender gates town news at 1000 game ticks, once per key, 64 rem
     assert.equal(api.go("b", 2000), false, name + " the same key is told once");
     assert.equal(api.sent(), 2, name);
     for (let i = 0; i < 63; i++) assert.equal(api.go("k" + i, 3000 + i * 1000), true, name + " key " + i);
-    assert.equal(api.size(), 64, name + " seen list stays at 64");
     const at = 3000 + 62 * 1000;
     assert.equal(api.go("a", at), false, name + " evicted key still waits for the hour");
+    assert.equal(api.sent(), 65, name);
+    // The seen list stays at 64: after the hour "b" (the 64th newest of the 65 keys told) is still refused as told,
+    // and "a" (the 65th, the oldest) was dropped from it and can be told again.
+    assert.equal(api.go("b", at + 1000), false, name + " seen list keeps 64 keys");
     assert.equal(api.sent(), 65, name);
     assert.equal(api.go("a", at + 1000), true, name + " oldest key can be told again after the hour");
     const again = vm.runInNewContext(
       [
         '"use strict";',
-        GATE,
         "const system = { currentTick: 0, sendScriptEvent() {} };",
         "const send = (id, msg) => system.sendScriptEvent(id, JSON.stringify(msg));",
-        src,
+        wiring,
         "gossip('a', { kind: 'x' })",
       ].join("\n"),
-      {},
+      { createGossip: gates.get(file) },
     );
     assert.equal(again, true, name + " script restart clears the in-memory gate");
   }
