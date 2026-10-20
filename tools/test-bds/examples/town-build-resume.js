@@ -6,12 +6,14 @@
 export default async function (t) {
   const dim = t.dimension;
   const G = -61;
+  const failed = [];
+  const fill = (cmd) => t.server(cmd).ok || failed.push(cmd);
   const slope = (ox) => {
     for (let x = -50; x <= 50; x += 3) {
-      const h = Math.floor((x + 50) / 3) - 16;
-      if (h > 0) t.server(`/fill ${ox + x} ${G + 1} -50 ${ox + x + 2} ${G + h} 50 dirt`);
-      else if (h < 0) t.server(`/fill ${ox + x} ${G + h + 1} -50 ${ox + x + 2} ${G} 50 air`);
-      t.server(`/fill ${ox + x} ${G + h} -50 ${ox + x + 2} ${G + h} 50 grass_block`);
+      const h = Math.max(-2, Math.floor((x + 50) / 3) - 16); // flat 2 below the plain on the west side (bedrock is at -64)
+      if (h > 0) fill(`/fill ${ox + x} ${G + 1} -50 ${ox + x + 2} ${G + h} 50 dirt`);
+      else if (h < 0) fill(`/fill ${ox + x} ${G + h + 1} -50 ${ox + x + 2} ${G} 50 air`);
+      fill(`/fill ${ox + x} ${G + h} -50 ${ox + x + 2} ${G + h} 50 grass_block`);
     }
   };
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
@@ -19,6 +21,7 @@ export default async function (t) {
   t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "nolife", pack: "town_bp", key: "townLife", value: false }));
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
   const dump = async (id) => {
+    await t.wait(1); // a dump just before answered in this tick: never take its message for this one
     const since = t.tick;
     town("dump", { town: id });
     return JSON.parse((await t.waitMessage(p, (x) => x.startsWith('{"town"'), { since, timeout: 60 })).plain);
@@ -32,8 +35,10 @@ export default async function (t) {
   if (t.phase === 1) {
     await t.loadArea(0, 0, { radius: 4 });
     await t.loadArea(400, 0, { radius: 4 });
+    await t.wait(40); // the areas' edges load after their centers
     slope(0);
     slope(400);
+    t.assert(!failed.length, `the slopes are built (${failed.length} fills failed: ${failed[0]})`);
     await t.wait(20);
     for (const [name, x] of [["Riverside", 0], ["Oakfield", 400]]) {
       p.teleport({ x: x + 0.5, y: G + 2, z: 0.5 });
