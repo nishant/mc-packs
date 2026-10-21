@@ -1466,8 +1466,12 @@ const FAR_MOVE = 256;
 const TURN_BUDGET = 8;
 /** Strips and radars built per tick at most (building one whose text didn't change is the cost without the send). */
 const RENDER_BUDGET = 10;
-/** Players whose turning and moving is checked a tick (all of them up to this many, else taking turns). */
-const TURN_CHECKS = 12;
+/**
+ * Players whose turning and moving is checked a tick (all of them up to this many, else taking turns), by budgetLevel
+ * (TURN_CHECKS_BY): no more than the drawing budget can draw for, since each check reads the game.
+ */
+let TURN_CHECKS = 4;
+const TURN_CHECKS_BY = /** @type {Record<string, number>} */ ({ low: 3, normal: 4, high: 12 });
 /**
  * With more than DRAW_MIN_FROM players drawn, a player's strip and radar are drawn at most every DRAW_MIN ticks for
  * turning or moving (10 a second); with fewer, every tick (the drawing budget has room for them).
@@ -1528,8 +1532,7 @@ system.runInterval(() => {
     // of them a tick (about one picture fits in a tick's rebuild time): the others wait their turn.
     const lagDue = v.lag && rebuildBudget.ok && lagChecks < LAG_CHECKS;
     if (lagDue) lagChecks++;
-    // A turn's check reads the game: it is charged to the drawing budget, and the turns stop when that is spent.
-    if (!v.dirty && !lagDue && !refresh && ((k - turnFirst + n) % n >= checks || !drawBudget.ok)) continue;
+    if (!v.dirty && !lagDue && !refresh && (k - turnFirst + n) % n >= checks) continue;
     // A player drawn a moment ago waits DRAW_MIN ticks, unless the pass found something new or the title is due.
     if (busy && !v.dirty && !refresh && (now - (v.drawn ?? -Infinity) < DRAW_MIN || now - (v.checked ?? -Infinity) < DRAW_MIN)) continue;
     v.checked = now;
@@ -1553,9 +1556,7 @@ system.runInterval(() => {
     }
   }
   if (n) turnFirst = (turnFirst + checks) % n;
-  const checkTook = Date.now() - t0;
-  turnCheckMs += checkTook;
-  drawBudget.spend(checkTook);
+  turnCheckMs += Date.now() - t0;
   // Titles about to fade first (O5), then the longest-waiting: a lagging radar waits since it was last up to date.
   const waited = (/** @type {View} */ v) => (v.lag ? v.fresh ?? 0 : v.drawn ?? 0);
   if (due.length > 1) due.sort((a, b) => Number(b.refresh) - Number(a.refresh) || waited(a.v) - waited(b.v));
@@ -1653,6 +1654,7 @@ function applyBudgetLevel() {
     [b.perTick, b.max, b.tickMax] = ks[i];
     b.left = Math.min(b.left, b.max);
   }
+  TURN_CHECKS = TURN_CHECKS_BY[level] ?? TURN_CHECKS_BY.normal;
 }
 applyBudgetLevel();
 world.afterEvents.worldLoad.subscribe(() => applyBudgetLevel()); // a saved level can't be read before the world loads
