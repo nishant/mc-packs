@@ -29,7 +29,7 @@ export default async function (t) {
   const st = load(t);
   st.results ??= [];
   const { top } = await t.loadArea(SPOT.x, SPOT.z, { radius: 2 });
-  const y = top + 1;
+  const y = top.location.y + 1;
   /** @type {{ id: string, msg: string, tick: number }[]} */
   const events = [];
   t.system.afterEvents.scriptEventReceive.subscribe(
@@ -119,6 +119,16 @@ export default async function (t) {
     const e = evOf("exptest:restored", (m) => JSON.parse(m).name === name, since);
     return e ? JSON.parse(e.msg) : undefined;
   };
+  /**
+   * Did the hand-back finish before the cut at tick `cut`? Its exptest:restored event comes at the end of the tick it
+   * resolved in, so a hand-back that gave everything back earlier in the cut tick (to a player still valid) is only
+   * known a tick later: a simulated player's inventory goes with them, so that case is "finished before the cut".
+   */
+  const finishedBy = async (name, since, cut) => {
+    await t.wait(1);
+    const e = evOf("exptest:restored", (m) => JSON.parse(m).name === name, since);
+    return !!e && e.tick <= cut && !!JSON.parse(e.msg).done;
+  };
   /** The owner is back (same name, new simulated player): their record goes on them and the hand-back runs to its end. */
   const comeBack = async (name, at) => {
     const p = await t.player(name, { x: at.x, y: at.y, z: at.z });
@@ -181,8 +191,16 @@ export default async function (t) {
         p.disconnect();
         continue;
       }
+      const cut = t.system.currentTick;
       p.disconnect();
-      await t.wait(3);
+      if (await finishedBy(name, r.since, cut)) {
+        st.results.push(`${name}: finished in the cut tick`);
+        t.log(`${name}: finished in the cut tick`);
+        stop = 0;
+        tidy(name);
+        continue;
+      }
+      await t.wait(2);
       breakCarts(r.tag);
       await t.wait(60);
       stop = 0;
@@ -268,15 +286,16 @@ export default async function (t) {
   const seenA = watch(ra.tag, () => Infinity);
   const seenB = watch(rb.tag, () => Infinity);
   if (k) await t.wait(k);
-  const doneA = !!finished(a.name, ra.since)?.done;
-  const doneB = !!finished(b.name, rb.since)?.done;
   // The server going down takes the players with it at this tick: the hand-back can't go on (t.restart() itself stops
   // the server only about half a second later, which would let it finish).
+  const cut = t.system.currentTick;
   pa?.disconnect();
   pb?.disconnect();
+  const doneA = await finishedBy(a.name, ra.since, cut);
+  const doneB = await finishedBy(b.name, rb.since, cut);
   if (doneA) t.log(`${a.name}: finished before the cut`);
   if (doneB) t.log(`${b.name}: finished before the cut`);
-  await t.wait(2);
+  await t.wait(1);
   st.puts ??= {};
   st.puts[ra.tag] = (st.puts[ra.tag] ?? 0) + events.filter((e) => e.id === "exptest:placed" && e.msg === ra.tag).length;
   st.puts[rb.tag] = (st.puts[rb.tag] ?? 0) + events.filter((e) => e.id === "exptest:placed" && e.msg === rb.tag).length;

@@ -191,6 +191,9 @@ function stageScenario(p) {
   let detail = "";
   try {
     bashPath ??= findBash();
+    // A fresh folder every time, retries included: the hooks refuse to write over an earlier copy, and a retry must not
+    // run on what the failed attempt left behind.
+    fs.rmSync(p.stage, { recursive: true, force: true });
     fs.mkdirSync(p.stage, { recursive: true });
     const r = runRecipe(p.recipe, { cwd: ROOT, bash: bashPath });
     if (r.status !== 0) return { ok: false, detail: `${r.stderr || r.error || ""}${r.stdout || ""}` || `exit ${r.status}` };

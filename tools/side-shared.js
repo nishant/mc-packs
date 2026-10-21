@@ -431,6 +431,8 @@ export function sideBoxes(from, options = {}) {
       const t = clean(text, segBytesOf(slot) - 1);
       const span = Math.min(Math.max(Math.round(ticks), 1), MAX_TICKS);
       const tick = system.currentTick;
+      // The messages kept unread came before this: read first, so an older one can't take the slot from it.
+      materialize(player.id);
       apply(player.id, from, slot, t, tick + span);
       if (!local(player.id)) system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from, slot, text: t, ticks: span, tick }));
       if (now) draw(player);
@@ -438,6 +440,7 @@ export function sideBoxes(from, options = {}) {
     /** Takes this pack's readout (or one part's) off the player's screen. @param {Player} player @param {string} [part] @param {boolean} [now] false: don't draw yet */
     clear(player, part = "", now = true) {
       const from = part ? `${me}/${part}` : me;
+      materialize(player.id);
       const had = [...(picture.get(player.id)?.values() ?? [])].some((e) => e.from === from);
       if (!had) return;
       apply(player.id, from, "", "", 0);
@@ -456,6 +459,7 @@ export function sideBoxes(from, options = {}) {
      */
     keep(player, ticks, parts) {
       const tick = system.currentTick;
+      materialize(player.id);
       prune(player.id, tick);
       const slots = picture.get(player.id);
       if (!slots || !hasOwn(player.id)) return false;
@@ -579,6 +583,9 @@ onScriptEvent(
     if (!ours && !(drew !== undefined && drew >= now - CROSS_TICKS - 2)) {
       let box = inbox.get(pid);
       if (!box) inbox.set(pid, (box = new Map()));
+      // Kept in the order they came (a newer one from the same pack goes last), so reading them later gives the
+      // same picture as reading each as it came: the last one into a slot has it.
+      box.delete(from);
       box.set(from, { msg: message, at: now });
       // Whatever they drew is on screen now (or they cleared it): a later draw of an empty picture clears it.
       drewSome.set(pid, true);

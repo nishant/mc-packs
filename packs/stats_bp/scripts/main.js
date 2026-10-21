@@ -205,9 +205,12 @@ function applySidebar() {
  * note draws at once. Writing the bar is the ticker's biggest cost, so it writes only this often.
  */
 const REFRESH_TICKS = 40;
-/** Players are spread over the second: each is handled once every 20 ticks, in one of 4 groups 5 ticks apart. */
-const TICKER_GROUPS = 4;
-const TICKER_STEP = 20 / TICKER_GROUPS;
+/**
+ * Every ticker is handled in one pass a second. Spreading players over 4 passes 5 ticks apart was measured dearer:
+ * each pass costs about 0.35 ms whatever it does, so stats_bp went from 0.163 to 0.208-0.210 ms a tick at 40 players
+ * and from 0.064 to 0.118-0.124 at 10 (perf-soak, October 2026).
+ */
+const TICKER_STEP = 20;
 /**
  * How long a stat's ranking (every name's score, read from the board) is reused for the ticker's "#2 of 9": the
  * player's own score is read live and placed against it, so their own rank moves at once and only the others' scores
@@ -221,17 +224,20 @@ const RANK_TICKS = 100;
  * @type {Map<string, { index: number, seconds: number, text: string, head?: string, at: number, via?: "bar" | "hud" }>}
  */
 const tickers = new Map();
-/** player id -> its ticker group (0 to TICKER_GROUPS - 1), from a hash of the id so it never shifts as players come and go. */
-const tickerGroups = new Map();
-/** @param {string} id */
-function groupOf(id) {
-  let g = tickerGroups.get(id);
-  if (g === undefined) {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-    tickerGroups.set(id, (g = (h >>> 0) % TICKER_GROUPS));
-  }
-  return g;
+/**
+ * The players online (id -> Player), kept up to date by playerSpawn and playerLeave, so the ticker's pass doesn't
+ * list every player and read every id each second. Rebuilt from the player list every ROSTER_TICKS anyway, in case
+ * an event was missed.
+ * @type {Map<string, Player>}
+ */
+const tickerRoster = new Map();
+const ROSTER_TICKS = 100;
+let rosterAt = -Infinity;
+/** @param {number} now */
+function rebuildRoster(now) {
+  tickerRoster.clear();
+  for (const player of world.getAllPlayers()) tickerRoster.set(player.id, player);
+  rosterAt = now;
 }
 /** player id -> tick until which another pack's action bar message is left alone (realm:actionbar) */
 const pausedUntil = new Map();
@@ -278,7 +284,15 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   tickers.delete(playerId);
   pausedUntil.delete(playerId);
   tickerPrefs.delete(playerId);
-  tickerGroups.delete(playerId);
+  tickerRoster.delete(playerId);
+});
+// A joining player is in the next pass (within a second), not only after the next roster rebuild.
+world.afterEvents.playerSpawn.subscribe(({ player }) => {
+  try {
+    tickerRoster.set(player.id, player);
+  } catch (e) {
+    console.warn(`[stats] ticker roster: ${e}`);
+  }
 });
 
 /** @param {unknown} id */
@@ -295,12 +309,12 @@ const fmt = (stat, n) => (stat.format ? stat.format(n) : n.toLocaleString());
  */
 const tickerPrefs = new Map();
 
-/** @param {Player} player */
-function prefsOf(player) {
-  let p = tickerPrefs.get(player.id);
+/** @param {Player} player @param {string} [id] the player's id, when the caller has it (one call into the game less) */
+function prefsOf(player, id = player.id) {
+  let p = tickerPrefs.get(id);
   if (!p) {
     tickerPrefs.set(
-      player.id,
+      id,
       (p = {
         on: get("tickerEnabled") === true && getFor(player, "ticker") === true,
         shown: STATS.filter((s) => getFor(player, `tickerShows.${s.id}`) === true),
@@ -318,10 +332,10 @@ function prefsOf(player) {
 /**
  * Which stat the player's ticker is on, advancing to the next one when its time is up: a stat id, "all" (every
  * chosen stat on one line) or "" (none chosen: nothing to show). Reads no scores.
- * @param {Player} player @param {{ index: number, seconds: number }} t
+ * @param {Player} player @param {{ index: number, seconds: number }} t @param {string} [id]
  */
-function tickerHead(player, t) {
-  const { shown, all, seconds } = prefsOf(player);
+function tickerHead(player, t, id = player.id) {
+  const { shown, all, seconds } = prefsOf(player, id);
   if (!shown.length) return "";
   if (all) return "all";
   if (t.seconds >= seconds) {
@@ -333,10 +347,10 @@ function tickerHead(player, t) {
 
 /**
  * The ticker's text for the stat `head` (from tickerHead). "" = nothing to show.
- * @param {Player} player @param {string} head
+ * @param {Player} player @param {string} head @param {string} [id]
  */
-function tickerText(player, head) {
-  const { shown, lc, vc, full } = prefsOf(player);
+function tickerText(player, head, id = player.id) {
+  const { shown, lc, vc, full } = prefsOf(player, id);
   /** @param {Stat} stat */
   const one = (stat) => {
     const score = scoreOf(stat.id, player.name);
@@ -386,8 +400,8 @@ function tickerPlace(id, name, score) {
   return { rank: score > 0 ? above + 1 : 0, of };
 }
 
-/** @param {Player} player */
-const tickerOn = (player) => prefsOf(player).on;
+/** @param {Player} player @param {string} [id] */
+const tickerOn = (player, id = player.id) => prefsOf(player, id).on;
 
 /** @param {string} playerId @param {string} text */
 const toHud = (playerId, text) => system.sendScriptEvent("realm:hud_line", JSON.stringify({ player: playerId, key: "stats", text, ticks: 80 }));
@@ -402,32 +416,35 @@ function clearTicker(player, t) {
 /** Draws each player's stats ticker, one group of players per tick: the lowest steady line, it only listens and waits. */
 function tickerLoop() {
   const now = system.currentTick;
-  const group = Math.floor(now / TICKER_STEP) % TICKER_GROUPS;
   const hudAlive = now - hudHeard < HUD_STALE_TICKS;
-  for (const player of world.getAllPlayers()) {
+  if (now - rosterAt >= ROSTER_TICKS || now < rosterAt) rebuildRoster(now);
+  for (const [id, player] of tickerRoster) {
     try {
-      if (groupOf(player.id) !== group) continue; // its turn comes in another tick of this second
-      let t = tickers.get(player.id);
-      if (!tickerOn(player)) {
+      if (!player.isValid) {
+        tickerRoster.delete(id);
+        continue;
+      }
+      let t = tickers.get(id);
+      if (!tickerOn(player, id)) {
         if (t) {
           clearTicker(player, t);
-          tickers.delete(player.id);
+          tickers.delete(id);
         }
         continue;
       }
-      if (!t) tickers.set(player.id, (t = { index: 0, seconds: 0, text: "", at: -Infinity }));
+      if (!t) tickers.set(id, (t = { index: 0, seconds: 0, text: "", at: -Infinity }));
       t.seconds++;
       /** @type {"bar" | "hud"} */
-      const via = hudAlive && hudPlayers.has(player.id) ? "hud" : "bar";
-      if (t.via === "hud" && via === "bar") toHud(player.id, ""); // the HUD went off: its line goes too
-      if (via === "bar" && (pausedUntil.get(player.id) ?? 0) > now) continue; // another pack's message is on the bar
-      const head = tickerHead(player, t);
+      const via = hudAlive && hudPlayers.has(id) ? "hud" : "bar";
+      if (t.via === "hud" && via === "bar") toHud(id, ""); // the HUD went off: its line goes too
+      if (via === "bar" && (pausedUntil.get(id) ?? 0) > now) continue; // another pack's message is on the bar
+      const head = tickerHead(player, t, id);
       // The same stat in the same place, drawn less than REFRESH_TICKS ago: unchanged, or only its number moved,
       // which shows with the next refresh. Nothing is read or written for it this second.
       if (head === t.head && via === t.via && now - t.at < REFRESH_TICKS) continue;
-      const text = head ? tickerText(player, head) : "";
+      const text = head ? tickerText(player, head, id) : "";
       if (!text && !t.text) continue; // nothing to show, and nothing of ours to take off
-      if (via === "hud") toHud(player.id, text);
+      if (via === "hud") toHud(id, text);
       else player.onScreenDisplay.setActionBar(text);
       t.text = text;
       t.head = head;

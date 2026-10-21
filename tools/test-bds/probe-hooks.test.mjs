@@ -1,4 +1,4 @@
-// The harness-only probe hooks (tools/test-bds/hooks/owed-probe.mjs, milestones-rejoin.mjs, expedition-queue-rejoin.mjs, stash-loads.mjs, elite-remove.mjs) build
+// The harness-only probe hooks (tools/test-bds/hooks/owed-probe.mjs, milestones-rejoin.mjs, expedition-queue-rejoin.mjs, stash-loads.mjs, elite-remove.mjs, claims-taps.mjs) build
 // test copies whose scripts parse, put the probe where it runs (right after diag.js, so it sees what the pack
 // subscribes), leave the shipped packs alone, and work on a source tree given as their last argument (how a scenario
 // is run on the code from before a fix).
@@ -139,6 +139,33 @@ test("elite-remove: works on a source tree from before the guards", () => {
     run([path.join(HOOKS, "elite-remove.mjs"), path.join(dir, "out"), path.join(dir, "src")]);
     const main = fs.readFileSync(path.join(dir, "out", "elite_bp", "scripts", "main.js"), "utf8").split("\n");
     assert.deepEqual(main.slice(0, 3), ['import "./diag.js";', 'import "./harness_elite_remove.js";', 'import { world } from "@minecraft/server";']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("claims-taps: the tap probe comes right after diag.js, before main.js subscribes its tap handlers", () => {
+  const dir = tmp();
+  try {
+    run([path.join(HOOKS, "claims-taps.mjs"), path.join(dir, "packs")]);
+    const main = fs.readFileSync(path.join(dir, "packs", "claims_bp", "scripts", "main.js"), "utf8").split("\n");
+    assert.equal(main[0], 'import "./diag.js";');
+    assert.equal(main[1], 'import "./harness_claims_taps.js";');
+    const shipped = fs.readFileSync(path.join(ROOT, "packs", "claims_bp", "scripts", "main.js"), "utf8");
+    assert.deepEqual([main[0], ...main.slice(2)], shipped.split("\n"), "nothing else changes");
+    assert.match(shipped, /^world\.beforeEvents\.playerInteractWithEntity\.subscribe\(/m, "claims_bp subscribes its entity tap handler while loading");
+    assert.match(shipped, /^world\.beforeEvents\.playerInteractWithBlock\.subscribe\(/m, "claims_bp subscribes its block tap handler while loading");
+    const probe = path.join(dir, "packs", "claims_bp", "scripts", "harness_claims_taps.js");
+    parses(probe);
+    const text = fs.readFileSync(probe, "utf8");
+    assert.match(text, /"playerInteractWithEntity"/);
+    assert.match(text, /"playerInteractWithBlock"/);
+    assert.match(text, /const sig = world\.beforeEvents\[name\];\s*const subscribe = sig\.subscribe;\s*sig\.subscribe = /, "wraps the signal object's own subscribe, where diag.js puts its wrapper");
+    assert.match(fs.readFileSync(path.join(ROOT, "tools", "diag-shared.js"), "utf8"), /sig\.subscribe = function/, "diag.js still replaces each signal's own subscribe");
+    assert.match(text, /isFirstEvent: true/, "the block tap is a first tap, like a real player's");
+    assert.match(text, /ScriptEventSource\.Server/, "console only");
+    assert.match(text, /namespaces: \["harness"\]/);
+    assert.throws(() => run([path.join(HOOKS, "claims-taps.mjs"), path.join(dir, "packs")]), "an existing output folder is refused");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

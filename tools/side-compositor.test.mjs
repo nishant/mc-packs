@@ -322,3 +322,39 @@ test("realm:side traffic per tick with a minimap drawing 40 players", () => {
   assert.ok(parsed < 0.1, `each other pack parses ${parsed.toFixed(2)} messages a tick`);
   assert.ok(s.sent.filter((e) => e.id === "realm:side_comp").every((e) => e.message.length < 2048), "every claim message under 2048");
 });
+
+test("a pack's own readout is never covered by another pack's older message read later (title-hold, side-boxes)", () => {
+  const s = server();
+  const hud = s.pack("hud");
+  const mobhp = s.pack("mobhp");
+  const p = s.join("100");
+  hud.api.show(p, "left1", "§fX 1 Z 2", 140);
+  s.step(20);
+  // Mob Health takes the same box for a moment; the HUD doesn't draw then, so it keeps the message unread.
+  mobhp.api.show(p, "left1", "§cPig 8/10", 15);
+  s.step(20);
+  // Later the HUD writes its box again: it is newer than the pig's (long run out) and must show.
+  hud.api.show(p, "left1", "§fX 1 Z 3", 140);
+  const last = p.titles.filter((t) => t.by === "hud").at(-1);
+  assert.equal(cut(last.sub, SLOT.left1), "§fX 1 Z 3");
+  assert.equal(cut(hud.api.payload(p), SLOT.left1), "§fX 1 Z 3");
+});
+
+test("kept messages are read in the order they came: the last one into a slot has it", () => {
+  const s = server();
+  const hud = s.pack("hud");
+  const mobhp = s.pack("mobhp");
+  const maps = s.pack("maps");
+  const p = s.join("100");
+  hud.api.show(p, "left1", "§fX 1 Z 2", 300);
+  s.step(20);
+  mobhp.api.show(p, "right1", "§cPig 8/10", 200);
+  s.step(2);
+  maps.api.show(p, "right1", "§eThe map is warm", 200);
+  s.step(2);
+  // Mob Health writes the same box again: now it is the last one into right1, as in every other pack's picture.
+  mobhp.api.show(p, "right1", "§cPig 7/10", 200);
+  s.step(2);
+  assert.equal(cut(maps.api.payload(p), SLOT.right1), "§cPig 7/10");
+  assert.equal(cut(hud.api.payload(p), SLOT.right1), "§cPig 7/10");
+});

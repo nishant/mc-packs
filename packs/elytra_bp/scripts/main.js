@@ -666,7 +666,9 @@ system.runInterval(() => {
   if (tick % 2 !== 0 || get("enabled") === false || !gliders.size) return;
   for (const player of gliders.values()) {
     try {
-      if (!player.isValid || !player.isGliding || player.isOnGround || activeNosBursts.has(player.id) || hudOff(player)) continue;
+      // No isValid first: on a handle kept from an earlier tick it makes the reads after it several times dearer
+      // (BDS 1.26); a player who left throws on the first read, caught below.
+      if (!player.isGliding || player.isOnGround || activeNosBursts.has(player.id) || hudOff(player)) continue;
       const vel = player.getVelocity();
       const spd = Math.hypot(vel.x, vel.y, vel.z);
       if (spd < 1.2) continue; // 24+ blocks/s

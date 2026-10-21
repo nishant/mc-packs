@@ -91,6 +91,12 @@ export default async function (t) {
 
   const boxes = (p, since = 0) => t.messages(p, { kind: "title", since }).filter((m) => m.text === MARK);
   const lastBox = (p, since = 0) => boxes(p, since).at(-1);
+  /** The box a pack drew first after `since`, as the player sees it: the last title of that tick (a title drawn
+   * earlier in the same tick, say when a readout ran out just as its next one came, never shows). */
+  const firstBoxBy = (p, pack, since) => {
+    const first = boxes(p, since).find((x) => x.pack === pack);
+    return first && boxes(p, since).filter((x) => x.pack === pack && x.tick === first.tick).at(-1);
+  };
 
   // Helpers that make each pack show something.
   const pigs = [];
@@ -120,14 +126,14 @@ export default async function (t) {
     await set("mobhp_bp", "where", slot, a);
     let since = t.tick;
     await hit(a);
-    let m = await t.waitUntil(() => boxes(a, since).find((x) => x.pack === "mobhp_bp"), { timeout: 20, message: `mobhp draws in ${slot}` });
+    let m = await t.waitUntil(() => firstBoxBy(a, "mobhp_bp", since), { timeout: 20, message: `mobhp draws in ${slot}` });
     let d = decode(m.subtitle);
     t.check(d.bytes === 3473, `subtitle is 3473 bytes: nine boxes, the minimap's strip, the 21x21 radar and the quest box (${d.bytes})`);
     t.check(/Cow\s+§f\d+\/10/.test(d.out[slot]), `mobhp in ${slot}: "${d.out[slot]}"`);
     // Warmer / Colder
     await set("maps_bp", "where", slot, a);
     since = t.tick;
-    m = await t.waitUntil(() => boxes(a, since).find((x) => x.pack === "maps_bp"), { timeout: 60, message: `maps draws in ${slot}` });
+    m = await t.waitUntil(() => firstBoxBy(a, "maps_bp", since), { timeout: 60, message: `maps draws in ${slot}` });
     d = decode(m.subtitle);
     t.check(/map is|clue/i.test(d.out[slot]), `maps in ${slot}: "${d.out[slot]}"`);
     t.check(SLOTS.filter((s) => s !== slot && d.out[s]).every((s) => !/clue \d/.test(d.out[s])), `maps holds one slot only`);
@@ -153,7 +159,7 @@ export default async function (t) {
       await set("elytra_bp", "where", slot, a);
       if (!a.isGliding) await glide();
       const since = t.tick;
-      const m = await t.waitUntil(() => boxes(a, since).find((x) => x.pack === "elytra_bp"), { timeout: 20, message: `elytra draws in ${slot}` });
+      const m = await t.waitUntil(() => firstBoxBy(a, "elytra_bp", since), { timeout: 20, message: `elytra draws in ${slot}` });
       const d = decode(m.subtitle);
       t.check(/blocks\/s\s+§fY \d+\n§fElytra/.test(d.out[slot]), `elytra in ${slot}: ${JSON.stringify(d.out[slot])}`);
     }
@@ -198,7 +204,7 @@ export default async function (t) {
   await set("mobhp_bp", "where", "middle", b);
   const s2 = t.tick;
   await hit(b);
-  const mb = await t.waitUntil(() => boxes(b, s2).find((x) => x.pack === "mobhp_bp"), { timeout: 20, message: "Bob's box" });
+  const mb = await t.waitUntil(() => firstBoxBy(b, "mobhp_bp", s2), { timeout: 20, message: "Bob's box" });
   const db = decode(mb.subtitle).out;
   t.check(/Cow/.test(db.middle) && !db.right1 && !db.left1, `Bob sees only his middle box: ${JSON.stringify(db)}`);
   t.check(!boxes(a, s2).some((m) => decode(m.subtitle).out.middle), "Alice never gets Bob's box");
@@ -247,7 +253,7 @@ export default async function (t) {
   await t.waitUntil(() => t.messages(a, { kind: "actionbar", pack: "hud_bp", since }).find((m) => /X -?\d+  Y -?\d+/.test(m.plain)), { timeout: 60, message: "the HUD on the hotbar" });
   await set("hud_bp", "where", "left4", a);
   since = t.tick;
-  const h = await t.waitUntil(() => boxes(a, since).find((m) => m.pack === "hud_bp"), { timeout: 40, message: "the HUD back in a box" });
+  const h = await t.waitUntil(() => firstBoxBy(a, "hud_bp", since), { timeout: 40, message: "the HUD back in a box" });
   t.check(/X -?\d+  Y -?\d+/.test(decode(h.subtitle).out.left4.replace(/§./g, "")), "HUD in left4");
   t.check(sides.every((s) => JSON.stringify(s.m).length < 2048), "every realm:side under 2048");
   for (const pig of pigs) try { pig.remove(); } catch {}

@@ -1,12 +1,19 @@
 // F3: page 1 is 24 full stacks of dirt, the player mines dirt on a nearly full page 2. Every pickup is routed past page 1
 // (no stack there has room) to page 3. Before F3 each routing pass restored page 1's snapshot only to find no room; the
 // profile shows the difference (stash_bp ms/tick). The scenario checks nothing was lost or duplicated, and counts the
-// page snapshots stash_bp restores and saves while mining: each save (a storage entity spawned, cause Spawned) is one
-// routing pass onto page 3; each restore (the same entity placed from a structure, any other cause) reads a page. On
-// 88cc198 every pass also restored page 1, about 2 restores per save; with F3 only page 3 is restored, at most 1 per save.
+// page snapshots stash_bp writes and reads while mining. Every auto-store pass is one commit, which writes 3 snapshots
+// (page 3, and the inventory's before and after images; spawnEntity, entitySpawn cause Spawned), and reads each back
+// once (structure load, entityLoad). Reads beyond those read-backs are page reads: with F3 only page 3 (one per pass,
+// none the first time), at 88cc198 page 1 too (two per pass). Auto-store is off while the pages are filled, or filling
+// page 1 would itself route its newest stacks to other pages and page 1 would never be full.
 // Run: node tools/test-bds/run.mjs --quiet --no-relay --profile --only stash_bp --scenario tools/test-bds/examples/stash-autostore-full-page.js
 export default async function (t) {
   const mc = t.mc;
+  const setAuto = async (/** @type {boolean} */ value) => {
+    t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `full-page-${value}`, pack: "stash_bp", key: "autoStore", value }));
+    await t.wait(3);
+  };
+  await setAuto(false);
   const p = await t.player("Digger", { op: true });
   t.cmd(p, "/gamemode survival");
   const inv = p.getComponent("minecraft:inventory").container;
@@ -28,6 +35,8 @@ export default async function (t) {
   // Page 2: 22 stacks of stone and two free slots; the hotbar is full so pickups land on the page.
   for (const s of STORAGE.slice(0, 22)) inv.setItem(s, new mc.ItemStack("minecraft:stone", 64));
   for (let s = 0; s < 9; s++) inv.setItem(s, new mc.ItemStack("minecraft:torch", 1 + s));
+  await t.wait(20);
+  await setAuto(true);
   await t.wait(20);
   const STORE = "realm:stash_page_store";
   const seen = { saves: 0, restores: 0, loads: 0, unreadable: 0, causes: /** @type {Record<string, number>} */ ({}) };
@@ -53,11 +62,12 @@ export default async function (t) {
   }
   await t.wait(40);
   watching = false;
-  t.log(`while mining: ${seen.saves} page saves, ${seen.restores} restores (entitySpawn causes ${JSON.stringify(seen.causes)}), ${seen.loads} entityLoad events, ${seen.unreadable} unreadable`);
-  t.assert(seen.saves >= 20, `the routing passes are visible as page saves (${seen.saves}); if 0, read the logged causes`);
-  const restores = Math.max(seen.restores, seen.loads);
-  t.assert(restores >= 1, `page restores are visible (${restores}); if 0, read the logged events`);
-  t.assert(restores <= seen.saves, `page 1 is never restored: ${restores} restores for ${seen.saves} routing passes (88cc198: about 2 per pass)`);
+  const passes = seen.saves / 3;
+  const pageReads = Math.max(seen.restores, seen.loads) - seen.saves;
+  t.log(`while mining: ${seen.saves} snapshot saves (${passes} auto-store passes), ${seen.loads} entityLoad events, ${pageReads} page reads beyond read-backs (entitySpawn causes ${JSON.stringify(seen.causes)}, ${seen.unreadable} unreadable)`);
+  t.assert(seen.saves >= 60 && Number.isInteger(passes), `the auto-store passes are visible as 3 snapshot saves each (${seen.saves}); if not, read the logged causes`);
+  t.assert(Math.max(seen.restores, seen.loads) >= seen.saves, `every snapshot save is read back (${seen.loads} loads for ${seen.saves} saves); if not, read the logged events`);
+  t.assert(pageReads <= passes, `page 1 is never read: ${pageReads} page reads for ${passes} passes (88cc198: about 2 per pass)`);
   const onPage2 = count("minecraft:dirt");
   t.log(`page 2 holds ${onPage2} dirt after ${pickups} pickups; wall ${Date.now() - t0} ms`);
   t.assert(STORAGE.filter((s) => !inv.getItem(s)).length >= 1, "page 2 kept a free slot (routing worked)");

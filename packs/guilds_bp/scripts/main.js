@@ -580,12 +580,13 @@ function saveProgress(p) {
   }
 }
 
-// Each player once a second as before, a tenth of them every 2 ticks (scripts/spread.js), so a full server doesn't
-// do (or save) everyone on one tick. Each tenth saves on a different second of the 30. The placed blocks save every
+// Each player once a second, saved every 30 seconds. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
+// The placed blocks save every
 // 30 seconds from `start`, which runs each round whoever is online (a share, even share 0, can stay empty).
 spreadPlayers(system, world, {
   every: 20,
-  parts: 10,
+  parts: 1,
   start: (_, round) => {
     if (round % 30 === 0) savePlaced();
   },

@@ -2,6 +2,7 @@
 // Runs behavior packs on a throwaway Bedrock Dedicated Server with simulated players.
 // See README.md. Exit codes: 0 pass, 1 scenario failed, 2 script errors, 3 timeout,
 // 4 server or harness problem, 64 bad arguments.
+import { isCaughtErrorWarning } from "./lib/caught.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -216,8 +217,11 @@ function maybeStart() {
   bds.send(`scriptevent harness:start ${JSON.stringify(cfg)}`);
 }
 
-function onLine(line) {
-  logStream.write(line + "\n");
+function onLine(raw) {
+  logStream.write(raw + "\n");
+  // BDS follows a console line of over about 4 KB (a bundle's final profile row) with a NUL byte, which lands at the
+  // start of the next line: without stripping it, that line (a PROFILE_TICKS part) read as a continuation.
+  const line = raw.replace(/^\0+/, "");
   if (!line.trim()) return;
   const m = LINE.exec(line);
   if (!m) {
@@ -258,7 +262,7 @@ function onLine(line) {
       lastRecord = { phase, text };
       contentErrors.push(lastRecord);
     }
-  } else if (text.startsWith("[Scripting]") && /\b(error|exception)\b/i.test(text) && level === "WARN") {
+  } else if (level === "WARN" && isCaughtErrorWarning(text)) {
     lastRecord = { phase, pack: attribute(text), text };
     warnErrors.push(lastRecord);
     show = true;

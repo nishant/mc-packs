@@ -6,12 +6,14 @@
 // round, so their own cadence stays `every` ticks; only a share that grew past its fair size (players left or joined)
 // hands its newest members to the emptiest shares. Slots are kept by player id, not by list position, so somebody
 // leaving doesn't move everyone after them. A player who joins mid-round is first visited in the next round, as a
-// plain runInterval(every) would. Players who left meanwhile are skipped.
+// plain runInterval(every) would. Players who left meanwhile are skipped: the world's playerLeave event lists them, not
+// isValid, which on a handle kept from an earlier tick made the reads after it several times dearer (measured on BDS
+// 1.26: a share of one with isValid cost 0.12 ms a run, without it 0.02).
 //
 // Packs never import each other: node tools/sync-spread.mjs copies this file into each pack that uses it, as
 // scripts/spread.js. It takes the game's `system` and `world` as arguments, so it runs in node tests too.
 
-/** @typedef {{ id: string, isValid: boolean }} Visitable */
+/** @typedef {{ id: string }} Visitable */
 
 /**
  * The shares for this round: everyone keeps their last slot while that share isn't over its fair size
@@ -54,7 +56,7 @@ export function assignShares(prev, players, parts) {
  * (0 to parts - 1), so `(round + part) % n === 0` picks a different share each round for work done every n rounds.
  * @template {Visitable} P
  * @param {{ runInterval: (cb: () => void, ticks?: number) => number }} system
- * @param {{ getAllPlayers: () => P[] }} world
+ * @param {{ getAllPlayers: () => P[], afterEvents?: { playerLeave?: { subscribe: (cb: (ev: { playerId: string }) => void) => unknown } } }} world
  * @param {{ every: number, parts: number, visit: (share: P[], at: { round: number, part: number }) => void, start?: (players: P[], round: number) => void }} o
  * @returns {number} the runInterval handle
  */
@@ -68,6 +70,11 @@ export function spreadPlayers(system, world, o) {
   let shares = [];
   let part = 0;
   let round = 0;
+  /** Players who left since this round's list was read. @type {Set<string>} */
+  const gone = new Set();
+  world.afterEvents?.playerLeave?.subscribe(({ playerId }) => {
+    gone.add(playerId);
+  });
   return system.runInterval(() => {
     const at = part;
     part = (part + 1) % parts;
@@ -75,6 +82,7 @@ export function spreadPlayers(system, world, o) {
       round++;
       /** @type {P[]} */
       let players = [];
+      gone.clear();
       try {
         players = world.getAllPlayers();
         ({ slots, shares } = assignShares(slots, players, parts));
@@ -88,7 +96,12 @@ export function spreadPlayers(system, world, o) {
     if (!share?.length) return;
     /** @type {P[]} */
     const live = [];
-    for (const p of share) if (p.isValid) live.push(p);
-    if (live.length) o.visit(live, { round, part: at });
+    for (const p of share) if (!gone.has(p.id)) live.push(p);
+    if (!live.length) return;
+    try {
+      o.visit(live, { round, part: at });
+    } catch (e) {
+      console.warn(`[spread] ${e}`); // a player who left this very tick (their leave event comes at its end)
+    }
   }, step);
 }

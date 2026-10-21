@@ -314,8 +314,13 @@ world.afterEvents.entityDie.subscribe(
   { entityTypes: ["minecraft:player"] },
 );
 
-/** The sweep: every player's gear read again, one player a tick, each at most every SWEEP_MIN ticks. */
+/**
+ * The sweep: every player's gear read again, one player every SWEEP_STEP ticks, each at most every SWEEP_MIN ticks.
+ * Only gear that changes with no event needs it (armor put on by a dispenser, a command or another pack's script),
+ * so on a busy server it slows down: one full read every tick was a quarter of a millisecond a tick with 40 on.
+ */
 const SWEEP_MIN = 20;
+const SWEEP_STEP = 4;
 /** @type {Player[]} */
 let sweepList = [];
 let sweepAt = 0;
@@ -328,13 +333,16 @@ system.runInterval(() => {
       else dropGear(p.id);
     }
   }
+  if (system.currentTick % SWEEP_STEP !== 0) return;
   if (sweepAt >= sweepList.length) {
     if (system.currentTick % SWEEP_MIN !== 0) return;
     sweepList = world.getAllPlayers();
     sweepAt = 0;
   }
+  // No isValid first (it makes the reads after it on a kept handle several times dearer): refresh() catches a player
+  // who left and drops their gear.
   const p = sweepList[sweepAt++];
-  if (p?.isValid) refresh(p);
+  if (p) refresh(p);
 }, 1);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -448,15 +456,13 @@ system.runInterval(() => {
   if (get("enabled") !== true) return;
   beat++;
   for (const p of [...wearers.values()]) {
+    // No isValid first (on a kept handle it makes the reads after it several times dearer): a player who left
+    // throws on the first read and is dropped then.
     try {
-      if (!p.isValid) {
-        dropGear(p.id);
-        continue;
-      }
       if (!playing(p)) continue;
       ambient(p);
     } catch {
-      // the player left mid-tick
+      if (!p.isValid) dropGear(p.id); // else the player left mid-tick
     }
   }
 }, 4);
@@ -544,8 +550,7 @@ system.runInterval(() => {
     const g = gear.get(p.id);
     if (!g || !g.feet.has("hyper_jump")) continue;
     try {
-      if (!p.isValid) continue;
-      const jumping = p.isJumping;
+      const jumping = p.isJumping; // no isValid first (see the ambient loop): one who left throws here
       const rising = jumping && !wasJumping.get(p.id);
       wasJumping.set(p.id, jumping);
       if (!rising || !p.isSneaking || !has(p, "hyper_jump") || !playing(p)) continue;

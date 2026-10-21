@@ -1,275 +1,278 @@
 {
   "notes": [
-    "Minimap: new players are no longer told an operator reset their map; only players whose destination or marked spots were actually cleared get that message.",
-    "Story: when a quest step is too long for the quest box, its name is shortened and the direction, distance or time left always stays visible.",
-    "Land Claims: your own pets now work in other people's claims too. Pets tamed before this update stay locked in others' claims.",
-    "Kitchen: old dishes from before the Dish: line now stack with new servings once they are in your inventory or when you join.",
-    "Expeditions: the line for a dungeon now survives a reload or a restart, and after a restart you have 5 minutes to come back and keep your place.",
-    "Milestones: top-tier titles you missed while Titles & Trails was off are now sent again until Titles confirms them.",
-    "Realm Mail: a pack letter refused because the realm's mail is full no longer deletes your oldest letters.",
-    "Welcome Message: operators can restore or delete an old welcome the new default replaced (/realm:welcome -> Old welcome), and the welcome names Old Tobin or Mara only once they stand in town.",
-    "Many packs spread their per-second work over the second, so a full server runs smoother."
+    "Minimap: the compass strip and radar no longer blink off now and then with many players on.",
+    "Side boxes keep the right text: a box from one pack no longer covers or blanks another pack's newer box.",
+    "Fewer slowdowns with many players on: the Minimap shares its title with the other side boxes, and many once-a-second checks are cheaper.",
+    "Blood Moon: the first wave no longer stalls the server for a moment.",
+    "Expeditions: stored items are never handed back twice, and storage carts that only unloaded are put down again instead of your items being reported lost.",
+    "Kitchen: a dish started in your first few seconds online is no longer handed over before it has cooked.",
+    "Auto-store skips a full saved page without opening it (lighter on the server).",
+    "Easy Building: anchors survive switching items, pickaxes no longer build an anchored shape, previews count their blocks again, and a dimension change clears the anchor.",
+    "Kitchen: a finished dish is never handed over twice, even if a save fails.",
+    "Chest Finder: new worlds start with the private index; switching to world-wide takes effect at once.",
+    "Realm Stats: a lighter stats ticker, and tied players share a place.",
+    "Diagnostics: shared saved-data prefixes stay unowned in /realm:diag instead of going to the first pack that touches them."
   ],
   "packNotes": {
+    "cooking_bp": {
+      "version": "1.1.16",
+      "notes": "A batch still in the pot is no longer handed over early by the join handover (a cook in a player's first 5 seconds online, or the world's, was instant), and a dish is never handed over twice when the world fails to save at that moment (when the pot finishes, when it starts, or when you join while it cooks)."
+    },
     "admin_bp": {
-      "version": "1.6.8",
-      "notes": "Realm Configuration checks for its menu item less often and only reads whole inventories when needed; the crowns audit entry says it lists the newest 50. /realm:diag credits saved data that two packs share to the right pack."
+      "version": "1.6.9",
+      "notes": "Reads inventories less often for the admin item."
     },
     "afk_bp": {
-      "version": "1.3.11",
-      "notes": "AFK's once-a-second checks are spread over the second, and name tags refresh when AFK changes. /realm:diag credits saved data that two packs share to the right pack."
+      "version": "1.3.12",
+      "notes": "Tells Nicknames when the AFK tag changes."
     },
     "atlas_bp": {
-      "version": "1.1.10",
-      "notes": "Atlas's 2-second player loop is spread over its 40 ticks, so 40 players no longer cost one big tick. Town news goes through the shared gossip gate (no change for players)."
+      "version": "1.1.11",
+      "notes": "Internal: shared sweep module."
     },
     "bounty_bp": {
       "version": "1.3.9",
-      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "build_bp": {
       "version": "3.0.10",
-      "notes": "Easy Building keeps the anchor when you switch to a sword, food or an empty hand, drops an anchor from another dimension, and only wakes its preview for players actually building. /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Your shape's first anchor stays when you switch to a sword, food or an empty hand; a pickaxe right-click no longer builds an anchored shape; previews show their outline and block count again; changing dimension clears the anchor; holding a block with building off costs the server almost nothing."
     },
     "calendar_bp": {
-      "version": "1.0.17",
-      "notes": "Side boxes are drawn by the Minimap's compositor, which costs less per player. Town news goes through the shared gossip gate (no change for players)."
+      "version": "1.0.18",
+      "notes": "Cheaper with many players on."
     },
     "caravan_bp": {
       "version": "1.2.9",
-      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "chairs_bp": {
       "version": "1.3.12",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "claims_bp": {
       "version": "1.5.8",
-      "notes": "Your own pets work in other people's claims: a wolf, cat or parrot you feed tame, or a horse you ride tame, can be leashed, ridden or told to sit by you anywhere."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "cleanup_bp": {
       "version": "1.2.8",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "climate_bp": {
       "version": "1.0.10",
-      "notes": "Shared weather plan reader (no change for players). /realm:diag credits saved data that two packs share to the right pack."
-    },
-    "cooking_bp": {
-      "version": "1.1.14",
-      "notes": "Old dishes from before the Dish: line stack with new servings again, and a finished dish is never paid out twice after a failed save."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "crowns_bp": {
       "version": "1.1.11",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "death_bp": {
       "version": "1.3.8",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "dolphin_bp": {
-      "version": "1.2.8",
-      "notes": "Dolphin Friends' ride lookup is spread out and skipped while no tamed dolphin is loaded. /realm:diag credits saved data that two packs share to the right pack."
+      "version": "1.2.9",
+      "notes": "Internal: shared sweep module."
     },
     "domt_bp": {
       "version": "1.1.14",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "durability_bp": {
-      "version": "1.2.11",
-      "notes": "Low Durability Warning checks items right after they wear (uses, hits, hurts, hotbar changes) instead of polling, including a held shield or brush."
+      "version": "1.2.12",
+      "notes": "Checks held items and armor on events instead of every half second."
     },
     "elite_bp": {
-      "version": "1.3.13",
-      "notes": "Champions menus and commands no longer error when a player leaves mid-command, and champion auras and approach steps cost less. Town news goes through the shared gossip gate (no change for players)."
+      "version": "1.3.14",
+      "notes": "Champions far from every player take no aura or approach turn."
     },
     "elytra_bp": {
-      "version": "1.3.19",
-      "notes": "The elytra slipstream only looks at players who are gliding. Side boxes are drawn by the Minimap's compositor, which costs less per player."
+      "version": "1.3.20",
+      "notes": "Cheaper with many players on."
     },
     "expedition_bp": {
-      "version": "2.4.13",
-      "notes": "The line for a dungeon survives a reload or a restart: leaders are told they're still number N of M and have 5 minutes to come back after a restart. A stash's carts are remembered across a leave, a break or a restart."
+      "version": "2.4.14",
+      "notes": "Stored items are never handed back twice when a player leaves or a cart breaks during the hand-back; storage carts that only unloaded are put down again from the saved items instead of being reported lost, and a record is never forgotten while its saved items still exist."
     },
     "farm_bp": {
       "version": "1.4.8",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "find_bp": {
       "version": "1.4.8",
-      "notes": "Chest Finder decides private or world-wide from its own saved data, so a new world starts with the right setting."
+      "notes": "A brand-new world starts with the private index, and switching to world-wide takes effect at once."
     },
     "fishing_bp": {
       "version": "1.1.14",
-      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "goals_bp": {
       "version": "1.1.11",
-      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "guard_bp": {
       "version": "1.4.10",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "guilds_bp": {
-      "version": "1.1.12",
-      "notes": "Guilds' travel sweep and saves are spread over the second and skip AFK players. Town news goes through the shared gossip gate (no change for players)."
+      "version": "1.1.13",
+      "notes": "Internal: shared sweep module."
     },
     "harvest_bp": {
       "version": "1.3.9",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "hud_bp": {
       "version": "1.3.9",
-      "notes": "The Coordinates HUD's player list is built about 60% faster at 40 players, and an empty list is sent once instead of every 5 seconds. Side boxes are drawn by the Minimap's compositor, which costs less per player."
+      "notes": "Side boxes: a newer box is never covered by another pack's older one."
     },
     "journal_bp": {
-      "version": "1.1.10",
-      "notes": "Journal looks read less per player. /realm:diag credits saved data that two packs share to the right pack."
+      "version": "1.1.11",
+      "notes": "Cheaper once-every-4-seconds look."
     },
     "leaves_bp": {
       "version": "1.0.8",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "mail_bp": {
       "version": "1.2.8",
-      "notes": "A pack letter refused because the realm's mail is full no longer deletes your oldest letters."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "map_bp": {
       "version": "1.3.9",
-      "notes": "Only players whose destination or marked spots were cleared are told about a map reset; strips no longer fade at a refresh, and a roofed player's cave layer survives a jump."
+      "notes": "The compass strip and radar no longer blink off with many players on; the Minimap draws everyone's side boxes in one title."
     },
     "maps_bp": {
-      "version": "1.8.12",
-      "notes": "Side boxes are drawn by the Minimap's compositor, which costs less per player. Town news goes through the shared gossip gate (no change for players)."
+      "version": "1.8.13",
+      "notes": "Cheaper with many players on."
     },
     "meteor_bp": {
       "version": "1.2.11",
-      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "milestones_bp": {
-      "version": "1.0.7",
-      "notes": "Top-tier titles you missed while Titles & Trails was off are sent again until Titles confirms them; the per-second check is spread out and skips AFK players."
+      "version": "1.0.8",
+      "notes": "Internal: shared sweep module."
     },
     "mobhp_bp": {
-      "version": "1.2.16",
-      "notes": "Side boxes are drawn by the Minimap's compositor, which costs less per player. /realm:diag credits saved data that two packs share to the right pack."
+      "version": "1.2.17",
+      "notes": "Cheaper with many players on."
     },
     "moon_bp": {
-      "version": "1.2.13",
-      "notes": "Blood Moon builds its block list in small steps after world load. Shared weather plan reader (no change for players)."
+      "version": "1.2.14",
+      "notes": "The Blood Moon's first wave no longer stalls the server for 50 ms."
     },
     "nick_bp": {
-      "version": "1.1.9",
-      "notes": "Name tags refresh when AFK or Titles change them, plus a 5-second sweep, instead of every player every 10 ticks."
+      "version": "1.1.10",
+      "notes": "Name tags follow AFK and Titles at once; much cheaper."
     },
     "night_bp": {
       "version": "1.1.8",
-      "notes": "Shared weather plan reader (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "npc_bp": {
       "version": "1.7.17",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "party_bp": {
       "version": "1.2.9",
-      "notes": "Shared inactive-player cleanup (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "phantom_bp": {
       "version": "1.2.8",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "platypus_bp": {
       "version": "1.1.7",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "quests_bp": {
-      "version": "1.3.7",
-      "notes": "Daily Quests' travel sweep is spread over the second. /realm:diag credits saved data that two packs share to the right pack."
+      "version": "1.3.8",
+      "notes": "Internal: shared sweep module."
     },
     "rain_bp": {
       "version": "1.5.16",
-      "notes": "Shared weather plan reader (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "rainbow_bp": {
       "version": "1.4.8",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "refill_bp": {
       "version": "1.1.6",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "relics_bp": {
-      "version": "1.2.16",
-      "notes": "Relics skips its once-a-second passives for players with no relic. Town news goes through the shared gossip gate (no change for players)."
+      "version": "1.2.17",
+      "notes": "Skips players with no relic in the once-a-second loop."
     },
     "saga_bp": {
       "version": "1.16.14",
-      "notes": "When a quest step is too long for the quest box, its name is shortened and the direction, distance or time left stays visible. Side boxes are drawn by the Minimap's compositor, which costs less per player."
+      "notes": "Side boxes: the quest box is never covered by another pack's older box."
     },
     "settings_bp": {
       "version": "1.4.5",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "silly_bp": {
-      "version": "1.2.10",
-      "notes": "Silly Enchants follows your gear by events, so swapping the held stack is noticed at once. /realm:diag credits saved data that two packs share to the right pack."
+      "version": "1.2.11",
+      "notes": "Cheaper: gear is read on events, with a slower safety sweep on busy servers."
     },
     "skills_bp": {
-      "version": "1.1.9",
-      "notes": "Skills keeps game mode and dimension from their change events. Town news goes through the shared gossip gate (no change for players)."
+      "version": "1.1.10",
+      "notes": "Cheaper game mode and dimension checks."
     },
     "slots_bp": {
       "version": "1.0.13",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "stash_bp": {
       "version": "1.8.9",
-      "notes": "Auto-store skips saved pages that can't take the item and routes a burst that fills a page within one look."
+      "notes": "Auto-store skips a saved page that is full of full stacks of what you pick up without opening it, and checks your hotbar and gear totals only when the page is nearly full."
     },
     "stats_bp": {
       "version": "1.4.13",
-      "notes": "Tied scores share a place in My stats and the leaderboards, and the ticker refreshes changed numbers only every 2 seconds."
+      "notes": "The stats ticker redraws when its stat changes and otherwise every 2 seconds, so it costs the server less with many players online; tied players share the same place in My stats and the leaderboards."
     },
     "storm_bp": {
       "version": "1.1.12",
-      "notes": "Shared weather plan reader (no change for players). Town news goes through the shared gossip gate (no change for players)."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "titles_bp": {
-      "version": "1.2.12",
-      "notes": "Titles confirms top-tier titles to Milestones, and its per-second sweep and saves are spread over the second."
+      "version": "1.2.13",
+      "notes": "Internal: shared sweep module."
     },
     "tornado_bp": {
       "version": "1.2.11",
-      "notes": "A tornado's wind clip is stopped with one command for everyone near it. Shared weather plan reader (no change for players)."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "town_bp": {
       "version": "1.2.10",
-      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "translucent_bp": {
       "version": "1.0.7",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "wander_bp": {
-      "version": "1.2.18",
-      "notes": "Wanderer labels sync often only near players, so far wanderers cost one sync a second."
+      "version": "1.2.19",
+      "notes": "Cheaper name labels at night."
     },
     "waystone_bp": {
       "version": "1.3.8",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "weather_bp": {
       "version": "1.3.11",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "welcome_bp": {
       "version": "1.5.11",
-      "notes": "If the new default welcome replaced your old one, operators can restore or delete it from /realm:welcome -> Old welcome; the start line names only townsfolk who are placed."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     },
     "zones_bp": {
       "version": "1.0.11",
-      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
     }
   }
 }
