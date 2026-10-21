@@ -69,7 +69,7 @@ export function compare(base, head, { rel = 0.15, abs = 0.5, packRel = 0.5, pack
 /** @param {string} count @param {Side} base @param {Side} head @param {ReturnType<typeof compare>} result @param {number} [top] */
 export function markdown(count, base, head, result, top = 15) {
   const f = (/** @type {number | null} */ v) => (v === null || !Number.isFinite(v) ? "-" : v.toFixed(3));
-  const L = [`### ${count} players: ${result.status === "ok" ? "no regression" : result.status === "invalid" ? "INVALID (no accepted soak on a side)" : "REGRESSION"}`, ""];
+  const L = [`### ${/^\d+$/.test(count) ? `${count} players` : count}: ${result.status === "ok" ? "no regression" : result.status === "invalid" ? "INVALID (no accepted soak on a side)" : "REGRESSION"}`, ""];
   if (result.status === "invalid") {
     L.push(`base valid: ${base.valid}, head valid: ${head.valid}`, "");
     return L.join("\n");

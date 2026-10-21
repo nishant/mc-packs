@@ -2,11 +2,14 @@
 # to 4 runners, and a short perf check that runs the PR's base and the PR back to back on the same runner, failing
 # only on a clear slowdown (tools/test-bds/perf-compare.mjs). The full suite, the long soaks, the Realm Bundle soak and
 # the memory soak run after release in validate.yml. check.yml (check, build, bundle smoke) is unchanged.
+# A follow-up push to the same PR (same base, no force-push) reruns only the scenarios the last run didn't pass and
+# those its new commits touch, and the perf check only when they touch packs/ or the harness or it wasn't green.
 name: pr-tests
 on:
   pull_request:
 permissions:
   contents: read
+  actions: read # the PR's previous run and its artifacts
 concurrency:
   group: pr-tests-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -31,20 +34,60 @@ jobs:
           path: suite-times.json
           key: suite-times-${{ github.sha }}
           restore-keys: suite-times-
+      # The PR's newest earlier completed run: its head must be an ancestor of this one and its base this base
+      # (scenarios-carried/base.txt), or nothing is carried over.
+      - name: The PR's last run
+        id: prev
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          read -r id sha < <(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/pr-tests.yml/runs?event=pull_request&branch=$HEAD_REF&status=completed&per_page=30" \
+            --jq "[.workflow_runs[] | select(.head_sha != \"$HEAD_SHA\" and ([.pull_requests[].number] | index($PR)))][0] | \"\(.id) \(.head_sha)\"" 2>/dev/null) || true
+          if [ -n "${id:-}" ] && git merge-base --is-ancestor "$sha" "$HEAD_SHA" 2>/dev/null; then
+            gh run download "$id" --pattern 'scenarios-*' --dir prev 2>/dev/null || true
+            if [ "$(cat prev/scenarios-carried/base.txt 2>/dev/null)" = "$BASE_SHA" ]; then
+              echo "since=$sha" >> "$GITHUB_OUTPUT"
+              echo "perf=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs" --jq '[.jobs[] | select(.name == "perf") | .conclusion][0] // ""')" >> "$GITHUB_OUTPUT"
+              echo "follow-up of run $id at ${sha::7}"
+            else
+              echo "run $id had another base (or no record of it): every needed scenario runs"
+            fi
+          else
+            echo "no earlier run of this PR to build on (first push, force-push or none finished)"
+          fi
       - id: plan
+        env:
+          SINCE: ${{ steps.prev.outputs.since }}
+          PREV_PERF: ${{ steps.prev.outputs.perf }}
         run: |
           base="${{ github.event.pull_request.base.sha }}"
-          node tools/test-bds/affected.mjs --base "$base" --shards 4 --per-shard 8 --times suite-times.json > plan.json
+          node tools/test-bds/affected.mjs --base "$base" ${SINCE:+--since "$SINCE" --prev prev} --shards 4 --per-shard 8 --times suite-times.json > plan.json
+          mkdir -p carried && node -e 'console.log(JSON.stringify(require("./plan.json").carried))' > carried/carried.json && echo "$base" > carried/base.txt
           node -e 'const p=require("./plan.json");console.log(`${p.reason}: ${p.scenarios.length} scenario(s) in ${p.shards.length} shard(s)`)'
           {
             echo "shards=$(node -e 'console.log(JSON.stringify(require("./plan.json").shards.map(s=>({index:s.index,of:require("./plan.json").shards.length,filter:s.filter}))))')"
             echo "count=$(node -e 'console.log(require("./plan.json").scenarios.length)')"
-            echo "perf=$(node tools/test-bds/affected.mjs --base "$base" --packs-changed)"
+            # A follow-up whose last perf check was green (or not needed) reruns it only for new pack or harness changes.
+            if [ -n "$SINCE" ] && { [ "$PREV_PERF" = success ] || [ "$PREV_PERF" = skipped ]; }; then
+              echo "perf=$(node tools/test-bds/affected.mjs --base "$SINCE" --packs-changed)"
+            else
+              echo "perf=$(node tools/test-bds/affected.mjs --base "$base" --packs-changed)"
+            fi
           } >> "$GITHUB_OUTPUT"
           {
             echo "### Scenarios this PR needs"
             node -e 'const p=require("./plan.json");console.log(`${p.reason}: **${p.scenarios.length}** scenario(s) in ${p.shards.length} shard(s)${p.packs.length?` (packs: ${p.packs.join(", ")})`:""}`)'
           } >> "$GITHUB_STEP_SUMMARY"
+      # What this run carries as passed, and its base: the next push's run builds on it.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scenarios-carried
+          path: carried
+          retention-days: 14
 
   scenarios:
     needs: plan

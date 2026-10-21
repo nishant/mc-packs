@@ -4,8 +4,13 @@
 #   soak-10, soak-40 (15 min each; 10 and 40 players only, owner answer October 20, 2026): the profiled perf soak, the previous master and this one back
 #     to back on the same runner (runners differ by 10-40%, so only a same-runner pair shows a change);
 #   bundle-10, bundle-40 (5 min each): the genuine one-context Realm Bundle under the same soak, both trees built, one harness;
-#   memory-40 (60 min, unprofiled): bedrock_server RSS every 10 s, both trees (F74);
+#   memory-40-base, memory-40-head (60 min each, unprofiled, in parallel: RSS doesn't depend on runner speed the way
+#     ms/tick does): bedrock_server RSS every 10 s (F74);
 #   suite-1..4: the whole BDS scenario suite, split by the last run's seconds.
+# Started by hand with `scenarios` (on any branch, against `base`), it runs only scenario A/B pairs instead: one job
+# per entry, each the scenario's own plan profiled on the base and the head tree back to back on one runner
+# (tools/test-bds/scenario-soak.mjs), `repeat` pairs in alternating order; for per-pack perf scenarios such as
+# gear-perf that the soaks don't exercise.
 # Then one report: a job summary and an issue labeled perf-report with every table, and the scenario seconds cached
 # for pr-tests.yml's shards. Budgets are reported, not enforced here: the run is red only for a failed scenario or a
 # same-runner regression (tools/test-bds/perf-compare.mjs). Fixes go on a perf branch and ship as a later release.
@@ -23,13 +28,19 @@ on:
         type: boolean
         default: false
       base:
-        description: "Base commit for the A/B pairs (default: the first parent of the run's commit)"
+        description: "Base branch or commit for the A/B pairs (default: the first parent of the run's commit)"
         default: ""
+      scenarios:
+        description: "Only these scenario A/B pairs, separated by ';': name [run.mjs args], e.g. gear-perf --arg players=40 --arg seconds=120 --timeout 3000"
+        default: ""
+      repeat:
+        description: "Scenario pairs per entry, alternating the order (1-3)"
+        default: "1"
 permissions:
   contents: read
   issues: write
 concurrency:
-  group: validate
+  group: validate-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   plan:
@@ -42,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -56,22 +67,28 @@ jobs:
           PARALLEL: ${{ inputs.parallel || vars.VALIDATE_PARALLEL || '4' }}
           QUICK: ${{ inputs.quick && '1' || '' }}
           BASE: ${{ inputs.base }}
+          SCENARIOS: ${{ inputs.scenarios }}
         run: |
           node tools/test-bds/affected.mjs --all --shards 4 --times suite-times.json > plan.json
           node > matrix.json <<'EOF'
           const q = process.env.QUICK === "1";
           const s = (long) => (q ? 60 : long);
-          const jobs = [
-            { name: "soak-10", kind: "soak", players: 10, seconds: s(900) },
-            { name: "soak-40", kind: "soak", players: 40, seconds: s(900) },
-            { name: "bundle-10", kind: "bundle", players: 10, seconds: s(300) },
-            { name: "bundle-40", kind: "bundle", players: 40, seconds: s(300) },
-            { name: "memory-40", kind: "memory", players: 40, seconds: q ? 600 : 3600 },
-            ...require("./plan.json").shards.map((x) => ({ name: `suite-${x.index}`, kind: "suite", filter: x.filter })),
-          ];
+          const specs = (process.env.SCENARIOS || "").split(";").map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean);
+          const jobs = specs.length
+            ? specs.map((spec, i) => ({ name: `scenario-${i + 1}-${spec.split(" ")[0]}`, kind: "scenario", spec }))
+            : [
+                { name: "soak-10", kind: "soak", players: 10, seconds: s(900) },
+                { name: "soak-40", kind: "soak", players: 40, seconds: s(900) },
+                { name: "bundle-10", kind: "bundle", players: 10, seconds: s(300) },
+                { name: "bundle-40", kind: "bundle", players: 40, seconds: s(300) },
+                { name: "memory-40-base", kind: "memory", side: "base", players: 40, seconds: q ? 600 : 3600 },
+                { name: "memory-40-head", kind: "memory", side: "head", players: 40, seconds: q ? 600 : 3600 },
+                ...require("./plan.json").shards.map((x) => ({ name: `suite-${x.index}`, kind: "suite", filter: x.filter })),
+              ];
           console.log(JSON.stringify({ include: jobs }));
           EOF
-          base="${BASE:-$(git rev-parse HEAD^1)}"
+          # A branch name resolves on origin first (a dispatch's base is usually another branch).
+          if [ -n "$BASE" ]; then base=$(git rev-parse --verify --quiet "origin/$BASE^{commit}" || git rev-parse --verify "$BASE^{commit}"); else base=$(git rev-parse HEAD^1); fi
           {
             echo "matrix=$(cat matrix.json)"
             echo "parallel=$(node -e 'console.log(Math.max(1, Math.min(8, Math.floor(Number(process.env.PARALLEL)) || 4)))')"
@@ -92,6 +109,9 @@ jobs:
       PLAYERS: ${{ matrix.players }}
       SECONDS_: ${{ matrix.seconds }}
       FILTER: ${{ matrix.filter }}
+      SPEC: ${{ matrix.spec }}
+      SIDE: ${{ matrix.side }}
+      REPEAT: ${{ inputs.repeat || '1' }}
       BASE_SHA: ${{ needs.plan.outputs.base }}
     steps:
       - uses: actions/checkout@v4
@@ -125,11 +145,20 @@ jobs:
                 tail -25 "$OUT/$side.out"
               done ;;
             memory)
-              for side in base head; do
+              for side in ${SIDE:-base head}; do
                 rss "$OUT/$side.rss" & sampler=$!
                 (cd "${!side}" && node tools/test-bds/run.mjs --quiet --no-relay --scenario tools/test-bds/examples/perf-soak.js --arg players="$PLAYERS" --arg seconds="$SECONDS_" --timeout $((SECONDS_ * 2 + 900)) > "$OUT/$side.out" 2>&1; echo $? > "$OUT/$side.exit") || true
                 kill "$sampler" || true
                 echo "$side: exit $(cat "$OUT/$side.exit"), $(wc -l < "$OUT/$side.rss" 2>/dev/null || echo 0) RSS samples"
+              done ;;
+            scenario)
+              n=$(node -e 'console.log(Math.max(1, Math.min(3, Math.floor(Number(process.env.REPEAT)) || 1)))')
+              for r in $(seq 1 "$n"); do
+                if [ $((r % 2)) = 1 ]; then order="base head"; else order="head base"; fi
+                for side in $order; do
+                  node tools/test-bds/scenario-soak.mjs --root "${!side}" --spec "$SPEC" --label "$SPEC" --json "$OUT/$side-$r.json" > "$OUT/$side-$r.out" 2>&1 || true
+                  echo "$side $r: $(tail -1 "$OUT/$side-$r.out")"
+                done
               done ;;
             suite)
               node tools/test-bds/suite.mjs --jobs 2 --retry --filter "$FILTER" --json "$OUT/suite.json" | tail -40 ;;
@@ -174,7 +203,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh label create perf-report --color 5319e7 --description "Post-release validation (validate.yml)" --force > /dev/null
-          gh issue create --title "Post-release validation ${GITHUB_SHA::7}" --body-file report.md --label perf-report
+          gh issue create --title "Validation ${GITHUB_SHA::7} (${GITHUB_REF_NAME})" --body-file report.md --label perf-report
       - name: Red when a scenario failed or a pair regressed
         if: always()
         run: test "${{ steps.report.outputs.status }}" = ok

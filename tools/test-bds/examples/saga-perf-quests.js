@@ -59,15 +59,25 @@ export default async function (t) {
   };
   const players = [];
   const side = Math.ceil(Math.sqrt(N));
+  const spots = Array.from({ length: N }, (_, i) => ({ x: SX + (i % side) * SPREAD, z: SZ + Math.floor(i / side) * SPREAD }));
+  // F73/F75: an area removed while its outer chunks still load leaves them unloadable for the rest of the run, and
+  // removing each player's own area 2 ticks after it spawned did that ("spawned 5 of 10 declared players"). So one
+  // radius-2 loader per 64-block tile of the grid (it always covers the tile), each loaded whole; the players spawn
+  // under them (area: false) and the loaders go once everyone has settled.
+  const tiles = new Map();
+  for (const s of spots) {
+    const kx = Math.floor((s.x - SX) / 64), kz = Math.floor((s.z - SZ) / 64);
+    tiles.set(`${kx},${kz}`, { x: SX + kx * 64 + 32, z: SZ + kz * 64 + 32 });
+  }
+  await Promise.all([...tiles.values()].map((c) => t.loadArea(c.x, c.z, { radius: 2, whole: true, timeout: 1200 }).catch((e) => t.log(`grid loader: ${e}`))));
   for (let i = 0; i < N; i++) {
-    clearAreas();
-    const x = SX + (i % side) * SPREAD, z = SZ + Math.floor(i / side) * SPREAD;
     try {
-      players.push(await t.player(`Saga${String(i + 1).padStart(2, "0")}`, { x, z, op: i === 0, settle: 2 }));
+      players.push(await t.player(`Saga${String(i + 1).padStart(2, "0")}`, { ...spots[i], op: i === 0, settle: 1, area: false, timeout: 100 }));
     } catch (e) {
       t.log(`could not spawn player ${i + 1}: ${e}`);
     }
   }
+  await t.wait(10);
   clearAreas();
   const failures = [];
   const report = (extra) => t.report("saga-quest-workload", { schema: 1, declared: N, spawned: players.length, retained, quested, seconds: SECONDS, startGameTick, endGameTick, windowTicks: endGameTick - startGameTick, minValid, failures, ...extra });
