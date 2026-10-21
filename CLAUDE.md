@@ -32,7 +32,7 @@ Minecraft Bedrock packs for a Realm. Each folder in `packs/` is a self-contained
 ## Commands
 
 ```bash
-npm run check 2>&1 | tail -30   # every check (tsc, check-pipeline, ASCII, docs coverage, commands, stories, ids, script events, action bar, unit tests, settings/zones/side/diag/labels copies, catalogs, news, generated packs, versions last); stops at the first failure
+npm run check 2>&1 | tail -30   # every check (tsc, check-pipeline, ASCII, docs coverage, commands, stories, ids, script events, action bar, event guards, line endings, unit tests, settings/zones/side/diag/labels copies, catalogs, news, generated packs, versions last); stops at the first failure
 npm run test                    # the unit tests alone (tools/**/*.test.mjs)
 npm run build 2>&1 | tail -3    # dist/<folder>.mcpack
 npm run bundle -- --all         # or --resources; --list [--json]; see the bundle-packs skill. Refreshes the Realm News release first
