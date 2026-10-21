@@ -204,11 +204,18 @@ export function* gradeSteps(region, fp, col, pad, depth) {
     yield;
   }
   const inRegion = (/** @type {number} */ x, /** @type {number} */ z) => x >= region.x1 && x <= region.x2 && z >= region.z1 && z <= region.z2;
-  for (let i = 0; i < rw; i++) {
-    for (let j = 0; j < rd; j++) {
-      const x = region.x1 + i;
-      const z = region.z1 + j;
-      const k = i * rd + j;
+  // The steps, outermost ring first (O79): where the apron meets the natural ground is where a plan on a steep slope
+  // fails, so a plan that fails is found after a few columns instead of the whole region. Every column is still checked
+  // before a plan passes, so the answer is the same.
+  /** @type {number[]} */
+  const order = [];
+  for (let d = 2; d >= 0; d--) for (let k = 0; k < rw * rd; k++) if (distTo(fp, region.x1 + Math.floor(k / rd), region.z1 + (k % rd)) === d) order.push(k);
+  for (let n = 0; n < order.length; n++) {
+    if (n > 0 && n % rd === 0) yield;
+    {
+      const k = order[n];
+      const x = region.x1 + Math.floor(k / rd);
+      const z = region.z1 + (k % rd);
       const h = t[k];
       const changed = h !== g[k];
       const cut = h < g[k];
@@ -236,8 +243,124 @@ export function* gradeSteps(region, fp, col, pad, depth) {
         }
       }
     }
+  }
+  yield;
+  return { ok: true, vol, t, g };
+}
+
+/**
+ * A region's columns and the ring around it in flat arrays, for gradeGrid (O79): kind (1 natural, 2 water, 3 lava,
+ * 4 unknown, 0 anything else), ground height and water surface. `col` must give every column of the region and the ring.
+ * @param {Rect} region @param {(x: number, z: number) => Column} col
+ */
+export function gridOf(region, col) {
+  const steps = gridSteps(region, col);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+/**
+ * gridOf a row at a time: yields after each row (the scan ends its tick between rows).
+ * @param {Rect} region @param {(x: number, z: number) => Column} col
+ * @returns {Generator<void, ReturnType<typeof emptyGrid>, void>}
+ */
+export function* gridSteps(region, col) {
+  const grid = emptyGrid(region);
+  for (let i = 0; i < grid.w; i++) {
+    for (let j = 0; j < grid.d; j++) gridPut(grid, grid.x0 + i, grid.z0 + j, col(grid.x0 + i, grid.z0 + j));
     yield;
   }
+  return grid;
+}
+
+/** An empty grid over a region and the ring around it. @param {Rect} region */
+export function emptyGrid(region) {
+  const w = region.x2 - region.x1 + 3;
+  const d = region.z2 - region.z1 + 3;
+  return { x0: region.x1 - 1, z0: region.z1 - 1, w, d, k: new Int8Array(w * d), g: new Int16Array(w * d), wl: new Int16Array(w * d), hasG: new Uint8Array(w * d), hasW: new Uint8Array(w * d) };
+}
+
+/** Puts column (x, z) into a grid. @param {ReturnType<typeof emptyGrid>} grid @param {number} x @param {number} z @param {Column} c */
+export function gridPut(grid, x, z, c) {
+  const n = (x - grid.x0) * grid.d + (z - grid.z0);
+  grid.k[n] = c.k === "N" ? 1 : c.k === "W" ? 2 : c.k === "L" ? 3 : c.k === "U" ? 4 : 0;
+  if (typeof c.g === "number") {
+    grid.g[n] = c.g;
+    grid.hasG[n] = 1;
+  }
+  if (typeof c.w === "number") {
+    grid.wl[n] = c.w;
+    grid.hasW[n] = 1;
+  }
+}
+
+/**
+ * gradePlan over a grid (gridOf), in one go and without a lookup per column: the same rules, the same answer
+ * (town-sites.test.mjs compares them on random ground). The scan uses it, so a plan costs a fraction of what a
+ * column-by-column one does (O79: slow spot picking on a hillside).
+ * @param {ReturnType<typeof gridOf>} grid @param {Rect} region @param {Rect} fp @param {number} pad @param {number} depth
+ * @returns {{ ok: true, vol: number, t: number[], g: number[] } | { ok: false, why: string }}
+ */
+export function gradeGrid(grid, region, fp, pad, depth) {
+  const rd = region.z2 - region.z1 + 1;
+  const rw = region.x2 - region.x1 + 1;
+  const { d: gd, k: K, g: G, wl: WL, hasG, hasW } = grid;
+  const n = rw * rd;
+  /** @type {number[]} */
+  const t = new Array(n);
+  /** @type {number[]} */
+  const g = new Array(n);
+  const dist = new Int8Array(n);
+  let vol = 0;
+  for (let i = 0; i < rw; i++) {
+    const x = region.x1 + i;
+    const dx = Math.max(fp.x1 - x, 0, x - fp.x2);
+    for (let j = 0; j < rd; j++) {
+      const z = region.z1 + j;
+      const q = (i + 1) * gd + j + 1;
+      if (K[q] !== 1 || !hasG[q]) return { ok: false, why: "not natural" };
+      const dd = Math.max(dx, fp.z1 - z, 0, z - fp.z2);
+      const c = G[q];
+      const to = dd === 0 ? pad : pad + Math.max(-dd, Math.min(dd, c - pad));
+      if (Math.abs(to - c) > depth) return { ok: false, why: "too deep" };
+      const k = i * rd + j;
+      t[k] = to;
+      g[k] = c;
+      dist[k] = dd;
+      vol += Math.abs(to - c);
+    }
+  }
+  const DI = [1, -1, 0, 0];
+  const DJ = [0, 0, 1, -1];
+  for (let dd = 2; dd >= 0; dd--)
+    for (let k = 0; k < n; k++) {
+      if (dist[k] !== dd) continue;
+      const i = Math.floor(k / rd);
+      const j = k % rd;
+      const h = t[k];
+      const changed = h !== g[k];
+      const cut = h < g[k];
+      for (let side = 0; side < 4; side++) {
+        const ni = i + DI[side];
+        const nj = j + DJ[side];
+        let oh = NaN;
+        let oChanged = false;
+        const q = (ni + 1) * gd + nj + 1;
+        if (ni >= 0 && ni < rw && nj >= 0 && nj < rd) {
+          const o = ni * rd + nj;
+          oh = t[o];
+          oChanged = t[o] !== g[o];
+        } else if (K[q] === 1 && hasG[q]) oh = G[q];
+        else if (K[q] === 2 && hasW[q]) oh = WL[q];
+        if (!Number.isNaN(oh) && (changed || oChanged) && Math.abs(h - oh) > 1) return { ok: false, why: "step" };
+        if (cut) {
+          if (K[q] === 3) return { ok: false, why: "lava" };
+          if (K[q] === 2 && hasW[q] && WL[q] > h) return { ok: false, why: "water" };
+          if (K[q] === 4) return { ok: false, why: "unknown" };
+        }
+      }
+    }
   return { ok: true, vol, t, g };
 }
 
@@ -301,10 +424,10 @@ export function compareKeys(a, b) {
  * @typedef {["c", number, number] | ["b", number, number, number] | ["claims", number, number, number, number] | ["tick"]} ScanRequest
  * @typedef {{ x: number, z: number, f: number, pad: number, vol: number, lv?: string, lt?: string, dist: number, key: number[], region: Rect, cuts: { x: number, z: number, t: number }[] }} Candidate
  * @typedef {{ vol: number, cuts: { x: number, z: number, t: number }[], lv?: string, lt?: string } | null} PadPlan
- * @typedef {null | "wait" | { m: number, gs: number[], plans: Map<number, PadPlan> }} Look
+ * @typedef {null | "wait" | { m: number, gs: number[], lo: number, hi: number, plans: Map<number, PadPlan>, fv: Map<number, number>, top?: string, grid: ReturnType<typeof emptyGrid> }} Look
  */
 
-export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear: 9, maxNear: 30, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3, workTick: 100 };
+export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear: 9, maxNear: 30, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3, workTick: 100, gridWork: 1 };
 
 /**
  * Picks a spot for each project, one after another (the well first), reading columns as it goes (yield). Returns
@@ -320,9 +443,12 @@ export function* scanTown(input) {
   let work = 0;
   /** Ends the tick when this tick's work is used up. @returns {Generator<ScanRequest, void, any>} */
   function* pace() {
-    if (work < SCAN.workTick) return;
-    work = 0;
-    yield ["tick"];
+    // What a step used past this tick's share is carried over (O79): a plan made in one go (gradeGrid) counts its
+    // whole cost, so the ticks after it do less, and the scan's average cost a tick stays at SCAN.workTick.
+    while (work >= SCAN.workTick) {
+      work -= SCAN.workTick;
+      yield ["tick"];
+    }
   }
   /** @param {number} x @param {number} z @returns {Generator<ScanRequest, Column, any>} */
   function* col(x, z) {
@@ -351,10 +477,22 @@ export function* scanTown(input) {
   /** @type {string[]} */
   const wait = [];
   const order = [...input.projects].sort((a, b) => Number(!!b.well) - Number(!!a.well));
+  /** Footprint shapes (all four facings, and `near`) that found no valid spot this scan. @type {Set<string>} */
+  const none = new Set();
   for (const p of order) {
+    // A project shaped like one that found no spot finds none either (O79): spots taken since only add to what is in
+    // the way. A Village's houses on a steep hillside would otherwise each walk every ring again.
+    const shape = p.dock ? undefined : JSON.stringify([[0, 1, 2, 3].map((f) => p.box({ x: 0, y: 0, z: 0, f })), p.near ?? null, !!p.well]);
+    if (shape !== undefined && none.has(shape)) {
+      nos.push(p.id);
+      continue;
+    }
     const res = p.dock ? yield* pickDock(p) : yield* pickBuild(p);
     if (res === "wait") wait.push(p.id);
-    else if (!res) nos.push(p.id);
+    else if (!res) {
+      nos.push(p.id);
+      if (shape !== undefined) none.add(shape);
+    }
     else {
       picks.push({ id: p.id, spot: res.spot });
       taken.push(res.region);
@@ -463,19 +601,26 @@ export function* scanTown(input) {
       yield* pace();
       // The footprint alone moves at least this much: when that is a worse leveling bucket (scoreKey) than a plan
       // already found here, this pad can't win, so its plan isn't made.
+      // A footprint column farther than depth from the pad: its plan would fail (gradeSteps), so it isn't made.
+      work++;
+      if (seen.hi - pad > input.depth || pad - seen.lo > input.depth) continue;
       if (Number.isFinite(bestVol)) {
-        work += seen.gs.length;
-        if (Math.floor(seen.gs.reduce((v, g) => v + Math.abs(g - pad), 0) / 6) > Math.floor(bestVol / 6)) continue;
+        // The footprint's own leveling at this pad, summed once per footprint (O79: houses walk the rings the first
+        // house read, and summing it again at every position was most of their scan).
+        let fv = seen.fv.get(pad);
+        if (fv === undefined) {
+          work += seen.gs.length;
+          seen.fv.set(pad, (fv = seen.gs.reduce((v, g) => v + Math.abs(g - pad), 0)));
+        } else work++;
+        if (Math.floor(fv / 6) > Math.floor(bestVol / 6)) continue;
       }
       let plan = seen.plans.get(pad);
       if (plan === undefined) {
-        const steps = gradeSteps(region, fp, known, pad, input.depth);
-        let st = steps.next();
-        while (!st.done) {
-          yield* pace();
-          st = steps.next();
-        }
-        const g = st.value;
+        // The plan from the region's columns look() kept in flat arrays, in one go, counted at SCAN.gridWork a
+        // column (O79: a lookup each made a hillside town's spots take minutes).
+        yield* pace();
+        work += Math.ceil((region.x2 - region.x1 + 1) * (region.z2 - region.z1 + 1) * SCAN.gridWork);
+        const g = gradeGrid(seen.grid, region, fp, pad, input.depth);
         if (!g.ok) plan = null;
         else {
           const rd = region.z2 - region.z1 + 1;
@@ -484,7 +629,7 @@ export function* scanTown(input) {
           g.t.forEach((to, k) => {
             if (to < g.g[k]) cuts.push({ x: region.x1 + Math.floor(k / rd), z: region.z1 + (k % rd), t: to });
           });
-          plan = { vol: g.vol, cuts, ...(g.vol > 0 ? { lv: encodePlan(g.t, g.g, pad), lt: yield* topOf(region) } : {}) };
+          plan = { vol: g.vol, cuts, ...(g.vol > 0 ? { lv: encodePlan(g.t, g.g, pad), lt: (seen.top ??= yield* topOf(region)) } : {}) };
         }
         seen.plans.set(pad, plan);
       } else work += 8;
@@ -512,10 +657,33 @@ export function* scanTown(input) {
    */
   function* look(region, fp) {
     let unknown = false;
+    const grid = emptyGrid(region); // every column read below goes in, for gradeGrid
+    // The footprint first (O79): every pad lies within depth of all its columns, so a footprint whose ground spans more
+    // than twice the depth can never be leveled, and the rest of its region isn't read (most positions on a steep
+    // hillside). Same answer as reading everything: a column that isn't natural still rejects it first.
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = fp.x1; i <= fp.x2; i++) {
+      yield* pace();
+      for (let j = fp.z1; j <= fp.z2; j++) {
+        const c = yield* col(i, j);
+        gridPut(grid, i, j, c);
+        if (c.k === "U") unknown = true;
+        else if (c.k !== "N") return null;
+        else if (typeof c.g === "number") {
+          lo = Math.min(lo, c.g);
+          hi = Math.max(hi, c.g);
+        }
+      }
+    }
+    if (!unknown && hi - lo > 2 * input.depth) return null;
+    // Then the apron (the footprint's columns were read just above).
     for (let i = region.x1; i <= region.x2; i++) {
       yield* pace();
       for (let j = region.z1; j <= region.z2; j++) {
+        if (i >= fp.x1 && i <= fp.x2 && j >= fp.z1 && j <= fp.z2) continue;
         const c = yield* col(i, j);
+        gridPut(grid, i, j, c);
         if (c.k === "U") unknown = true;
         else if (c.k !== "N") return null;
       }
@@ -527,6 +695,7 @@ export function* scanTown(input) {
       for (let j = region.z1 - 1; j <= region.z2 + 1; j++) {
         if (i >= region.x1 && i <= region.x2 && j >= region.z1 && j <= region.z2) continue;
         const c = yield* col(i, j);
+        gridPut(grid, i, j, c);
         if (c.k === "U") return "wait";
         if (c.k === "T") {
           for (let a = i - 2; a <= i + 2; a++) for (let b = j - 2; b <= j + 2; b++) if (distTo(region, a, b) === 0 && known(a, b).lf) return null;
@@ -536,7 +705,7 @@ export function* scanTown(input) {
     /** @type {number[]} */
     const gs = [];
     for (let i = fp.x1; i <= fp.x2; i++) for (let j = fp.z1; j <= fp.z2; j++) gs.push(/** @type {number} */ (known(i, j).g));
-    return { m: median(gs), gs, plans: new Map() };
+    return { m: median(gs), gs, lo: Math.min(...gs), hi: Math.max(...gs), plans: new Map(), fv: new Map(), grid };
   }
 
   /** The most common top block of a region (what a fill gets on top), without "minecraft:". @param {Rect} region @returns {Generator<ScanRequest, string, any>} */

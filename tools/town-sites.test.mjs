@@ -409,3 +409,60 @@ test("scan pacing: no single step does much more than SCAN.workTick lookups, gra
   // A grading row of the biggest region (13 columns, each with 4 sides and 2 lookups) may cross the budget once.
   assert.ok(most <= SCAN.workTick + 160, `lookups in one step: ${most} (workTick ${SCAN.workTick})`);
 });
+
+test("scan on ground too steep for any spot (O79): a footprint spanning more than twice levelDepth is dropped after its own columns, and projects shaped like one that found nothing don't walk the rings again", () => {
+  const steep = worldOf((x) => 64 + 2 * x); // a 5-wide well footprint spans 8 blocks
+  const ticks = (projects) => {
+    const gen = scanTown({ ...base, projects });
+    let n = 0;
+    let r = gen.next();
+    while (!r.done) {
+      const q = r.value;
+      if (q[0] === "tick") n++;
+      r = gen.next(q[0] === "c" ? steep(q[1], q[2]) : q[0] === "b" ? { id: id("stone") } : 0);
+    }
+    return { n, res: r.value };
+  };
+  const one = ticks([{ id: "house_1", box: box("house") }]);
+  const four = ticks(["house_1", "house_2", "house_3", "house_4"].map((h) => ({ id: h, box: box("house") })));
+  assert.deepEqual(one.res.nos, ["house_1"]);
+  assert.deepEqual(four.res.nos, ["house_1", "house_2", "house_3", "house_4"], "no spot for any house");
+  assert.equal(four.n, one.n, `the other 3 houses cost no tick (${one.n} vs ${four.n})`);
+  // Only each footprint's own columns are looked at, not its region and the ring around it: a fifth of the ticks
+  // (3,740 before this change).
+  const well = ticks([{ id: "well", well: true, box: box("well") }]);
+  assert.deepEqual(well.res.nos, ["well"]);
+  assert.ok(well.n < 1200, `the well's scan ends its tick ${well.n} times`);
+});
+
+test("gradeGrid (the scan's plans, O79) gives the same answer as gradePlan on random ground, water and lava included", async () => {
+  const { gridOf, gradeGrid } = await import("../packs/town_bp/scripts/sites.js");
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let n = 0; n < 400; n++) {
+    const base0 = 64;
+    const amp = 1 + Math.floor(rnd() * 5);
+    const hs = new Map();
+    const col = (x, z) => {
+      const k = `${x},${z}`;
+      if (!hs.has(k)) {
+        const r = rnd();
+        hs.set(k, r < 0.04 ? { k: "W", w: base0 + Math.floor(rnd() * 3) } : r < 0.05 ? { k: "L" } : r < 0.06 ? { k: "U" } : r < 0.07 ? { k: "T" } : { k: "N", g: base0 + Math.floor(rnd() * amp) + Math.floor(x / 3) });
+      }
+      return hs.get(k);
+    };
+    const fp = { x1: 0, z1: 0, x2: 2 + Math.floor(rnd() * 5), z2: 2 + Math.floor(rnd() * 5) };
+    const region = regionOf(fp);
+    // The region itself natural (the scan grades only those), the ring as it comes.
+    for (let x = region.x1; x <= region.x2; x++) for (let z = region.z1; z <= region.z2; z++) hs.set(`${x},${z}`, { k: "N", g: base0 + Math.floor(rnd() * amp) + Math.floor(x / 3) });
+    const pad = base0 + Math.floor(rnd() * amp) + 1;
+    const depth = Math.floor(rnd() * 4);
+    const a = gradePlan(region, fp, col, pad, depth);
+    const b = gradeGrid(gridOf(region, col), region, fp, pad, depth);
+    assert.equal(b.ok, a.ok, `case ${n}: ok`);
+    if (a.ok && b.ok) {
+      assert.equal(b.vol, a.vol, `case ${n}: vol`);
+      assert.deepEqual(b.t, a.t, `case ${n}: plan`);
+    }
+  }
+});
