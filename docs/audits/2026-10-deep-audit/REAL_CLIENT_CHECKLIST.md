@@ -71,6 +71,8 @@ Useful commands (operator):
 - FAIL: the line is cut at the screen edge, or covers the hotbar or health bar.
 
 ### A4. Minimap budget and the black square (O15, O69)
+Since October 2026 **normal** is about 1 ms a tick (the owner's Minimap budget) and **high** is the earlier normal
+(about 2.9 ms), so this check also decides whether normal still looks right: compare normal with high side by side.
 1. `/realm:config` → **Minimap** → **Minimap script time a tick**: try **low**, then **normal**, then **high**.
    With each: walk for 30 seconds, sprint, fly in creative across new land for 30 seconds, then stand at spawn with
    the other player and some animals around.

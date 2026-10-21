@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Minimap: uses about half the server time it did; with many players moving the radar's land and mob dots catch up a few seconds later. Operators can pick High in /realm:config -> Minimap for the earlier behavior.",
     "Minimap: new players are no longer told an operator reset their map; only players whose destination or marked spots were actually cleared get that message.",
     "Story: when a quest step is too long for the quest box, its name is shortened and the direction, distance or time left always stays visible.",
     "Land Claims: your own pets now work in other people's claims too. Pets tamed before this update stay locked in others' claims.",
@@ -143,8 +144,8 @@
       "notes": "A pack letter refused because the realm's mail is full no longer deletes your oldest letters. Line endings tidied (no change for players)."
     },
     "map_bp": {
-      "version": "1.3.10",
-      "notes": "Only players whose destination or marked spots were cleared are told about a map reset. Line endings tidied (no change for players)."
+      "version": "1.3.11",
+      "notes": "About half the server time: budgetLevel normal is now about 1 ms a tick (High is the earlier normal). Titles held longer, shared mob searches, fewer wasted redraws."
     },
     "maps_bp": {
       "version": "1.8.14",

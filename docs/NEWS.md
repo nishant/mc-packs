@@ -7,6 +7,12 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## A lighter Minimap
+
+- The Minimap uses about half the server time it did. With many players moving at once, the land under your radar and the mob dots can take a few seconds longer to catch up; standing still, everything catches up.
+- Operators who want the earlier, faster Minimap can pick High in /realm:config -> Minimap -> Minimap script time a tick.
+
+
 ## Pets in claims, a saved Expedition line and small fixes
 
 - Land Claims: your own pets now work in other people's claims too. A wolf, cat or parrot you feed tame, or a horse you ride tame, can be leashed, ridden or told to sit by you anywhere. Pets tamed before this update stay locked in others' claims.
