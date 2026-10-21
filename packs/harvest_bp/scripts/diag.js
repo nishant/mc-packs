@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "harvest_bp";
-const VERSION = "1.3.9";
+const VERSION = "1.3.10";
 const NAME = "Right-click Harvest";
 /** @type {string[]} */
 const PREFIXES = ["harvest"];

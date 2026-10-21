@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "claims_bp";
-const VERSION = "1.5.8";
+const VERSION = "1.5.9";
 const NAME = "Land Claims";
 /** @type {string[]} */
 const PREFIXES = ["claims"];

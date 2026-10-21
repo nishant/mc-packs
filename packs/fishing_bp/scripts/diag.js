@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "fishing_bp";
-const VERSION = "1.1.14";
+const VERSION = "1.1.15";
 const NAME = "Fishing 2.0";
 /** @type {string[]} */
 const PREFIXES = ["fishing"];

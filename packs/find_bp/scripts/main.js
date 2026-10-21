@@ -340,8 +340,7 @@ world.afterEvents.playerInteractWithBlock.subscribe(({ block, player }) => {
 });
 
 // A container a player places is theirs for the private index, even before anything is in it.
-// (Optional chaining keeps the older seam tests' event mock working; the real game always has the event.)
-world.afterEvents.playerPlaceBlock?.subscribe(({ block, player }) => {
+world.afterEvents.playerPlaceBlock.subscribe(({ block, player }) => {
   if (!containerTypes().has(block.typeId)) return;
   const { dimension } = block;
   const spot = keyOf(dimension, block.location);

@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "quests_bp";
-const VERSION = "1.3.7";
+const VERSION = "1.3.9";
 const NAME = "Daily Quests";
 /** @type {string[]} */
 const PREFIXES = ["quests"];

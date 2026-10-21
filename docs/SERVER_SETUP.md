@@ -170,8 +170,9 @@ client FPS or all of the server's CPU. Every figure in this table and the two bu
 - **A separate, shorter run** (a 4-core Linux test machine, an earlier build of these fixes, 5-minute steady window):
   the Realm Bundle running as one pack took about 4.8 ms a tick at 10 players, under the goal. It is not the same
   setup as the table, so do not compare the two directly.
-- **Not measured yet:** 100 players, the story quests at 100 players, and the Realm Bundle as one pack at 40
-  players. Until then, treat 100+ player servers as untested.
+- **Measurements cover 10 and 40 players only** (10 is this Realm's maximum; 40 shows how the packs scale). Not
+  measured yet: the Realm Bundle as one pack at 40 players. Servers with more than 40 players are not measured, so
+  measure your own with `/realm:diag` (below).
 - This Realm keeps the **Small Realm** defaults (10 players, usually 1-4 online). Hardware, workload and how many
   packs you run all change these numbers; on your own server, measure with `/realm:diag` (below).
 
@@ -188,7 +189,8 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 | 40 players | 135.4 ms a tick, server at 5.2 TPS | 6.2 to 9.5 ms a tick (three runs), 18.4 to 19.4 TPS; 8.3 ms with Large server |
 
 - The Minimap was most of the old cost (25 ms a tick at 10 players, 108 at 40) and is now 2.3 to 3.8 ms at the same
-  counts, kept to its time budgets. Next come Easy Building (0.6 to 1 ms) and Quick Stack & Sort (0.2 to 0.6 ms).
+  counts, kept to its time budgets. Quick Stack & Sort comes next (0.2 to 0.6 ms). Easy Building, once
+  0.6 to 1 ms, now wakes only for players who are building: 0.13 to 0.18 ms at 10 and 40 players (0.34 to 0.84 before).
   39 to 45 of the 67 behavior packs cost under 0.05 ms a tick, and 58 to 60 are within the 0.15 ms budget.
 - **The budget** the packs are held to: the whole bundle under 5 ms a tick at 40 players, a typical pack 0.15 ms or
   less and the heaviest (the Minimap, the HUDs) 1 ms or less. Most packs are well under it; the bundle as a whole and
@@ -225,9 +227,9 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
   stored inventory pages and saved ground of town projects as structures inside it.
 - **Versions:** every pack's version is in its `manifest.json`. The bundles' versions are their build time in UTC
   (`YYYY.MMDD.HHMM`), so every build is higher than the last; a single pack counts up (`1.4.2`).
-- **Updating:** It is assumed the Realm Bundle and Realm Resources get uploaded to the Realm after each release; the owner does it.
-  On a Realm, the owner then checks that the Realm's active pack shows the new version
-  (if not, deactivate and activate it again). On BDS, stop the server, replace the folders and the `version` in the
+- **Updating:** on a Realm, the Realm's owner opens the new Realm Bundle and Realm Resources `.mcpack` files (Minecraft
+  imports them), activates both in the Realm's settings, then checks that the Realm's active packs show the new versions
+  (if not, deactivate and activate them again). On BDS, stop the server, replace the folders and the `version` in the
   two world JSON files, start it. Settings and progress stay: they are in the world, and the bundles keep their uuid.
 - **Update both bundles together.** Realm Resources draws what the Realm Bundle's scripts send: the Minimap's icon
   font and the side boxes' layout must match the scripts that fill them, and the rain and sky effects need their
@@ -238,7 +240,7 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 
 - **Measured with simulated players**, not real clients: no chunk sending, simple movement, no client packets. A
   real server spends more time per player outside the scripts, and a Realm's CPU differs from the test machine.
-- **Current 100-player load acceptance is incomplete.** The current master attempt failed population admission and its only identical retry also could not produce a valid full window; no partial population is a 100-player comparator. Coordinates HUD updates now arrive in bounded parts rather than truncating at 100, but that code change is not a completed current 100-player load or client-rendering test. Minimap keep-alive demand and the separate Saga quest workload still need their actual load evidence.
+- **Measured at 10 and 40 players only.** Larger servers are not measured. Coordinates HUD updates arrive in bounded parts (no cap at 100 players), but that is a code change, not a load test; the Minimap keep-alive and the story quest workload still need their 40-player measurements.
 - **At 40 players the packs are over their 5 ms goal:** about 8 ms a tick, the Minimap 3.7 ms of it against 1. That is open, not accepted: it leaves less room for other server work. See Performance above.
 - **Ticking areas:** Bedrock allows 10 per world. Farm Loader's farms, Expeditions' dungeon resets (up to `slots`),
   Death Point's `/realm:death_back` and some story and town builds share them, as do any you add with `/tickingarea`.

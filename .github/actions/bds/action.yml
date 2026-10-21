@@ -1,0 +1,34 @@
+# One runner's Bedrock Dedicated Server test setup: Node 22, npm ci, the cached BDS download and private harness
+# folders (BDS_DIR, BDS_HARNESS_CACHE/TMP/LOGS in $GITHUB_ENV for the rest of the job). Used by pr-tests.yml and
+# validate.yml; check.yml's smoke job spells the same steps out.
+name: bds-setup
+description: Node, npm ci and a cached Bedrock Dedicated Server for tools/test-bds
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+    - name: Private BDS paths on this runner
+      shell: bash
+      run: |
+        {
+          echo "BDS_DIR=$RUNNER_TEMP/bds"
+          echo "BDS_HARNESS_CACHE=$RUNNER_TEMP/bds-harness-cache"
+          echo "BDS_HARNESS_TMP=$RUNNER_TEMP/bds-harness-tmp"
+          echo "BDS_HARNESS_LOGS=$RUNNER_TEMP/bds-harness-logs"
+        } >> "$GITHUB_ENV"
+    - shell: bash
+      run: npm ci
+    - uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/bds
+        key: bds-${{ runner.os }}-${{ hashFiles('tools/test-bds/lib/server.mjs') }}
+    - shell: bash
+      run: node tools/test-bds/setup.mjs
+    - name: BDS shared libraries are present
+      shell: bash
+      run: "! ldd \"$BDS_DIR/bedrock_server\" | grep 'not found'"
+    - shell: bash
+      run: mkdir -p "$BDS_HARNESS_CACHE" "$BDS_HARNESS_TMP" "$BDS_HARNESS_LOGS"

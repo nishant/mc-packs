@@ -54,9 +54,24 @@ export default async function (t) {
     return { feet, heads, orphans };
   };
 
+  // Bedrock keeps at most 10 ticking areas: drop the areas this scenario's earlier modes added (only the harness's own,
+  // from its ledger) before loading the next one, or the 12th mode's area is refused.
+  const cleared = new Set();
+  const clearOwned = () => {
+    const raw = t.world.getDynamicProperty("harness:tickingAreas");
+    const areas = raw === undefined ? [] : JSON.parse(raw);
+    for (const area of areas) {
+      const key = `${area.dimension}|${area.name}`;
+      if (cleared.has(key) || !/^harness_\d+_\d+$/.test(area.name)) continue;
+      t.world.getDimension(area.dimension).runCommand(`tickingarea remove "${area.name}"`);
+      cleared.add(key);
+    }
+  };
+
   for (let k = 0; k < modes.length; k++) {
     const mode = modes[k];
     const ox = 2 + k * 24;
+    clearOwned();
     await t.loadArea(ox + 6, 6, { radius: 2 });
     t.server(`/fill ${ox - 2} ${floor + 1} -2 ${ox + 14} ${floor + 14} 14 air`);
     t.server(`/fill ${ox - 2} ${floor} -2 ${ox + 14} ${floor} 14 stone`);

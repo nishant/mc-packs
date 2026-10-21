@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "storm_bp";
-const VERSION = "1.1.12";
+const VERSION = "1.1.13";
 const NAME = "Storm Chasing";
 /** @type {string[]} */
 const PREFIXES = ["storm"];

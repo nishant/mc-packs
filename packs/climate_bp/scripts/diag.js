@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "climate_bp";
-const VERSION = "1.0.10";
+const VERSION = "1.0.11";
 const NAME = "Regional Weather";
 /** @type {string[]} */
 const PREFIXES = ["climate"];

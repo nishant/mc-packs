@@ -108,7 +108,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     against 5). None of the owner's recorded answers says this.
   - Ask the owner. Until he answers, record it as "open: over budget at 40 players", not accepted. The Realm
     (10 players, 1-4 online) is under budget as one bundle (4.75 ms at 10).
-- [ ] PARTIAL, still open (14b6158, 303bb12): the attribution is corrected everywhere (contributor msftMyt); the deferred soaks are run by the release process. **F57 (high, process) The soak deferral is recorded as the owner's but was the contributor's** (N2).
+- [x] DONE (14b6158, 303bb12; measurements October 20): the attribution is corrected everywhere (contributor msftMyt); the deferred soaks ran before and after release 1 and are in [perf-after-2026-10-20.md](perf-after-2026-10-20.md): 15 min at 10 and 40, 5 min at 100, the Realm Bundle at 10 and 40, saga quests at 100, the weather crowd at 40 and the 60-minute unprofiled memory soak at 40. Follow-ups: F73 (spawn flake), F74 (memory growth), F75 (flaky scenarios). **F57 (high, process) The soak deferral is recorded as the owner's but was the contributor's** (N2).
   - The quote "lets skip the soak tests, let nishs claude do that later" refers to Nish in the third person.
     OPEN.md :346 calls it "User-directed"; five other places call it an owner override.
   - Correct the attribution everywhere.
@@ -138,24 +138,24 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   was spawned for and wherever it dies. Count only mobs spawned for that player's (or party's) step.
 - [x] DONE (be962f3, 87edd82, 229d785): one group of mobs per party, place and step; saga-party-fight (9 alive -> 3) and saga-party-fight-helper fail before and pass after. **F63 (low, perf) Each party member gets their own group of story mobs** (N9): 4 mates at the Gray Ring means
   16 illagers. Use one shared group per place and step for a party, with F47.
-- [ ] **F64 (low) welcome_bp loose ends** (N10-N12):
+- [x] DONE (0e3f8c1b, a2544ac5, 71969eff; group 4): welcome-generic-bundle's small bundle fails before (3 F64 checks) and passes after; the genuine Realm Bundle and welcome-edit-concurrent pass. **F64 (low) welcome_bp loose ends** (N10-N12):
   - the migration drops an operator-edited body that still contains the old sentence, without keeping a copy
   - the retired `welcome:profile` key is never deleted
   - the welcome names Old Tobin and Mara whenever Townsfolk is installed, even with no townsfolk placed
-- [ ] **F65 (low, docs) The O66 wording** (N13, N14).
+- [x] DONE (cfc87885; group 4): SERVER_SETUP.md has generic update steps and the owner-uploads rule is in WORKING.md; hosting's CLAUDE.md already says the .mcpack files are no longer attached. **F65 (low, docs) The O66 wording** (N13, N14).
   - Hosting's CLAUDE.md still says to hand over the `.mcpack` files. Align it with the owner's answer: report that
     the site is up to date with the bundle versions; uploading is assumed.
   - Keep the "the owner uploads to the Realm" sentence out of SERVER_SETUP.md, which is for outside server
     owners; put it in the maintainers' docs instead.
-- [ ] **F66 (low, tests) Restore the narrowed fixtures listed above** (N15, N16): find-index across a restart with
+- [x] DONE (1f7dfe1, dfbb032, 92034d4, 162fc9c; rel2): diag-owned-reload (exactly 3 probe keys), find-index across a restart and admin-size-profile (exactly 7 changes) pass on BDS; size-profile-constants.test.mjs 2/2. **F66 (low, tests) Restore the narrowed fixtures listed above** (N15, N16): find-index across a restart with
   the private index; diag-owned-reload back to 3 after F23; admin-size-profile's exact change list after F10.
-- [ ] **F67 (low, quality) Shipped scripts with CRLF or mixed line endings** (N18). Normalize them to LF, and add a
+- [x] DONE (48d47ed4, 14094d65; ship4): 111 pack files and 3 shared sync sources normalized to LF (empty under --ignore-cr-at-eol); tools/check-eol.mjs in npm run check fails on any CR, 4 unit tests, and .gitattributes keeps them LF on Windows. **F67 (low, quality) Shipped scripts with CRLF or mixed line endings** (N18). Normalize them to LF, and add a
   check to `npm run check`.
-- [ ] **F68 (low, docs) The `map:reset` docs no longer say what the value is** (N19).
+- [x] DONE (1570cb81; group 4): PACKS.md and reset.js say map:reset is max(previous + 1, Unix seconds), not a count. **F68 (low, docs) The `map:reset` docs no longer say what the value is** (N19).
 - [x] DONE (atlas: 86a28e4, d074d47, 6c96787, bd653ab; wander: 9f5b835; wander-walk: 8a56f9e, 58b4851, b6f227c, b50c8ba): harness ticking-area removal and scenario races (atlas), unloaded camp chunk (wander), a lightning witch bug and fixture deaths (wander-walk); all three pass on the merged tree, no assertion weakened. **F69 (high) Root-cause the 3 failing scenarios at 8aa5cf06:** atlas, wander-walk and wander (above). Run them
   alone first to rule out load. Fix the pack or the scenario, without weakening what it checks.
 
-- [ ] **F70 (high, scope) Finish the plan items that are still open in `../OPEN.md`, not only the F-items.**
+- [ ] PARTLY DONE (group 3 + ship3, October 21): W1 measured at 10 and 40 and worked: O5, O6, O9 and O19 DONE, O7 DONE scoped, O2 and O10 PARTLY DONE, O1 and O3 OPEN with numbers, O4 waits on validate.yml's memory A/B (F74); dispositions in `../OPEN.md`. Remaining: the map_bp redesign (O1), silly_bp (O2), the night champion count and the npc label loop (O3, O10), O47/O48 (group 2), O11-O16 (F71). **F70 (high, scope) Finish the plan items that are still open in `../OPEN.md`, not only the F-items.**
   - #96 marked several plan items WON'T FIX or DONE without the work (F58): O1, O2, O4, O5, O10-O15, O19, O47 and
     O48. Others are marked DONE although open F-items cover them: O3, O7, O17, O71.
   - After F58 re-marks them honestly, implement every one that is still open, as `../PLAN.md` describes:
@@ -183,6 +183,27 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   hosting when this re-review ran (hosting's last publish was #107). Before the first fix release, check hosting
   `site/packs/packs.json` and run check-live. If #96 isn't live, publish it, either alone first or together with the
   first fixes. The final report names the live bundle versions.
+- [x] DONE (d4d5f1e; rel2 ab727687 and merge 2c0ac34e: t.loadArea waits for the whole area by default plus 20 settle ticks, and a phase start waits for the saved areas before removing them; spawn probe 4/4 bad -> 0/12 in 4/4 runs, perf soak at 10 3/4 -> 4/4, saga-perf-quests at 40 2/4 -> 4/4): root cause: the soak removed each player's ticking area 2 ticks after its center column read, while the far groups' outer chunks were still generating; BDS never loads a chunk whose area was removed mid-load (not under a new area, not next to a player). Master dad4a5f, `suite.mjs --perf 10,40,100 --perf-seconds 60`: 36/40 and 96/100 spawned, every failure in the chunk next to the group's first player (Soak21 at -81,171 in chunk -6, then Soak22-25 at -78..-60 in chunks -5/-4: 12 tries x 400 ticks; Soak31/32 at x 399, then 405-419 never loaded). Fix: `t.loadArea(..., { whole: true })` waits for every chunk of the area (a circle loads a square: 5x5 at radius 2, measured), `t.player(..., { area: false })` spawns under it, and the soak loads each group once, spawns its players together, four groups a wave, and removes the loaders after 10 ticks. After: 10/10, 40/40, 100/100 and 100/100 again, all VALID; spawn ramp 6.6 -> 3.6, 267 -> 18.3 and 447 -> 35.4/38 game seconds; wall 91 -> 85, 295 -> 125, 535 -> 218/225 s. **F73 (high, tests) perf-soak and harness spawn flake: "chunk at x,z did not load in 400 ticks".**
+  - Seen at the second group (~190,180) and elsewhere, together with stash_bp's "storage staging chunk is not
+    loaded" warning, on both trees (master 5422aac and release 1). It invalidated 4 soaks on October 20
+    ([perf-after-2026-10-20.md](perf-after-2026-10-20.md)).
+  - Root-cause it (ticking areas, chunk loading order, the stash staging chunk) and fix the harness or the pack.
+- [ ] PARTLY DONE (30049a3d, 85624976, 8caf5577, d80f0828; rel2): no pack leak found; the Realm Bundle at 40 players grows 2.58 MiB/min on 5422aac and 2.69-3.32 on 7aa0cce over 18 min, and the 60-minute curves level off. Remaining: validate.yml's 60-minute memory A/B in CI must show head within about 15% of base and a second-half slope of 0.5 MiB/min or less. **F74 (medium, perf) Memory growth in the 60-minute soak at 40 players.**
+  - bedrock_server RSS from minute 10 to 60: +100 MB before (master 5422aac), +145 MB with release 1, one run each
+    ([perf-after-2026-10-20.md](perf-after-2026-10-20.md)).
+  - Find whether any pack leaks: bisect by pack with `tools/test-bds/rss-soak.mjs`.
+- [ ] PARTLY DONE (346df1f as 5ac44b06 on rel2, 3e5d099, aedf57f; rel2 also e0943f17 cooking-restart 3/6 -> 6/6 (not proof of the pack fix: the scenario now cooks after the 100-tick window; the proof is cooking-early, 119d9561), ab727687 expedition-restart and saga-escort 4/4 and the phase-start wait listed under Remaining, bd26627a map-flight; expedition-climb keeps the rel2 check (fall damage 0 and every other loss explained by a recorded hurt) but was never reproduced in 11 runs, so it stays open; October 21, BDS 1.26.52.3, 4 vCPU, suite.mjs --jobs 2 rounds): seven of the eight are root-caused and passed every rerun. expedition-climb is left to the lead (fixed on PR #108: the check counted the Spider Nest's mob hits, and now counts only `fall` damage). **F75 (medium, tests) Root-cause the flaky scenarios of the October 20 suites.**
+  - atlas, expedition-restart, saga-escort ("chunk at ... did not load in 400 ticks"): the "before" suite ran 5422aac, which predates F69's harness fix (86a28e4: a phase removes its own ticking areas when it asks for the restart, not at the start of the next phase, while the chunks are still loading from the save). r1 (88cc198) has the fix, and on 8763272 they passed 5/5 each under --jobs 2. No further change.
+  - saga-perf-quests ("spawned 5 of 10"): the same F73 pattern as the old perf soak. Each player's own area was removed 2 ticks after the next player's center column loaded. Now there is one radius-2 loader per 64-block tile of the grid, loaded whole (`whole: true`); the players spawn under it (`area: false`) and the loaders go after everyone has settled. A unit test was added (saga-perf-quests.test.mjs). 5/5 before (it was rare at 10 players), 5/5 after.
+  - saga-escort (a new flake, 1 of 5 before): "Pell walked (many small steps)" with "samples 9, moving 2". wander spawns Pell 24 to 40 blocks ahead along the player's view, and the scenario faced the chapel 48 blocks east, so a 40-block roll left a 7-block walk. Pell's spawn x was 924 in a 52-sample run and 940 in the failing run. The player now faces west: 172-202 samples, 5/5.
+  - cooking-restart ("the interrupted dish is owed to its cook"): a pack bug, fixed in commit 346df1f (branch worktree-agent-aebc52953a641eaad), NOT on master yet: the fix campaign's int23 already carries a different cooking_bp 1.1.14 (its own settle fix) and owns the pack, so its lead applies 346df1f on top with the next version (a version is published once). The join handover (100 ticks after a player's first spawn or the world load) handed over everything owed, including a batch still in the pot, so a cook started in those 5 seconds was instant. A probe logging ticks showed the second dish arriving 5 ticks after the cook started (cook at tick 149), and owed was 0 at the restart. Before: 2 of 4 suite runs and 4 of 6 probe runs failed. After: 6/6 suite runs and 6/6 probes, plus cooking-windows and cooking-moon-restart.
+  - maps-hunt (TIMEOUT 900 s): the F73 pattern in the scenario's own radius-4 areas. They were removed as soon as the next spot's center loaded, and a slow area was removed and added again. In one run an area at 226,956 was replaced after 600 ticks and the new one never loaded either (60 s lost). Every visit near such chunks waits the same way, which is how a hunt runs out of time. Now an area goes only once all 81 chunks can be read (at most 30 s, logged), and a slow load is waited for under the same area. That change surfaced a timing case, fixed too: a treasure the pack finds while the player already stands at the chest counts, checked to be at the chest. 12/13 after (the 1 failure was that case, before its fix; 8/8 since).
+  - wander ("Hob is at his camp after the restart"): fixed by F69 (9f5b835), which the "before" tree lacked. 5/5 on 8763272.
+  - Remaining: the harness still removes a phase's areas at the restart without waiting for them to load whole (an area added just before `t.restart()`, like atlas's last radius-3 area or expedition-restart's verify area, may still be loading). Nothing failed from it in 10 restart runs, so it is not changed; if a restart scenario flakes on a chunk again, make `removeOwnedAreas` wait (bounded) for each area's `circleChunks` first.
+  - New in the release 1 suite (they passed on master): cooking-restart ("the interrupted dish is owed to its
+    cook"), expedition-climb ("a fall in the shaft doesn't hurt (20 -> 13)") and maps-hunt (TIMEOUT after 900 s).
+  - Flaky on master: expedition-restart, saga-escort and saga-perf-quests (atlas was fixed by F69).
+  - Root-cause each one; fix the pack or the scenario without weakening what it checks.
 
 ## Decisions made in the fix campaign (October 20)
 
@@ -241,6 +262,49 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - integrator: Release review, PACKS.md Blood Moon (real): the section still described the removed 8-block clear-cell cache; it now says every spawn spot gets a fresh 9 x 9 x 9 check and an unloaded chunk counts as built. help-catalog regenerated, so help_bp went to 1.1.78 (still one release step from 1.1.76).
 - integrator: Release review, stash:native saved-data row (real): it now documents `pending.out` as `{ d, p, x?, f? }` and that a 1.8.7-or-older journal without `x` exports its whole before-image in the old layout.
 - integrator: Release review, NEWS night-fight line (real): F61 lets night fights start while the daylight cycle is stopped during the day (stopped at night already worked), so the line now says so; gen-news moved news_bp to 1.7.81. All three were doc fixes with no behavior change, so no new test.
+- rel2: Merged v-rel2/stash-perf, build-gate, mediums-misc, tests-acceptance, flakes and memory with --no-ff; the only conflict was tools/test-bds/README.md (both sections kept).
+- rel2: F73/F75 were fixed twice (master d4d5f1e/3e5d099/aedf57f/765d9531, v-rel2/flakes ab727687/e7b8223e/f1ef3d45). Kept master's whole-area loaders in perf-soak and saga-perf-quests, master's maps-hunt (8/8 and the treasure-at-chest case) and its `circleChunks`/`whole`/`area: false` API; dropped flakes' duplicate `areaChunkSpots` and maps-hunt rewrite. Kept from flakes what master lacks: the 20 settle ticks (its probe: removing 2 ticks after the last chunk reads still failed 2-5 of 12 spawns), `whole` on by default, and the phase-start wait (master's own "Remaining" item), plus flakes' stricter expedition-climb check with master's 2-tick wait for entityHurt.
+- rel2: master's whole-wait failure message was built before the wait and listed every chunk; it is now built when the wait runs out. Master's "center only" unit test passes `whole: false` explicitly; flakes' failure test matches the merged message with the same 6-chunk count.
+- rel2: 346df1f (cooking join handover) composes with F12's settle: applyOwed re-owes the batch still in the pot, and finish settles it through settleOwed, so it is handed over once. cooking_bp goes to 1.1.15 (int23's 1.1.14 is unpublished but taken).
+- rel2: Kept flakes' cooking-restart scenario (cook after the 100-tick handover). With 346df1f the early window is fixed in the pack, but no scenario now cooks inside it; a follow-up scenario could.
+- rel2: F45's newsLine is the verification branch's (one pass a second), not the workstream's "every 2 seconds", which a4ed2e55 reverted.
+- rel2: F67 was not done: the task lists no extras.
+- rel2: help-catalog and admin-catalog were already current after the merges (mediums-misc 78af3535 rebuilt help_bp 1.1.79); every sync-* tool was current.
+- rel2: All 67 behavior packs are above origin/master (the diag.js F23 fix touches every one); release/notes.json has an entry for each (help_bp and news_bp name themselves) and seven Realm Bundle lines. No resource pack changed.
+- rel2: O19 (Expeditions stash cart window, F70) moved to group 3 with expedition_bp; no change here.
+- rel2 review: applyOwed's in-pot keep and cook()'s first save now count what the owed store really holds after a failed save (`oweMore`/`keepInPot` in settle.js, 1137ecc8, cooking_bp 1.1.16): a value written before a failed index write is kept owed instead of also being handed over at once (paid twice). cook()'s case predates rel2 but is the same pattern, so it is fixed with it.
+- rel2 review: the early-window coverage gap (decision above) is closed by cooking-early (119d9561): it cooks 70 ticks after the spawn, asserts no dish 110 ticks after the spawn, one dish after the full 3 s and nothing owed. cooking-restart keeps cooking after the window; its pass rate is not counted as proof of the pack fix.
+- rel2 review: the integrator report's --pack-notes were paraphrases. The publish takes its strings from release/notes.json (the release workflow, or the fallback `publish-packs.mjs` run with the notes copied from that file), and the updated report quotes that file.
+- rel2 review: CRLF restored in tools/test-bds/lib/tickingarea.js and tools/stats-ticker-prefs.test.mjs (9f7250cd). No .gitattributes rule is added here: the repo mixes endings by file and a repo-wide normalization would rewrite many files and conflict with every open branch; that is a separate change for the lead.
+
+- group 3: measured both trees with the verifier's harness (`run.mjs --packs <7aa0cce>/packs`), so only pack code differs; 10 and 40 players, 120 s windows (owner answer); the 100-player windows (O5, O6) ran at 40; no 60-minute soaks locally (O4 waits on CI).
+- group 3: WS4's sweep spreader runs with one share per sweep, because measured: spread it was +47% at 40 / +84% at 10 (`isValid` first on a handle read ticks earlier costs about 0.08 ms on BDS 1.26), with one share -11% / -13%. The spreader module and WS4's other changes stay.
+- group 3: map_bp's budgets are unchanged: 0.9 ms in all starved a single turning player (map-turn) and the flier (map-flight); the 1 ms target needs a redesign of the per-tick work (budgetLevel low: 3.5 ms at 40). Owner F56 answer applies: improve where measured; a perf/map-redesign workstream follows.
+- group 3: out of draw budget, a title about to fade is drawn again unchanged (cheap) rather than skipped (O5).
+- group 3: silly_bp's gear sweep reads one player every 4 ticks instead of every tick (each still at most every 20 ticks); servers up to 5 players are unchanged.
+- group 3: side.js reads the kept messages before every own write, in arrival order; the lazy inbox stays, so the traffic win stays.
+- group 3: elite_bp's night cost is not changed (per champion flat; near champions step more often by WS3's design); why more champions stay alive is an open item (O3). The npc label loop (0.178 ms a tick in the 40-player stress only) is not changed this late (shared module, O3/O10).
+- group 3: Expedition build steps are not split (O10): one step in four at 26 ms against the plan's 25 ms rule.
+- group 3: scenario fixes (silly-gear-events, expedition-carts-window, side-boxes, admin-diag, admin-diag-bundle) keep every check; each now measures what it says.
+- ship3: merged origin/master (release 2) into group 3 with a merge commit; conflicts in news_bp (master's 1.7.83 kept, then gen-news), stash_bp's PageIndex typedef (master's documented one), tools/test-bds/README.md (master's section kept) and perf-soak.js's header (both the `hud` and `probe` arguments described).
+- ship3: every pack group 3 changed was already at master's version after release 2, so all 25 went up one patch (admin 1.6.9, afk 1.3.12, atlas 1.1.11, calendar 1.0.18, dolphin 1.2.9, durability 1.2.12, elite 1.3.14, elytra 1.3.20, expedition 2.4.14, guilds 1.1.13, hud 1.3.9, journal 1.1.11, map 1.3.9, maps 1.8.13, milestones 1.0.8, mobhp 1.2.17, moon 1.2.14, nick 1.1.10, quests 1.3.8, relics 1.2.17, saga 1.16.14, silly 1.2.11, skills 1.1.10, titles 1.2.13, wander 1.2.19); gen-news moved news_bp to 1.7.84; help-catalog and admin-catalog were current; every sync tool was current.
+- ship3: O19 item safety (20713fd5). The invariant is that a stash or parcel record is never forgotten while its structure is saved: when nothing may come back, the structure is deleted first, and a structure that can't be deleted keeps the record (tried again). How each seen cart left the world is recorded in `expedition:cart_gone` from a remove listener that is now always on (one type check per removed entity) plus a cart death listener: a cart removed still holding its items, with no death, is put down again from the structure and handed back; a broken, emptied, killed or unreadable one never is (O19's no-duplicate rule), and its part is listed in the record's `skip` so its copy is taken away empty whenever it turns up. Classification probed on BDS 1.26.52: remove() 2 of 2 stacks still in the cart at entityRemove, kill 2 (items also dropped, entityDie fired), applyDamage 0, lava 0, unload 2.
+- ship3: the group 3 failures of expedition-nether-carts (3 in 13, two "Your stored items couldn't be found") are explained by the Nether floor flake master fixed in 19bca74d (the fill placed nothing on a slow runner, so the runner and the carts put down at their feet fell into the lava sea: burned carts are "seen, gone" and O19 rightly refused a second copy, but the record was cleared while the structure was still saved). On the merged tree: expedition-nether-carts 10/10 before the safety change and 15/15 after, expedition-carts-partial 15/15, expedition-carts-window 15/15 (BDS 1.26.52.3, 2 jobs), so O19 is kept, not reverted.
+- ship3: parcels made from now on tag their carts `realm:exp_parcel_part_<k>` like stash carts, so a parcel's parts can be told apart too; an older parcel whose carts are gone keeps O19's rule (never put down again).
+- ship3: the "couldn't be found" message now says why ("their storage carts were broken or emptied before they came back to you") and still asks the player to tell an operator.
+- ship3: map_bp stays about 4.2 ms at 40 players and is recorded open (O1, F46), per the owner's F56 answer; not changed in this release.
+- group 4: F28 was merged into F24's queue.js rather than reverting F24's module: the saved line (`saveQueue`, `loadQueue`, `queueLeft`, `queueRejoined`, `PROP_QUEUE`) lives in `createQueue` with `readJson`, `writeJson` and `dungeonById` as deps; main.js keeps the playerSpawn/playerLeave/worldLoad hooks, and the tests import the shipped module.
+- group 4: F28 drops a leader who left from the line 10 seconds later (QUEUE_GONE) instead of on the leave, so a server stop's disconnects don't empty it; such a leader stays in line up to about 15 s, and the start loop skips offline leaders. After a restart a leader has 5 minutes to come back.
+- group 4: F29 records a tamer only when exactly one player can account for the taming (one watch per animal and player); two players feeding the same animal in the same window record nobody (the pet stays locked, as before). Pets tamed before the update have no record and stay locked in others' claims.
+- group 4: F32 marks Titles' confirmation with a new `tc` key, so a legacy `tf` gets its top-tier titles sent once more on the first join after the update (Titles ignores ones a player owns).
+- group 4: F19 was measured at 10 and 40 players (the owner's rule) and is noise (the funnel drifts, 1-47 stopsounds per run), so it ships as one stopsound per wind pulse with no perf claim.
+- group 4: scenario fixes that make a check observable, none weaker: tornado-sound-perf (no waitMessage under --no-relay, `--arg players`, a 120 s window), cooking-old-dish-stack (bread, since a stew stacks to 1), welcome-generic-bundle (What You Can Do only with feature packs), admin-diag-bundle (Nicknames' interval is its spread.js sweep).
+- group 4: F71's real-client checklist gets E5 (a visitor's own pet in someone's claim); F17's and F64's look on a real client are on it too.
+- ship4: merged origin/master (release 3, 8ce8f6c2) into group 4 with a merge commit. Conflicts: cooking_bp's imports (both sides: master's `keepInPot`/`oweMore` and F31's dish-lore), stash's PageIndex typedef and admin-diag-bundle's Nicknames check (master's), tools/test-bds/README.md and probe-hooks.test.mjs (both hooks listed); admin_bp and news_bp manifests and diag.js taken from master, then bumped. O19 was kept by group 3, so nothing was reverted.
+- ship4: F67 is two commits: the normalization alone (48d47ed4: 111 pack files, all 67 behavior packs' script-events.js among them, plus tools/events-shared.js, owed-shared.js and spawn-shared.js so the sync copies stay byte-identical; empty under --ignore-cr-at-eol) and the check (14094d65: tools/check-eol.mjs in npm run check over packs/ and tools/*-shared.js, with a .gitattributes `eol=lf` for those paths so Windows checkouts stay LF). Test and tool files outside those paths keep their endings (rel2's decision: a repo-wide normalization conflicts with every open branch).
+- ship4: because F67 touches every behavior pack and build_rp, all 68 changed packs went up one patch above master (help_bp 1.1.80 by hand: help-catalog was current and only bumps on a catalog change; news_bp 1.7.85 by gen-news); release/notes.json was rebuilt from master's: group 4's 8 player lines plus one for the line endings, a `resourceNotes` line for build_rp, and 66 packNotes describing only what this release changes (group 4's stale entries for int23 work master already shipped were dropped).
+- ship4: claims-own-pet (F29) could never pass on BDS (a simulated tap fires no before event, so no tamer is recorded and no tap is refused); it now uses master's claims-taps probe like claims-animals: each bone is tapped through the probe and fed for real, and both leash taps in the claim go through the probe. Its first probe run also showed the tamed wolf teleporting back to its owner 24 blocks away, so the tamer now comes into the claim with it, and the scenario asserts the wolf is in the claim. Fails before F29 (5f88e080^: the tamer's tap is canceled), passes after 3 of 3. Nothing is checked less: the stranger's refusal is now observable at all.
+- ship4: F22 stays PARTLY DONE (the guards ship; BDS can't reproduce the leave race). F19 ships as a correctness change without a perf claim.
 
 ## Blockers and highs
 
@@ -264,7 +328,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - Fix: route only when it is needed, as master did (the page is almost full), or batch the moves per player
     every few seconds with one commit. Show at most one quiet message per batch. Re-measure to master's numbers or
     better.
-- [ ] **F3 (high, perf) stash_bp: the page index (O17) still loads pages it could skip.**
+- [x] DONE (a7ddb3c, ec96fdc, f2a3582, 39d1f6f, 623defc; rel2): the index records `p`, kinds with room; BDS stash-autostore-full-page fails on 5422aac (239 page reads per 120 passes) and passes on rel2 (119), stash_bp 2.355 -> 2.133 ms/tick; unit tests 145-147 fail before, pass after. **F3 (high, perf) stash_bp: the page index (O17) still loads pages it could skip.**
   - In `mayTake`, when page 1 is full of full stacks of the item being mined, page 1's structure loads on every
     auto-store pass and finds no room.
   - Fix: store free space and partial-stack counts per item in the index, and skip pages that can't take the item.
@@ -302,16 +366,16 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - Fix: on a timeout, keep the last known count (never lower progress because of a missing answer), and split
     long rows on the stash side.
   - Also clear the bridge's maps when a player leaves.
-- [ ] **F7 (medium, perf) build_bp: the O48 "holder gate" is open nearly all the time in survival.**
+- [x] DONE (628d439, 924c4ec, f70cebe; rel2): build-holders-perf build_bp 0.437/0.468 -> 0.146/0.138 ms/tick at 10 and 0.798/0.837 -> 0.174/0.161 at 40 (afk_bp control flat); the F7 unit test (0 inventory reads) fails on the old code. **F7 (medium, perf) build_bp: the O48 "holder gate" is open nearly all the time in survival.**
   - Code: `utils/build-tool.js` :30-38, `utils/tool-gate.js`, `core/Preview.js` :343-370,
     `core/ModifierVisualizer.js` :131-178.
   - Holding any placeable block counts as holding a building tool. While the gate is open, three loops each build
     a new Set every tick and repeat inventory reads.
   - Fix: open the gate only for the build book or an active build mode, and reuse the Sets.
   - Measure: profile a survival player holding dirt, before and after.
-- [ ] **F8 (medium, bug) build_bp: switching the hotbar to a sword or food silently clears the build anchor**
+- [x] DONE (fff398c, f62327e; rel2): build-anchor.test.mjs 3/3, its dimension-change case fails before f62327e; build BDS suite 7/7. **F8 (medium, bug) build_bp: switching the hotbar to a sword or food silently clears the build anchor**
   (`core/Preview.js` :358-369). Keep the anchor until the mode ends or the player clears it.
-- [ ] **F9 (medium, perf) build_bp: the bed handling reads every block twice per destroy preview**
+- [x] DONE (4e21c08; rel2): the destroy preview makes at most 26 getBlock reads (46 before) and at most 2 state reads. **F9 (medium, perf) build_bp: the bed handling reads every block twice per destroy preview**
   (`Preview.js` :305-321 `previewDestroyBeds`). Confirming a destroy reads full block states for every block, not
   only beds (`main.js` :198-210 `readPlaced`). Fix: reuse the first read, and read states only for beds.
 - [x] (Owner answer, October 20: keep the per-player scaling as is. It is fine, because champions often don't push into town, so it doesn't feel like a lot. No code change. Pin admin-size-profile's exact change list to that, F66.) **F10 (medium, owner decision) elite_bp: champion limit changed from a fixed 8 to 0.8 per online player**
@@ -319,18 +383,18 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - On the owner's Realm (1-4 online) that means 1-4 champions instead of 8.
   - Recommended: keep the old default of 8 and put per-player scaling in the Large server profile only. Ask the
     owner before changing it.
-- [ ] **F11 (medium) find_bp: a brand-new world can get the old world-wide index.**
+- [x] DONE (ba94844, ecfc418; rel2): find-mode-bundle fails on 5422aac ('the unopened barrel is not listed') and passes on rel2; find-private.test.mjs 16/16. **F11 (medium) find_bp: a brand-new world can get the old world-wide index.**
   - `decideMode` guesses "new world" from any saved property outside a short list. In the bundle, other packs
     write on world load first. Also, if the settings cache was already read, an existing world can run private until
     the next restart.
   - Fix: decide from find_bp's own markers only (for example its own `find:` keys or an explicit `find:mode`
     written once).
   - Test: the decision inside a bundle (see `tools/test-bds/hooks/diag-bundle.mjs`).
-- [ ] **F12 (medium) cooking_bp: `settle` returns the dishes as due even when saving the store failed**, so they
+- [x] DONE (f97b8dd, then 5ac44b06 and 1137ecc8 on top; rel2): cooking-settle.test.mjs passes (10/10; its two in-pot save-failure tests fail with rel2's boolean keep); cooking-early (119d9561) fails on 7aa0cce4 (dish 37 ticks into a 60-tick cook) and passes 3/3 on rel2; cooking-restart, cooking-moon-restart, cooking-windows, owed-legacy-restart and saga-kitchen-way pass on BDS. 5ac44b06 (346df1f, cooking_bp 1.1.15) keeps a batch still in the pot owed at the join handover and composes with settle (finish settles it). **F12 (medium) cooking_bp: `settle` returns the dishes as due even when saving the store failed**, so they
   can be paid twice. Return nothing, or keep them owed, when the write fails.
-- [ ] **F13 (medium, perf) stash_bp: `liveTotals` runs on page 1 every 10 ticks even when nothing can move.** Run
+- [x] DONE (8e843eb, 8973edb; rel2): test 148 (0 worn-gear reads, 18 before) fails on 5422aac; the burst test keeps all 384 dirt once; no BDS perf win claimed (within noise). **F13 (medium, perf) stash_bp: `liveTotals` runs on page 1 every 10 ticks even when nothing can move.** Run
   it only when the inventory changed (an event or a dirty flag).
-- [ ] **F14 (medium, tests) Native acceptance that was never run:**
+- [x] DONE (488b8954, 8b87c830, 57e4ddec; rel2): owed-legacy-consumers, claims-animals, mail-moderation, party-moderation, crowns-limit and nick-reserved each fail on the old code and pass on BDS now. **F14 (medium, tests) Native acceptance that was never run:**
   - O27-O31 (W5: claims, chest privacy, moderation, Crowns ledger, reserved names) are marked "queued, not run".
   - Of the W4 owed-store migrations, only cooking has a native scenario. Add them for relics, fishing, bounty,
     guilds and town.
@@ -338,52 +402,52 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
 ## Lows
 
-- [ ] **F15 hud_bp:** `statePartMessages` (`main.js` :94-108) re-encodes the whole growing chunk for every id when
+- [x] DONE (41890255; group 4): realm:hud_state parts counted as they grow; hud-state-parts unit test fails before; party-hud-coords passes; hud_bp at 40 players with the Coordinates HUD on 0.632/0.674 -> 0.261/0.266 ms/tick (-60%), at 10 0.120 -> 0.095. **F15 hud_bp:** `statePartMessages` (`main.js` :94-108) re-encodes the whole growing chunk for every id when
   it splits `realm:hud_state`. Build the parts incrementally.
-- [ ] **F16 map_bp:** after any `/realm:map_reset`, every brand-new player is told an operator reset their map
+- [x] DONE (3a1163f8; group 4): map-reset.js fails before ("operator with nothing saved is told", "later joiner is told") and passes after. **F16 map_bp:** after any `/realm:map_reset`, every brand-new player is told an operator reset their map
   (`applyReset`, `main.js` :299-313). Stamp new players with the current generation silently.
-- [ ] **F17 saga_bp:** when a long step label has to be cut, the quest box drops the direction and distance first
+- [x] DONE (68d9b67c; group 4): saga-quest-box unit test fails before; saga-quest-box and saga-quest-wrap pass on BDS. The look on a real client is on the F71 checklist. **F17 saga_bp:** when a long step label has to be cut, the quest box drops the direction and distance first
   (`ui.js` :1559-1585 `layoutBox`). Cut the label and keep the tail (" NE 240m", "1:20 left").
-- [ ] **F18 saga_bp:** dead code. `currentPage` (`ui.js` :1714-1715) has a second `needs.length` branch that can
+- [x] DONE (94c51bd2; group 4): the dead branch is removed; unit tests pass. **F18 saga_bp:** dead code. `currentPage` (`ui.js` :1714-1715) has a second `needs.length` branch that can
   never be reached.
-- [ ] **F19 tornado_bp:** the O9 "sound batching" saves nothing; it still makes one sound call per player
+- [x] DONE (94149a6f, d000841e; group 4): one stopsound per wind pulse; the band test fails before and passes after. Not a perf gain: tornado_bp at 10/40 players is within noise (the funnel drifts, so the workload is not controlled), so no perf claim. **F19 tornado_bp:** the O9 "sound batching" saves nothing; it still makes one sound call per player
   (`main.js` :361-426). Batch for real, or revert to the simpler code.
-- [ ] **F20 tools:** check-actionbar's allowlist entry `(anonymous)` exempts every anonymous `setActionBar` writer
+- [x] DONE (4b25390b; group 4): check-actionbar names the Coordinates HUD and stats ticker loops and refuses "(anonymous)" entries; its test fails before. **F20 tools:** check-actionbar's allowlist entry `(anonymous)` exempts every anonymous `setActionBar` writer
   in hud_bp and stats_bp main.js. Name the exact functions.
 - [x] (FIXED before the merge (70db7f4d); see also N5: the entry was never shown in game) **F21 stats_bp (owner awareness):** players whose "off" choice for the ticker was erased by the old rule
   (choices equal to the old default weren't saved) will see the ticker again now that it defaults on. Mention it in
   the release news.
-- [ ] **F22 elite_bp:** O58 added `isValid` in only two places, and no soak shows the recurring
+- [ ] PARTLY DONE (036f23da, 59c24ef1; group 4): Champions menus, commands and the shield break check isValid across the tick. Open: the leave race does not reproduce on BDS (elite-invalid-leave passes before and after, also with --strict), so the guards are unit-verified only. **F22 elite_bp:** O58 added `isValid` in only two places, and no soak shows the recurring
   `[elite] InvalidEntityError ... dimension` is gone. Soak and grep the log, then add the guards that are still
   missing.
-- [ ] **F23 tools/diag-shared.js:** in `claim` (around :354), `??` treats `null` (a prefix two packs declare) as
+- [x] DONE (1f7dfe1, 5f826b90; rel2): diag-owned-reload fails on 5422aac and passes on rel2; sync-diag current in all 67 packs, each bumped. **F23 tools/diag-shared.js:** in `claim` (around :354), `??` treats `null` (a prefix two packs declare) as
   missing, so the first pack to touch such a key still claims it. Treat `null` as "ambiguous, unowned".
-- [ ] **F24 quality:** tests that extract and run code between comment markers in shipped files (expedition
+- [x] DONE (a167e947, dd6236b7, 885e9f56; group 4): expedition's queue and forget hook and saga's stash bridge are modules the tests import; expedition-queue, expedition-forget, stash-saga-solo-gather and saga-collect-count pass. **F24 quality:** tests that extract and run code between comment markers in shipped files (expedition
   `main.js` :370/401 and :1341/1441, saga `objectives.js` `stash-bridge:begin/end`). Move that code into small
   modules the tests import.
-- [ ] **F25 quality:** every converted listener repeats its id list in an inner guard (for example saga `main.js`
+- [x] DONE (300fd0ae; group 4): check-event-guards in npm run check, 7 unit tests, mutation runs. **F25 quality:** every converted listener repeats its id list in an inner guard (for example saga `main.js`
   :430-460, wander :1333-1360), so the two can drift. Remove the inner guards, or add a check that they match.
-- [ ] **F26 quality:** the same gossip limiter is pasted into saga, elite, expedition, calendar, fishing, relics and
+- [x] DONE (77871648, fee6b69f, 2d2c72c2; group 4): one gossip gate (tools/gossip-shared.js, 19 copies) and one prune.js (3 copies), with sync --check in npm run check; town news scenarios pass. **F26 quality:** the same gossip limiter is pasted into saga, elite, expedition, calendar, fishing, relics and
   guilds, and `prune.js` is copied by hand into party, nick and titles. Make each a shared module with a sync tool
   and `--check`, like settings, zones, side, diag and labels.
-- [ ] **F27 saga_bp:** `sessionChampions` never removes an id (`objectives.js` :3453-3469). Delete it on
+- [x] DONE (cf156e31; group 4): a dead champion's id is forgotten and the list is capped at 256; champions-session unit tests. **F27 saga_bp:** `sessionChampions` never removes an id (`objectives.js` :3453-3469). Delete it on
   entityRemove/entityDie.
-- [ ] **F28 expedition_bp:** the waiting queue is memory only and is lost on `/reload` or a restart without telling
+- [x] DONE (3d450868, 1e8498b7; group 4): expedition-queue-restart fails before ("the line is saved with Bob", saved: []) and passes after; expedition-queue and expedition-restart pass. **F28 expedition_bp:** the waiting queue is memory only and is lost on `/reload` or a restart without telling
   anyone (`main.js` :1341-1441). Tell online leaders on world load, or persist the queue.
-- [ ] **F29 claims_bp:** a visitor's own tamed pets are locked inside other people's claims. The comment says there
+- [x] DONE (5f88e080, 153bdc2e, 0060b002; group 4 + ship4): claims-tamer 10/10 unit; claims-own-pet now goes through the claims-taps probe (a simulated tap fires no before event) and fails before F29 (the tamer's tap is canceled) and passes after, 3 of 3. The real-client look is checklist E5. **F29 claims_bp:** a visitor's own tamed pets are locked inside other people's claims. The comment says there
   is no API for the tamer, but `tamedToPlayerId` exists in `@minecraft/server` 2.1.0. Let the tamer interact with
   their own pets.
-- [ ] **F30 mail_bp:** when the realm's mail is full, it still deletes the recipient's oldest pack letters and
+- [x] DONE (2dedd11c; group 4): mail-policy unit test fails before, passes after. **F30 mail_bp:** when the realm's mail is full, it still deletes the recipient's oldest pack letters and
   delivers nothing. Check for room before deleting anything.
-- [ ] **F31 cooking_bp:** the new `§8Dish:` lore line stops old and new dishes of the same kind from stacking. Add
+- [x] DONE (7814882a, f90db0e2; group 4): cooking-old-dish-stack fails before ("does not stack") and passes after (6 of 6 stack). **F31 cooking_bp:** the new `§8Dish:` lore line stops old and new dishes of the same kind from stacking. Add
   the line in a way that matches old stacks, or migrate old dishes when they are picked up.
-- [ ] **F32 milestones_bp:** the `tf` flag makes a title backfill that was missed permanent. Retry until the
+- [x] DONE (5c902061, 04de3ab8; group 4): milestones-title-ack fails before ("tf set with no Titles") and passes after; w10-milestones-flag passes. **F32 milestones_bp:** the `tf` flag makes a title backfill that was missed permanent. Retry until the
   Titles pack confirms.
-- [ ] **F33 quality:**
+- [x] DONE (c790ca2e, fca654a1; group 4): statements split, literal \n in comments fixed; no behavior change. **F33 quality:**
   - Statements glued onto one line by an automated edit: cooking `main.js` :31, nick :186, titles :340, mail :660.
   - A literal `\n` inside a mail `policy.js` comment.
   - Comments that don't match the code (see both reviews).
-- [ ] **F34 tests that don't prove their fix:**
+- [x] DONE (verified on rel2, no new commits): owed-legacy-restart, w10-milestones-flag and refill-pages fail on the old code and pass now; saga-quest-wrap passes; saga-quest-box, client-font and probe-hooks pass offline (24/24). **F34 tests that don't prove their fix:**
   - `refill-pages.js`: the O20 cases are coverage only.
   - `owed-legacy-restart.js`: fails on master only because master lacks its test hook, not because of the old
     storage.
@@ -391,7 +455,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - `saga-quest-wrap.js`: checks the server's 32-column estimate, not how a client wraps.
 
   Rewrite each so it fails on the old code for the right reason.
-- [ ] PARTIAL, still open (6806ec6, 8c06985): the moon scenario (moon-shelter.js) is in the suite; the elite (O3, O58) and build_bp gate (F7) scenarios remain. **F35 missing tests:** there is no native scenario for the moon cache (F5), the elite changes (O3, O58) or the
+- [x] DONE (6806ec6, 8c06985, 4563244d, 7db53e89, 52593c34; rel2): moon-shelter.js is in the suite; elite-density and elite-invalid --strict fail on the old code and pass (elite-crowd-perf elite_bp 4.855/5.096 -> 1.285/1.327 ms/tick); the build_bp gate scenario is build-holders-perf (F7). **F35 missing tests:** there is no native scenario for the moon cache (F5), the elite changes (O3, O58) or the
   build_bp gate (F7). Add them, with perf numbers where they are performance changes.
 
 - [x] DONE (cfbeb51, 5cc5b0d, 22c4216, f4075a2, 72c9ab7, 570ad6c, ab732bd, de634bc, 87276b5, 2c245d1, 17c5a25): shared tether (tools/tether-shared.js, sync-tether) steers strays home and teleports only as a last resort; wander-tether, caravan-llamas and npc-floor-gone fail before and pass after (0 snaps). **F42 (medium, owner report October 19) Wanderers rubber-band: Hob Fairweather walks about 10 steps out of
@@ -443,14 +507,14 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     N ticks", which may be one shared cause, possibly in the new event router or the form lifecycle changes.
 
   Never weaken a scenario just to make it pass.
-- [ ] **F44 (medium, tests) New scenarios that are broken as wired:**
+- [x] DONE (verified on rel2; 6f611cb0 for build-beds-modes): build-beds, diag-owned-reload and welcome-generic-bundle pass in suite --retry; build-beds-modes passes after its ticking-area cleanup. **F44 (medium, tests) New scenarios that are broken as wired:**
   - build-beds: the suite passes `--port`, which `build-beds.mjs` rejects.
   - welcome-generic-bundle: its `<stage>` placeholder is never filled in.
   - diag-owned-reload: fails at "phase 1: the probe wrote decl:a and has its probe:big".
 
   Five of the 28 new scenarios fail. Fix their wiring so the suite runs them, then make them pass for the right
   reason.
-- [ ] **F45 (medium, perf) The stats ticker now writes the action bar for every player every second.**
+- [ ] PARTLY DONE (5c6e6a5, c68498d, 5db308b7, a4ed2e55; rel2): one pass a second, redraw on change or every 2 seconds; stats_bp at 40 players 0.189/0.184 -> 0.150/0.169 ms/tick, 10 players unchanged (about 0.065). Remaining: still at or over 0.15 at 40, mostly setActionBar (about 1.09 a tick, the scrolling ticker changes every second); going lower changes the ticker the owner chose (owner decision). **F45 (medium, perf) The stats ticker now writes the action bar for every player every second.**
   - `stats_bp` `runInterval(20)` at `main.js` :362. setActionBar went from about 0 to 1.1-1.2 per tick at 40
     players (0.3 at 10), and stats_bp from 0.068 to 0.17 ms/tick. It is the only pack newly over the 0.15 ms budget.
   - It comes from O71: the ticker defaults on. Keep the behavior the owner chose (on by default, personal off
@@ -459,7 +523,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - spread players over the second
     - skip players whose bar is held by another pack (the actionbar protocol)
   - Re-measure at 10 and 40 players.
-- [ ] **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
+- [ ] PARTLY DONE (group 3: 6a439ead, a250925b, d2530c33, 9ba983c, ec6fa11, 01e59ad and the workstream commits in `campaign-reports/g3.md`; shipped in the ship3 PR): at 40 players, steady window, before 7aa0cce vs after: elytra 0.280 -> 0.157, saga 0.209 -> 0.179, silly 0.382 -> 0.192, admin 0.131 -> 0.130, wander and the WS3 set 0.215 -> 0.205; the one-context Realm Bundle 8.004 -> 7.108 ms (10 players: 4.941 -> 3.981). Remaining: map_bp 4.185 against 1 (O1; owner F56: improve where measured, a perf/map-redesign workstream follows) and silly_bp 0.192; build_bp, stash_bp and stats_bp are group 2's. **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
   - map_bp 3.6-3.8 ms against its 1 ms budget
   - build_bp 0.73-0.78
   - stash_bp 0.53-0.57
@@ -535,17 +599,17 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - both mates complete the step at the goal and get the vision
     - no watcher snaps back more than a few times in 2 minutes
 
-- [ ] **F48 (low, bug) build_bp: the shared tool gate drops a "released" anchor** (`utils/tool-gate.js` :45-95,
+- [x] DONE (628d439; rel2): build-preview.test.mjs F48 fails on the old gate and passes now; createToolGate unchanged. **F48 (low, bug) build_bp: the shared tool gate drops a "released" anchor** (`utils/tool-gate.js` :45-95,
   engine review #5). Three loops share one gate. When the mirror loop (every tick) or the array loop (every 20
   ticks) calls `begin` first in a tick, it consumes `dirty` and `released`. Preview's closed-gate branch then sees an
   empty `released` and never clears a stale anchor, and `visualizationIdle()` short-circuits every loop until
   someone holds a tool again. Fix: make `begin` once per tick (cache by `system.currentTick`), or keep `released`
   until Preview reads it. Fix it together with F7 and F8.
-- [ ] **F49 (low, perf) stash_bp: `storedCount` reads every legacy page property on each `realm:stash_count_ask`**
+- [x] DONE (fcc298b; rel2): test 151, the shadowed 30 KB property is read 0 times over 7 asks; fails on 5422aac. **F49 (low, perf) stash_bp: `storedCount` reads every legacy page property on each `realm:stash_count_ask`**
   (`pages.js` :314-322, item review #14). Up to 25 `stash:page_<n>` properties, some chunked to 30 KB, are read
   only to measure their length. Build the cache signature from the native index alone; a legacy page is migrated
   on its first load anyway.
-- [ ] **F50 (low, quality) Test parameters in production code** (item review #17):
+- [x] DONE (b9c4173c, fca654a1; group 4): cooking and find_bp drop their test parameters; owed-legacy-restart (owed-probe hook) and find-index pass. **F50 (low, quality) Test parameters in production code** (item review #17):
   - cooking `applyOwed(player, pid, failIds)` (:600) with `failIds` throwing "test: grant failed"
   - find's `world.afterEvents.playerPlaceBlock?.subscribe` (optional chaining kept for an older mock)
   - milestones' `recheck`/`report` hooks
@@ -553,13 +617,13 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   All are limited to `ScriptEventSource.Server`, so players can't reach them, and `realm:cooking_owed_ping` has no
   source check (read-only, harmless). Keep the gates; move test switches to a module-level test flag; fix the find
   mock instead of using optional chaining.
-- [ ] **F51 (low, docs) Descriptions that don't match the code** (item review #18):
+- [x] DONE (d2bc48a4; group 4): the crowns_audit description and the claims pet comment match the code; admin catalog regenerated. **F51 (low, docs) Descriptions that don't match the code** (item review #18):
   - `crowns_audit`'s description says "the last 200 pays and gives", but the form shows the newest 50.
   - claims_bp's comment and OPEN.md O27 say there is no tame-owner getter (fixed by F29).
-- [ ] **F52 (low, quality) The weather plan code is copied three times** (`planNow` in storm_bp, moon_bp and
+- [x] DONE (c3be2b93; group 4): one weather plan reader (tools/weather-plan-shared.js, 6 copies) with sync-weather --check; weather-plan-intake 39/39. **F52 (low, quality) The weather plan code is copied three times** (`planNow` in storm_bp, moon_bp and
   tornado_bp, engine review). Make it one shared module with a sync tool, or read `realm:weather_plan` as O57
   intended.
-- [ ] **F53 (medium, tests) Failing and flaky scenarios not covered by F43** (`perf-report.md`):
+- [x] DONE (verified on rel2): guilds-placed-restart 2/5 failed on 5422aac, 5/5 pass now; cleanup-keep 5/5 on both (its flake did not reproduce on base). **F53 (medium, tests) Failing and flaky scenarios not covered by F43** (`perf-report.md`):
   - calendar and wander fail on both master and the branch.
   - cleanup-keep and guilds-placed-restart are flaky only on the branch.
 

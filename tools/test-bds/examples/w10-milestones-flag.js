@@ -6,10 +6,11 @@
 // the pack (tools/test-bds/hooks/milestones-rejoin.mjs) moves her phase-1 record onto her new id, drops the pack's
 // in-memory state as a fresh start would and runs the pack's own join check: no title may be sent again. The probe uses
 // no part of the fix, so the same recipe runs the old code (537cbaf as its second argument), which fails at "tf" in
-// phase 1 and sends Loyal III again in phase 2.
+// phase 1 and sends Loyal III again in phase 2. Titles & Trails runs too: since F32 the flag is set only once it confirms
+// the title (realm:title_ack); without it see milestones-title-ack.js.
 //   mkdir -p /tmp/milestones-flag
 //   node tools/test-bds/hooks/milestones-rejoin.mjs /tmp/milestones-flag/packs
-//   node tools/test-bds/run.mjs --quiet --packs /tmp/milestones-flag/packs --only milestones_bp --scenario tools/test-bds/examples/w10-milestones-flag.js --timeout 600
+//   node tools/test-bds/run.mjs --quiet --packs /tmp/milestones-flag/packs --only milestones_bp,titles_bp --scenario tools/test-bds/examples/w10-milestones-flag.js --timeout 600
 export default async function (t) {
   const ANN_ID = "harness_w10_ann_id";
   /** @type {{ id: string, tick: number, m: any }[]} */

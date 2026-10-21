@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "chairs_bp";
-const VERSION = "1.3.12";
+const VERSION = "1.3.13";
 const NAME = "Chairs";
 /** @type {string[]} */
 const PREFIXES = ["chairs"];

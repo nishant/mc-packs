@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "cleanup_bp";
-const VERSION = "1.2.8";
+const VERSION = "1.2.9";
 const NAME = "Lag Cleanup";
 /** @type {string[]} */
 const PREFIXES = ["cleanup"];
