@@ -21,6 +21,250 @@
     "admin_bp": {
       "version": "1.6.8",
       "notes": "The setup checklist says towns pick their own project spots, so setting one is optional, and a spot an operator sets is never leveled."
+    },
+    "afk_bp": {
+      "version": "1.3.11",
+      "notes": "AFK's once-a-second checks are spread over the second, and name tags refresh when AFK changes. /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "atlas_bp": {
+      "version": "1.1.10",
+      "notes": "Atlas's 2-second player loop is spread over its 40 ticks, so 40 players no longer cost one big tick. Town news goes through the shared gossip gate (no change for players)."
+    },
+    "bounty_bp": {
+      "version": "1.3.9",
+      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "build_bp": {
+      "version": "3.0.10",
+      "notes": "Easy Building keeps the anchor when you switch to a sword, food or an empty hand, drops an anchor from another dimension, and only wakes its preview for players actually building. /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "calendar_bp": {
+      "version": "1.0.17",
+      "notes": "Side boxes are drawn by the Minimap's compositor, which costs less per player. Town news goes through the shared gossip gate (no change for players)."
+    },
+    "caravan_bp": {
+      "version": "1.2.9",
+      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "chairs_bp": {
+      "version": "1.3.12",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "claims_bp": {
+      "version": "1.5.8",
+      "notes": "Your own pets work in other people's claims: a wolf, cat or parrot you feed tame, or a horse you ride tame, can be leashed, ridden or told to sit by you anywhere."
+    },
+    "cleanup_bp": {
+      "version": "1.2.8",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "climate_bp": {
+      "version": "1.0.10",
+      "notes": "Shared weather plan reader (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "cooking_bp": {
+      "version": "1.1.14",
+      "notes": "Old dishes from before the Dish: line stack with new servings again, and a finished dish is never paid out twice after a failed save."
+    },
+    "crowns_bp": {
+      "version": "1.1.11",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "death_bp": {
+      "version": "1.3.8",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "dolphin_bp": {
+      "version": "1.2.8",
+      "notes": "Dolphin Friends' ride lookup is spread out and skipped while no tamed dolphin is loaded. /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "domt_bp": {
+      "version": "1.1.14",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "durability_bp": {
+      "version": "1.2.11",
+      "notes": "Low Durability Warning checks items right after they wear (uses, hits, hurts, hotbar changes) instead of polling, including a held shield or brush."
+    },
+    "elite_bp": {
+      "version": "1.3.13",
+      "notes": "Champions menus and commands no longer error when a player leaves mid-command, and champion auras and approach steps cost less. Town news goes through the shared gossip gate (no change for players)."
+    },
+    "elytra_bp": {
+      "version": "1.3.19",
+      "notes": "The elytra slipstream only looks at players who are gliding. Side boxes are drawn by the Minimap's compositor, which costs less per player."
+    },
+    "expedition_bp": {
+      "version": "2.4.13",
+      "notes": "The line for a dungeon survives a reload or a restart: leaders are told they're still number N of M and have 5 minutes to come back after a restart. A stash's carts are remembered across a leave, a break or a restart."
+    },
+    "farm_bp": {
+      "version": "1.4.8",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "find_bp": {
+      "version": "1.4.8",
+      "notes": "Chest Finder decides private or world-wide from its own saved data, so a new world starts with the right setting."
+    },
+    "fishing_bp": {
+      "version": "1.1.14",
+      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "goals_bp": {
+      "version": "1.1.11",
+      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "guard_bp": {
+      "version": "1.4.10",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "guilds_bp": {
+      "version": "1.1.12",
+      "notes": "Guilds' travel sweep and saves are spread over the second and skip AFK players. Town news goes through the shared gossip gate (no change for players)."
+    },
+    "harvest_bp": {
+      "version": "1.3.9",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "journal_bp": {
+      "version": "1.1.10",
+      "notes": "Journal looks read less per player. /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "leaves_bp": {
+      "version": "1.0.8",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "mail_bp": {
+      "version": "1.2.8",
+      "notes": "A pack letter refused because the realm's mail is full no longer deletes your oldest letters."
+    },
+    "maps_bp": {
+      "version": "1.8.12",
+      "notes": "Side boxes are drawn by the Minimap's compositor, which costs less per player. Town news goes through the shared gossip gate (no change for players)."
+    },
+    "meteor_bp": {
+      "version": "1.2.11",
+      "notes": "Town news goes through the shared gossip gate (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "milestones_bp": {
+      "version": "1.0.7",
+      "notes": "Top-tier titles you missed while Titles & Trails was off are sent again until Titles confirms them; the per-second check is spread out and skips AFK players."
+    },
+    "mobhp_bp": {
+      "version": "1.2.16",
+      "notes": "Side boxes are drawn by the Minimap's compositor, which costs less per player. /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "moon_bp": {
+      "version": "1.2.13",
+      "notes": "Blood Moon builds its block list in small steps after world load. Shared weather plan reader (no change for players)."
+    },
+    "nick_bp": {
+      "version": "1.1.9",
+      "notes": "Name tags refresh when AFK or Titles change them, plus a 5-second sweep, instead of every player every 10 ticks."
+    },
+    "night_bp": {
+      "version": "1.1.8",
+      "notes": "Shared weather plan reader (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "party_bp": {
+      "version": "1.2.9",
+      "notes": "Shared inactive-player cleanup (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "phantom_bp": {
+      "version": "1.2.8",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "platypus_bp": {
+      "version": "1.1.7",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "quests_bp": {
+      "version": "1.3.7",
+      "notes": "Daily Quests' travel sweep is spread over the second. /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "rain_bp": {
+      "version": "1.5.16",
+      "notes": "Shared weather plan reader (no change for players). /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "rainbow_bp": {
+      "version": "1.4.8",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "refill_bp": {
+      "version": "1.1.6",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "relics_bp": {
+      "version": "1.2.16",
+      "notes": "Relics skips its once-a-second passives for players with no relic. Town news goes through the shared gossip gate (no change for players)."
+    },
+    "settings_bp": {
+      "version": "1.4.5",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "silly_bp": {
+      "version": "1.2.10",
+      "notes": "Silly Enchants follows your gear by events, so swapping the held stack is noticed at once. /realm:diag credits saved data that two packs share to the right pack."
+    },
+    "skills_bp": {
+      "version": "1.1.9",
+      "notes": "Skills keeps game mode and dimension from their change events. Town news goes through the shared gossip gate (no change for players)."
+    },
+    "slots_bp": {
+      "version": "1.0.13",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "stash_bp": {
+      "version": "1.8.9",
+      "notes": "Auto-store skips saved pages that can't take the item and routes a burst that fills a page within one look."
+    },
+    "stats_bp": {
+      "version": "1.4.13",
+      "notes": "Tied scores share a place in My stats and the leaderboards, and the ticker refreshes changed numbers only every 2 seconds."
+    },
+    "storm_bp": {
+      "version": "1.1.12",
+      "notes": "Shared weather plan reader (no change for players). Town news goes through the shared gossip gate (no change for players)."
+    },
+    "titles_bp": {
+      "version": "1.2.12",
+      "notes": "Titles confirms top-tier titles to Milestones, and its per-second sweep and saves are spread over the second."
+    },
+    "tornado_bp": {
+      "version": "1.2.11",
+      "notes": "A tornado's wind clip is stopped with one command for everyone near it. Shared weather plan reader (no change for players)."
+    },
+    "translucent_bp": {
+      "version": "1.0.7",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "wander_bp": {
+      "version": "1.2.18",
+      "notes": "Wanderer labels sync often only near players, so far wanderers cost one sync a second."
+    },
+    "waystone_bp": {
+      "version": "1.3.8",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "weather_bp": {
+      "version": "1.3.11",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "zones_bp": {
+      "version": "1.0.11",
+      "notes": "/realm:diag credits saved data that two packs share to the right pack."
+    },
+    "hud_bp": {
+      "version": "1.3.8",
+      "notes": "Side boxes are drawn by the Minimap's compositor, which costs less per player."
+    },
+    "map_bp": {
+      "version": "1.3.8",
+      "notes": "The compass strip and radar come back by themselves if they ever drop out, and strips no longer fade at a refresh with many players."
+    },
+    "saga_bp": {
+      "version": "1.16.13",
+      "notes": "Side boxes are drawn by the Minimap's compositor, which costs less per player."
     }
   }
 }
