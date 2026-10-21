@@ -12,7 +12,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, FormRejectReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { isProtected } from "./zones.js";
@@ -1457,7 +1457,16 @@ function guideText() {
 async function show(player, form) {
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid) return undefined;
-    const res = await form.show(player);
+    let res;
+    try {
+      res = await form.show(player);
+    } catch (e) {
+      // The player left (or the server is stopping) while the form was open: the game rejects the form, and there
+      // is nobody to answer. Anything else is a real error for the caller's log.
+      const reason = /** @type {{ reason?: unknown }} */ (e)?.reason;
+      if (!player.isValid || reason === FormRejectReason.PlayerQuit || reason === FormRejectReason.ServerShutdown) return undefined;
+      throw e;
+    }
     if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
       await new Promise((r) => system.runTimeout(() => r(undefined), 20));
       continue;

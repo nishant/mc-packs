@@ -2,7 +2,8 @@
   "notes": [
     "Silly Enchants costs less on a busy server: its every-tick checks run only while someone wears Hyper Jump boots.",
     "Expedition dungeons build in shorter steps, so a busy server no longer hitches while one is built.",
-    "Champions cost less at night: their aura and approach read less from the game."
+    "Champions cost less at night: their aura and approach read less from the game.",
+    "Champions: a player who leaves the game with the Champions menu open no longer leaves an error in the server log."
   ],
   "resourceNotes": [
     "Easy Building's resources: line endings tidied (no change for players)."
@@ -33,8 +34,8 @@
       "notes": "Dungeon builds and resets spread their work over more, shorter steps: no build step holds a server tick for long."
     },
     "elite_bp": {
-      "version": "1.3.16",
-      "notes": "Cheaper at night: champions' aura and approach steps read less from the game."
+      "version": "1.3.17",
+      "notes": "A player who leaves with the Champions menu open no longer leaves an error in the server log."
     }
   }
 }

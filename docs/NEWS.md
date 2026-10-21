@@ -7,6 +7,10 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## A quieter server log
+
+- Champions: leaving the game while the Champions menu is open no longer leaves an error behind on the server.
+
 ## Smoother busy servers
 
 - Expedition dungeons now build in shorter steps, so the server no longer hitches while one is being built.
