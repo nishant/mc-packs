@@ -1471,6 +1471,8 @@ const TURN_CHECKS = 12;
  */
 const DRAW_MIN = 2;
 const DRAW_MIN_FROM = 16;
+/** Radars waiting for a terrain picture looked at a tick, besides their turn (LAG_CHECKS). */
+const LAG_CHECKS = 2;
 let turnFirst = 0;
 /**
  * The redraw's time: building strips and radars and sending them (drawBudget), and building a radar's terrain
@@ -1510,6 +1512,7 @@ system.runInterval(() => {
   const n = views.size;
   const checks = Math.min(n, TURN_CHECKS);
   const busy = n > DRAW_MIN_FROM;
+  let lagChecks = 0;
   let k = -1;
   for (const v of views.values()) {
     k++;
@@ -1518,8 +1521,11 @@ system.runInterval(() => {
     const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
     // A new pass, a radar waiting for its terrain or a title about to fade (the refresh: with many players their turn
     // could come after HOLD ran out, O5) is always due; the others are looked at in turns.
-    // A radar waiting for its terrain picture is due again only while there is time to build one.
-    if (!v.dirty && !(v.lag && rebuildBudget.ok) && !refresh && (k - turnFirst + n) % n >= checks) continue;
+    // A radar waiting for its terrain picture is due again only while there is time to build one, and only LAG_CHECKS
+    // of them a tick (about one picture fits in a tick's rebuild time): the others wait their turn.
+    const lagDue = v.lag && rebuildBudget.ok && lagChecks < LAG_CHECKS;
+    if (lagDue) lagChecks++;
+    if (!v.dirty && !lagDue && !refresh && (k - turnFirst + n) % n >= checks) continue;
     // A player drawn a moment ago waits DRAW_MIN ticks, unless the pass found something new or the title is due.
     if (busy && !v.dirty && !refresh && (now - (v.drawn ?? -Infinity) < DRAW_MIN || now - (v.checked ?? -Infinity) < DRAW_MIN)) continue;
     v.checked = now;
