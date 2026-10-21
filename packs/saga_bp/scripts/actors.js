@@ -30,6 +30,7 @@ const nameLabels = createNameLabels({
   labelIdTag: LABEL_ID_TAG,
   spectatorsExcluded: true,
   observersPerDimension: true,
+  entityById: (id) => world.getEntity(id),
 });
 
 /**

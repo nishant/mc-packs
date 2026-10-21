@@ -65,6 +65,7 @@ const nameLabels = createNameLabels({
   spectatorsExcluded: true,
   syncTicks: 10, // LABEL_TICKS
   observersPerDimension: true,
+  entityById: (id) => world.getEntity(id),
 });
 
 const LOOP_TICKS = 10; // facing, idle lines and keeping them on their spot

@@ -55,6 +55,7 @@ const nameLabels = createNameLabels({
   spectatorsExcluded: true,
   syncTicks: 10, // LABEL_TICKS
   observersPerDimension: true,
+  entityById: (id) => world.getEntity(id),
 });
 
 const HOUR = 3600000;

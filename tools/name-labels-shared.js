@@ -90,12 +90,14 @@ const RESEND_TICKS = [20, 60]; // with `syncTicks`: 1 s after a new viewer enter
  *   headOffset?: number,
  *   spectatorsExcluded?: boolean,
  *   syncTicks?: number,
- *   observersPerDimension?: boolean
+ *   observersPerDimension?: boolean,
+ *   entityById?: (id: string) => Entity | undefined
  * }} opts `syncTicks`: how often the caller syncs, in ticks; the resends after a new viewer comes near are then 1 s
  * and 3 s more later (without it they come 1 sync and 3 syncs later). `spectatorsExcluded`: the observers given to sync never include spectators (the caller asked
  * world.getPlayers to leave them out), so their game mode isn't read again on every sync. `observersPerDimension`: sync's
  * observer list is a function of a Dimension that returns only the players in it (`dim.getPlayers(...)`), called once per
- * dimension with a target in it, so no player's dimension is read (with 40 players that was most of a sync's reads)
+ * dimension with a target in it, so no player's dimension is read. `entityById` (`(id) => world.getEntity(id)`): each sync
+ * looks the helpers up by id instead of asking their kept handles isValid
  */
 export function createNameLabels(opts) {
   const {
@@ -108,6 +110,7 @@ export function createNameLabels(opts) {
     spectatorsExcluded = false,
     syncTicks,
     observersPerDimension = false,
+    entityById,
   } = opts;
   const resendSteps = syncTicks ? RESEND_TICKS.map((t) => Math.max(1, Math.round(t / syncTicks))) : NEAR_RESEND_STEPS;
   /**
@@ -122,7 +125,9 @@ export function createNameLabels(opts) {
    *   useAltVariant?: boolean,
    *   caption?: string,
    *   at?: { x: number, y: number, z: number },
-   *   targetName?: string
+   *   targetName?: string,
+   *   targetId?: string,
+   *   helperId?: string
    * }>} `caption` and `at`: what was last written to the helper, and `targetName` to the target, so a sync with nothing
    * new reads nothing back
    */
@@ -322,7 +327,20 @@ export function createNameLabels(opts) {
         const anchor = { x: loc.x, y: loc.y + headOffset, z: loc.z };
 
         let entry = tracked.get(key);
-        if (entry && (!entry.helper.isValid || entry.target.id !== target.id || entry.dimId !== dimId)) {
+        // With `entityById` the helper is looked up by its id each sync (a fresh handle, or nothing when it is gone)
+        // instead of asking the kept handle isValid: on a handle kept for seconds isValid and the reads after it cost
+        // several times a fresh read (with 12 townsfolk and 40 players it was most of a sync).
+        const targetId = target.id;
+        if (entry) {
+          const now = entityById ? entityById(entry.helperId ?? entry.helper.id) : entry.helper.isValid ? entry.helper : undefined;
+          if (now) entry.helper = now;
+          else {
+            remove(entry.helper);
+            tracked.delete(key);
+            entry = undefined;
+          }
+        }
+        if (entry && (entry.targetId !== targetId || entry.dimId !== dimId)) {
           remove(entry.helper);
           tracked.delete(key);
           entry = undefined;
@@ -332,9 +350,10 @@ export function createNameLabels(opts) {
           if (ownerTag) helper.addTag(ownerTag);
           if (labelTag) helper.addTag(labelTag);
           if (labelIdTag) helper.addTag(labelIdTag + key);
-          entry = { target, helper, dimId, useAltVariant: false };
+          entry = { target, targetId, helper, helperId: helper.id, dimId, useAltVariant: false };
           tracked.set(key, entry);
         }
+        entry.target = target; // this sync's handle, for the sweep's checks
 
         // Bedrock's client caches a creature's default name ("NPC") when the entity spawns in the same packet
         // batch as its nameTag or before a newly joined viewer enters range. When a new viewer enters within

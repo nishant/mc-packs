@@ -103,6 +103,11 @@ globalThis.__sagaStub = {
   system: { currentTick: 0, runInterval() {}, run(fn) { fn(); } },
   world: {
     afterEvents: { entitySpawn: { subscribe() {} }, entityLoad: { subscribe() {} } },
+    // Like the game's world.getEntity: the entity with that id while it exists.
+    getEntity(id) {
+      for (const d of dimensions.values()) for (const e of d.entities) if (e.id === id && e.isValid) return e;
+      return undefined;
+    },
     getAllPlayers() {
       getAllPlayersCalls++;
       return [...players];

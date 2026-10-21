@@ -530,7 +530,7 @@ test("with syncTicks the resend after a new near viewer comes 1 s and 3 s later 
 });
 
 test("a label sync with players in two dimensions reads no player's dimension and no target's name between sweeps", () => {
-  const reads = { dimension: 0, id: 0, location: 0, targetName: 0, getPlayers: 0 };
+  const reads = { dimension: 0, id: 0, location: 0, targetName: 0, getPlayers: 0, helperValid: 0 };
   let nextId = 0;
   const dims = ["minecraft:overworld", "minecraft:nether"].map((id) => {
     const dim = {
@@ -540,8 +540,10 @@ test("a label sync with players in two dimensions reads no player's dimension an
       getEntities({ type }) { return this.entities.filter((e) => e.isValid && e.typeId === type); },
       getPlayers() { reads.getPlayers++; return [...this.players]; },
       spawnEntity(typeId, location) {
-        const e = { id: `h${nextId++}`, typeId, location: { ...location }, dimension: dim, nameTag: "", isValid: true, tags: [],
-          addTag(t) { this.tags.push(t); }, teleport(at) { this.location = { ...at }; }, remove() { this.isValid = false; } };
+        let valid = true;
+        const e = { id: `h${nextId++}`, typeId, location: { ...location }, dimension: dim, nameTag: "", tags: [],
+          get isValid() { reads.helperValid++; return valid; },
+          addTag(t) { this.tags.push(t); }, teleport(at) { this.location = { ...at }; }, remove() { valid = false; this.removed = true; } };
         this.entities.push(e);
         return e;
       },
@@ -566,19 +568,33 @@ test("a label sync with players in two dimensions reads no player's dimension an
   };
   for (let i = 0; i < 20; i++) player(`o${i}`, over, i * 3 - 10);
   for (let i = 0; i < 20; i++) player(`n${i}`, nether, i);
-  const labels = createNameLabels({ labelType: "realm:npc_label", spectatorsExcluded: true, syncTicks: 10, observersPerDimension: true });
+  // The game's world.getEntity: the entity with that id while it exists (a fresh handle), else nothing.
+  const entityById = (id) => dims.flatMap((d) => d.entities).find((e) => e.id === id && !e.removed);
+  const labels = createNameLabels({ labelType: "realm:npc_label", spectatorsExcluded: true, syncTicks: 10, observersPerDimension: true, entityById });
   const list = () => targets.map((t, i) => ({ id: `folk${i}`, entity: t, name: `Folk ${i}` }));
   labels.sync(list(), (dim) => dim.getPlayers(), dims); // a sweep sync: reads everything back
   for (const k of Object.keys(reads)) reads[k] = 0;
   for (let s = 0; s < 9; s++) labels.sync(list(), (dim) => dim.getPlayers(), dims);
+  const helperValidReads = reads.helperValid; // before the checks below, whose getEntities reads isValid
   assert.equal(over.getEntities({ type: "realm:npc_label" }).length, 12, "every townsfolk has its label");
   assert.equal(nether.getEntities({ type: "realm:npc_label" }).length, 0, "no label in the other dimension");
   assert.equal(reads.dimension, 0, "no player's dimension is read: each dimension lists its own players");
   assert.equal(reads.getPlayers, 9, "one player list a sync, only for the dimension with townsfolk");
   assert.equal(reads.location, 9 * 20, "each overworld player's place once a sync");
   assert.equal(reads.targetName, 0, "the targets' names are trusted between sweeps");
+  assert.equal(helperValidReads, 0, "no kept helper is asked isValid between sweeps");
   // Renamed by something else (a name tag): put right on the next sweep sync.
   targets[0].nameTag = "Bob";
   labels.sync(list(), (dim) => dim.getPlayers(), dims);
   assert.equal(targets[0].nameTag, SUPPRESSED_NAME);
+  // A helper removed by something else between sweeps: the next write to it fails and a new one is made.
+  const gone = over.getEntities({ type: "realm:npc_label" })[0];
+  gone.remove();
+  gone.teleport = () => { throw new Error("InvalidEntity"); };
+  Object.defineProperty(gone, "nameTag", { get: () => { throw new Error("InvalidEntity"); }, set: () => { throw new Error("InvalidEntity"); } });
+  const before = [...targets.map((t) => t.location.x)];
+  targets.forEach((t) => (t.location = { ...t.location, x: t.location.x + 0.5 })); // they moved: every helper is teleported
+  for (let s = 0; s < 3; s++) labels.sync(list(), (dim) => dim.getPlayers(), dims);
+  assert.equal(over.getEntities({ type: "realm:npc_label" }).length, 12, "the lost helper is made again");
+  assert.ok(before.length === 12);
 });
