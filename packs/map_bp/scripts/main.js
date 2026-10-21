@@ -1389,9 +1389,11 @@ system.runInterval(() => {
     const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
     // A new pass, a radar waiting for its terrain or a title about to fade (the refresh: with many players their turn
     // could come after HOLD ran out, O5) is always due; the others are looked at in turns.
-    if (!v.dirty && !v.lag && !refresh && (k - turnFirst + n) % n >= checks) continue;
+    // Out of budget, only those wait for no one (a turn's check reads the game, so it is charged to the budget too).
+    if (!v.dirty && !v.lag && !refresh && ((k - turnFirst + n) % n >= checks || !drawBudget.ok)) continue;
     try {
-      if (!p.isValid) continue;
+      // No isValid first: on a handle kept from an earlier tick it makes every read after it several times dearer
+      // (BDS 1.26). A player who left is dropped from views by playerLeave; one leaving this tick throws here.
       // Another dimension (a portal) or far from where the pass looked (a teleport): wait for the next pass.
       if (p.dimension.id !== v.dim) {
         views.delete(p.id);
@@ -1408,30 +1410,37 @@ system.runInterval(() => {
       if (Math.abs(at.x - v.x) + Math.abs(at.z - v.z) > 0.6 * Math.max(1, now - (v.drawn ?? now))) planNow.add(p.id);
       due.push({ p, v, refresh, moved, keep: refresh && !changed && !v.lag, heading, at });
     } catch (e) {
-      console.warn(`[map] turn: ${e}`);
+      if (p.isValid) console.warn(`[map] turn: ${e}`);
     }
   }
   if (n) turnFirst = (turnFirst + checks) % n;
-  turnCheckMs += Date.now() - t0;
-  // The longest-waiting first: a lagging radar waits since it was last up to date.
+  const checkTook = Date.now() - t0;
+  turnCheckMs += checkTook;
+  drawBudget.spend(checkTook);
+  // Titles about to fade first (O5), then the longest-waiting: a lagging radar waits since it was last up to date.
   const waited = (/** @type {View} */ v) => (v.lag ? v.fresh ?? 0 : v.drawn ?? 0);
-  if (due.length > 1) due.sort((a, b) => waited(a.v) - waited(b.v));
+  if (due.length > 1) due.sort((a, b) => Number(b.refresh) - Number(a.refresh) || waited(a.v) - waited(b.v));
   let sends = 0;
   let built = 0;
   const refreshBefore = refreshSends;
   for (const { p, v, refresh, moved, keep, heading, at } of due) {
-    if (sends >= TURN_BUDGET || built >= RENDER_BUDGET || !drawBudget.ok) break;
+    // Out of budget, a title about to fade is still drawn again as it is (cheap: no strip or radar is built), so with
+    // many players moving a strip can lag but never goes off; the refreshes come first, so the rest wait.
+    const over = sends >= TURN_BUDGET || built >= RENDER_BUDGET || !drawBudget.ok;
+    if (over && !refresh) break;
     // A radar waiting for its terrain, with nothing else new, waits for a rebuild in the budget.
     if (!moved && !rebuildBudget.ok) continue;
     const tr = Date.now();
     try {
-      if (keep) {
-        // Nothing they see changed: the same title again, so it doesn't fade (no strip or radar is built).
+      if (keep || over) {
+        // Nothing they see changed (or no time to build it): the same title again, so it doesn't fade.
+        const drawn = v.drawn;
         if (keepAlive(p, v, now)) {
           sends++;
           refreshSends++;
           keepSends++;
         }
+        if (!keep) v.drawn = drawn; // still due to be built: it keeps its place in the queue
         drawBudget.spend(Date.now() - tr);
         continue;
       }

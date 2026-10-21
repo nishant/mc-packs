@@ -155,6 +155,51 @@ test("the real redraw callback refreshes a still player's title without building
   assert.ok(renders.includes("lagging"), "a radar waiting for its terrain is built again");
 });
 
+test("out of draw budget, a moving player's title about to fade is drawn again as it is, and fades for no one (O5)", () => {
+  const renders = [];
+  const kept = [];
+  const mkView = (id, extra) => ({ player: { id, isValid: true, dimension: { id: "d" }, location: { x: 5, y: 0, z: 0 } }, dim: "d", px: 0, pz: 0, heading: 0, x: 0, y: 0, z: 0, radar: true, terrain: false, drawn: 45, ...extra });
+  // Both walked 5 blocks since their last draw; "fading" was last sent 31 ticks ago, "fresh" 2 ticks ago.
+  const views = new Map([["fresh", mkView("fresh", { drawn: 10 })], ["fading", mkView("fading", {})]]);
+  const lastSent = new Map([
+    ["fresh", { ctext: "c", cat: 48, rtext: "r", rat: 48, compass: true, radar: true }],
+    ["fading", { ctext: "c", cat: 19, rtext: "r", rat: 19, compass: true, radar: true }],
+  ]);
+  const spent = { ...okBudget(), ok: false, left: -1, room: 0 };
+  const sandbox = {
+    drawBudget: spent, rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
+    wrap: (a) => a, headingOf: () => 0,
+    render: (p) => (renders.push(p.id), true),
+    keepAlive: (p, v, now) => (kept.push(p.id), (v.drawn = now), true),
+  };
+  const run = vm.runInNewContext(`let turnFirst = 0, turnMs = 0, turnTicks = 0, turnDraws = 0, turnSends = 0, refreshSends = 0, keepSends = 0, turnCheckMs = 0;\n(${callbackSource(1)})`, sandbox);
+  run();
+  assert.deepEqual(kept, ["fading"], "the title about to fade is drawn again although the budget is spent");
+  assert.deepEqual(renders, [], "nothing is built without budget");
+  assert.equal(views.get("fading").drawn, 45, "and it keeps its place in the queue: it is still due to be built");
+});
+
+test("titles about to fade are drawn before players who waited longer for a redraw (O5)", () => {
+  const order = [];
+  const mkView = (id, extra) => ({ player: { id, isValid: true, dimension: { id: "d" }, location: { x: 5, y: 0, z: 0 } }, dim: "d", px: 0, pz: 0, heading: 0, x: 0, y: 0, z: 0, radar: false, terrain: false, ...extra });
+  const views = new Map([["waited", mkView("waited", { drawn: 1 })], ["fading", mkView("fading", { drawn: 40 })]]);
+  const lastSent = new Map([
+    ["waited", { ctext: "c", cat: 45, rtext: "", rat: 45, compass: true, radar: false }],
+    ["fading", { ctext: "c", cat: 19, rtext: "", rat: 19, compass: true, radar: false }],
+  ]);
+  const sandbox = {
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
+    wrap: (a) => a, headingOf: () => 0,
+    render: (p) => (order.push(p.id), true),
+    keepAlive: (p) => (order.push(p.id), true),
+  };
+  const run = vm.runInNewContext(`let turnFirst = 0, turnMs = 0, turnTicks = 0, turnDraws = 0, turnSends = 0, refreshSends = 0, keepSends = 0, turnCheckMs = 0;\n(${callbackSource(1)})`, sandbox);
+  run();
+  assert.deepEqual(order, ["fading", "waited"]);
+});
+
 /** A top-level function of main.js (from `function name(` to its closing brace at the start of a line). */
 function functionSource(name) {
   const at = mainSource.indexOf(`\nfunction ${name}(`);
