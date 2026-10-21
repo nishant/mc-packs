@@ -7,6 +7,11 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Smoother busy servers
+
+- Expedition dungeons now build in shorter steps, so the server no longer hitches while one is being built.
+- Silly Enchants, Champions at night and the name labels of townsfolk, caravans and story characters cost the server less with many players on. Nothing changes in how they look or play.
+
 ## Living towns: a mayor for every town, and villagers move in
 
 - Every town now has a mayor of its own, waiting at the town center to take deliveries for that town's projects. Mayor Bram is still the realm's main mayor and keeps his town; every other town gets its own mayor the next time someone visits it.
