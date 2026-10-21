@@ -9,6 +9,10 @@
 export default async function (t) {
   const dim = t.dimension;
   const JOBS = ["composter", "lectern", "barrel", "smoker", "cartography_table", "brewing_stand", "fletching_table", "loom", "stonecutter_block", "grindstone"].map((b) => `minecraft:${b}`);
+  // No mobs (O80): a flat world spawns slimes by day. One knocked Ann (survival) into the town and killed her (3 of 10
+  // local runs, logged as health 0); a simulated player who dies stays where she fell, so a house's build waited for her
+  // to step off its spot, or `/tp Ann` (a dead player) failed and no family could move while she lay among the houses.
+  t.server("/gamerule domobspawning false");
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
   await t.loadArea(0, 0, { radius: 4, whole: true });
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
@@ -107,8 +111,11 @@ export default async function (t) {
   t.check(d.town.log?.filter(([, text]) => /A new house went up/.test(text)).length >= 1, "the story tells of the new houses");
 
   // Residents: the well's two move into house_1 and house_2, two more come to house_3 and house_4.
-  t.server("/tp Ann 90 -60 0"); // still in the town (96), more than 24 blocks from every house
+  // Still in the town (96), more than 24 blocks from every house; checked, since a move waits while she is near (O80).
+  await t.loadArea(90, 0, { radius: 1, whole: true });
+  p.teleport({ x: 90.5, y: -60, z: 0.5 });
   await t.wait(20);
+  t.assert(Math.abs(p.location.x - 90.5) < 2 && Math.abs(p.location.z - 0.5) < 2, `Ann stands at 90, 0 (${p.location.x.toFixed(1)}, ${p.location.z.toFixed(1)})`);
   const LOOK = ["farmer", "librarian", "fisherman", "butcher"];
   try {
     await t.waitUntil(async () => {

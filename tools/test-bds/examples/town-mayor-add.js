@@ -18,6 +18,7 @@ export default async function (t) {
   );
   const of = (id, since = 0) => events.filter((e) => e.id === id && e.tick >= since).map((e) => e.m);
   const npcs = (id) => t.dimension.getEntities({ type: "minecraft:npc", tags: [`realm:npc_id:${id}`] });
+  t.server("/gamerule domobspawning false"); // a flat world spawns slimes by day; one killed a survival player mid-run (O80)
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
   await t.wait(40);
   const town = (action, extra = {}) => sys.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));

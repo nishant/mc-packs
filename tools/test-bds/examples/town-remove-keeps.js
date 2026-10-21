@@ -6,6 +6,7 @@
 export default async function (t) {
   const dim = t.dimension;
   const G = -61;
+  t.server("/gamerule domobspawning false"); // a flat world's slimes push players about (O80)
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
   await t.loadArea(0, 0, { radius: 4, whole: true });
   // The slope of town-terrain-restore.js: one block every 3 blocks to the east, so the well's spot is leveled.

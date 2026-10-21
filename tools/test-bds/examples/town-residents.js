@@ -8,6 +8,7 @@
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-residents.js --timeout 4000
 export default async function (t) {
   const dim = t.dimension;
+  t.server("/gamerule domobspawning false"); // a flat world spawns slimes by day; one killed a survival player mid-run (O80)
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
   await t.loadArea(0, 0, { radius: 4, whole: true });
   const cfg = (key, value) => t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `${key}${t.tick}`, pack: "town_bp", key, value }));

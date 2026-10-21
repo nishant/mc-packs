@@ -6,6 +6,9 @@
 export default async function (t) {
   const dim = t.dimension;
   const G = -61; // flat world: grass at -61
+  // No mobs (O80): a flat world spawns slimes by day. One knocked Ann (survival) about and killed her, and a simulated
+  // player who dies stays where she fell: inside the well's region, so its build waited for her to step off forever.
+  t.server("/gamerule domobspawning false");
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
   await t.loadArea(0, 0, { radius: 4, whole: true });
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
