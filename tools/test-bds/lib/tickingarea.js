@@ -119,3 +119,16 @@ export function releaseOwnedAreas(raw, remove) {
   }
   return { removed, problems };
 }
+
+/**
+ * The chunks a `tickingarea add circle <x> <y> <z> <radius>` loads. Despite the name, BDS 1.26 loads a square: every
+ * chunk up to `radius` chunks from the center chunk on both axes, 3x3 for radius 1, 5x5 for 2, 7x7 for 3 (measured on
+ * fresh terrain 300 ticks after the add, with no player near). @param {number} x @param {number} z
+ * @param {number} radius @returns {{ x: number, z: number }[]}
+ */
+export function circleChunks(x, z, radius) {
+  const cx = Math.floor(Math.floor(x) / 16), cz = Math.floor(Math.floor(z) / 16);
+  const chunks = [];
+  for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) chunks.push({ x: cx + dx, z: cz + dz });
+  return chunks;
+}
