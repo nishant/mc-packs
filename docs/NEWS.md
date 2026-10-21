@@ -7,6 +7,11 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Kitchen fix
+
+- A dish you start cooking in your first few seconds online now cooks for its full time like any other. Before, it could be handed to you the moment you started it.
+- If you leave while a pot is cooking, you still get the dish when you come back: the moment it is done, not before.
+
 ## Calmer wanderers and party quests together
 
 - Wanderers and caravan llamas no longer jump back to camp: one that strays slows down and walks back, and one stuck behind a wall gets a moment to find its way around.
