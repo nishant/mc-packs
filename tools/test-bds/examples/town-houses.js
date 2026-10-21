@@ -62,7 +62,7 @@ export default async function (t) {
   await t.waitUntil(async () => {
     d = await dump("elm");
     return houses.every((h) => prog(d, h)?.built === 1);
-  }, { timeout: 5000, interval: 100, message: "4 houses built" });
+  }, { timeout: 12000, interval: 100, message: "4 houses built" }); // the paced scan picks 4 house spots in a few minutes (D77)
   t.log("house spots:", JSON.stringify(houses.map((h) => d.town.spots[h])));
   t.check(!houses.some((h) => d.town.nos?.includes(h)), "every house found a spot");
 
