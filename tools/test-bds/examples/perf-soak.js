@@ -5,8 +5,9 @@
 // players were placed, and the full steady window ran: the scenario fails otherwise and reports
 // {declared, spawned, retention, soak window} as `perf-workload`, which run.mjs puts into the profile JSON
 // next to its acceptance verdict (lib/perf-acceptance.mjs).
-//   node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 900
-// Arguments (--arg key=value): players (default 10), seconds (default 300), group (players per
+//   node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 900
+// Development comparisons use 10 and 40 players with 120 s windows; release validation uses 300 s (--arg seconds=300).
+// Arguments (--arg key=value): players (default 10), seconds (default 120), group (players per
 // group, default 5), spread (blocks between far groups, default 240), commands (seconds between one
 // player's commands, default 45; 0 = none), water (players put in a pool, default 2), nether
 // (players in the Nether, default 2).
@@ -18,7 +19,7 @@
 export default async function (t) {
   const a = t.args;
   const N = Math.max(1, Number(a.players ?? 10));
-  const SECONDS = Math.max(10, Number(a.seconds ?? 300));
+  const SECONDS = Math.max(10, Number(a.seconds ?? 120));
   const GROUP = Math.max(1, Number(a.group ?? 5));
   const SPREAD = Math.max(50, Number(a.spread ?? 240));
   const CMD_EVERY = Math.max(0, Number(a.commands ?? 45));
