@@ -89,15 +89,10 @@ const RESEND_TICKS = [20, 60]; // with `syncTicks`: 1 s after a new viewer enter
  *   observerRange?: number,
  *   headOffset?: number,
  *   spectatorsExcluded?: boolean,
- *   syncTicks?: number,
- *   observersPerDimension?: boolean,
- *   entityById?: (id: string) => Entity | undefined
+ *   syncTicks?: number
  * }} opts `syncTicks`: how often the caller syncs, in ticks; the resends after a new viewer comes near are then 1 s
  * and 3 s more later (without it they come 1 sync and 3 syncs later). `spectatorsExcluded`: the observers given to sync never include spectators (the caller asked
- * world.getPlayers to leave them out), so their game mode isn't read again on every sync. `observersPerDimension`: sync's
- * observer list is a function of a Dimension that returns only the players in it (`dim.getPlayers(...)`), called once per
- * dimension with a target in it, so no player's dimension is read. `entityById` (`(id) => world.getEntity(id)`): each sync
- * looks the helpers up by id instead of asking their kept handles isValid
+ * world.getPlayers to leave them out), so their game mode isn't read again on every sync
  */
 export function createNameLabels(opts) {
   const {
@@ -109,8 +104,6 @@ export function createNameLabels(opts) {
     headOffset = HEAD_OFFSET,
     spectatorsExcluded = false,
     syncTicks,
-    observersPerDimension = false,
-    entityById,
   } = opts;
   const resendSteps = syncTicks ? RESEND_TICKS.map((t) => Math.max(1, Math.round(t / syncTicks))) : NEAR_RESEND_STEPS;
   /**
@@ -124,12 +117,8 @@ export function createNameLabels(opts) {
    *   resendStage?: number,
    *   useAltVariant?: boolean,
    *   caption?: string,
-   *   at?: { x: number, y: number, z: number },
-   *   targetName?: string,
-   *   targetId?: string,
-   *   helperId?: string
-   * }>} `caption` and `at`: what was last written to the helper, and `targetName` to the target, so a sync with nothing
-   * new reads nothing back
+   *   at?: { x: number, y: number, z: number }
+   * }>} `caption` and `at`: what was last written to the helper, so a sync with nothing new reads nothing back
    */
   const tracked = new Map();
   /** @type {Set<string>} */
@@ -240,7 +229,7 @@ export function createNameLabels(opts) {
    * Observers and dimensions may be given as functions, called only when they are needed (not on a sync with
    * nothing to label).
    * @param {LabelTarget[]} targets
-   * @param {Player[] | (() => Player[]) | ((dimension: Dimension) => Player[])} observerList with `observersPerDimension`, a function of the dimension
+   * @param {Player[] | (() => Player[])} observerList
    * @param {Dimension[] | (() => Dimension[])} [dimensionList]
    */
   const sync = (targets, observerList, dimensionList = []) => {
@@ -251,48 +240,22 @@ export function createNameLabels(opts) {
       if (sweepNow) sweepStrays(dims());
       return;
     }
+    const observers = !targets.length ? [] : typeof observerList === "function" ? observerList() : observerList;
     /** @type {Set<string>} */
     const wanted = new Set();
-    // Each observer's place (and dimension), read once per sync (native reads cost more than the math); its id only
-    // when it is within the resend range of a target.
-    /** @typedef {{ dimId: string, x: number, y: number, z: number, p: any, id?: string }} Observer */
-    /** @param {any} p @param {string | undefined} dimId @param {Observer[]} out */
-    const observe = (p, dimId, out) => {
+    // Each observer's dimension and place, read once per sync (native reads cost more than the math).
+    /** @type {{ dimId: string, x: number, y: number, z: number, id: string }[]} */
+    const activeObservers = [];
+    for (const p of observers) {
       try {
-        if (!p || (!spectatorsExcluded && p.isValid === false)) return; // a fresh getPlayers list holds only valid players
-        if (!spectatorsExcluded && typeof p.getGameMode === "function" && String(p.getGameMode()).toLowerCase() === "spectator") return;
+        if (!p || (!spectatorsExcluded && p.isValid === false)) continue; // a fresh getPlayers list holds only valid players
+        if (!spectatorsExcluded && typeof p.getGameMode === "function" && String(p.getGameMode()).toLowerCase() === "spectator") continue;
         const l = p.location;
-        out.push({ dimId: dimId ?? p.dimension.id, x: l.x, y: l.y, z: l.z, p });
+        activeObservers.push({ dimId: p.dimension.id, x: l.x, y: l.y, z: l.z, id: String(p.id ?? p.name ?? "") });
       } catch {
         // gone
       }
-    };
-    /** @param {Observer} o */
-    const idOf = (o) => (o.id ??= String(o.p.id ?? o.p.name ?? ""));
-    /** Observers by dimension id (observersPerDimension), each list read on first need. @type {Map<string, Observer[]>} */
-    const byDim = new Map();
-    /** @type {Observer[]} */
-    const activeObservers = [];
-    if (targets.length && !observersPerDimension) {
-      const observers = typeof observerList === "function" ? /** @type {() => Player[]} */ (observerList)() : observerList;
-      for (const p of observers) observe(p, undefined, activeObservers);
     }
-    /** @param {Dimension} dim @param {string} dimId @returns {Observer[]} */
-    const observersIn = (dim, dimId) => {
-      if (!observersPerDimension) return activeObservers;
-      let list = byDim.get(dimId);
-      if (!list) {
-        byDim.set(dimId, (list = []));
-        let players = [];
-        try {
-          players = typeof observerList === "function" ? /** @type {any} */ (observerList)(dim) : observerList.filter((p) => p.dimension.id === dimId);
-        } catch {
-          // dimension not ticking
-        }
-        for (const p of players) observe(p, dimId, list);
-      }
-      return list;
-    };
 
     for (const item of targets) {
       const target = item?.entity;
@@ -314,11 +277,11 @@ export function createNameLabels(opts) {
         let near = false;
         /** @type {Set<string>} */
         const nearIds = new Set();
-        for (const p of observersIn(dim, dimId)) {
+        for (const p of activeObservers) {
           if (p.dimId !== dimId) continue;
           const d2 = (p.x - loc.x) ** 2 + (p.y - loc.y) ** 2 + (p.z - loc.z) ** 2;
           if (d2 <= rangeSq) near = true;
-          if (d2 <= NEAR_RESEND_SQ) nearIds.add(idOf(p));
+          if (d2 <= NEAR_RESEND_SQ) nearIds.add(p.id);
         }
         if (!near) {
           restoreFallback(target, fallback);
@@ -327,20 +290,7 @@ export function createNameLabels(opts) {
         const anchor = { x: loc.x, y: loc.y + headOffset, z: loc.z };
 
         let entry = tracked.get(key);
-        // With `entityById` the helper is looked up by its id each sync (a fresh handle, or nothing when it is gone)
-        // instead of asking the kept handle isValid: on a handle kept for seconds isValid and the reads after it cost
-        // several times a fresh read (with 12 townsfolk and 40 players it was most of a sync).
-        const targetId = target.id;
-        if (entry) {
-          const now = entityById ? entityById(entry.helperId ?? entry.helper.id) : entry.helper.isValid ? entry.helper : undefined;
-          if (now) entry.helper = now;
-          else {
-            remove(entry.helper);
-            tracked.delete(key);
-            entry = undefined;
-          }
-        }
-        if (entry && (entry.targetId !== targetId || entry.dimId !== dimId)) {
+        if (entry && (!entry.helper.isValid || entry.target.id !== target.id || entry.dimId !== dimId)) {
           remove(entry.helper);
           tracked.delete(key);
           entry = undefined;
@@ -350,10 +300,9 @@ export function createNameLabels(opts) {
           if (ownerTag) helper.addTag(ownerTag);
           if (labelTag) helper.addTag(labelTag);
           if (labelIdTag) helper.addTag(labelIdTag + key);
-          entry = { target, targetId, helper, helperId: helper.id, dimId, useAltVariant: false };
+          entry = { target, helper, dimId, useAltVariant: false };
           tracked.set(key, entry);
         }
-        entry.target = target; // this sync's handle, for the sweep's checks
 
         // Bedrock's client caches a creature's default name ("NPC") when the entity spawns in the same packet
         // batch as its nameTag or before a newly joined viewer enters range. When a new viewer enters within
@@ -392,7 +341,6 @@ export function createNameLabels(opts) {
         if (sweepNow) {
           entry.caption = entry.helper.nameTag;
           entry.at = entry.helper.location;
-          entry.targetName = undefined;
         }
         if (entry.caption !== helperWanted) {
           entry.helper.nameTag = helperWanted;
@@ -404,15 +352,7 @@ export function createNameLabels(opts) {
           entry.helper.teleport(anchor);
           entry.at = anchor;
         }
-        // The target's name is read back only on a sweep sync too (or when it is new to this entry): something else
-        // renaming it (a name tag item) is put right within a sweep.
-        if (entry.targetName === undefined) {
-          if (target.nameTag !== targetWanted) target.nameTag = targetWanted;
-          entry.targetName = targetWanted;
-        } else if (entry.targetName !== targetWanted) {
-          target.nameTag = targetWanted; // a resend toggle: what is there is what was written last
-          entry.targetName = targetWanted;
-        }
+        if (target.nameTag !== targetWanted) target.nameTag = targetWanted;
         wanted.add(key);
         warned.delete(key);
       } catch (e) {

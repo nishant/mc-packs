@@ -54,8 +54,6 @@ const nameLabels = createNameLabels({
   labelIdTag: LABEL_ID_TAG,
   spectatorsExcluded: true,
   syncTicks: 10, // LABEL_TICKS
-  observersPerDimension: true,
-  entityById: (id) => world.getEntity(id),
 });
 
 const HOUR = 3600000;
@@ -508,7 +506,7 @@ function updateLabels() {
       targets.push({ id: String(i), entity, name: traderTag(/** @type {Visit} */ (visit), i) });
     });
   }
-  nameLabels.sync(targets, (/** @type {import("@minecraft/server").Dimension} */ dim) => dim.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /** @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */

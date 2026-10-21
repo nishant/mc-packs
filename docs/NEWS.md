@@ -10,7 +10,7 @@ entries below as a changelog.
 ## Smoother busy servers
 
 - Expedition dungeons now build in shorter steps, so the server no longer hitches while one is being built.
-- Silly Enchants, Champions at night and the name labels of townsfolk, caravans and story characters cost the server less with many players on. Nothing changes in how they look or play.
+- Silly Enchants and Champions at night cost the server less with many players on. Nothing changes in how they look or play.
 
 ## Living towns: a mayor for every town, and villagers move in
 

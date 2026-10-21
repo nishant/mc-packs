@@ -89,12 +89,6 @@ function makeDimension(id) {
         (e) => e.isValid && (!query.type || e.typeId === query.type) && (!query.tags || query.tags.every((t) => e.tags.includes(t))),
       );
     },
-    // Like the game's Dimension.getPlayers: only the players in this dimension, the same query options.
-    getPlayers(options = {}) {
-      getPlayersCalls.push(options);
-      const excluded = options.excludeGameModes ?? [];
-      return players.filter((p) => p.dimension === dimension && !excluded.includes(p.mode));
-    },
   };
   return dimension;
 }
@@ -103,11 +97,6 @@ globalThis.__sagaStub = {
   system: { currentTick: 0, runInterval() {}, run(fn) { fn(); } },
   world: {
     afterEvents: { entitySpawn: { subscribe() {} }, entityLoad: { subscribe() {} } },
-    // Like the game's world.getEntity: the entity with that id while it exists.
-    getEntity(id) {
-      for (const d of dimensions.values()) for (const e of d.entities) if (e.id === id && e.isValid) return e;
-      return undefined;
-    },
     getAllPlayers() {
       getAllPlayersCalls++;
       return [...players];
@@ -169,7 +158,7 @@ test("saga label sync asks for observers without spectators, not through getAllP
   getAllPlayersCalls = 0;
   updateActorLabels();
   assert.equal(getAllPlayersCalls, 0, "the label sync must not read every player");
-  assert.ok(getPlayersCalls.length >= 1, "the label sync asks getPlayers (the world's or a dimension's) for its observers");
+  assert.ok(getPlayersCalls.length >= 1, "the label sync asks world.getPlayers for its observers");
   assert.deepEqual(getPlayersCalls.at(-1).excludeGameModes, ["spectator"], "spectators are left out by the query");
 });
 
