@@ -97,8 +97,11 @@ shim's relay (a script event per message), so profile with `--no-relay`. The sim
 the scenario itself also cost server time that no pack is charged for.
 
 ```bash
-node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 900
+node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 900
 ```
+
+Performance runs use 10 players (the Realm has at most 10) and 40 players (a scalability check), never other
+counts. During development use 120 s windows (the default); release validation uses 300 s (`--arg seconds=300`).
 
 `examples/perf-soak.js` spreads `players` simulated players around spawn in groups (two near spawn,
 the others 240+ blocks apart, two in a pool, two in the Nether), makes them walk, look around, sneak
@@ -144,7 +147,8 @@ Options: `--jobs N` (default 2; each run is CPU bound), `--filter <regex>` (scen
 `logs/suite-<time>/<scenario>.out` (run.mjs output) and `.log` (full BDS log). The exit code is 1 when
 anything failed or timed out. The whole suite takes a few hours at `--jobs 2`.
 
-`node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp] [--json out]` runs
+`node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp] [--json out]` (`--perf default`
+is the same 10,40; `--perf-seconds 300` for release validation) runs
 only `perf-soak.js`, once per player count (one at a time, with `--profile`), and prints ms/tick per pack side by
 side with the budget: the whole bundle under 5 ms/tick at 40 players, a typical pack at most 0.15, the Minimap
 (`map_bp`) and HUD (`hud_bp`) at most 1. The JSON reports land in the suite's log folder.
@@ -160,8 +164,12 @@ make a comparison pass. What the profiler measures: time inside the callbacks ea
 `await` inside an async callback is not attributed (see `lib/profile.js`), and a run of separate packs sums separate script
 contexts, whereas `--bundle --profile` measures the real merged context as one row.
 
-Population setup removes only its own temporary ticking areas, never another pack's loader, then yields one tick
-before adding the next loader. Population, group/spread, water/Nether placement and the steady window are unchanged.
+Population setup loads each group's spot once (`t.loadArea` with `whole: true`), spawns the group's players together
+under it (`area: false`), four groups at a time (the first wave also holds the pool and the Nether pocket), lets the
+wave settle 10 ticks, then removes only its own temporary ticking areas, never another pack's loader. Before, every
+player added its own loader and the soak removed it 2 ticks later, while the far groups' outer chunks were still
+generating: BDS then never loaded those chunks (F73, 36 of 40 and 96 of 100 spawned), and the ramp took about 3 game
+seconds a player. Population, group/spread, water/Nether placement and the steady window are unchanged.
 Use the same setup version for the frozen before packs and candidate packs; retain invalid population attempts.
 
 The shim also checks the script event rule: a pack that sends a `realm:` script event of 2048 characters or
@@ -232,13 +240,13 @@ read). BDS 1.26.52 loads the whole square of (2r + 1) x (2r + 1) chunks of `tick
 included, measured for r = 1, 2 and 4), the middle up to 30 ticks before the corners, and a chunk that can be read is
 not quite done: removed 2 ticks after the last chunk could be read, 2 to 5 of 12 spawns a chunk over still failed;
 10 or more ticks after, none did. So `t.loadArea` returns only 20 ticks after every chunk of its area can be read
-(failing with `... loaded, but N of the 25 chunks of its ticking area ... did not load` otherwise), and a scenario may
+(failing with `ticking area <name> at x,z: chunks ... of 25 did not load` otherwise; `whole: false` skips the wait), and a scenario may
 remove the area right after; the start of a phase waits the same way for the listed areas of earlier phases, which
 load again from the save, before removing them. A scenario that adds its own
 areas and removes them (the perf soak's Nether pocket, maps-hunt) waits for all of their chunks too. Before this, the
-perf soak and saga-perf-quests, which remove each spawn's area before the next spawn (Bedrock allows 10), lost players
+perf soak and saga-perf-quests, which removed each spawn's area before the next spawn (Bedrock allows 10), lost players
 to `chunk at 193,170 did not load in 400 ticks` (F73: a whole column of chunks next to an earlier spawn), and
-maps-hunt timed out once its stuck legs had used up the 10 areas. `lib/harness-lifecycle.test.mjs`'s fake game models
+maps-hunt timed out once its stuck legs had used up the 10 areas; both now load whole loaders once and spawn under them. `lib/harness-lifecycle.test.mjs`'s fake game models
 the stuck chunks.
 
 ## Memory soaks (`rss-soak.mjs`)
@@ -315,8 +323,9 @@ Players and commands
   world. `opts`: `x`, `z` (default: the world spawn), `y` (default: on the highest solid block),
   `dimension` (`"overworld"`), `gameMode` (`"survival"`, `"creative"`, `"adventure"`,
   `"spectator"`), `op` (`true` = operator, i.e. `GameDirectors`, or a level name like `"admin"`),
-  `settle` (ticks to wait after spawning, 10). The chunk is loaded first with a ticking area
-  (`harness_<n>`), which stays. Returns a gametest `SimulatedPlayer` (a `Player`), so everything
+  `settle` (ticks to wait after spawning, 10), `area` (`false`: the caller already loaded the column with
+  `t.loadArea`, so the player adds no ticking area of its own; `timeout`, 400, bounds the wait for that column).
+  Otherwise the chunk is loaded first with a ticking area (`harness_<n>`), which stays. Returns a gametest `SimulatedPlayer` (a `Player`), so everything
   is available: `p.location`, `p.teleport()`, `p.getComponent("inventory")`, `p.giveItem()`,
   `p.breakBlock()`, `p.interactWithBlock()`, `p.useItemInSlot()`, `p.moveToLocation()`,
   `p.navigateToLocation()`, `p.lookAtBlock()`, `p.attackEntity()`, `p.jump()`, `p.disconnect()`...
@@ -342,9 +351,13 @@ Waiting
 - `await t.wait(ticks)`, `await t.seconds(s)` (20 ticks = 1 s).
 - `await t.waitUntil(() => cond, { timeout: 200, interval: 1, message })`: polls until truthy,
   returns the value, fails the scenario on timeout. Errors inside the function count as "not yet".
-- `await t.loadArea(x, z, { radius: 2 })`: loads a spot with a ticking area and returns
-  `{ top }`, the highest solid block there, once every chunk of the area is loaded (so it can be removed at once; about
-  1 s more than the spot alone).
+- `await t.loadArea(x, z, { radius: 2, whole: true, timeout: 400 })`: loads a spot with a ticking area and returns
+  `{ top, name }`, the highest solid block there, once every chunk of the area can be read and 20 ticks more (so it can
+  be removed at once; about 1 s more than the spot alone). Despite the name, a `circle` area loads a square of chunks
+  (3x3 at radius 1, 5x5 at 2, 7x7 at 3; `circleChunks` in `lib/tickingarea.js`). `whole: false` waits for the center
+  column only: use it only for an area kept until the end of the phase. BDS leaves the chunks of an area removed while
+  they were still loading unloadable for the rest of the run, even under a new area or next to a player (F73: the perf
+  soak's `chunk at -78,168 did not load in 400 ticks`).
 - `t.tick`: the current tick.
 
 Messages (what packs tell players)

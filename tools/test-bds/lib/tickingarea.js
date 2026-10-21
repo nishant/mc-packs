@@ -46,7 +46,7 @@ const MAX_OWNED_AREAS = 100;
 
 /**
  * Where an area is (x, z, radius) is kept too, so the next phase can wait for its chunks to load from the save before it
- * removes it (see areaChunkSpots). A list saved without them still works: its areas are removed at once.
+ * removes it (see circleChunks). A list saved without them still works: its areas are removed at once.
  * @typedef {{ name: string, dimension: string, x?: number, z?: number, radius?: number }} OwnedArea
  */
 
@@ -136,17 +136,17 @@ export function releaseOwnedAreas(raw, remove) {
 // chunks are still loading leaves those chunks unloadable for the rest of the run: no area added over them later
 // loads them, and a simulated player standing on one is in an unloaded chunk. That was every "chunk at x,z did not
 // load in 400 ticks" spawn failure of the perf soak, saga-perf-quests and maps-hunt (F73, F75), because those
-// scenarios remove each spawn's area right after the spawn. So loadArea returns only once every chunk is readable.
+// scenarios remove each spawn's area right after the spawn. So loadArea returns only once every chunk is readable (harness.js).
 
 /**
- * One block in each chunk of the area `tickingarea add circle x <y> z radius` loads (the middle of each chunk).
- * @param {number} x @param {number} z @param {number} radius in chunks, 1 to 4
- * @returns {{ x: number, z: number }[]}
+ * The chunks a `tickingarea add circle <x> <y> <z> <radius>` loads. Despite the name, BDS 1.26 loads a square: every
+ * chunk up to `radius` chunks from the center chunk on both axes, 3x3 for radius 1, 5x5 for 2, 7x7 for 3 (measured on
+ * fresh terrain 300 ticks after the add, with no player near). @param {number} x @param {number} z
+ * @param {number} radius @returns {{ x: number, z: number }[]}
  */
-export function areaChunkSpots(x, z, radius) {
+export function circleChunks(x, z, radius) {
   const cx = Math.floor(Math.floor(x) / 16), cz = Math.floor(Math.floor(z) / 16);
-  /** @type {{ x: number, z: number }[]} */
-  const spots = [];
-  for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) spots.push({ x: (cx + dx) * 16 + 8, z: (cz + dz) * 16 + 8 });
-  return spots;
+  const chunks = [];
+  for (let dx = -radius; dx <= radius; dx++) for (let dz = -radius; dz <= radius; dz++) chunks.push({ x: cx + dx, z: cz + dz });
+  return chunks;
 }

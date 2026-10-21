@@ -77,6 +77,7 @@ export default async function (t) {
         await t.wait(2);
         if (p.getEffect("slow_falling")) slow = true;
       }
+      await t.wait(2); // entityHurt arrives after the tick
       t.world.afterEvents.entityHurt.unsubscribe(onHurt);
       const after = hp.currentValue;
       const fallHurt = hurts.filter((h) => h.cause === "fall").reduce((n, h) => n + h.damage, 0);

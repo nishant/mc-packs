@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, isOwnedAreaName, ownedAreaName, radiusProblem, readOwnedAreas, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
+import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, circleChunks, isOwnedAreaName, ownedAreaName, radiusProblem, readOwnedAreas, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
+
+test("a circle area's chunks are the square BDS loads, around the chunk that holds the point", () => {
+  assert.equal(circleChunks(163, 170, 1).length, 9);
+  assert.equal(circleChunks(163, 170, 2).length, 25);
+  assert.deepEqual(circleChunks(-81, 412, 1).map((c) => `${c.x},${c.z}`).sort(), ["-5,24", "-5,25", "-5,26", "-6,24", "-6,25", "-6,26", "-7,24", "-7,25", "-7,26"]);
+  assert.deepEqual(circleChunks(-80, -1, 0), [{ x: -5, z: -1 }]);
+});
 
 test("accepts radius 1 to 4 and rejects everything else immediately", () => {
   for (const ok of [1, 2, 3, 4, "2", " 4 "]) assert.equal(radiusProblem(ok), null, String(ok));

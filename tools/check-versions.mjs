@@ -8,7 +8,7 @@
 // base (no git, a shallow clone without origin/master) it says so and passes.
 //
 //   node tools/check-versions.mjs [--base <ref>]
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -92,3 +92,7 @@ if (problems.length) {
   process.exit(1);
 }
 console.log(`Versions: ${checked} of ${packs} packs changed since ${short}, each with a higher header.version.`);
+// Then every bump's release notes (tools/release-notes.mjs, the notes the release workflow publishes with): run from
+// here rather than as its own term in npm run check, so the long check line other branches edit doesn't conflict.
+const notes = spawnSync(process.execPath, [join(root, "tools", "release-notes.mjs"), ...(args.base ? ["--base", args.base] : [])], { stdio: "inherit" });
+if (notes.status !== 0) process.exit(notes.status ?? 1);

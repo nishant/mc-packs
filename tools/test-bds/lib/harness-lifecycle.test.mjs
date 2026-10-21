@@ -12,8 +12,9 @@ const tickingAreaUrl = new URL("./tickingarea.js", import.meta.url).href;
 const MAX_AREAS = 10;
 
 /** What BDS keeps between two runs of one world. */
-function savedWorld({ failRemove = [], throwOnRemove = false } = {}) {
-  return { props: new Map(), areas: [], failRemove: new Set(failRemove), throwOnRemove, runs: 0 };
+function savedWorld({ failRemove = [], throwOnRemove = false, edgeDelay = 0 } = {}) {
+  // edgeDelay: the outer ring of an area's chunks loads this many ticks after its center (fresh terrain under load)
+  return { props: new Map(), areas: [], failRemove: new Set(failRemove), throwOnRemove, edgeDelay, runs: 0 };
 }
 
 const block = (x, y, z, typeId = "minecraft:grass_block") => ({
@@ -41,10 +42,12 @@ function startServer(saved, scenarioSource) {
   const players = [];
   const chunkOf = (v) => Math.floor(v / 16);
   const ring = (a, cx, cz) => Math.max(Math.abs(cx - chunkOf(a.x)), Math.abs(cz - chunkOf(a.z)));
-  const chunkReady = (a, cx, cz) => ring(a, cx, cz) <= a.radius && (readyAt.get(a.name) ?? Infinity) + 3 * ring(a, cx, cz) <= game.tick;
+  // BDS loads a square of chunks for a "circle" (lib/tickingarea.js circleChunks); edgeDelay holds the outer ring back
+  const readyTick = (a, cx, cz) => (readyAt.get(a.name) ?? Infinity) + 3 * ring(a, cx, cz) + (ring(a, cx, cz) === a.radius ? saved.edgeDelay : 0);
+  const chunkReady = (a, cx, cz) => ring(a, cx, cz) <= a.radius && readyTick(a, cx, cz) <= game.tick;
   // A chunk can be read a few ticks before it is done: removed in between, it is stuck all the same (on BDS, spawns a
   // chunk over failed when the area went 2 ticks after its last chunk could be read, never 10 or more ticks after).
-  const chunkDone = (a, cx, cz) => chunkReady(a, cx, cz) && (readyAt.get(a.name) ?? Infinity) + 3 * ring(a, cx, cz) + 5 <= game.tick;
+  const chunkDone = (a, cx, cz) => chunkReady(a, cx, cz) && readyTick(a, cx, cz) + 5 <= game.tick;
   const loaded = (x, z) => {
     const cx = chunkOf(x), cz = chunkOf(z);
     return !stuck.has(`${cx},${cz}`) && saved.areas.some((a) => chunkReady(a, cx, cz));
@@ -324,5 +327,39 @@ test("loadArea fails with the chunks it waited for when the rest of its area nev
   const r = await runPhase(saved, scenario, 1);
   assert.equal(r.done.ok, false);
   assert.deepEqual(r.stuck.length, 9, "the other area's 9 chunks are stuck");
-  assert.match(r.done.msg, /chunk at 163,170 loaded, but 6 of the 25 chunks of its ticking area harness_1_1 did not load in 100 ticks/);
+  assert.match(r.done.msg, /ticking area harness_1_1 at 163,170: chunks (-?\d+,-?\d+ ){6}of 25 did not load in 100 ticks/);
+});
+
+// F73 (perf soak): an area removed while its outer chunks were still loading left them unloadable for the rest of the
+// run. loadArea waits for every chunk of the area by default; whole: false waits for the center column only.
+test("loadArea waits for the area's outer chunks; with whole: false only the center column is waited for", async () => {
+  const scenario = `export default async function (t) {
+    const s0 = t.tick; await t.loadArea(163, 170, { radius: 2, whole: false }); t.log("center " + (t.tick - s0));
+    const s1 = t.tick; await t.loadArea(1163, 170, { radius: 2, whole: true }); t.log("whole " + (t.tick - s1));
+  }`;
+  const r = await runPhase(savedWorld({ edgeDelay: 30 }), scenario, 1);
+  assert.equal(r.done.ok, true, r.done.msg);
+  const took = (what) => Number(r.logs.find((l) => l.startsWith(what))?.split(" ")[1]);
+  assert.ok(took("center") < 30, r.logs.join("\n"));
+  assert.ok(took("whole") >= 34, r.logs.join("\n"));
+});
+
+test("loadArea whole names the chunks that never loaded", async () => {
+  const r = await runPhase(savedWorld({ edgeDelay: 10_000 }), `export default async function (t) { await t.loadArea(163, 170, { radius: 1, whole: true, timeout: 60 }); }`, 1);
+  assert.equal(r.done.ok, false);
+  assert.match(r.done.msg, /ticking area harness_1_1 at 163,170: chunks 9,9 .* of 9 did not load in 60 ticks/);
+});
+
+test("t.player with area: false adds no ticking area and needs the column loaded first", async () => {
+  const scenario = `export default async function (t) {
+    await t.loadArea(163, 170, { radius: 2, whole: true });
+    const p = await t.player("Ann", { x: 170, z: 175, area: false, settle: 1 });
+    t.log("at " + p.location.y);
+    await t.player("Bob", { x: 3000, z: 3000, area: false, timeout: 20 });
+  }`;
+  const r = await runPhase(savedWorld(), scenario, 1);
+  assert.equal(r.commands.filter((c) => c.startsWith("tickingarea add")).length, 1, r.commands.join("\n"));
+  assert.ok(r.logs.includes("at 70"), r.logs.join("\n"));
+  assert.equal(r.done.ok, false);
+  assert.match(r.done.msg, /chunk at 3000,3000 is not loaded \(t.player with area: false needs t.loadArea over it first\)/);
 });

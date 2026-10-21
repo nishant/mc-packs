@@ -170,8 +170,9 @@ client FPS or all of the server's CPU. Every figure in this table and the two bu
 - **A separate, shorter run** (a 4-core Linux test machine, an earlier build of these fixes, 5-minute steady window):
   the Realm Bundle running as one pack took about 4.8 ms a tick at 10 players, under the goal. It is not the same
   setup as the table, so do not compare the two directly.
-- **Not measured yet:** 100 players, the story quests at 100 players, and the Realm Bundle as one pack at 40
-  players. Until then, treat 100+ player servers as untested.
+- **Measurements cover 10 and 40 players only** (10 is this Realm's maximum; 40 shows how the packs scale). Not
+  measured yet: the Realm Bundle as one pack at 40 players. Servers with more than 40 players are not measured, so
+  measure your own with `/realm:diag` (below).
 - This Realm keeps the **Small Realm** defaults (10 players, usually 1-4 online). Hardware, workload and how many
   packs you run all change these numbers; on your own server, measure with `/realm:diag` (below).
 
@@ -239,7 +240,7 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 
 - **Measured with simulated players**, not real clients: no chunk sending, simple movement, no client packets. A
   real server spends more time per player outside the scripts, and a Realm's CPU differs from the test machine.
-- **Current 100-player load acceptance is incomplete.** The current master attempt failed population admission and its only identical retry also could not produce a valid full window; no partial population is a 100-player comparator. Coordinates HUD updates now arrive in bounded parts rather than truncating at 100, but that code change is not a completed current 100-player load or client-rendering test. Minimap keep-alive demand and the separate Saga quest workload still need their actual load evidence.
+- **Measured at 10 and 40 players only.** Larger servers are not measured. Coordinates HUD updates arrive in bounded parts (no cap at 100 players), but that is a code change, not a load test; the Minimap keep-alive and the story quest workload still need their 40-player measurements.
 - **At 40 players the packs are over their 5 ms goal:** about 8 ms a tick, the Minimap 3.7 ms of it against 1. That is open, not accepted: it leaves less room for other server work. See Performance above.
 - **Ticking areas:** Bedrock allows 10 per world. Farm Loader's farms, Expeditions' dungeon resets (up to `slots`),
   Death Point's `/realm:death_back` and some story and town builds share them, as do any you add with `/tickingarea`.

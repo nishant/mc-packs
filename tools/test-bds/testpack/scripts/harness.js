@@ -4,7 +4,7 @@
 import * as mc from "@minecraft/server";
 import * as gt from "@minecraft/server-gametest";
 import scenario from "./scenario.js";
-import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, areaChunkSpots, ownedAreaName, radiusProblem, readOwnedAreas, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
+import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, circleChunks, ownedAreaName, radiusProblem, readOwnedAreas, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
 
 const { world, system, GameMode, CommandPermissionLevel } = mc;
 
@@ -295,7 +295,7 @@ const AREA_SETTLE_TICKS = 20;
 
 /**
  * The areas an earlier phase saved with the world load again when the server starts, and one removed before its chunks
- * have loaded leaves them unloadable for the whole run (areaChunkSpots in tickingarea.js). So the start of a phase waits
+ * have loaded leaves them unloadable for the whole run (circleChunks in tickingarea.js). So the start of a phase waits
  * (up to `timeout` ticks) until every chunk of each listed area can be read, before they are removed.
  * @param {number} [timeout]
  */
@@ -311,8 +311,8 @@ async function settleOwnedAreas(timeout = 400) {
   if (listed.some((a) => a.radius === undefined)) await system.waitTicks(Math.min(timeout, 100));
   const areas = listed.filter((a) => a.radius !== undefined);
   if (!areas.length) return;
-  const spots = areas.flatMap((a) => areaChunkSpots(/** @type {number} */ (a.x), /** @type {number} */ (a.z), /** @type {number} */ (a.radius)).map((s) => ({ ...s, dimension: a.dimension })));
-  const loading = () => spots.filter((s) => { try { return !world.getDimension(s.dimension).getBlock({ x: s.x, y: 0, z: s.z }); } catch (e) { return true; } });
+  const spots = areas.flatMap((a) => circleChunks(/** @type {number} */ (a.x), /** @type {number} */ (a.z), /** @type {number} */ (a.radius)).map((c) => ({ ...c, dimension: a.dimension })));
+  const loading = () => spots.filter((c) => { try { return !chunkReadable(world.getDimension(c.dimension), c.x, c.z); } catch (e) { return true; } });
   const end = system.currentTick + timeout;
   while (loading().length && system.currentTick < end) await system.waitTicks(1);
   const left = loading().length;
@@ -338,6 +338,25 @@ function findGround(dimension, top) {
     b = b.below(); // throws while the chunk is not ticking: loadArea retries
   }
   return false;
+}
+
+/**
+ * The block a player can stand on at x,z, or false while the column is not loaded. getTopmostBlock can answer before
+ * the chunk ticks (with y 319): the block must also read and a standing spot below it must be found.
+ */
+function groundAt(dimension, x, z) {
+  const top = dimension.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+  if (!top || !dimension.getBlock(top.location)) return false;
+  return findGround(dimension, top);
+}
+
+/** Whether chunk cx,cz can be read (a block in its middle, at the bottom of the world). */
+function chunkReadable(dimension, cx, cz) {
+  try {
+    return !!dimension.getBlock({ x: cx * 16 + 8, y: dimension.heightRange?.min ?? -64, z: cz * 16 + 8 });
+  } catch (e) {
+    return false;
+  }
 }
 
 function makeT(cfg) {
@@ -396,8 +415,13 @@ function makeT(cfg) {
     get formTimeout() { return formTimeout; },
     set echoActionBar(v) { echoActionBar = !!v; },
 
-    /** Waits until the chunk column at x,z can be read, loading it with a ticking area (circle radius 1 to 4), and until every chunk of that area is loaded, so the area can be removed at once. */
-    async loadArea(x, z, { dimension = world.getDimension("overworld"), radius = 2, timeout = 400 } = {}) {
+    /**
+     * Waits until the chunk column at x,z can be read, loading it with a ticking area (circle radius 1 to 4), then
+     * (whole, the default) until every chunk of the area can be read and AREA_SETTLE_TICKS more, so the area can be
+     * removed at once: an area removed while its chunks still load can leave them unloadable for the rest of the run
+     * (F73). whole: false waits for the center column only, for an area kept until the end of the phase.
+     */
+    async loadArea(x, z, { dimension = world.getDimension("overworld"), radius = 2, timeout = 400, whole = true } = {}) {
       const badRadius = radiusProblem(radius);
       if (badRadius) throw new Stop(false, `loadArea(${x}, ${z}): ${badRadius}`);
       const name = ownedAreaName(t.phase, ++spawnArea);
@@ -410,13 +434,7 @@ function makeT(cfg) {
           out({ type: "log", msg: `ticking area ${name} is not in the harness's saved list, so the next phase will not remove it: ${e}` });
         }
       }
-      // getTopmostBlock can answer before the chunk ticks (with y 319): also require that the
-      // block can be read and that a standing spot below it can be found.
-      const readGround = () => {
-        const top = dimension.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
-        if (!top || !dimension.getBlock(top.location)) return false;
-        return findGround(dimension, top);
-      };
+      const readGround = () => groundAt(dimension, x, z);
       if (!add.ok) {
         let readable = false;
         try { readable = !!readGround(); } catch (e) { readable = false; }
@@ -424,17 +442,15 @@ function makeT(cfg) {
         if (after.action === "fail") throw new Stop(false, after.message);
         out({ type: "log", msg: `loadArea: ${after.message}` });
       }
-      const startTick = system.currentTick;
+      const started = system.currentTick;
       const ground = await t.waitUntil(readGround, { timeout, message: `chunk at ${x},${z} did not load in ${timeout} ticks` });
-      if (add.ok) {
-        // The rest of the area too: removing an area while some of its chunks are still loading leaves them
-        // unloadable for the whole run (tickingarea.js, areaChunkSpots), and scenarios remove it right after.
-        const spots = areaChunkSpots(x, z, radius);
-        const y = ground.location.y;
-        const loading = () => spots.filter((s) => { try { return !dimension.getBlock({ x: s.x, y, z: s.z }); } catch (e) { return true; } });
-        const left = Math.max(1, timeout - (system.currentTick - startTick));
-        const all = await t.waitUntil(() => loading().length === 0, { timeout: left }).then(() => true, () => false);
-        if (!all) throw new Stop(false, `chunk at ${x},${z} loaded, but ${loading().length} of the ${spots.length} chunks of its ticking area ${name} did not load in ${timeout} ticks`);
+      if (whole && add.ok) {
+        const chunks = circleChunks(x, z, radius);
+        const unread = () => chunks.filter((c) => !chunkReadable(dimension, c.x, c.z));
+        const left = Math.max(1, timeout - (system.currentTick - started));
+        const all = await t.waitUntil(() => unread().length === 0, { timeout: left }).then(() => true, () => false);
+        // The chunks still unread when the wait ran out (a message built before the wait would list them all).
+        if (!all) throw new Stop(false, `ticking area ${name} at ${x},${z}: chunks ${unread().map((c) => `${c.x},${c.z}`).join(" ")} of ${chunks.length} did not load in ${timeout} ticks`);
         // A chunk that can be read is not quite done yet: removed within 2 ticks of that, chunks still got stuck.
         await system.waitTicks(AREA_SETTLE_TICKS);
       }
@@ -451,7 +467,11 @@ function makeT(cfg) {
       const sp = world.getDefaultSpawnLocation();
       const x = opts.x ?? sp.x, z = opts.z ?? sp.z;
       let y = opts.y, groundId;
-      if (y === undefined) {
+      if (opts.area === false) {
+        // The caller loaded this column already (t.loadArea): no ticking area of the player's own.
+        const ground = await t.waitUntil(() => groundAt(dimension, x, z), { timeout: opts.timeout ?? 400, message: `chunk at ${x},${z} is not loaded (t.player with area: false needs t.loadArea over it first)` });
+        if (y === undefined) { groundId = ground.typeId; y = ground.location.y + 1; }
+      } else if (y === undefined) {
         const { top: ground } = await t.loadArea(x, z, { dimension });
         groundId = ground.typeId;
         y = ground.location.y + 1;
