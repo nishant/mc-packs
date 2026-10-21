@@ -61,15 +61,25 @@ export default async function (t) {
       const hp = p.getComponent("minecraft:health");
       hp.resetToMaxValue();
       const before = hp.currentValue;
+      // Count fall damage only: the Spider Nest's mobs can hit the player during the 120 ticks (CI: 20 -> 5.29 with
+      // no fall at all), and that isn't what this checks.
+      /** @type {Record<string, number>} */
+      const hurt = {};
+      const onHurt = t.world.afterEvents.entityHurt.subscribe(({ hurtEntity, damage, damageSource }) => {
+        if (hurtEntity.id === p.id) hurt[damageSource.cause] = (hurt[damageSource.cause] ?? 0) + damage;
+      });
       p.teleport(local(rm, 2, 1, 14));
       let slow = false;
       for (let k = 0; k < 60; k++) {
         await t.wait(2);
         if (p.getEffect("slow_falling")) slow = true;
       }
+      await t.wait(2); // entityHurt arrives after the tick
+      t.world.afterEvents.entityHurt.unsubscribe(onHurt);
       const after = hp.currentValue;
-      t.log(`shaft fall from 13 blocks: health ${before} -> ${after}, slow falling ${slow}, now ${(p.location.y - (rm.c.y)).toFixed(1)} above the floor`);
-      t.check(after >= before, `a fall in the shaft doesn't hurt (${before} -> ${after})`);
+      const fall = hurt.fall ?? 0;
+      t.log(`shaft fall from 13 blocks: health ${before} -> ${after}, damage by cause ${JSON.stringify(hurt)}, slow falling ${slow}, now ${(p.location.y - (rm.c.y)).toFixed(1)} above the floor`);
+      t.check(fall === 0, `a fall in the shaft doesn't hurt (fall damage ${fall}; health ${before} -> ${after})`);
       t.check(slow, "slow falling caught the fall");
       falls++;
       p.addEffect("resistance", 20000, { amplifier: 4, showParticles: false });
