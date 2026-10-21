@@ -456,12 +456,31 @@ function partyTag(player) {
 /** Townsfolk and wanderers near each player, searched every other pass (they hardly move). @type {Map<string, { tick: number, dim: string, x: number, z: number, list: { kind: string, x: number, y: number, z: number, id?: string }[] }>} */
 const npcCache = new Map();
 
+/**
+ * The last searches for townsfolk and for mobs, any player's: a player near where one was made a moment ago uses its
+ * result instead of searching again (players often go about together). At most SHARED_KEPT of each are kept.
+ * @type {{ tick: number, dim: string, x: number, z: number, list: { kind: string, x: number, y: number, z: number, id?: string }[] }[]}
+ */
+const npcShared = [];
+/** @type {{ tick: number, dim: string, x: number, z: number, r: number, mobs: { x: number, z: number }[] }[]} */
+const mobShared = [];
+const SHARED_KEPT = 24;
+/** A shared mob search reaches this much farther than the player's own radius, so the players near them can use it. */
+const MOB_SHARE = 8;
+
 /** @param {Player} player */
 function npcsNear(player) {
   const at = player.location;
   const dim = player.dimension;
+  const now = system.currentTick;
   const hit = npcCache.get(player.id);
-  if (hit && hit.dim === dim.id && system.currentTick - hit.tick < 20 && Math.abs(hit.x - at.x) + Math.abs(hit.z - at.z) < 8) return hit.list;
+  if (hit && hit.dim === dim.id && now - hit.tick < 20 && Math.abs(hit.x - at.x) + Math.abs(hit.z - at.z) < 8) return hit.list;
+  for (const sh of npcShared) {
+    if (sh.dim === dim.id && now - sh.tick < 20 && Math.abs(sh.x - at.x) + Math.abs(sh.z - at.z) < 8) {
+      npcCache.set(player.id, sh);
+      return sh.list;
+    }
+  }
   /** @type {{ kind: string, x: number, y: number, z: number, id?: string }[]} */
   const list = [];
   for (const e of dim.getEntities({ location: at, maxDistance: Number(get("npcRange")) || 64, tags: [NPC_TAG] })) {
@@ -481,8 +500,48 @@ function npcsNear(player) {
       // gone meanwhile
     }
   }
-  npcCache.set(player.id, { tick: system.currentTick, dim: dim.id, x: at.x, z: at.z, list });
+  const made = { tick: now, dim: dim.id, x: at.x, z: at.z, list };
+  npcCache.set(player.id, made);
+  npcShared.unshift(made);
+  if (npcShared.length > SHARED_KEPT) npcShared.pop();
   return list;
+}
+
+/**
+ * The nearest `max` monsters within `radius` of the player: from a search made for a player near them in the last
+ * INTERVAL ticks (it reaches MOB_SHARE farther), else from a new one.
+ * @param {Player} player @param {number} radius @param {number} max @returns {{ x: number, z: number }[]}
+ */
+function mobsNear(player, radius, max) {
+  const at = player.location;
+  const dim = player.dimension;
+  const now = system.currentTick;
+  let found = mobShared.find((sh) => sh.dim === dim.id && now - sh.tick < INTERVAL && Math.hypot(sh.x - at.x, sh.z - at.z) + radius <= sh.r);
+  if (!found) {
+    /** @type {{ x: number, z: number }[]} */
+    const mobs = [];
+    const r = radius + MOB_SHARE;
+    for (const e of dim.getEntities({ location: at, maxDistance: r, families: ["monster"], excludeTags: [NPC_TAG], closest: max * 4 })) {
+      try {
+        const l = e.location;
+        mobs.push({ x: l.x, z: l.z });
+      } catch {
+        // gone meanwhile
+      }
+    }
+    found = { tick: now, dim: dim.id, x: at.x, z: at.z, r, mobs };
+    mobShared.unshift(found);
+    if (mobShared.length > SHARED_KEPT) mobShared.pop();
+  }
+  const r2 = radius * radius;
+  /** @type {{ x: number, z: number, d: number }[]} */
+  const near = [];
+  for (const m of found.mobs) {
+    const d = (m.x - at.x) ** 2 + (m.z - at.z) ** 2;
+    if (d <= r2) near.push({ x: m.x, z: m.z, d });
+  }
+  near.sort((a, b) => a.d - b.d);
+  return near.slice(0, max);
 }
 
 /**
@@ -506,14 +565,7 @@ function gather(player, seen, pr) {
   }
   if (pr.mobs) {
     const max = Math.max(1, Number(get("maxMobs")) || 8);
-    for (const e of dim.getEntities({ location: at, maxDistance: pr.radius, families: ["monster"], excludeTags: [NPC_TAG], closest: max })) {
-      try {
-        const l = e.location;
-        add("mob", l.x, l.z, true);
-      } catch {
-        // gone meanwhile
-      }
-    }
+    for (const m of mobsNear(player, pr.radius, max)) add("mob", m.x, m.z, true);
   }
   const tag = seen.find((s) => s.id === player.id)?.party;
   const others = get("showOthers") === true;
