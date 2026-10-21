@@ -163,12 +163,13 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   }
 });
 
-// Each player once a second as before, a tenth of them every 2 ticks (scripts/spread.js), so a full server doesn't
-// do everyone on one tick. An AFK player's position isn't read at all: nothing counts while they're away, and the
+// Each player once a second. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
+// An AFK player's position isn't read at all: nothing counts while they're away, and the
 // first second back starts from where they are then.
 spreadPlayers(system, world, {
   every: 20,
-  parts: 10,
+  parts: 1,
   visit: (share) => {
     for (const player of share) tally(player);
   },
@@ -281,12 +282,11 @@ function check(player, objectives) {
   player.playSound("random.levelup", { pitch: 1, volume: 0.9 });
 }
 
-// Each player is checked (and their record saved) every checkSeconds, a share of the players each second
-// (scripts/spread.js, by player id), so a full server doesn't check and save everyone on the same tick.
+// Each player is checked (and their record saved) every checkSeconds (scripts/spread.js, one share, as above).
 const CHECK_EVERY = Math.max(1, Math.floor(CONFIG.checkSeconds) || 1);
 spreadPlayers(system, world, {
   every: 20 * CHECK_EVERY,
-  parts: CHECK_EVERY,
+  parts: 1,
   visit: (share) => {
     /** @type {string[]} */
     const ids = [];

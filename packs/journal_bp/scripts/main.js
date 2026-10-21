@@ -494,15 +494,15 @@ function explore(player, spawn) {
   if (overworld) weatherOver(player, headroom);
 }
 
-// Each player every 4 seconds, spread over the 10 runs in between (a tenth of the players a run, every 8 ticks;
-// scripts/spread.js keeps each player in their tenth by id), so a full server doesn't look everyone up on the same
-// tick. Each look is a few calls into the game, and so are the list of players and the world spawn: they are read
+// Each player every 4 seconds. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
+// Each look is a few calls into the game, and so are the list of players and the world spawn: they are read
 // once a round, not every run.
 /** @type {import("@minecraft/server").Vector3 | undefined} */
 let spawn;
 spreadPlayers(system, world, {
   every: 80,
-  parts: 10,
+  parts: 1,
   start: () => {
     spawn = undefined;
   },

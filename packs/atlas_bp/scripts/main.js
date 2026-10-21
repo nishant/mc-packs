@@ -1063,11 +1063,11 @@ function tickPlayer(player) {
       }
 }
 
-// Each player every 2 seconds as before, a tenth of them every 4 ticks (scripts/spread.js), so a full server never
-// does every player's cell math on one tick.
+// Each player every 2 seconds. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
 spreadPlayers(system, world, {
   every: 40,
-  parts: 10,
+  parts: 1,
   visit: (share) => {
     if (!enabled()) return;
     for (const p of share) {

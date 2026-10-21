@@ -458,7 +458,7 @@ function setRidden(d, on) {
 
 /**
  * Players riding a tamed dolphin, steered every tick. Everyone else is found at once when they tap a dolphin (the way
- * on), and otherwise looked at every 5 ticks, a fifth of the players each tick (scripts/spread.js), for a ride that
+ * on), and otherwise looked at every 5 ticks (scripts/spread.js, one share), for a ride that
  * started any other way (a /ride command; the stable API has no ride event). While no tamed dolphin is loaded nobody
  * can be riding one, so nobody is looked at (the following check below counts them every second).
  * @type {Map<string, { p: Player, d: Entity }>}
@@ -474,7 +474,7 @@ function dropRider(id) {
 
 spreadPlayers(system, world, {
   every: 5,
-  parts: 5,
+  parts: 1,
   visit: (share) => {
     if (tamedLoaded === 0 || get("enabled") !== true) return;
     for (const p of share) {
