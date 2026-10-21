@@ -215,12 +215,32 @@ function blockAt(dim, at) {
     return undefined;
   }
 }
+/**
+ * Entity handles by id, kept while they stay valid: `world.getEntity` is a native lookup and the label sync, the
+ * tether and the upkeep ask for every wanderer many times a second. A handle goes invalid when its entity is removed
+ * or unloaded (then it is looked up again, which finds it once it loads); `lost` forgets it on removal.
+ * @type {Map<string, Entity>}
+ */
+const handles = new Map();
 /** @param {string | undefined} id */
 function entityById(id) {
   if (!id) return undefined;
+  const known = handles.get(id);
+  if (known) {
+    try {
+      if (known.isValid) return known;
+    } catch {
+      // gone
+    }
+    handles.delete(id);
+  }
   try {
     const e = world.getEntity(id);
-    return e && e.isValid ? e : undefined;
+    if (e && e.isValid) {
+      handles.set(id, e);
+      return e;
+    }
+    return undefined;
   } catch {
     return undefined;
   }
@@ -669,7 +689,7 @@ function spawnWanderer(dim, rec, type, camp, look) {
     if (type !== OLD_NPC) protect(ent);
     if (camp) camps[rec.w].e = ent.id;
     else rec.e = ent.id;
-    updateLabels();
+    updateLabels(true);
     return ent;
   } catch (e) {
     console.warn(`[wander] spawn ${type}: ${e}`);
@@ -682,49 +702,110 @@ const wandererLabel = (wid, name) => `${NAMED_BY_ID.has(wid) ? "§6" : "§e"}${n
 /** Unique invisible format-code marker for a road or camp wanderer (`§r§b§4...§r`), preserved across transformations. @param {string} key */
 const wandererMarker = (key) => encodeHiddenMarker("b4", key);
 
-/** Syncs all active road and camp wanderer nameplate helpers with active observers. */
-function updateLabels() {
-  if (!ready) return;
-  const dims = () =>
-    DIMENSIONS.flatMap((id) => {
-      try {
-        return [world.getDimension(id)];
-      } catch {
-        return [];
-      }
-    });
-  /** @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string }[]} */
-  const targets = [];
-  for (const rec of Object.values(live)) {
-    const ent = entityById(rec.e);
-    const id = `road:${rec.w}`;
-    if (ent) targets.push({ id, entity: ent, name: wandererLabel(rec.w, rec.n), suppressedName: wandererMarker(id) });
-  }
-  for (const [wid, c] of Object.entries(camps)) {
-    const ent = entityById(c.e);
-    const n = NAMED_BY_ID.get(wid);
-    const id = `camp:${wid}`;
-    if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
-  }
-  nameLabels.sync(targets, () => labelObservers(targets), dims);
-}
-
 /** Players further than this from every wanderer can't see a label (`nameLabels`' range, with room for a head's height). */
 const LABEL_REACH = LABEL_OBSERVER_RANGE + 4;
+/**
+ * A wanderer with a player this close at the last full pass is synced every 2 ticks until the next one: room for a
+ * player sprinting or riding for a second to reach LABEL_REACH. The others are synced only on the full pass.
+ */
+const LABEL_HOT = LABEL_REACH + 24;
+/** Every this many label runs (2 ticks each, so once a second) all wanderers are synced and sorted near or far again. */
+const LABEL_FULL_EVERY = 10;
 /** With this many players or fewer (or about as many as wanderers) every player is read: asking for the ones near each wanderer saves nothing. */
 const LABEL_QUERY_PLAYERS = 8;
 /** Asking per wanderer costs one native query each: never for more wanderers than this. */
 const LABEL_QUERY_TARGETS = 16;
 let onlineN = 0;
 let onlineAt = -Infinity;
+let labelRun = 0;
+/** Label keys (`road:<wid>`, `camp:<wid>`) with a player within LABEL_HOT at the last full pass. @type {Set<string>} */
+let hotLabels = new Set();
+
+const labelDims = () =>
+  DIMENSIONS.flatMap((id) => {
+    try {
+      return [world.getDimension(id)];
+    } catch {
+      return [];
+    }
+  });
+
+/**
+ * Syncs the road and camp wanderers' nameplate helpers with the players near them. Once a second (and when `full`)
+ * every wanderer is synced and sorted by whether a player is within LABEL_HOT; between those, every 2 ticks, only the
+ * near ones are, so the wanderers nobody is close to cost nothing (a label shows only within LABEL_REACH, and the
+ * resends after a new viewer comes near keep their 2-tick timing). @param {boolean} [full]
+ */
+function updateLabels(full = false) {
+  if (!ready) return;
+  if (labelRun++ % LABEL_FULL_EVERY === 0) full = true;
+  if (!full && !hotLabels.size) {
+    nameLabels.sync([], [], labelDims);
+    return;
+  }
+  /** @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string }[]} */
+  const targets = [];
+  for (const rec of Object.values(live)) {
+    const id = `road:${rec.w}`;
+    if (!full && !hotLabels.has(id)) continue;
+    const ent = entityById(rec.e);
+    if (ent) targets.push({ id, entity: ent, name: wandererLabel(rec.w, rec.n), suppressedName: wandererMarker(id) });
+  }
+  for (const [wid, c] of Object.entries(camps)) {
+    const id = `camp:${wid}`;
+    if (!full && !hotLabels.has(id)) continue;
+    const n = NAMED_BY_ID.get(wid);
+    const ent = n && entityById(c.e);
+    if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
+  }
+  if (!full) {
+    nameLabels.sync(targets, () => labelObservers(targets), labelDims);
+    return;
+  }
+  // The full pass asks for the players within LABEL_HOT (the same reads as a sync's observers, a little wider): they
+  // sort the wanderers and are the sync's observers (it measures the real distance itself).
+  /** @type {Player[]} */
+  let players = [];
+  if (targets.length) {
+    try {
+      players = labelObservers(targets, LABEL_HOT);
+    } catch {
+      players = [];
+    }
+  }
+  /** @type {{ dimId: string, x: number, y: number, z: number }[]} */
+  const at = [];
+  for (const p of players) {
+    try {
+      const l = p.location;
+      at.push({ dimId: p.dimension.id, x: l.x, y: l.y, z: l.z });
+    } catch {
+      // left
+    }
+  }
+  /** @type {Set<string>} */
+  const hot = new Set();
+  const hotSq = LABEL_HOT * LABEL_HOT;
+  for (const t of targets) {
+    try {
+      const l = t.entity.location;
+      const dimId = t.entity.dimension.id;
+      if (at.some((p) => p.dimId === dimId && (p.x - l.x) ** 2 + (p.y - l.y) ** 2 + (p.z - l.z) ** 2 <= hotSq)) hot.add(t.id);
+    } catch {
+      // unloaded this tick
+    }
+  }
+  hotLabels = hot;
+  nameLabels.sync(targets, () => players, labelDims);
+}
 
 /**
  * Who a label sync reads: every player, or, on a busy server, only the players near a wanderer (one native query
  * per wanderer instead of a read of every player's place on every sync; the sync still measures the real
  * distance, so what it does is the same).
- * @param {{ entity: Entity }[]} targets
+ * @param {{ entity: Entity }[]} targets @param {number} [reach] how far from a wanderer a player counts (LABEL_REACH)
  */
-function labelObservers(targets) {
+function labelObservers(targets, reach = LABEL_REACH) {
   const every = () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] });
   const tick = system.currentTick;
   if (tick - onlineAt >= 100 || tick < onlineAt) {
@@ -736,7 +817,7 @@ function labelObservers(targets) {
   const near = new Map();
   for (const t of targets) {
     try {
-      for (const p of t.entity.dimension.getPlayers({ location: t.entity.location, maxDistance: LABEL_REACH, excludeGameModes: [GameMode.Spectator] })) near.set(p.id, p);
+      for (const p of t.entity.dimension.getPlayers({ location: t.entity.location, maxDistance: reach, excludeGameModes: [GameMode.Spectator] })) near.set(p.id, p);
     } catch {
       // unloaded or removed this tick: nobody can be near it
     }
@@ -1130,6 +1211,7 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
  * by the next upkeep if their player is near, else they've left (`again`). @param {string} id
  */
 function lost(id) {
+  handles.delete(id);
   campTether.forget(id);
   roadTether.forget(id);
   talking.delete(id);
@@ -1259,7 +1341,7 @@ function sweep() {
       console.warn(`[wander] sweep: ${e}`);
     }
   }
-  updateLabels();
+  updateLabels(true);
 }
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
@@ -1572,7 +1654,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   }
   ready = true;
   sweep();
-  system.runInterval(updateLabels, 2);
+  system.runInterval(() => updateLabels(), 2);
   system.runInterval(sweep, 200);
   pingZones();
   system.runTimeout(() => {

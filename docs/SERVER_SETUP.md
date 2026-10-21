@@ -138,7 +138,7 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 | Easy Building | `allowInfiniteReach` | Enabled | Disabled | Do not let public-server builds reach faraway areas |
 | Lag Cleanup | `threshold` | 500 | 1,500 | It counts dropped items in every dimension together; more players drop more, so cleanups stay about as rare |
 | Chest Finder | `liveScanRadius` | 16 | 8 | Each search reads 4,913 blocks instead of 35,937; farther containers still come from its index |
-| Realm Configuration | `checkSeconds` | 30 | 60 | The item check reads every inventory, about 0.2 ms per player: half as often |
+| Realm Configuration | `checkSeconds` | 30 | 60 | Each round reads the inventories that need it (a new operator, a missing item, a failed removal; every inventory once in 10 rounds), about 0.2 ms each: half as often |
 | Realm Mail | `sendCooldownSeconds` | 10 | 30 | Less letter spam among many strangers |
 | AFK + Smart Sleep | `sleep.percent` | 100 | 50 | With 30 or more players, all of them asleep at once never happens, so the night would never skip |
 

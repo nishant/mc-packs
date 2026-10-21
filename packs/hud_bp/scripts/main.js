@@ -107,10 +107,15 @@ function statePartMessages(players, seq) {
   return chunks.map((list, i) => envelope(list, i + 1, chunks.length));
 }
 
-/** @param {string[]} players @param {boolean} [now] send even if nothing changed */
+/**
+ * Sent when the list changes, and every STATE_EVERY ticks while someone sees the HUD (Stats and Parties treat a list
+ * not heard for 200 ticks as nobody's, so an empty list needs no repeating: a server where nobody uses the HUD sends
+ * nothing).
+ * @param {string[]} players @param {boolean} [now] send even if nothing changed
+ */
 function sendState(players, now = false) {
   const key = players.join(",");
-  if (!now && key === stateKey && system.currentTick - stateAt < STATE_EVERY) return;
+  if (!now && key === stateKey && (!players.length || system.currentTick - stateAt < STATE_EVERY)) return;
   stateKey = key;
   stateAt = system.currentTick;
   for (const message of statePartMessages(players, ++stateSeq)) system.sendScriptEvent("realm:hud_state", message);

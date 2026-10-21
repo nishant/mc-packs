@@ -308,9 +308,9 @@ world.afterEvents.worldLoad.subscribe(() => {
     if (!(night?.a && night.s === "harvest")) restoreTicks(); // a Harvest Moon cut short
     if (!(night?.a && night.s === "blood")) removeMobs();
     lastTime = t;
-    // The player-made block list takes about 40 ms to build: here, while the world loads, rather than in the middle
-    // of the first Blood Moon wave.
-    system.runTimeout(() => playerMadeBlocks(), 60);
+    // The player-made block list took about 40 ms to build in one go (a hitch at load): built now in small steps
+    // over the next ticks, rather than in the middle of the first Blood Moon wave.
+    system.runTimeout(() => buildPlayerMadeSoon(), 60);
   } catch (e) {
     console.warn(`[moon] ${e}`);
   }
@@ -527,22 +527,63 @@ function canSpawn() {
 
 /** @type {string[] | undefined} */
 let playerMade;
+/** The block list being built a slice a tick (`madeSteps`), started at world load. @type {Generator<void, void, void> | undefined} */
+let madeJob;
+const PLAYER_MADE =
+  /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch(?!flower)|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|bricks|ladder|rail|lever|button|pressure_plate|hopper|anvil|enchanting_table|loom|cartography|fletching|smithing|stonecutter|grindstone|composter|cauldron|campfire|jukebox|noteblock|banner|bell|lectern|scaffolding|piston|redstone_lamp|dispenser|dropper|observer|shulker_box|beacon|flower_pot|candle|stripped|hay_block|smooth_stone|polished|sea_lantern|glowstone|shroomlight|froglight|end_rod/;
 /**
- * Blocks that mean someone built here (validated against this game version's block list, since an unknown
- * id makes the filter throw). Natural colored terracotta is left out: badlands are made of it.
+ * Block types whose id is read per job step. Building the whole list in one runTimeout was a one-off 40-45 ms hitch at
+ * load; whether BlockTypes.getAll() (still one step) or the id reads cost most of it is not measured yet.
  */
-function playerMadeBlocks() {
-  if (playerMade) return playerMade;
-  const pattern =
-    /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch(?!flower)|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|bricks|ladder|rail|lever|button|pressure_plate|hopper|anvil|enchanting_table|loom|cartography|fletching|smithing|stonecutter|grindstone|composter|cauldron|campfire|jukebox|noteblock|banner|bell|lectern|scaffolding|piston|redstone_lamp|dispenser|dropper|observer|shulker_box|beacon|flower_pot|candle|stripped|hay_block|smooth_stone|polished|sea_lantern|glowstone|shroomlight|froglight|end_rod/;
+const MADE_PER_STEP = 64;
+
+/** Builds `playerMade` in steps: the game's block list, then its ids a slice at a time. */
+function* madeSteps() {
+  /** @type {import("@minecraft/server").BlockType[]} */
+  let types;
   try {
-    playerMade = BlockTypes.getAll()
-      .map((t) => t.id)
-      .filter((id) => pattern.test(id));
+    types = BlockTypes.getAll();
   } catch (e) {
     console.warn(`[moon] block list: ${e}`);
     playerMade = [];
+    return;
   }
+  yield;
+  /** @type {string[]} */
+  const out = [];
+  for (let i = 0; i < types.length; i++) {
+    try {
+      const id = types[i].id;
+      if (PLAYER_MADE.test(id)) out.push(id);
+    } catch {
+      // a type that can't be read: not ours to check
+    }
+    if (i % MADE_PER_STEP === MADE_PER_STEP - 1) yield;
+  }
+  playerMade = out;
+}
+
+/** Starts building the block list over the next ticks (world load), unless it's built or being built already. */
+function buildPlayerMadeSoon() {
+  if (playerMade || madeJob) return;
+  madeJob = madeSteps();
+  system.runJob(madeJob);
+}
+
+/**
+ * Blocks that mean someone built here (validated against this game version's block list, since an unknown
+ * id makes the filter throw). Natural colored terracotta is left out: badlands are made of it. Built in steps after
+ * world load; asked for before that's done (a wave in the first seconds), the rest is built at once.
+ */
+function playerMadeBlocks() {
+  if (playerMade) return playerMade;
+  madeJob ??= madeSteps();
+  try {
+    while (!madeJob.next().done);
+  } catch (e) {
+    console.warn(`[moon] block list: ${e}`);
+  }
+  playerMade ??= [];
   return playerMade;
 }
 

@@ -10,6 +10,12 @@ import { cellWorld, colKey, glyphAt, planScan, sampleResolution, spendBudget, Te
 import * as terrain from "../packs/map_bp/scripts/terrain.js";
 
 const HALF = 10;
+/** main.js's staleSlot (each player's turn for the 200-tick rebuild), for the radarOf sandboxes below. @param {string} source */
+function realStaleSlot(source) {
+  const fn = source.match(/function staleSlot\([\s\S]*?\n\}/)?.[0];
+  return fn ? vm.runInNewContext(`${source.match(/^const STALE_EVERY = .+;$/m)[0]}\n${fn}\nstaleSlot`) : undefined;
+}
+
 test("all four radar directions survive crowded edge markers at every heading", () => {
   const source = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
   const fn = source.match(/function radarOf\([\s\S]*?\n\}/)[0];
@@ -20,7 +26,7 @@ test("all four radar directions survive crowded edge markers at every heading", 
     FRIEND_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_FRIEND_${i}`]),
     PARTY_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_PARTY_${i}`]),
     STAR_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_STAR_${i}`]),
-    KINDS: { other: { q: G.Q_OTHER, p: 5 }, mob: { q: G.Q_MOB, p: 6 } },
+    KINDS: { other: { q: G.Q_OTHER, p: 5 }, mob: { q: G.Q_MOB, p: 6 } }, staleSlot: realStaleSlot(source),
   });
   const markers = [[0, -200], [200, 0], [0, 200], [-200, 0]].map(([x, z]) => ({ kind: "other", x, z }));
   markers.push({ kind: "mob", x: 5, z: 5 });
@@ -513,7 +519,7 @@ test("a built radar lists exactly the columns its own picture samples, and marke
     YOU: Array.from({ length: 8 }, (_, i) => G[`Q_YOU_${i}`]), FRIEND_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_FRIEND_${i}`]),
     PARTY_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_PARTY_${i}`]), STAR_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_STAR_${i}`]),
     KINDS: { mob: { q: G.Q_MOB, p: 7 } }, terrain: w, storeFor: () => store, terrainVerOf: () => `${store.id}#${w.viewVer(store, 0, 0, 999)}`,
-    colKey, glyphAt, sampleCoord: terrain.sampleCoord, radarRebuilds: 0, radarStale: false,
+    colKey, glyphAt, sampleCoord: terrain.sampleCoord, radarRebuilds: 0, radarStale: false, staleSlot: realStaleSlot(source),
   };
   const radarOf = vm.runInNewContext(`(${fn})`, ctx);
   const at = { x: 40.4, z: -17.6 };

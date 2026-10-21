@@ -10,10 +10,13 @@
 // Arguments (--arg key=value): players (default 10), seconds (default 120), group (players per
 // group, default 5), spread (blocks between far groups, default 240), commands (seconds between one
 // player's commands, default 45; 0 = none), water (players put in a pool, default 2), nether
-// (players in the Nether, default 2), probe (seconds between memory probes, default 0 = none: entity counts by
-// type, scoreboard participants, structures and every pack's saved world data (realm:diag_ping bytes; each pack's
-// storage is its own, so the scenario can't read it directly),
+// (players in the Nether, default 2), hud (1: the Coordinates HUD on for everyone, for the native realm:hud_state
+// proof at 100 players, O6; run it with commands=0 so no /realm:hud toggles anyone off), probe (seconds between memory
+// probes, default 0 = none: entity counts by type, scoreboard participants, structures and every pack's saved world
+// data (realm:diag_ping bytes; each pack's storage is its own, so the scenario can't read it directly),
 // logged and reported as `perf-probe`, for memory soaks with rss-soak.mjs; leave it off when profiling).
+// With hud_bp in the run, every realm:hud_state is assembled by seq like Stats and Parties do: each message must
+// stay under 2048 characters, and with hud=1 a complete list must name every player.
 // Layout: group 0 at the world spawn and group 1 30 blocks from it; the other groups on a ring of
 // `spread`-block steps around spawn (so 200+ blocks apart). Water players stand in a 7x7 pool dug at
 // group 1; Nether players stand in a cleared pocket at the spawn's Nether coordinates.
@@ -32,7 +35,33 @@ export default async function (t) {
 const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   const WATER = Math.min(N, Math.max(0, Number(a.water ?? 2)));
   const NETHER = Math.min(Math.max(0, N - WATER - 1), Math.max(0, Number(a.nether ?? 2)));
+  const HUD = Number(a.hud ?? 0) > 0;
   const over = t.world.getDimension("overworld");
+  /** realm:hud_state assembled by seq: the lists completed, their largest size and parts, the longest message. */
+  const hudState = { messages: 0, longest: 0, lists: 0, largest: 0, parts: 0, last: /** @type {string[]} */ ([]), seq: /** @type {Map<unknown, { parts: number, got: Map<number, string[]> }>} */ (new Map()) };
+  const withHud = t.packs.includes("hud_bp");
+  if (withHud) t.system.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
+    if (id !== "realm:hud_state") return;
+    hudState.messages++;
+    hudState.longest = Math.max(hudState.longest, message.length);
+    try {
+      const m = JSON.parse(message);
+      const parts = Number(m.parts ?? 1);
+      const key = m.seq ?? "none";
+      let at = hudState.seq.get(key);
+      if (!at) hudState.seq.set(key, (at = { parts, got: new Map() }));
+      at.got.set(Number(m.part ?? 1), Array.isArray(m.players) ? m.players : []);
+      if (at.got.size < at.parts) return;
+      hudState.seq.delete(key);
+      const list = [...at.got.values()].flat();
+      hudState.lists++;
+      hudState.last = list;
+      if (list.length >= hudState.largest) [hudState.largest, hudState.parts] = [list.length, at.parts];
+    } catch (e) {
+      t.log(`realm:hud_state not JSON: ${e}`);
+    }
+  }, { namespaces: ["realm"] });
+  if (HUD && withHud) t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "soak_hud", pack: "hud_bp", key: "defaultOn", value: true }));
   const nether = t.world.getDimension("nether");
   const spawn = t.world.getDefaultSpawnLocation();
   const SX = spawn.x === 0 && spawn.z === 0 ? 163 : spawn.x, SZ = spawn.z === 0 && spawn.x === 0 ? 170 : spawn.z;
@@ -268,4 +297,13 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   });
   t.check(samples > 0 && minValid === N && alive === N, `all ${N} players stayed in the world for the whole ${SECONDS} s soak (fewest at any second: ${samples ? minValid : 0}, at the end: ${alive})`);
   t.check(soakTicks >= SECONDS * 20, `the steady window ran its full ${SECONDS} s of game time (${(soakTicks / 20).toFixed(1)} s)`);
+  if (withHud) {
+    t.log(`realm:hud_state: ${hudState.messages} messages (longest ${hudState.longest} characters), ${hudState.lists} complete lists, the largest ${hudState.largest} players in ${hudState.parts} parts`);
+    t.check(hudState.longest < 2048, `every realm:hud_state is under 2048 characters (${hudState.longest})`);
+    if (HUD) {
+      const ids = new Set(hudState.last);
+      const missing = players.filter((x) => valid(x.p) && !ids.has(x.p.id)).length;
+      t.check(hudState.lists > 0 && missing === 0, `the last complete realm:hud_state names every player in the world (${hudState.last.length} listed, ${missing} missing, ${hudState.parts} parts at most)`);
+    }
+  }
 }

@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "atlas_bp";
-const VERSION = "1.1.10";
+const VERSION = "1.1.11";
 const NAME = "Atlas of the Realm";
 /** @type {string[]} */
 const PREFIXES = ["atlas"];

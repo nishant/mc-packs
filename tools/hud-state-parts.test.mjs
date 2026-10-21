@@ -243,3 +243,31 @@ test("end to end: the real HUD's parts feed the real Stats", async () => {
   assert.ok(statsHud(sim, ids(0, 250)[249]));
   assert.ok(statsHud(sim, ids(0, 250)[3]));
 });
+
+test("realm:hud_state repeats only while someone sees the HUD: an empty list is sent once, then not every 5 seconds (W1)", async () => {
+  const sim = createSim();
+  await sim.load("hud_bp");
+  sim.server.world.getDay = () => 0;
+  sim.boot();
+  const players = Array.from({ length: 5 }, (_, i) => {
+    const p = sim.join(`P${i}`, { id: String(i) });
+    p.getRotation = () => ({ x: 0, y: 0 });
+    return p;
+  });
+  sim.step(1);
+  sim.game.sent.length = 0;
+  sim.step(400);
+  assert.equal(stateMsgs(sim).length, 0, "nobody sees the HUD: nothing to repeat");
+  // One player turns it on: the list goes out, and is repeated while it lasts.
+  players[0].setDynamicProperty("hud:pref", JSON.stringify({ on: true }));
+  sim.step(300);
+  const on = stateMsgs(sim);
+  assert.ok(on.length >= 3 && on.every((m) => m.players.includes("0")), `the list is sent and kept alive (${on.length})`);
+  // Off again: the empty list is sent once, and then nothing.
+  players[0].setDynamicProperty("hud:pref", JSON.stringify({ on: false }));
+  sim.game.sent.length = 0;
+  sim.step(400);
+  const off = stateMsgs(sim);
+  assert.equal(off.length, 1, `one empty list (${off.length})`);
+  assert.deepEqual(off[0].players, []);
+});

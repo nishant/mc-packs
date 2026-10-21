@@ -76,7 +76,7 @@ same `this` and arguments and returns their result, so the pack behaves the same
 `system.run`/`runTimeout`/`runInterval`, each step of a `runJob` generator, every
 `world`/`system` `beforeEvents`/`afterEvents` subscription (unsubscribe takes the pack's own function
 as before) and custom command callbacks. It also counts `setDynamicProperty` writes (world, entity,
-item, and the characters written), `setActionBar`, `setTitle` and `runCommand` calls. Each callback
+item, and the characters written), `setActionBar`, `setTitle` and `runCommand` calls, and script events by id: what each pack sends (`system.sendScriptEvent`) and what its `scriptEventReceive` listeners spend per id (calls and ms). The summary prints the most-sent ids per tick; the JSON has them per pack (`scriptEventsSent`, `scriptEventsHandled`) and summed in `bundle.scriptEvents` (`sentPerTick`, `senders`, `handledPerTick`), counted over the whole profiled window. Each callback
 is named by its kind and the `file:line` that handed it over (`runInterval(20) @ main.js:148`). The
 window starts when the scenario starts (startup and module loading are not measured) and ends when
 it finishes; with `t.restart()` only the last phase is reported. The test pack also measures the
@@ -85,7 +85,7 @@ time and memory from `/proc`.
 
 The summary then lists, per pack sorted by cost: ms/tick (average), the p95 and max of a tick's ms,
 calls/tick, `setDynamicProperty`, `setActionBar`, `setTitle` and `runCommand` per tick and the top
-callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, and the
+callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, its 5 longest single calls (`slowest`: a hitch such as one `runJob` step, by `max` ms), and the
 whole-bundle per-tick total (packs summed tick by tick: p50, p95, p99, max).
 
 Limits: Bedrock scripting has no high-resolution clock, so times are `Date.now()` differences: a

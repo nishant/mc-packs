@@ -756,3 +756,122 @@ test("regression: automatic check/event paths report failed removals across inve
     cleanup();
   }
 });
+
+test("the checkSeconds round reads whole inventories only for players who need it, and still gives back a deleted item and the item to a new operator", async () => {
+  const { world, system, settingsMod, cleanup } = await createAdminHarness();
+  try {
+    const players = [1, 2, 3].map((i) => new MockPlayer(`r${i}`, `R${i}`, false));
+    let reads = 0;
+    for (const p of players) {
+      p.container.setItem(0, makeRealTool(1));
+      const getItem = p.container.getItem.bind(p.container);
+      p.container.getItem = (slot) => (reads++, getItem(slot));
+      world.players.push(p);
+    }
+    const round = () => {
+      for (let i = 0; i < 30; i++) system.stepInterval();
+    };
+    round(); // the first round checks everyone it hasn't seen
+    reads = 0;
+    for (let r = 0; r < 5; r++) round();
+    // Five rounds used to read 3 inventories each (15 checks of 36+ slots); now only each player's safety round.
+    assert.ok(reads <= 5 * 3 * 37 / 2, `${reads} slot reads in 5 rounds for 3 players who changed nothing`);
+
+    // A deleted item (with its inventory event) comes back at the next round, as before.
+    const [a, b, c] = players;
+    a.container.emitEvents = true;
+    a.container.setItem(0, undefined);
+    system.flushRuns();
+    assert.equal(countRealTools(a).count, 0);
+    round();
+    assert.equal(countRealTools(a).count, 1, "given back at the next round");
+
+    // Deleted with no event at all: the safety round finds it within SAFETY_ROUNDS rounds.
+    b.container.slots[0] = undefined;
+    for (let r = 0; r < 10 && countRealTools(b).count === 0; r++) round();
+    assert.equal(countRealTools(b).count, 1, "given back by the safety round");
+
+    // Items for operators only: a player made an operator gets one at the next round.
+    settingsMod.set("giveToPlayers", false);
+    settingsMod.set("removeFromOthers", false);
+    system.flushRuns();
+    c.container.slots[0] = undefined;
+    round();
+    assert.equal(countRealTools(c).count, 0, "not an operator yet");
+    c.commandPermissionLevel = CommandPermissionLevel.GameDirectors;
+    round();
+    assert.equal(countRealTools(c).count, 1, "the new operator got one at the next round");
+  } finally {
+    cleanup();
+  }
+});
+
+test("an inventory change that involves no Realm Configuration item reads the cursor only after a real item left a slot", async () => {
+  const { world, system, cleanup } = await createAdminHarness();
+  try {
+    const p = new MockPlayer("cw", "Cursor", false);
+    p.container.setItem(0, makeRealTool(1));
+    world.players.push(p);
+    let cursorReads = 0;
+    const getComponent = p.getComponent.bind(p);
+    p.getComponent = (id) => (id === "minecraft:cursor_inventory" && cursorReads++, getComponent(id));
+    p.container.emitEvents = true;
+    for (let i = 0; i < 10; i++) p.container.setItem(5, new MockItemStack("minecraft:cobblestone", i + 1));
+    system.flushRuns();
+    assert.equal(cursorReads, 0, `${cursorReads} cursor reads for 10 cobblestone pickups`);
+
+    // The real item goes onto the cursor, a duplicate shows up there too while other slots change: still found.
+    p.container.setItem(0, undefined);
+    p.cursor.item = makeRealTool(1);
+    system.flushRuns();
+    p.container.slots[7] = makeRealTool(1); // a copy that arrived with no event
+    p.container.setItem(5, new MockItemStack("minecraft:cobblestone", 20));
+    system.flushRuns();
+    assert.equal(countRealTools(p).count, 1, "the copy on the cursor or in slot 7 was removed");
+  } finally {
+    cleanup();
+  }
+});
+
+test("a real item a reconcile found on the cursor is watched, so a copy that turns up with no event is removed on the next unrelated change", async () => {
+  const { world, system, cleanup } = await createAdminHarness();
+  try {
+    const p = new MockPlayer("cw2", "Carrier", false);
+    p.cursor.item = makeRealTool(1); // came onto the cursor with no inventory event (from the off hand, say)
+    world.players.push(p);
+    for (let i = 0; i < 30; i++) system.stepInterval(); // the round reconciles the new player: it carries one
+    system.flushRuns();
+    assert.equal(countRealTools(p).count, 1);
+    p.container.slots[7] = makeRealTool(1); // a copy that arrived with no event
+    p.container.emitEvents = true;
+    p.container.setItem(5, new MockItemStack("minecraft:cobblestone", 3));
+    system.flushRuns();
+    assert.equal(countRealTools(p).count, 1, "the copy was removed at the cobblestone pickup, not at a safety round minutes later");
+  } finally {
+    cleanup();
+  }
+});
+
+test("giving the item back in a round reads the inventory twice (before and after), not three times", async () => {
+  const { world, system, cleanup } = await createAdminHarness();
+  try {
+    const p = new MockPlayer("g1", "Giver", false);
+    world.players.push(p);
+    for (let i = 0; i < 30; i++) system.stepInterval(); // first round: gets the item
+    assert.equal(countRealTools(p).count, 1);
+    p.container.slots[0] = undefined; // gone with no event: the round after next finds it missing
+    let reads = 0;
+    const getItem = p.container.getItem.bind(p.container);
+    p.container.getItem = (slot) => (reads++, getItem(slot));
+    const has = () => p.container.slots.some((it) => it?.nameTag === "§r§6Realm Configuration");
+    for (let r = 0; r < 12 && !has(); r++) {
+      reads = 0;
+      for (let i = 0; i < 30; i++) system.stepInterval();
+    }
+    const inRound = reads;
+    assert.equal(countRealTools(p).count, 1, "given back");
+    assert.ok(inRound <= 2 * 36 + 4, `${inRound} slot reads in the round that gave it back`);
+  } finally {
+    cleanup();
+  }
+});

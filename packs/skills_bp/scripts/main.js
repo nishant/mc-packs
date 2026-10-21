@@ -184,11 +184,18 @@ const center = (p) => ({ x: p.x + 0.5, y: p.y + 0.5, z: p.z + 0.5 });
 // Gaining XP
 // ---------------------------------------------------------------------------
 
-/** @param {Player} player */
-function active(player) {
-  if (!enabled() || !player.isValid) return false;
+/** Each player's game mode, kept up to date by playerGameModeChange (read from the game once, and again every 30 s). @type {Map<string, GameMode>} */
+const modes = new Map();
+world.afterEvents.playerGameModeChange.subscribe(({ player, toGameMode }) => {
+  if (player) modes.set(player.id, toGameMode);
+});
+
+/** @param {Player} player @param {boolean} [valid] the caller already knows the player is in the world */
+function active(player, valid = false) {
+  if (!enabled() || (!valid && !player.isValid)) return false;
   try {
-    const mode = player.getGameMode();
+    let mode = modes.get(player.id);
+    if (mode === undefined) modes.set(player.id, (mode = player.getGameMode()));
     if (mode === GameMode.Spectator) return false;
     if (get("skipCreative") === true && mode === GameMode.Creative) return false;
   } catch {
@@ -780,7 +787,14 @@ const RECENT_CHUNKS = 128;
 /** @type {Map<string, { last?: { x: number, y: number, z: number, dim: string }, chunk: string, fresh: boolean, recent: Set<string>, blocks: number, minute: number, found: number }>} */
 const travel = new Map();
 
+/** Each player's dimension id, kept up to date by playerDimensionChange (read from the game on a spawn, and again every 30 s). @type {Map<string, string>} */
+const dims = new Map();
+world.afterEvents.playerDimensionChange.subscribe(({ player, toDimension }) => {
+  if (player) dims.set(player.id, toDimension.id);
+});
+
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  dims.delete(player.id);
   const t = travel.get(player.id);
   if (t) t.last = undefined; // respawning or joining isn't traveling
   if (!initialSpawn) return;
@@ -798,6 +812,9 @@ world.beforeEvents.playerLeave.subscribe(({ player }) => {
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   travel.delete(playerId);
+  modes.delete(playerId);
+  dims.delete(playerId);
+  slots.delete(playerId);
   visited.delete(playerId);
   streaks.delete(playerId);
   partyCache.delete(playerId);
@@ -805,11 +822,16 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   calling.forget(playerId);
 });
 
+/** @type {Map<string, number>} */
+const slots = new Map();
 /** A player's second (0-29) to save their explored chunks, from a hash of their id. @param {string} id */
 function saveSlot(id) {
+  let s = slots.get(id);
+  if (s !== undefined) return s;
   let h = 0x811c9dc5;
   for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
-  return (h >>> 8) % 30;
+  slots.set(id, (s = (h >>> 8) % 30));
+  return s;
 }
 
 let seconds = 0;
@@ -817,13 +839,20 @@ system.runInterval(() => {
   seconds++;
   for (const player of world.getAllPlayers()) {
     try {
-      if ((seconds + saveSlot(player.id)) % 30 === 0) saveVisited(player); // every 30 s, a share of the players each second
-      if (!active(player)) {
-        travel.delete(player.id);
+      const id = player.id;
+      if ((seconds + saveSlot(id)) % 30 === 0) {
+        saveVisited(player); // every 30 s, a share of the players each second
+        // and the game mode and dimension are read again, in case a change fired no event
+        modes.delete(id);
+        dims.delete(id);
+      }
+      if (!active(player, true)) {
+        travel.delete(id);
         continue;
       }
       const loc = player.location;
-      const dim = player.dimension.id;
+      let dim = dims.get(id);
+      if (dim === undefined) dims.set(id, (dim = player.dimension.id));
       let t = travel.get(player.id);
       if (!t) travel.set(player.id, (t = { chunk: "", fresh: false, recent: new Set(), blocks: 0, minute: seconds, found: 0 }));
       const d = DIMS[dim] ?? dim;

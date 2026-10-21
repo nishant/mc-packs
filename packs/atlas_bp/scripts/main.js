@@ -28,6 +28,7 @@ import { PREFABS, turn } from "./prefabs.js";
 import { get, getFor } from "./settings.js";
 import { protectedBox } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { spreadPlayers } from "./spread.js";
 import { spawnFresh } from "./spawn.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -1062,16 +1063,22 @@ function tickPlayer(player) {
       }
 }
 
-system.runInterval(() => {
-  if (!enabled()) return;
-  for (const p of world.getAllPlayers()) {
-    try {
-      tickPlayer(p);
-    } catch (e) {
-      console.warn(`[atlas] ${e}`);
+// Each player every 2 seconds. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
+spreadPlayers(system, world, {
+  every: 40,
+  parts: 1,
+  visit: (share) => {
+    if (!enabled()) return;
+    for (const p of share) {
+      try {
+        tickPlayer(p);
+      } catch (e) {
+        console.warn(`[atlas] ${e}`);
+      }
     }
-  }
-}, 40);
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Using a site: taps, hits, breaks

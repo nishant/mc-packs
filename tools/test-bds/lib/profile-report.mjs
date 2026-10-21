@@ -32,6 +32,40 @@ const pct = (sorted, p) => (sorted.length ? sorted[Math.min(sorted.length - 1, M
 const f2 = (x) => (x === null || x === undefined || Number.isNaN(x) ? "-" : Number(x).toFixed(2));
 const f3 = (x) => (x === null || x === undefined || Number.isNaN(x) ? "-" : Number(x).toFixed(3));
 
+/**
+ * Script events across the packs, per tick: how often each id was sent (by which packs), and how many listener calls and
+ * ms each id cost the packs that handle it. Ids sorted by how often they are sent (handled: by ms).
+ * @param {any[]} rows @param {number} ticks
+ */
+export function scriptEventTotals(rows, ticks) {
+  const n = Math.max(1, ticks);
+  /** @type {Map<string, { sent: number, by: Record<string, number> }>} */
+  const sent = new Map();
+  /** @type {Map<string, { calls: number, ms: number }>} */
+  const handled = new Map();
+  for (const r of rows) {
+    for (const [id, c] of Object.entries(r.scriptEventsSent ?? {})) {
+      let e = sent.get(id);
+      if (!e) sent.set(id, (e = { sent: 0, by: {} }));
+      e.sent += c;
+      e.by[r.pack] = (e.by[r.pack] ?? 0) + c;
+    }
+    for (const [id, h] of Object.entries(r.scriptEventsHandled ?? {})) {
+      let e = handled.get(id);
+      if (!e) handled.set(id, (e = { calls: 0, ms: 0 }));
+      e.calls += h.calls;
+      e.ms += h.ms;
+    }
+  }
+  const bySent = [...sent].sort((a, b) => b[1].sent - a[1].sent);
+  return {
+    sentTotalPerTick: bySent.reduce((a, [, e]) => a + e.sent, 0) / n,
+    sentPerTick: Object.fromEntries(bySent.map(([id, e]) => [id, e.sent / n])),
+    senders: Object.fromEntries(bySent.map(([id, e]) => [id, e.by])),
+    handledPerTick: Object.fromEntries([...handled].sort((a, b) => b[1].ms - a[1].ms || b[1].calls - a[1].calls).map(([id, e]) => [id, { calls: e.calls / n, ms: e.ms / n }])),
+  };
+}
+
 export class Profile {
   constructor({ say, everyS, json, scenario, args }) {
     Object.assign(this, { say, everyS, json, scenario, args });
@@ -153,6 +187,17 @@ export class Profile {
     return sum / (to - from);
   }
 
+  /** One pack's ms/tick average, p95 and max over a tick window; null if its per-tick data is incomplete. */
+  packWindowStats(pack, from, to) {
+    const e = this.tickParts.get(pack);
+    if (!e || to <= from || e.parts.filter((x) => x !== undefined).length < e.n) return null;
+    const vals = e.parts.join("").split(",");
+    const per = [];
+    for (let tick = from; tick < to; tick++) per.push(Number(vals[tick - e.startTick]) || 0);
+    const sorted = [...per].sort((a, b) => a - b);
+    return { avg: per.reduce((a, b) => a + b, 0) / per.length, p95: pct(sorted, 0.95), max: sorted[sorted.length - 1] || 0 };
+  }
+
   report() {
     const rows = this.packRows(this.final);
     const L = [];
@@ -185,13 +230,24 @@ export class Profile {
       this.acceptance = evaluatePerf({ args: this.args, workload: this.workload, profile: { ticks, packs: rows } });
       L.push(`  perf acceptance: ${this.acceptance.ok ? "VALID" : "INVALID"} for ${this.acceptance.declared?.players ?? "?"} players over ${this.acceptance.declared?.seconds ?? "?"} s${this.acceptance.ok ? "" : ` - ${this.acceptance.reasons.join("; ")}`}`);
       if (steady) L.push(`  steady soak window only (${steady.ticks} ticks): ${f3(steady.avg)} ms/tick summed over packs, p95 ${steady.p95} / p99 ${steady.p99} / max ${steady.max} ms`);
+      // A scenario may split its window into named phases (night-soak.js: dusk, early, mid and late night, dawn): each
+      // pack's ms/tick and the bundle's per-tick figures per phase, to see how a cost grows through the window.
+      const phases = Array.isArray(this.workload.phases) ? this.workload.phases.filter((ph) => ph && typeof ph.name === "string" && Number.isFinite(ph.startTick) && Number.isFinite(ph.endTick) && ph.endTick > ph.startTick) : [];
+      if (phases.length) {
+        for (const r of rows) r.phases = Object.fromEntries(phases.map((ph) => [ph.name, this.packWindowStats(r.pack, ph.startTick, ph.endTick)]));
+        this.phaseBundle = phases.map((ph) => ({ ...ph, bundle: this.bundleTicks(ph.startTick, ph.endTick) }));
+        for (const ph of this.phaseBundle) L.push(`  phase ${ph.name} (${ph.bundle?.ticks ?? 0} ticks): ${f3(ph.bundle?.avg)} ms/tick summed over packs, p95 ${ph.bundle?.p95 ?? "-"} / max ${ph.bundle?.max ?? "-"} ms; ${rows.slice(0, 8).map((r) => `${r.pack} ${f3(r.phases[ph.name]?.avg)} (p95 ${r.phases[ph.name]?.p95 ?? "-"}, max ${r.phases[ph.name]?.max ?? "-"})`).join(", ")}`);
+      }
     }
+    const events = scriptEventTotals(rows, ticks);
+    const topSent = Object.entries(events.sentPerTick).slice(0, 8);
+    if (topSent.length) L.push(`  script events sent/tick: ${f3(events.sentTotalPerTick)} (${topSent.map(([id, n]) => `${id} ${f3(n)}`).join(", ")})`);
     L.push(`  profile JSON: ${this.json}`);
-    this.write(rows, bundle, cpu, s, totals, ticks, steady);
+    this.write(rows, bundle, cpu, s, totals, ticks, steady, events);
     return L;
   }
 
-  write(rows, bundle, cpu, server = null, totals = null, ticks = 0, steady = null) {
+  write(rows, bundle, cpu, server = null, totals = null, ticks = 0, steady = null, events = scriptEventTotals(rows, ticks)) {
     try {
       fs.writeFileSync(this.json, JSON.stringify({
         date: new Date().toISOString(), scenario: this.scenario, args: this.args, ticks,
@@ -200,7 +256,7 @@ export class Profile {
         // Every figure is time inside callbacks the packs handed to the game; time after an await in an async callback
         // is not attributed (see lib/profile.js), and a run of separate packs sums separate script contexts.
         measurement: { unattributed: ["time after an await inside an async callback"], contexts: rows.length },
-        bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, steadyWindow: steady, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks } : null,
+        bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, steadyWindow: steady, phases: this.phaseBundle ?? undefined, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks, scriptEvents: events } : null,
         packs: rows.map((r) => ({ ...r, dynWritesPerTick: r.dynWrites / r.ticks, actionBarPerTick: r.actionBar / r.ticks, setTitlePerTick: r.titles / r.ticks, runCommandPerTick: r.commands / r.ticks })),
       }, null, 2));
     } catch (e) {

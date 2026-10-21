@@ -5,6 +5,7 @@ import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { stale, sweepGamertags } from "./prune.js";
+import { spreadPlayers } from "./spread.js";
 
 // A nickname shows above the player's head (Player.nameTag). The stable Script API has no chat
 // events, so chat, the player list and death messages keep the gamertag.
@@ -114,10 +115,9 @@ function titleLine(player) {
   return title ? `\n§7${title}` : "";
 }
 
-/** What the player's name tag should be, or undefined to leave it alone. @param {Player} player */
-function wanted(player) {
+/** What the player's name tag should be, or undefined to leave it alone. @param {Player} player @param {string} [title] their titleLine, when already read */
+function wanted(player, title = titleLine(player)) {
   const nick = enabled() ? nicks().get(player.id) : undefined;
-  const title = titleLine(player);
   if (nick) {
     const second = get("showGamertag") === true ? `\n§7${player.name}` : "";
     return `${afkPrefix(player)}§${nick.c}${nick.n}§r${second}${title}`;
@@ -131,10 +131,11 @@ function wanted(player) {
 /** @param {Player} player @param {boolean} [force] put the gamertag back even if this pack didn't change the tag (nickname just removed) */
 function refresh(player, force = false) {
   try {
-    const want = wanted(player) ?? (force ? `${afkPrefix(player)}${player.name}` : undefined);
+    const title = titleLine(player);
+    const want = wanted(player, title) ?? (force ? `${afkPrefix(player)}${player.name}` : undefined);
     if (want === undefined) return;
     if (player.nameTag !== want) player.nameTag = want;
-    if ((enabled() && nicks().has(player.id)) || titleLine(player)) shown.add(player.id);
+    if ((enabled() && nicks().has(player.id)) || title) shown.add(player.id);
     else shown.delete(player.id);
   } catch {
     // left meanwhile
@@ -143,8 +144,28 @@ function refresh(player, force = false) {
 
 const refreshAll = () => world.getAllPlayers().forEach((p) => refresh(p));
 
-// Twice a second: cheap (a string comparison per player), and it undoes the AFK pack resetting the tag.
-system.runInterval(refreshAll, 10);
+// The tag changes when the AFK pack marks a player away or back, or the Titles pack changes the title they wear: both
+// send realm:nametag { player } right after, and the tag is put right at once. Every player is also looked at every
+// 5 seconds (scripts/spread.js, one share: see the AFK pack's note), for anything that said nothing (an operator's /tag,
+// an older AFK or Titles pack).
+onScriptEvent("realm:nametag", ({ id, message }) => {
+  if (id !== "realm:nametag") return;
+  let who;
+  try {
+    who = String(JSON.parse(message)?.player ?? "");
+  } catch {
+    return;
+  }
+  const player = who ? world.getAllPlayers().find((p) => p.id === who) : undefined;
+  if (player) refresh(player);
+});
+spreadPlayers(system, world, {
+  every: 100,
+  parts: 1,
+  visit: (share) => {
+    for (const p of share) refresh(p);
+  },
+});
 onChange(() => refreshAll());
 
 /** Remembers a gamertag, so nobody can take it as a nickname while its player is offline. @param {Player} player */

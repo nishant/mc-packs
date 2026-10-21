@@ -26,10 +26,17 @@ function line(source, name, fallback) {
   return `const ${name} = ${fallback};`;
 }
 
+/** A top-level `const NAME = ...;` that may span lines. @param {string} source @param {string} name */
+function stmt(source, name) {
+  const m = source.match(new RegExp(`^const ${name} =[\\s\\S]*?;$`, "m"));
+  assert.ok(m, `production ${name}`);
+  return m[0];
+}
+
 const vec = (x, y = 64, z = 0) => ({ x, y, z });
 const OVER = "minecraft:overworld";
 
-function eliteContext({ champions, players, config = {}, tick = 1000 }) {
+function eliteContext({ champions, players, config = {}, tick = 1000, at = (i) => vec(i, 64, 0) }) {
   const touched = new Map();
   const steps = [];
   const puffs = [];
@@ -44,7 +51,7 @@ function eliteContext({ champions, players, config = {}, tick = 1000 }) {
       isValid: true,
       get location() {
         touched.set(id, (touched.get(id) ?? 0) + 1);
-        return vec(i, 64, 0);
+        return at(i);
       },
       dimension: { id: OVER },
     });
@@ -77,6 +84,7 @@ function eliteContext({ champions, players, config = {}, tick = 1000 }) {
       calls.night++;
       return true;
     },
+    CONFIG: { approach: { range: 48 } },
     CHAMP: "realm:champion",
     SPLIT: "elite:split",
   };
@@ -95,10 +103,22 @@ function eliteContext({ champions, players, config = {}, tick = 1000 }) {
     optFn(elite, "aliveCap"),
     optFn(elite, "crowdedAround"),
     "const approachSeen = new Map();",
+    // The near-player sort (O3 night scaling): absent in the baseline, where aura and approach take every champion.
+    "const detours = new Map();",
+    /^const NEAR_TICKS = /m.test(elite) ? line(elite, "NEAR_TICKS") : "",
+    /^const NEAR_MARGIN = /m.test(elite) ? line(elite, "NEAR_MARGIN") : "",
+    /^const SORT_PER_RUN = /m.test(elite) ? line(elite, "SORT_PER_RUN") : "",
+    /^const playersAt = /m.test(elite) ? line(elite, "playersAt") : "",
+    /^const nearState = /m.test(elite) ? line(elite, "nearState") : "",
+    /^let sortCursor;/m.test(elite) ? "let sortCursor;" : "",
+    optFn(elite, "sortNear"),
+    /^const nearIds = /m.test(elite) ? line(elite, "nearIds") : "",
     fn(elite, "aura"),
     optFn(elite, "approachRun"),
+    optFn(elite, "approachTurns"),
+    /^let runBlocks;/m.test(elite) ? "let runBlocks;" : "",
     fn(elite, "convert").replace(/\n {2}if \(get\("surfaceOnly"\)[\s\S]*$/, "\n  return true;\n}"),
-    "globalThis.api = { aura, convert, set loaded(v) { loaded = v; } };",
+    "globalThis.api = { aura, convert, set loaded(v) { loaded = v; }, detours };",
   ].join("\n");
   vm.runInContext(code, ctx);
   // the new source names approachRun; the baseline had the same body inline in a runInterval callback
@@ -188,6 +208,56 @@ test("approach: an invalid champion is purged and doesn't use a slot", () => {
   assert.equal(ctx.steps.length, 7);
 });
 
+test("night: champions far from every player take no aura or approach turn, so the near ones come up more often", () => {
+  // 10 champions within 10 blocks of the player, 30 more 5,000 blocks away (a night with many loaded far off).
+  const at = (i) => (i < 10 ? vec(i, 64, 0) : vec(5000 + i, 64, 0));
+  const ctx = eliteContext({ champions: 40, players: [vec(0)], at });
+  for (let r = 0; r < 4; r++) {
+    ctx.system.currentTick += 5;
+    ctx.approach(); // the first runs sort every champion once (12 a run)
+  }
+  ctx.steps.length = 0;
+  for (let r = 0; r < 10; r++) {
+    ctx.system.currentTick += 5;
+    ctx.approach();
+  }
+  const stepped = new Map();
+  for (const s of ctx.steps) stepped.set(s.e.id, (stepped.get(s.e.id) ?? 0) + 1);
+  const far = [...stepped.keys()].filter((id) => Number(id.slice(1)) >= 10);
+  assert.deepEqual(far, [], "no far champion was stepped");
+  for (let i = 0; i < 10; i++) assert.ok((stepped.get(`c${i}`) ?? 0) >= 4, `near c${i} stepped ${stepped.get(`c${i}`) ?? 0} times in 10 runs (every 2 runs with 10 near, not every 5 with 40)`);
+  ctx.puffs.length = 0;
+  for (let r = 0; r < 4; r++) ctx.api.aura();
+  assert.ok(ctx.puffs.length > 0 && ctx.puffs.every((e) => Number(e.id.slice(1)) < 10), "the aura puffs only for champions near a player");
+});
+
+test("night: with nobody online the aura puffs for no champion, not even unsorted ones after a reload", () => {
+  // 40 champions loaded, no player: the first run sorts 12 of them; the other 28 have not been sorted yet.
+  const ctx = eliteContext({ champions: 40, players: [] });
+  for (let r = 0; r < 3; r++) ctx.api.aura();
+  assert.equal(ctx.puffs.length, 0, `${ctx.puffs.length} puffs with no player online`);
+});
+
+test("night: sorting is bounded per run and a champion that a player walks up to is picked up again", () => {
+  const spots = Array.from({ length: 40 }, (_, i) => vec(5000 + i, 64, 0));
+  const ctx = eliteContext({ champions: 40, players: [vec(0)], at: (i) => spots[i] });
+  ctx.system.currentTick += 5;
+  ctx.approach();
+  assert.ok(ctx.touched.size <= 12, `one run read ${ctx.touched.size} champions' places`);
+  for (let r = 0; r < 4; r++) {
+    ctx.system.currentTick += 5;
+    ctx.approach();
+  }
+  ctx.steps.length = 0;
+  spots[7] = vec(20, 64, 0); // c7 comes within range of the player
+  for (let r = 0; r < 8; r++) {
+    ctx.system.currentTick += 5;
+    ctx.approach();
+  }
+  assert.ok(ctx.steps.some((s) => s.e.id === "c7"), "the champion now near the player is stepped within a few runs");
+  assert.ok(ctx.steps.every((s) => s.e.id === "c7"), "and only it");
+});
+
 test("density: the cap scales with players online (1/10/40/100) under the default ceiling", () => {
   assert.equal(convertCap(1, {}), 1);
   assert.equal(convertCap(10, {}), 8);
@@ -266,6 +336,10 @@ function wanderContext(players, targetCount) {
       line(wander, "LABEL_QUERY_PLAYERS", "8"),
       line(wander, "LABEL_QUERY_TARGETS", "16"),
       "let onlineN = 0; let onlineAt = -Infinity;",
+      // The near/far label passes (O3/O2 wander): absent in the baseline.
+      /^const LABEL_HOT = /m.test(wander) ? line(wander, "LABEL_HOT") : "",
+      /^const LABEL_FULL_EVERY = /m.test(wander) ? line(wander, "LABEL_FULL_EVERY") : "",
+      /^let labelRun = /m.test(wander) ? "let labelRun = 0; let hotLabels = new Set(); const labelDims = () => [];" : "",
       optFn(wander, "labelObservers"),
       "let ready = true; const DIMENSIONS = []; const live = liveRecords; const camps = {}; const NAMED_BY_ID = new Map();",
       "const nameLabels = { sync(t, observers) { globalThis.seen = observers(); } };",
@@ -315,4 +389,98 @@ test("wander upkeep: no camps, or the pack disabled, reads no player's place", (
   ctx.enabled = false;
   run();
   assert.equal(reads, 0, "disabled: no reads");
+});
+test("approach: one run reads each block once, however many angles its steps try", () => {
+  // A champion boxed in by a wall: every angle of a step and of its detour looks at the same few columns.
+  const code = [
+    stmt(elite, "WALK_THROUGH"),
+    line(elite, "NO_STEP_ON"),
+    /^let runBlocks;/m.test(elite) ? "let runBlocks;" : "let runBlocks;",
+    optFn(elite, "lookAt"),
+    line(elite, "open"),
+    line(elite, "ground"),
+    line(elite, "BODY"),
+    line(elite, "SIDE"),
+    fn(elite, "stepTo"),
+    fn(elite, "bodyStep"),
+    "globalThis.run = (dim, at, angles) => { if (typeof lookAt === 'function') runBlocks = new Map(); try { return angles.map((a) => bodyStep(dim, at, a, 0.5)); } finally { runBlocks = undefined; } };",
+  ].join("\n");
+  let reads = 0;
+  const dim = {
+    id: OVER,
+    getBlock: ({ x, y }) => {
+      reads++;
+      const wall = x >= 2; // a wall from x 2 on, ground below y 64
+      return { isAir: !(y < 64 || wall), isLiquid: false, typeId: y < 64 || wall ? "minecraft:stone" : "minecraft:air" };
+    },
+  };
+  const ctx = { Math };
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  const angles = [-2, -1, 0, 1, 2, 3, 4].map((k) => (k * Math.PI) / 4);
+  const at = { x: 1.5, y: 64, z: 0.5 };
+  const result = ctx.run(dim, at, angles);
+  assert.ok(result.some((r) => r === undefined) && result.some((r) => r !== undefined), "the wall blocks some angles and not others");
+  assert.ok(reads <= 60, `7 angles of one step read ${reads} blocks`);
+});
+
+test("approach: a step reads each nearby player's place once and a champion's tags once per refresh", () => {
+  const code = [
+    stmt(elite, "WALK_THROUGH"),
+    line(elite, "NO_STEP_ON"),
+    "let runBlocks;",
+    optFn(elite, "lookAt"),
+    line(elite, "open"),
+    line(elite, "ground"),
+    line(elite, "BODY"),
+    line(elite, "SIDE"),
+    line(elite, "DETOUR_STEPS"),
+    line(elite, "REST_STEPS"),
+    line(elite, "LEASH"),
+    line(elite, "LEASH_GRACE"),
+    line(elite, "LEASH_MAX"),
+    "const detours = new Map();",
+    /^const ownedSeen = /m.test(elite) ? line(elite, "ownedSeen") : "",
+    (elite.match(/^const ownedElsewhere = [^\n]*;$/m) ?? elite.match(/^const ownedElsewhere = [\s\S]*?^\};$/m))[0],
+    line(elite, "dist"),
+    fn(elite, "stepTo"),
+    fn(elite, "bodyStep"),
+    fn(elite, "feet"),
+    fn(elite, "approachStep"),
+    "globalThis.step = (e) => approachStep(e, 0.5, 1);",
+  ].join("\n");
+  const counts = { playerPlace: 0, tags: 0, teleports: 0 };
+  const dim = {
+    id: OVER,
+    getBlock: ({ x, y }) => ({ isAir: !(y < 64 || x >= 3), isLiquid: false, typeId: y < 64 || x >= 3 ? "minecraft:stone" : "minecraft:air" }),
+    getPlayers: () =>
+      [0, 1, 2, 3, 4].map((i) => ({
+        get location() {
+          counts.playerPlace++;
+          return vec(30, 64, 4 + i);
+        },
+      })),
+  };
+  const champ = {
+    id: "c0",
+    isValid: true,
+    isInWater: false,
+    isOnGround: true,
+    location: vec(1.5, 64, 0.5),
+    dimension: dim,
+    getTags() {
+      counts.tags++;
+      return ["realm:champion"];
+    },
+    teleport() {
+      counts.teleports++;
+    },
+  };
+  const ctx = { Math, GameMode: { Creative: "c", Spectator: "s" }, CONFIG: { approach: { range: 48, stopDistance: 10 } }, get: () => 48, isProtected: () => false };
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  for (let i = 0; i < 4; i++) ctx.step(champ);
+  assert.ok(counts.teleports > 0, "the champion stepped round the wall");
+  assert.ok(counts.playerPlace <= 4 * 5, `4 steps with 5 players read ${counts.playerPlace} player places`);
+  assert.equal(counts.tags, 1, "tags read once");
 });

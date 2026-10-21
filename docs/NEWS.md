@@ -7,6 +7,14 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Smoother with many players, steadier side boxes and safer Expeditions
+
+- The Minimap's compass strip and radar no longer blink off now and then when many players are on.
+- Side boxes keep the right text: a box from one pack no longer covers or blanks another pack's newer box (for example the Coordinates HUD after a Blood Moon title).
+- Fewer slowdowns with many players on: the Minimap shares its title with the other side boxes, and many once-a-second checks are cheaper.
+- The Blood Moon's first wave no longer stalls the server for a moment.
+- Expeditions: your stored items are never handed back twice when you leave or a cart breaks during the hand-back, and storage carts that only unloaded are put down again instead of your items being reported lost.
+
 ## Lighter auto-store, steadier Easy Building and Kitchen fixes
 
 - Auto-store is lighter: a saved page that is full of full stacks of what you are picking up is skipped without being opened.

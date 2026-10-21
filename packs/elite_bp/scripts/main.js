@@ -364,13 +364,16 @@ function turnOf(ids, after, cap) {
   return { batch, last: batch[take - 1] };
 }
 
-/** One aura puff for the champions whose turn it is, when a player is within 64 blocks. */
+/**
+ * One aura puff for the champions whose turn it is, among those with a player within 64 blocks when last sorted
+ * (`sortNear`): far champions take no turn.
+ */
 function aura() {
   const started = Date.now();
-  const players = world.getAllPlayers().map((p) => ({ dim: p.dimension.id, at: p.location }));
-  if (!players.length) return;
+  sortNear();
   let n = 0;
-  const turn = turnOf([...live.keys()], auraCursor, AURA_PER_RUN);
+  // Nobody online at the last read of the players' places: no puffs, not even from champions not sorted yet (a reload).
+  const turn = playersAt.list.length ? turnOf(nearIds("aura"), auraCursor, AURA_PER_RUN) : { batch: [], last: auraCursor };
   auraCursor = turn.last;
   for (const id of turn.batch) {
     const e = live.get(id);
@@ -380,9 +383,6 @@ function aura() {
         live.delete(id);
         continue;
       }
-      const at = e.location;
-      const dim = e.dimension.id;
-      if (!players.some((p) => p.dim === dim && (p.at.x - at.x) ** 2 + (p.at.y - at.y) ** 2 + (p.at.z - at.z) ** 2 < AURA_RANGE_SQ)) continue;
       const trait = known.get(id)?.trait ?? traitOf(e);
       if (!trait) continue;
       puff(e, trait === "shielded" && !shieldUp(e) ? BROKEN.particle : LOOKS[trait].particle, 2);
@@ -732,9 +732,30 @@ const WALK_THROUGH =
 /** Ground it never steps onto: what mobs can't climb over, what burns or pricks, and fluids. */
 const NO_STEP_ON = /fence|wall|_gate|magma|campfire|fire|cactus|sweet_berry|powder_snow|lava|water|scaffolding|pointed_dripstone/;
 
-/** Can a mob stand in this block (feet or head)? @param {import("@minecraft/server").Block | undefined} b */
+/** @typedef {{ isAir: boolean, isLiquid: boolean, typeId: string }} BlockLook */
+/**
+ * The blocks read during one approach run, by dimension and place: a step tries several angles and each looks at the
+ * same few columns (its center, its leading edge, both corners, from head height down), so a block is read once a run
+ * instead of once per look. Only within a run (one tick): nothing is kept between runs. @type {Map<string, BlockLook | undefined> | undefined}
+ */
+let runBlocks;
+/**
+ * A block's air, liquid and type, read once per approach run (`runBlocks`), or straight from the game outside a run.
+ * Undefined where `getBlock` gives nothing; an unloaded chunk throws, as `getBlock` does.
+ * @param {Dimension} dim @param {Vector3} at @returns {BlockLook | undefined}
+ */
+function lookAt(dim, at) {
+  const key = runBlocks && `${dim.id}|${at.x}|${at.y}|${at.z}`;
+  if (key && runBlocks?.has(key)) return runBlocks.get(key);
+  const b = dim.getBlock(at);
+  const look = b ? { isAir: b.isAir, isLiquid: b.isLiquid, typeId: b.typeId } : undefined;
+  if (key) runBlocks?.set(key, look);
+  return look;
+}
+
+/** Can a mob stand in this block (feet or head)? @param {BlockLook | undefined} b */
 const open = (b) => !!b && !b.isLiquid && (b.isAir || WALK_THROUGH.test(b.typeId));
-/** Can a mob stand on this block? @param {import("@minecraft/server").Block | undefined} b */
+/** Can a mob stand on this block? @param {BlockLook | undefined} b */
 const ground = (b) => !!b && !b.isAir && !b.isLiquid && !WALK_THROUGH.test(b.typeId) && !NO_STEP_ON.test(b.typeId);
 
 /**
@@ -753,7 +774,7 @@ function stepTo(dim, from, x, z) {
   const fy = Math.floor(from.y + 0.01);
   /** Are blocks y1..y2 of column (cx, cz) all open? @param {number} cx @param {number} cz @param {number} y1 @param {number} y2 */
   const clear = (cx, cz, y1, y2) => {
-    for (let y = y1; y <= y2; y++) if (!open(dim.getBlock({ x: cx, y, z: cz }))) return false;
+    for (let y = y1; y <= y2; y++) if (!open(lookAt(dim, { x: cx, y, z: cz }))) return false;
     return true;
   };
   for (const dy of [0, 1, -1, -2, -3]) {
@@ -761,14 +782,14 @@ function stepTo(dim, from, x, z) {
     if (y - from.y > 1.01) continue; // no higher than a jump
     const top = Math.max(y, fy) + 1; // the highest block it passes through: its head, at the higher of the two heights
     if (!clear(bx, bz, y, top)) continue; // a step down needs the whole column clear, a wall in front stops it
-    const below = dim.getBlock({ x: bx, y: y - 1, z: bz });
+    const below = lookAt(dim, { x: bx, y: y - 1, z: bz });
     if (!ground(below)) {
       // Air below: only fine further down (the drop is checked by the next dy).
       if (below && (below.isAir || WALK_THROUGH.test(below.typeId))) continue;
       return undefined;
     }
     // A step up also needs room above its own head.
-    if (dy > 0 && !open(dim.getBlock({ x: fx, y: fy + 2, z: fz }))) return undefined;
+    if (dy > 0 && !open(lookAt(dim, { x: fx, y: fy + 2, z: fz }))) return undefined;
     if (bx !== fx && bz !== fz && !clear(bx, fz, Math.max(y, fy), top) && !clear(fx, bz, Math.max(y, fy), top)) return undefined;
     return { x, y, z };
   }
@@ -776,7 +797,13 @@ function stepTo(dim, from, x, z) {
 }
 
 /** Is this champion one the approach leaves alone (an Expedition's)? @param {Entity} e */
-const ownedElsewhere = (e) => e.getTags().some((t) => t.startsWith("realm:exp"));
+const ownedElsewhere = (e) => {
+  let owned = ownedSeen.get(e.id);
+  if (owned === undefined) ownedSeen.set(e.id, (owned = e.getTags().some((t) => t.startsWith("realm:exp"))));
+  return owned;
+};
+/** Whether each champion is an Expedition's, read from its tags once per refresh (every 5 seconds) instead of every step. @type {Map<string, boolean>} */
+const ownedSeen = new Map();
 
 /** How far ahead of its center a step looks: the mob's body reaches past its center, and a wall or a
  * step that only its body touches stopped it for good (the game pushed it back out every step). */
@@ -843,7 +870,7 @@ function feet(e) {
   const v = e.getVelocity();
   if (v.y < -0.5 || Math.hypot(v.x, v.z) > 0.4) return undefined;
   for (let y = Math.floor(at.y + 0.01); y >= Math.floor(at.y) - 2; y--) {
-    const b = e.dimension.getBlock({ x: Math.floor(at.x), y: y - 1, z: Math.floor(at.z) });
+    const b = lookAt(e.dimension, { x: Math.floor(at.x), y: y - 1, z: Math.floor(at.z) });
     if (!b || b.isLiquid) return undefined;
     if (ground(b)) return at.y - y <= 1.3 ? { x: at.x, y, z: at.z } : undefined;
     if (!open(b)) return undefined;
@@ -865,17 +892,26 @@ function approachStep(e, step, units = 1) {
   const range = Number(get("approach.range")) || CONFIG.approach.range;
   const stop = CONFIG.approach.stopDistance;
   // Players in a safe zone, land claim or town are left alone (no crowd of champions at its edge).
-  const target = dim
-    .getPlayers({ location: at, maxDistance: range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], excludeTags: ["afk"] })
-    .filter((p) => !isProtected(dim.id, p.location.x, p.location.z))
-    .sort((a, b) => dist(a.location, at) - dist(b.location, at))[0];
+  // Each player's place is read once (the steps below look at the target's for every angle they try).
+  /** @type {Vector3 | undefined} */
+  let target;
+  let best = Infinity;
+  for (const p of dim.getPlayers({ location: at, maxDistance: range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], excludeTags: ["afk"] })) {
+    const l = p.location;
+    if (isProtected(dim.id, l.x, l.z)) continue;
+    const d = dist(l, at);
+    if (d < best) {
+      best = d;
+      target = l;
+    }
+  }
   let d = detours.get(e.id);
   if (!target) {
     if (d && d.rest === undefined) detours.delete(e.id);
     return;
   }
-  const dx = target.location.x - at.x;
-  const dz = target.location.z - at.z;
+  const dx = target.x - at.x;
+  const dz = target.z - at.z;
   const flat = Math.hypot(dx, dz);
   if (flat <= stop) {
     detours.delete(e.id);
@@ -895,10 +931,10 @@ function approachStep(e, step, units = 1) {
     if (!inZone && isProtected(dim.id, at.x + Math.cos(a) * (step + BODY), at.z + Math.sin(a) * (step + BODY))) return false; // safe zones and claims: not by our hand
     const to = bodyStep(dim, at, a, step);
     if (!to) return false;
-    const after = Math.hypot(target.location.x - to.x, target.location.z - to.z);
+    const after = Math.hypot(target.x - to.x, target.z - to.z);
     if (after > reach && after > flat) return false;
     const y = to.y === Math.floor(at.y + 0.01) ? at.y : to.y; // same height: keep a slab's half
-    e.teleport({ x: to.x, y, z: to.z }, { facingLocation: { x: target.location.x, y: y + 1.5, z: target.location.z }, keepVelocity: false });
+    e.teleport({ x: to.x, y, z: to.z }, { facingLocation: { x: target.x, y: y + 1.5, z: target.z }, keepVelocity: false });
     return true;
   };
   if (!d || d.heading === undefined || d.hit === undefined) {
@@ -952,15 +988,99 @@ function stepFor(speed, elapsed) {
 /** Tick of each champion's last approach step. @type {Map<string, number>} */
 const approachSeen = new Map();
 
+/** How often (ticks) the players' places are read for sorting champions by how near the closest one is. */
+const NEAR_TICKS = 20;
+/** Room (blocks) over the approach range for players and champions moving between two sorts of a champion. */
+const NEAR_MARGIN = 16;
+/** Champions re-sorted per aura or approach run (in a round robin, like the runs themselves): about 70 a second. */
+const SORT_PER_RUN = AURA_PER_RUN;
+/** The players' places, read at most once every NEAR_TICKS. @type {{ at: number, list: { dim: string, x: number, y: number, z: number }[] }} */
+const playersAt = { at: -Infinity, list: [] };
+/**
+ * Whether each champion had a player within the aura's 64 blocks (`aura`) and within the approach range plus
+ * NEAR_MARGIN (`approach`) when it was last sorted. The aura and approach round robins take their turns only from the
+ * champions near someone (an unsorted, new one counts as near), so their cost follows the champions near players and
+ * a far one costs only its sort, not a step or a puff.
+ * @type {Map<string, { aura: boolean, approach: boolean }>}
+ */
+const nearState = new Map();
+/** @type {string | undefined} */
+let sortCursor;
+
+/** Re-sorts the next SORT_PER_RUN loaded champions by the players near them (a fresh read of the players once every NEAR_TICKS). */
+function sortNear() {
+  if (!live.size) return;
+  const tick = system.currentTick;
+  if (tick - playersAt.at >= NEAR_TICKS || tick < playersAt.at) {
+    playersAt.at = tick;
+    playersAt.list = [];
+    for (const p of world.getAllPlayers()) {
+      try {
+        const l = p.location;
+        playersAt.list.push({ dim: p.dimension.id, x: l.x, y: l.y, z: l.z });
+      } catch {
+        // left this tick
+      }
+    }
+  }
+  const reach = (Number(get("approach.range")) || CONFIG.approach.range) + NEAR_MARGIN;
+  const reachSq = reach * reach;
+  const turn = turnOf([...live.keys()], sortCursor, SORT_PER_RUN);
+  sortCursor = turn.last;
+  for (const id of turn.batch) {
+    const e = live.get(id);
+    if (!e) continue;
+    let best = Infinity;
+    try {
+      if (!e.isValid) {
+        live.delete(id);
+        approachSeen.delete(id);
+        nearState.delete(id);
+        continue;
+      }
+      const at = e.location;
+      const dim = e.dimension.id;
+      for (const p of playersAt.list) {
+        if (p.dim !== dim) continue;
+        const d2 = (p.x - at.x) ** 2 + (p.y - at.y) ** 2 + (p.z - at.z) ** 2;
+        if (d2 < best) best = d2;
+      }
+    } catch {
+      continue; // unloaded this tick: sorted next time
+    }
+    const state = { aura: best < AURA_RANGE_SQ, approach: best <= reachSq };
+    nearState.set(id, state);
+    if (!state.approach) {
+      // Nobody near: like an approach step that finds no target, a detour (not a rest) is over.
+      const d = detours.get(id);
+      if (d && d.rest === undefined) detours.delete(id);
+    }
+  }
+}
+
+/** The loaded champions near a player for `kind`, in `live` order (an unsorted one counts as near). @param {"aura" | "approach"} kind */
+const nearIds = (kind) => [...live.keys()].filter((id) => nearState.get(id)?.[kind] !== false);
+
 /** One approach run: a step for the champions whose turn it is (`APPROACH_PER_RUN` at most). */
 function approachRun() {
   if (get("approach.enabled") !== true || !live.size) return;
   const speed = Math.max(0, Number(get("approach.speed")) || 0);
   if (speed <= 0) return;
   const now = system.currentTick;
-  const turn = turnOf([...live.keys()], approachCursor, APPROACH_PER_RUN);
+  sortNear();
+  const turn = turnOf(nearIds("approach"), approachCursor, APPROACH_PER_RUN);
   approachCursor = turn.last;
-  for (const id of turn.batch) {
+  runBlocks = new Map();
+  try {
+    approachTurns(turn.batch, speed, now);
+  } finally {
+    runBlocks = undefined;
+  }
+}
+
+/** The approach steps of one run's champions. @param {string[]} batch @param {number} speed @param {number} now */
+function approachTurns(batch, speed, now) {
+  for (const id of batch) {
     const e = live.get(id);
     if (!e) continue;
     if (!e.isValid) {
@@ -1202,6 +1322,8 @@ function refresh() {
   for (const id of live.keys()) if (!seen.has(id)) live.delete(id);
   for (const id of detours.keys()) if (!seen.has(id)) detours.delete(id);
   for (const id of approachSeen.keys()) if (!seen.has(id)) approachSeen.delete(id);
+  for (const id of nearState.keys()) if (!seen.has(id)) nearState.delete(id);
+  ownedSeen.clear();
   for (const id of nextStrike.keys()) if (!seen.has(id)) nextStrike.delete(id);
   const now = Date.now();
   for (const [id, m] of hitters) {

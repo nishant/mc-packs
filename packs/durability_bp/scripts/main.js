@@ -6,12 +6,20 @@ import { onScriptEvent } from "./script-events.js";
 
 // Player property "durability:off" (true = warnings off) is the "off" preference in settings.js.
 
-/** Held items wear down fast (mining, fighting): looked at every check. */
+/** Held items wear down when used (mining, fighting, a bow, a hoe...): checked after each use, hit or hotbar change. */
 const HELD = [EquipmentSlot.Mainhand, EquipmentSlot.Offhand];
-/** Armor wears down a point per hit: every ARMOR_EVERY checks is soon enough, and keeps 40 players cheap. */
+/** Armor wears down a point per hit: checked after the wearer is hurt. */
 const ARMOR = [EquipmentSlot.Head, EquipmentSlot.Chest, EquipmentSlot.Legs, EquipmentSlot.Feet];
+/** An elytra wears down while gliding, which fires no event: its wearer's armor is checked every ARMOR_EVERY checks. */
 const ARMOR_EVERY = 4;
 const ALL = [...HELD, ...ARMOR];
+/** Held items that wear with no event at the moment they wear: a shield blocking a hit (a blocked hit deals no damage, so
+ * no entityHurt), and a brush (it wears when brushing ends, long after the interaction that started it). A player holding
+ * one has that hand checked at every check, so its warning comes as quickly as for any other tool. */
+const QUIET = new Set(["minecraft:shield", "minecraft:brush"]);
+/** Every slot of every player is also checked once in this many checks (5 s by default), spread over the checks by
+ * player, for what fires no event (armor put on by a dispenser or a command, another pack changing an item). */
+const SWEEP_EVERY = 10;
 
 const OK = 0;
 const WARN = 1;
@@ -26,28 +34,110 @@ const maxOf = new Map();
 /** @type {Set<string>} */
 const undamageable = new Set();
 
+/** Players whose held items may have worn down or changed since their last check. @type {Set<string>} */
+const heldDirty = new Set();
+/** Players who were hurt (armor wears) since their last check. @type {Set<string>} */
+const armorDirty = new Set();
+/** Players wearing an elytra at their last armor check. @type {Set<string>} */
+const gliders = new Set();
+/** player id → the held slots that held a QUIET item at their last check. @type {Map<string, Set<EquipmentSlot>>} */
+const quiet = new Map();
+/** Each player's share of the sweep (0 to SWEEP_EVERY - 1), from a hash of their id. @type {Map<string, number>} */
+const sweepSlot = new Map();
+/** @param {string} id */
+function slotOf(id) {
+  let s = sweepSlot.get(id);
+  if (s !== undefined) return s;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  sweepSlot.set(id, (s = (h >>> 8) % SWEEP_EVERY));
+  return s;
+}
+
+/** @param {unknown} e @returns {e is Player} */
+const isPlayer = (e) => e instanceof Player || /** @type {any} */ (e)?.typeId === "minecraft:player";
+/** @param {unknown} e */
+const held = (e) => {
+  if (isPlayer(e)) heldDirty.add(e.id);
+};
+
+// What wears a held item down, or changes it: each marks the player for the next check.
+world.afterEvents.playerBreakBlock.subscribe(({ player }) => held(player));
+world.afterEvents.playerInteractWithBlock.subscribe(({ player }) => held(player));
+world.afterEvents.playerInteractWithEntity.subscribe(({ player }) => held(player));
+world.afterEvents.itemUse.subscribe(({ source }) => held(source));
+world.afterEvents.itemReleaseUse.subscribe(({ source }) => held(source));
+world.afterEvents.itemCompleteUse.subscribe(({ source }) => held(source));
+world.afterEvents.itemStopUseOn.subscribe(({ source }) => held(source));
+world.afterEvents.entityHitEntity.subscribe(({ damagingEntity }) => held(damagingEntity), { entityTypes: ["minecraft:player"] });
+world.afterEvents.entityHitBlock.subscribe(({ damagingEntity }) => held(damagingEntity), { entityTypes: ["minecraft:player"] });
+world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player }) => held(player));
+/** Can be worn (put on from the inventory, or taken off into it). @param {import("@minecraft/server").ItemStack | undefined} item */
+const wearable = (item) => !!item && /_(helmet|chestplate|leggings|boots)$|:elytra$/.test(item.typeId);
+world.afterEvents.playerInventoryItemChange.subscribe(({ player, itemStack, beforeItemStack }) => {
+  held(player);
+  if (player && (wearable(beforeItemStack) || wearable(itemStack))) armorDirty.add(player.id);
+});
+// Hurt: armor wears. (A shield that blocks the whole hit fires no hurt: QUIET items are checked every check instead.)
+world.afterEvents.entityHurt.subscribe(
+  ({ hurtEntity }) => {
+    if (!isPlayer(hurtEntity)) return;
+    heldDirty.add(hurtEntity.id);
+    armorDirty.add(hurtEntity.id);
+  },
+  { entityTypes: ["minecraft:player"] },
+);
+world.afterEvents.playerSpawn.subscribe(({ player }) => {
+  heldDirty.add(player.id);
+  armorDirty.add(player.id);
+});
+
 let round = 0;
 system.runInterval(() => {
-  const slots = ++round % ARMOR_EVERY === 0 ? ALL : HELD;
+  round++;
+  const sweep = round % SWEEP_EVERY;
+  const glide = round % ARMOR_EVERY === 0;
   for (const player of world.getAllPlayers()) {
     try {
-      check(player, slots);
+      const id = player.id;
+      const all = armorDirty.has(id) || slotOf(id) === sweep || (glide && gliders.has(id));
+      if (!all && !heldDirty.has(id)) {
+        const hands = quiet.get(id);
+        if (hands) check(player, [...hands]);
+        continue;
+      }
+      heldDirty.delete(id);
+      if (all) armorDirty.delete(id);
+      check(player, all ? ALL : HELD);
     } catch (e) {
       console.warn(`[durability] ${e}`);
     }
   }
 }, CONFIG.checkIntervalTicks);
 
-world.afterEvents.playerLeave.subscribe(({ playerId }) => state.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  state.delete(playerId);
+  heldDirty.delete(playerId);
+  armorDirty.delete(playerId);
+  gliders.delete(playerId);
+  quiet.delete(playerId);
+  sweepSlot.delete(playerId);
+});
 
 // Turning warnings back on (here, in /realm:prefs or with /realm:durability) starts the levels over.
 onChange((key, player) => {
-  if (player && key === "off") state.delete(player.id);
+  if (!player || key !== "off") return;
+  state.delete(player.id);
+  heldDirty.add(player.id);
+  armorDirty.add(player.id);
 });
 
 /** @param {Player} player @param {EquipmentSlot[]} slots */
 function check(player, slots) {
-  if (getFor(player, "off") === true) return;
+  if (getFor(player, "off") === true) {
+    quiet.delete(player.id);
+    return;
+  }
   const equippable = player.getComponent("minecraft:equippable");
   if (!equippable) return;
 
@@ -58,6 +148,19 @@ function check(player, slots) {
     // Each hotbar slot counts separately, so switching to another worn tool warns again.
     const key = slot === EquipmentSlot.Mainhand ? `${slot}:${player.selectedSlotIndex}` : slot;
     const item = equippable.getEquipment(slot);
+    if (slot === EquipmentSlot.Chest) {
+      if (item?.typeId === "minecraft:elytra") gliders.add(player.id);
+      else gliders.delete(player.id);
+    } else if (slot === EquipmentSlot.Mainhand || slot === EquipmentSlot.Offhand) {
+      let hands = quiet.get(player.id);
+      if (item && QUIET.has(item.typeId)) {
+        if (!hands) quiet.set(player.id, (hands = new Set()));
+        hands.add(slot);
+      } else if (hands) {
+        hands.delete(slot);
+        if (!hands.size) quiet.delete(player.id);
+      }
+    }
     if (!item) {
       seen.delete(key);
       continue;

@@ -661,10 +661,13 @@ system.runInterval(() => {
     if (burst.tick > burst.totalTicks) activeNosBursts.delete(playerId);
   }
 
-  // Ambient slipstream: fast gliding without a NOS burst still shows a crisp air-stream ahead and a puff behind
-  if (tick % 2 !== 0 || get("enabled") === false) return;
-  for (const player of world.getAllPlayers()) {
+  // Ambient slipstream: fast gliding without a NOS burst still shows a crisp air-stream ahead and a puff behind.
+  // Only the players the HUD round last saw gliding (every INTERVAL ticks) are looked at, not everyone every 2 ticks.
+  if (tick % 2 !== 0 || get("enabled") === false || !gliders.size) return;
+  for (const player of gliders.values()) {
     try {
+      // No isValid first: on a handle kept from an earlier tick it makes the reads after it several times dearer
+      // (BDS 1.26); a player who left throws on the first read, caught below.
       if (!player.isGliding || player.isOnGround || activeNosBursts.has(player.id) || hudOff(player)) continue;
       const vel = player.getVelocity();
       const spd = Math.hypot(vel.x, vel.y, vel.z);
@@ -695,6 +698,8 @@ system.runInterval(() => {
 }, 1);
 
 const INTERVAL = Math.max(1, CONFIG.intervalTicks);
+/** Players seen gliding at the last HUD round (every INTERVAL ticks), by id: the slipstream looks only at them. @type {Map<string, Player>} */
+const gliders = new Map();
 /** How long (ticks) each request asks the Coordinates HUD to leave the action bar alone; renewed every third of that while gliding. */
 const HOLD_TICKS = Math.max(30, INTERVAL * 3);
 /** player id -> tick of the last realm:actionbar request */
@@ -735,6 +740,8 @@ system.runInterval(() => {
   for (const player of world.getAllPlayers()) {
     try {
       const gliding = player.isGliding;
+      if (gliding) gliders.set(player.id, player);
+      else gliders.delete(player.id);
       // Only a gliding player's HUD is drawn: a player on the ground needs neither their `where` setting nor `hudOff` read.
       const off = gliding && hudOff(player);
       const where = gliding ? getFor(player, "where") : undefined;
@@ -765,6 +772,7 @@ system.runInterval(() => {
 }, INTERVAL);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  gliders.delete(playerId);
   heldAt.delete(playerId);
   barHeld.delete(playerId);
   inBox.delete(playerId);

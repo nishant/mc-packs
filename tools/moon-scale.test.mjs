@@ -421,3 +421,50 @@ test("dawn: Blood Moon monsters in the Nether and the End are removed too, so th
     w.done();
   }
 });
+/** A fake block list of `n` types whose id reads are counted per game tick. @param {any} w @param {number} n */
+function countedBlockList(w, n) {
+  /** @type {Map<number, number>} */
+  const perTick = new Map();
+  const types = Array.from({ length: n }, (_, i) => ({
+    get id() {
+      perTick.set(w.sim.game.tick, (perTick.get(w.sim.game.tick) ?? 0) + 1);
+      return i % 10 === 0 ? `minecraft:oak_planks_${i}` : `minecraft:stone_${i}`;
+    },
+  }));
+  w.sim.server.BlockTypes.getAll = () => types;
+  // One generator step a tick, as a busy server would run the job (pack-sim's runJob takes 50 at once).
+  w.sim.server.system.runJob = (gen) => {
+    const id = w.sim.server.system.runInterval(() => {
+      if (gen.next().done) w.sim.server.system.clearRun(id);
+    }, 1);
+    return id;
+  };
+  return perTick;
+}
+
+test("O7 load hitch: the player-made block list is built in small steps after world load, not in one tick", async () => {
+  const w = await night({ players: 0, at: apart });
+  try {
+    const perTick = countedBlockList(w, 1200);
+    w.run(10);
+    const reads = [...perTick.values()];
+    assert.equal(reads.reduce((a, b) => a + b, 0), 1200, "every type's id was read once");
+    assert.ok(Math.max(...reads) <= 64, `at most 64 ids read in one tick (most: ${Math.max(...reads)})`);
+  } finally {
+    w.done();
+  }
+});
+
+test("O7 load hitch: a wave before the stepped list is done still gets the whole list", async () => {
+  const w = await night({ players: 1, at: apart });
+  try {
+    // 30,000 types take 469 one-step ticks (over 23 s): the first wave (within 20 s) comes before the job is done.
+    const perTick = countedBlockList(w, 30000);
+    w.run(25);
+    assert.equal([...perTick.values()].reduce((a, b) => a + b, 0), 30000, "the list was finished, each id read once");
+    assert.ok(Math.max(...perTick.values()) > 64, "the first wave finished the rest of the list at once");
+    assert.ok(w.g.spawned.length > 0, "waves spawned with the list built");
+  } finally {
+    w.done();
+  }
+});

@@ -5,6 +5,7 @@ import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
+import { spreadPlayers } from "./spread.js";
 
 /** @typedef {"miners" | "growers" | "wardens" | "wayfarers"} Guild */
 /** @typedef {import("@minecraft/server").ScoreboardObjective} ScoreboardObjective */
@@ -577,57 +578,72 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   dirty.delete(playerId);
 });
 
-/** Saves changed counters (every 30 seconds: they change too often to save each time). */
-function saveProgress() {
-  for (const id of dirty) {
-    const p = online(id);
-    const prog = progCache.get(id);
-    if (!p || !prog) continue;
-    try {
-      p.setDynamicProperty(PROP_PROG, JSON.stringify({ o: prog.o, c: prog.c, k: prog.k, b: Math.floor(prog.b) }));
-    } catch (e) {
-      console.warn(`[guilds] save: ${e}`);
-    }
+/** Saves a player's changed counters (every 30 seconds: they change too often to save each time). @param {Player} p */
+function saveProgress(p) {
+  if (!dirty.has(p.id)) return;
+  dirty.delete(p.id);
+  const prog = progCache.get(p.id);
+  if (!prog) return;
+  try {
+    p.setDynamicProperty(PROP_PROG, JSON.stringify({ o: prog.o, c: prog.c, k: prog.k, b: Math.floor(prog.b) }));
+  } catch (e) {
+    console.warn(`[guilds] save: ${e}`);
   }
-  dirty.clear();
 }
 
-let seconds = 0;
-system.runInterval(() => {
-  seconds++;
-  for (const p of world.getAllPlayers()) {
-    try {
-      const l = liveOf(p);
-      const loc = p.location;
-      const dim = p.dimension.id;
-      const last = l.last;
-      l.last = { x: loc.x, y: loc.y, z: loc.z, dim };
-      if (!last || last.dim !== dim || !playing(p)) continue;
-      // Idle players (the AFK pack's tag) earn nothing: riding a minecart or boat loop isn't traveling.
-      if (CONFIG.afkTag && p.hasTag(CONFIG.afkTag)) continue;
-      const dist = Math.hypot(loc.x - last.x, loc.y - last.y, loc.z - last.z);
-      if (dist > CONFIG.maxSpeed || dist < 0.05) continue;
-      count(p, "b", dist, get("passive.blocksPerRep"), "wayfarers");
-      // Wayfarers' perk: sprint distance (on the ground), not while our Speed is still on.
-      if (p.isSprinting && system.currentTick >= l.speedUntil && hasPerk(p, "wayfarers")) {
-        const w = CONFIG.perks.wayfarers;
-        l.sprint += Math.hypot(loc.x - last.x, loc.z - last.z);
-        if (l.sprint >= w.sprintBlocks) {
-          l.sprint = 0;
-          l.speedUntil = system.currentTick + w.speedSeconds * 20;
-          perkEffect(p, "speed", w.speedSeconds * 20);
-          perkNote(p, `§bWayfarers' Guild: Speed I for ${w.speedSeconds}s`);
-        }
-      }
-    } catch (e) {
-      console.warn(`[guilds] ${e}`);
+// Each player once a second, saved every 30 seconds. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
+// The placed blocks save every
+// 30 seconds from `start`, which runs each round whoever is online (a share, even share 0, can stay empty).
+spreadPlayers(system, world, {
+  every: 20,
+  parts: 1,
+  start: (_, round) => {
+    if (round % 30 === 0) savePlaced();
+  },
+  visit: (share, { round, part }) => {
+    const saving = (round + part) % 30 === 0;
+    for (const p of share) {
+      travel(p);
+      if (saving) saveProgress(p);
     }
+  },
+});
+
+/** One player's second of travel (Wayfarers rep and perk). @param {Player} p */
+function travel(p) {
+  try {
+    const l = liveOf(p);
+    // Idle players (the AFK pack's tag) earn nothing: riding a minecart or boat loop isn't traveling. Their position
+    // isn't read; the first second back starts from where they are then.
+    if (CONFIG.afkTag && p.hasTag(CONFIG.afkTag)) {
+      l.last = undefined;
+      return;
+    }
+    const loc = p.location;
+    const dim = p.dimension.id;
+    const last = l.last;
+    l.last = { x: loc.x, y: loc.y, z: loc.z, dim };
+    if (!last || last.dim !== dim) return;
+    const dist = Math.hypot(loc.x - last.x, loc.y - last.y, loc.z - last.z);
+    // standing still (the usual case) needs no game mode read
+    if (dist > CONFIG.maxSpeed || dist < 0.05 || !playing(p)) return;
+    count(p, "b", dist, get("passive.blocksPerRep"), "wayfarers");
+    // Wayfarers' perk: sprint distance (on the ground), not while our Speed is still on.
+    if (p.isSprinting && system.currentTick >= l.speedUntil && hasPerk(p, "wayfarers")) {
+      const w = CONFIG.perks.wayfarers;
+      l.sprint += Math.hypot(loc.x - last.x, loc.z - last.z);
+      if (l.sprint >= w.sprintBlocks) {
+        l.sprint = 0;
+        l.speedUntil = system.currentTick + w.speedSeconds * 20;
+        perkEffect(p, "speed", w.speedSeconds * 20);
+        perkNote(p, `§bWayfarers' Guild: Speed I for ${w.speedSeconds}s`);
+      }
+    }
+  } catch (e) {
+    console.warn(`[guilds] ${e}`);
   }
-  if (seconds % 30 === 0) {
-    saveProgress();
-    savePlaced();
-  }
-}, 20);
+}
 
 // ---------------------------------------------------------------------------
 // Menus

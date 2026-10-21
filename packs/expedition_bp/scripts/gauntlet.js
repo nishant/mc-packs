@@ -313,8 +313,285 @@ export function saveStash(p, dim, at) {
   }
 }
 
+/** Deletes a stored record's structure. True once it's gone (or never was). @param {string} id */
+function forgetStructure(id) {
+  try {
+    world.structureManager.delete(id);
+  } catch {
+    // not saved
+  }
+  try {
+    return !world.structureManager.get(id);
+  } catch {
+    return false;
+  }
+}
+
 /** @param {number} ticks */
 const wait = (ticks) => new Promise((res) => system.runTimeout(() => res(undefined), ticks));
+
+// ---------------------------------------------------------------------------
+// Cart marks (O19): whether a stash's or parcel's carts were ever in the world, kept by the world, not the player.
+// The record on the player (or the parcel list) only learns `seen` once the hand-over finds the carts, a few ticks
+// after the structure is put down. A disconnect, a broken cart or a restart inside those ticks left a record saying
+// "put down, never seen", which put the structure down again: a second copy of every item. So from the moment the
+// structure is put down, the world watches for its carts without the player: at once, then every tick for 40 ticks,
+// plus any cart of the record being removed (broken, unloaded) in that window, and any cart of it loading later.
+// One sighting is enough: a record whose carts were seen is never put down again as a whole.
+// How each seen cart left the world is kept too (CART_GONE): one removed still holding its items (unloaded where
+// nobody is, or taken away by a script: nothing was dropped) is put down again from the structure when its record
+// can't find it; one broken or emptied (its items left it, so a second copy would be a duplicate), or whose end
+// wasn't seen, is not. A record is never forgotten while its structure (the items) is still saved.
+// ---------------------------------------------------------------------------
+
+const CART_MARKS = "expedition:cart_marks"; // world: JSON { <cart tag>: 0 put down, not seen yet | 1 seen }
+// A mark lives from a hand-over's put-down until it ends, so a player who never comes back leaves one behind. Over the
+// cap, "not seen yet" marks go first (oldest first: forgetting one only means carts that never appeared may be put down
+// again), and a "seen" mark only when nothing else is left: losing one could put a second copy down. 800 marks of
+// ~30 characters stay well under a dynamic property's 32767.
+const MARKS_MAX = 800;
+const WATCH_TICKS = 40;
+const CART_TYPE = "minecraft:chest_minecart";
+const OWN_CART_TAG = /^realm:exp_(stash|parcel)_\d+$/;
+const PART_TAG = /^realm:exp_(?:stash|parcel)_part_(\d+)$/;
+/** @type {Map<string, 0 | 1> | undefined} */
+let cartMarks;
+// world: JSON { <cart tag>: { <part>: 1 removed still holding its items | 0 broken, emptied or died } }, only for
+// records with a mark (being handed over); it goes with the mark.
+const CART_GONE = "expedition:cart_gone";
+/** @type {Map<string, Record<string, 0 | 1>> | undefined} */
+let cartGone;
+
+/** The marks, read once from the world (an empty, uncached map when it can't be read yet). */
+function marks() {
+  if (cartMarks) return cartMarks;
+  /** @type {Map<string, 0 | 1>} */
+  const m = new Map();
+  try {
+    const raw = world.getDynamicProperty(CART_MARKS);
+    const v = typeof raw === "string" ? JSON.parse(raw) : {};
+    for (const [k, x] of Object.entries(v && typeof v === "object" ? v : {})) if (OWN_CART_TAG.test(k)) m.set(k, x === 1 ? 1 : 0);
+  } catch {
+    return m; // before the world loaded: read again next time
+  }
+  cartMarks = m;
+  return m;
+}
+
+function saveMarks() {
+  if (!saving) return;
+  const m = marks();
+  try {
+    world.setDynamicProperty(CART_MARKS, m.size ? JSON.stringify(Object.fromEntries(m)) : undefined);
+  } catch (e) {
+    console.warn(`[expedition] cart marks: ${e}`);
+  }
+}
+
+/** Drops marks over the cap: the oldest "not seen yet" first, the oldest "seen" only when no other is left. @param {string} keep the mark just made */
+function trimMarks(keep) {
+  const m = marks();
+  if (m.size <= MARKS_MAX) return;
+  for (const [k, v] of m) {
+    if (m.size <= MARKS_MAX) break;
+    if (v === 0 && k !== keep) m.delete(k);
+  }
+  for (const k of m.keys()) {
+    if (m.size <= MARKS_MAX) break;
+    if (k !== keep) m.delete(k);
+  }
+  const g = gone();
+  let dropped = false;
+  for (const k of [...g.keys()]) if (!m.has(k)) dropped = g.delete(k) || dropped;
+  if (dropped) saveGone();
+}
+
+/** How the seen carts of records being handed over left the world, read once (like the marks). */
+function gone() {
+  if (cartGone) return cartGone;
+  /** @type {Map<string, Record<string, 0 | 1>>} */
+  const g = new Map();
+  try {
+    const raw = world.getDynamicProperty(CART_GONE);
+    const v = typeof raw === "string" ? JSON.parse(raw) : {};
+    for (const [k, x] of Object.entries(v && typeof v === "object" ? v : {})) {
+      if (!OWN_CART_TAG.test(k) || !x || typeof x !== "object") continue;
+      /** @type {Record<string, 0 | 1>} */
+      const r = {};
+      for (const [part, how] of Object.entries(x)) if (/^\d+$/.test(part)) r[part] = how === 1 ? 1 : 0;
+      g.set(k, r);
+    }
+  } catch {
+    return g; // before the world loaded: read again next time
+  }
+  cartGone = g;
+  return g;
+}
+
+function saveGone() {
+  if (!saving) return;
+  const g = gone();
+  try {
+    world.setDynamicProperty(CART_GONE, g.size ? JSON.stringify(Object.fromEntries(g)) : undefined);
+  } catch (e) {
+    console.warn(`[expedition] cart ends: ${e}`);
+  }
+}
+
+/** Which part of its record a cart is (stash carts and parcels made since 2.4.14 say; older parcels don't). @param {string[]} tags */
+function partOf(tags) {
+  for (const t of tags) {
+    const m = PART_TAG.exec(t);
+    if (m) return Number(m[1]);
+  }
+  return undefined;
+}
+
+/**
+ * A cart of a record being handed over left the world. Saved on the next tick (this runs in a before event).
+ * @param {string} tag @param {number | undefined} part @param {boolean} kept removed still holding its items
+ */
+function noteGone(tag, part, kept) {
+  if (part === undefined || !marks().has(tag)) return; // not being handed over, or a cart that can't be told apart
+  const g = gone();
+  g.set(tag, { ...(g.get(tag) ?? {}), [part]: kept ? 1 : 0 });
+  system.run(saveGone);
+}
+
+/** The parts of a record whose carts were removed still holding their items, so nothing of them is out in the world. @param {string} tag @param {number} want */
+function vanishedParts(tag, want) {
+  const r = gone().get(tag) ?? {};
+  /** @type {number[]} */
+  const out = [];
+  for (let k = 0; k < want; k++) if (r[k] === 1) out.push(k);
+  return out;
+}
+
+/** The record is being put down again: its carts' ends start over. @param {string} tag */
+function forgetGone(tag) {
+  if (gone().delete(tag)) saveGone();
+}
+
+/** Were this record's carts ever seen in the world? @param {string} tag */
+const seenMark = (tag) => marks().get(tag) === 1;
+
+/** A cart of this record is (or was) in the world. @param {string} tag @param {boolean} [later] saved next tick (in a before event) */
+function markSeen(tag, later = false) {
+  const m = marks();
+  if (m.get(tag) !== 0) return; // not being handed over, or already seen
+  m.set(tag, 1);
+  if (later) system.run(saveMarks);
+  else saveMarks();
+}
+
+/** The record is finished (handed over, or given up): its mark and its carts' ends go. @param {string} tag */
+function clearMark(tag) {
+  if (marks().delete(tag)) saveMarks();
+  forgetGone(tag);
+}
+
+/**
+ * Own carts removed in the last ticks, by entity id, and own carts that died: `kill` drops a cart's items but the
+ * cart still holds them when it's removed, so a death (whichever event comes first) means its items left it.
+ * @type {Map<string, { tags: string[], part: number | undefined }>}
+ */
+const removedNow = new Map();
+/** @type {Set<string>} */
+const diedNow = new Set();
+
+/** @param {import("@minecraft/server").EntityRemoveBeforeEvent} ev */
+function onCartRemove(ev) {
+  try {
+    const e = ev.removedEntity;
+    if (e.typeId !== CART_TYPE) return;
+    const all = e.getTags();
+    const tags = all.filter((t) => OWN_CART_TAG.test(t));
+    if (!tags.length) return;
+    const part = partOf(all);
+    let kept = false;
+    try {
+      const box = e.getComponent("minecraft:inventory")?.container;
+      kept = !!box && box.emptySlotsCount < box.size;
+    } catch {
+      kept = false; // unreadable: counted as emptied, never put down again
+    }
+    const id = e.id;
+    if (kept && diedNow.has(id)) kept = false;
+    for (const t of tags) {
+      markSeen(t, true);
+      noteGone(t, part, kept);
+    }
+    if (kept) {
+      removedNow.set(id, { tags, part });
+      system.runTimeout(() => removedNow.delete(id), 2);
+    }
+  } catch {
+    // gone
+  }
+}
+
+/** @param {import("@minecraft/server").EntityDieAfterEvent} ev */
+function onCartDie(ev) {
+  try {
+    const id = ev.deadEntity.id;
+    const r = removedNow.get(id);
+    if (r) {
+      removedNow.delete(id);
+      for (const t of r.tags) noteGone(t, r.part, false);
+      return;
+    }
+    diedNow.add(id);
+    system.runTimeout(() => diedNow.delete(id), 2);
+  } catch {
+    // gone
+  }
+}
+
+// Listened to all the time (cheap: a cart check per removed entity), so a cart that leaves while nobody is being handed
+// anything, or after a restart, is still told apart.
+try {
+  world.beforeEvents.entityRemove.subscribe(onCartRemove);
+} catch (e) {
+  console.warn(`[expedition] cart watch: ${e}`);
+}
+try {
+  world.afterEvents.entityDie.subscribe(onCartDie, { entityTypes: [CART_TYPE] });
+} catch {
+  // no death events here (tests): a removal's own reading stands
+}
+
+/** Is any cart with this tag in a loaded chunk? @param {string} tag */
+function cartsAround(tag) {
+  for (const d of DIMS) {
+    try {
+      if (world.getDimension(d).getEntities({ tags: [tag] }).length) return true;
+    } catch {
+      // that dimension can't be read now
+    }
+  }
+  return false;
+}
+
+/**
+ * The structure of this record was just put down: marked "not seen yet", then watched without the player for 40
+ * ticks (seen at once if the carts are already there).
+ * @param {string} tag
+ */
+function watchPutDown(tag) {
+  const m = marks();
+  if (m.get(tag) !== 1) {
+    m.delete(tag);
+    m.set(tag, 0);
+    trimMarks(tag);
+    saveMarks();
+  }
+  let n = 0;
+  const step = () => {
+    if (marks().get(tag) === 0 && cartsAround(tag)) markSeen(tag);
+    if (marks().get(tag) === 0 && ++n < WATCH_TICKS) system.runTimeout(step, 1);
+  };
+  step();
+}
 
 /** Is the block at this spot loaded (so a structure placed there really puts its carts down)? @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at */
 function loadedAt(dim, at) {
@@ -332,10 +609,14 @@ function loadedAt(dim, at) {
  * put down before the carts appear (never placed twice while they exist); one put down where the carts never
  * appeared is placed again, since the structure is only deleted once everything is handed over. Once its carts have been
  * found, `seen` is saved: a seen record whose carts are gone (broken, emptied) is never placed again, which would hand
- * the same items out twice, and resolves `null`. Any owned cart found, in any dimension, is used: fewer than `want`
- * is returned as is (the caller says so) and the structure is never placed over survivors.
- * Resolves the carts, `null` when the structure is missing, or `undefined` to try again later.
- * @template {{ id: string, tag: string, placed?: boolean, seen?: boolean, at?: { x: number, y: number, z: number, d: string } }} R
+ * the same items out twice, and resolves `null`. The exception (O19): when every cart it can't find was removed still
+ * holding its items (nothing of them is out in the world), or some were, the structure is put down again and only
+ * those parts are handed over; the others are listed in `skip`, and a cart of a skipped part that still holds
+ * anything is emptied and taken away whenever it turns up. Any owned cart found, in any dimension, is used: fewer
+ * than `want` is returned as is (the caller says so) and the structure is never placed over survivors.
+ * Resolves the carts, `null` when the structure is missing or nothing of it may come back, or `undefined` to try
+ * again later.
+ * @template {{ id: string, tag: string, placed?: boolean, seen?: boolean, skip?: number[], at?: { x: number, y: number, z: number, d: string } }} R
  * @param {Player} p @param {R} rec @param {(r: R) => void} save @param {number} want how many carts it has
  * @returns {Promise<import("@minecraft/server").Entity[] | null | undefined>}
  */
@@ -356,12 +637,14 @@ async function cartsOf(p, rec, save, want) {
       if (!p.isValid) return undefined;
       carts = find(d);
     }
-    // A cart can take a tick or two longer than another to appear.
+    // A cart can take a tick or two longer than another to appear (and one can be broken meanwhile: never hand
+    // back a cart that's gone).
     if (carts.length) {
+      markSeen(rec.tag);
       await wait(2);
       if (!p.isValid) return undefined;
       const again = find(d);
-      if (again.length > carts.length) carts = again;
+      if (again.length >= carts.length || carts.some((c) => !c.isValid)) carts = again;
     }
     return carts;
   };
@@ -373,6 +656,35 @@ async function cartsOf(p, rec, save, want) {
   const dropStrays = (keep) => {
     for (const d of DIMS) if (d !== keep) for (const cart of find(d)) removeCart(cart);
   };
+  /**
+   * The carts to hand over: a cart of a part that must not come back (its items were dropped before) is emptied and
+   * taken away; an empty one is kept (it hands nothing, and isn't missing).
+   * @param {import("@minecraft/server").Entity[]} carts
+   */
+  const usable = (carts) => {
+    const skip = rec.skip;
+    if (!skip?.length) return carts;
+    return carts.filter((c) => {
+      try {
+        const part = partOf(c.getTags());
+        if (part === undefined || !skip.includes(part)) return true;
+        const box = c.getComponent("minecraft:inventory")?.container;
+        if (box && box.emptySlotsCount >= box.size) return true;
+      } catch {
+        // gone: removed below
+      }
+      removeCart(c);
+      return false;
+    });
+  };
+  // Seen by the world (O19) also counts: the carts were there once, even if the player never learned it. The record
+  // learns it now, so it no longer depends on the mark lasting.
+  if (!rec.seen && seenMark(rec.tag)) {
+    rec = { ...rec, seen: true };
+    save(rec);
+  }
+  const seen = !!rec.seen;
+  let again = false;
   if (rec.placed && rec.at) {
     let dim;
     try {
@@ -386,7 +698,7 @@ async function cartsOf(p, rec, save, want) {
     if (carts.length) {
       dropStrays(rec.at.d);
       if (!rec.seen) save({ ...rec, seen: true });
-      return carts;
+      return usable(carts);
     }
     // Put down by an older version into the wrong dimension (the Overworld at the same spot) and loaded there: use those.
     for (const d of DIMS) {
@@ -395,10 +707,20 @@ async function cartsOf(p, rec, save, want) {
       if (there.length) {
         dropStrays(d);
         if (!rec.seen) save({ ...rec, seen: true });
-        return there;
+        return usable(there);
       }
     }
-    if (rec.seen) return null;
+    if (seen) {
+      // Seen, and none is left. Parts whose carts went still holding their items come back from the structure; the
+      // others never do (their items were dropped, or it's not known).
+      const back = vanishedParts(rec.tag, want).filter((k) => !rec.skip?.includes(k));
+      if (!back.length || !world.structureManager.get(rec.id)) return null;
+      /** @type {number[]} */
+      const skip = [];
+      for (let k = 0; k < want; k++) if (!back.includes(k)) skip.push(k);
+      rec = { ...rec, skip };
+      again = true;
+    }
   }
   if (!world.structureManager.get(rec.id)) return null;
   for (let t = 0; t < 20; t++) {
@@ -408,13 +730,15 @@ async function cartsOf(p, rec, save, want) {
       const dim = p.dimension;
       // Marked before placing: if the carts appear and anything stops us, they're searched for, never placed twice.
       save({ ...rec, placed: true, at: { ...at, d: dim.id } });
+      if (again) forgetGone(rec.tag); // the ends of the carts put down now are what counts from here on
       placeCarts(rec.id, dim, at);
+      watchPutDown(rec.tag);
       const carts = await look(dim.id);
       if (carts?.length) {
         dropStrays(dim.id);
         save({ ...rec, placed: true, seen: true, at: { ...at, d: dim.id } });
       }
-      return carts?.length ? carts : undefined;
+      return carts?.length ? usable(carts) : undefined;
     }
     await wait(5);
   }
@@ -453,10 +777,15 @@ function removeCart(cart) {
  * @param {import("@minecraft/server").Entity} entity
  */
 export function dropStrayCart(entity) {
-  if (entity.typeId !== "minecraft:chest_minecart") return;
+  if (entity.typeId !== CART_TYPE) return;
   for (const tag of entity.getTags()) {
     const m = /^realm:exp_(stash|parcel)_(\d+)$/.exec(tag);
-    if (m && !world.structureManager.get(`expedition:${m[1]}_${m[2]}`)) return removeCart(entity);
+    if (!m) continue;
+    if (!world.structureManager.get(`expedition:${m[1]}_${m[2]}`)) return removeCart(entity);
+    // A cart put down for a hand-over that's still waiting (after a restart, say): it was there. Before the world
+    // has loaded its marks can't be read yet, so then it's noted on the next tick.
+    if (cartMarks) markSeen(tag);
+    else system.run(() => markSeen(tag));
   }
 }
 
@@ -473,12 +802,15 @@ export async function restoreStash(p) {
     p.setDynamicProperty(STASH_PROP, undefined);
     return true;
   }
-  const sm = world.structureManager;
   const carts = await cartsOf(p, st, (r) => p.setDynamicProperty(STASH_PROP, JSON.stringify(r)), 2);
   if (carts === null) {
+    // Nothing of it may come back (its carts were broken or emptied: the items were dropped where they stood), or
+    // the structure is gone. The record is forgotten only once the structure is (O19).
     console.warn(`[expedition] stash ${st.id} for ${p.name} is missing`);
+    if (!forgetStructure(st.id)) return false;
     p.setDynamicProperty(STASH_PROP, undefined);
-    p.sendMessage("§cYour stored items couldn't be found. Tell an operator.");
+    clearMark(st.tag);
+    p.sendMessage("§cYour stored items couldn't be found: their storage carts were broken or emptied before they came back to you. Tell an operator.");
     return true;
   }
   if (!carts || !p.isValid) return false; // tried again in a moment, and when they next spawn
@@ -512,12 +844,11 @@ export async function restoreStash(p) {
       }
     cart.remove();
   }
+  // Everything is with the player: the structure goes first, then the record (never the record while the structure
+  // is saved). A structure that can't be deleted is only ever a copy now, so the record goes anyway.
+  forgetStructure(st.id);
   p.setDynamicProperty(STASH_PROP, undefined);
-  try {
-    sm.delete(st.id);
-  } catch {
-    // already gone
-  }
+  clearMark(st.tag);
   p.sendMessage(`§aYour own items are back with you.${spilled ? " Some are at your feet: those slots were taken." : ""}`);
   if (carts.length < 2) p.sendMessage(`§cOnly ${carts.length} of 2 storage carts could be found, so some of your stored items are missing. Tell an operator.`);
   return true;
@@ -573,6 +904,7 @@ export function saveParcel(owner, kind, items, dim, at) {
       const cart = spawnFresh(dim, "minecraft:chest_minecart", { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
       cart.addTag(PARCEL_TAG);
       cart.addTag(tag);
+      cart.addTag(`${PARCEL_TAG}_part_${c}`);
       carts.push(cart);
       const box = cart.getComponent("minecraft:inventory")?.container;
       if (!box) throw new Error("no cart inventory");
@@ -630,13 +962,14 @@ export const handingOver = () => opening.size > 0;
 async function handOver(p) {
   const kinds = new Set();
   let spilled = false;
-  const sm = world.structureManager;
   for (const pc of parcelsOf(p.id)) {
     if (!p.isValid) return false;
     const carts = await cartsOf(p, pc, (r) => setParcels(p.id, parcelsOf(p.id).map((x) => (x.id === r.id ? r : x))), pc.c ?? 1);
     if (carts === null) {
       console.warn(`[expedition] parcel ${pc.id} for ${p.name} is missing`);
+      if (!forgetStructure(pc.id)) return false; // the record waits while its structure is saved (O19)
       setParcels(p.id, parcelsOf(p.id).filter((x) => x.id !== pc.id));
+      clearMark(pc.tag);
       continue;
     }
     if (!carts || !p.isValid) return false; // tried again in a moment, and when they next spawn
@@ -663,12 +996,9 @@ async function handOver(p) {
         }
       cart.remove();
     }
+    forgetStructure(rec.id);
     setParcels(p.id, parcelsOf(p.id).filter((x) => x.id !== rec.id));
-    try {
-      sm.delete(rec.id);
-    } catch {
-      // already gone
-    }
+    clearMark(rec.tag);
     kinds.add(rec.k);
     if (carts.length < (rec.c ?? 1)) p.sendMessage(`§cOnly ${carts.length} of ${rec.c} carts holding your items could be found, so some items are missing. Tell an operator.`);
   }

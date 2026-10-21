@@ -115,7 +115,7 @@ From two weeks of history (728 commits, 161 of them fixes): the same classes cam
 | C18 | Action bar and titles | `setActionBar`, `setTitle` | `realm:actionbar {player, ticks, from}` first (with `steady` and a rank for redrawn lines), `realm:title` before titles, a one-space subtitle (`check-actionbar`) |
 | C19 | Giving items | `addItem(`, `spawnItem(` | Use the returned leftover exactly once (drop only it); rewards that cross a restart are persisted |
 | C20 | Ids | `"minecraft:` literals, `effectAdd` | `@minecraft/vanilla-data` (`check-ids`); normalize `effectAdd`'s display name |
-| C21 | Per-tick cost | `runInterval` with `getAllPlayers()` inside | Stagger players over ticks (by a hash of `player.id`, not the list index), share per-second work, cache geometry, time budgets for the heavy packs; measure first |
+| C21 | Per-tick cost | `runInterval` with `getAllPlayers()` inside | Stagger players over ticks (by `player.id`, not the list index: `tools/spread-shared.js`, copied as `scripts/spread.js` by `node tools/sync-spread.mjs`, keeps each player's slot and cadence), share per-second work, cache geometry, time budgets for the heavy packs; measure first |
 | C22 | Saved data size | `setDynamicProperty(` with `JSON.stringify` | Under 32 KB; bound every append-only list (drop the oldest), never refuse silently; plan for 1,000+ one-time players |
 | C23 | Restarts | any `Map` or `Set` of pending work | Persist it; on world load clean up and resume |
 | C24 | Operators | op checks | Permission level 1+ (never tags), checked server side when the form opens **and** on submit |
