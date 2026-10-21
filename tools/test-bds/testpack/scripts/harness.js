@@ -4,7 +4,7 @@
 import * as mc from "@minecraft/server";
 import * as gt from "@minecraft/server-gametest";
 import scenario from "./scenario.js";
-import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, ownedAreaName, radiusProblem, readOwnedAreas, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
+import { OWNED_AREAS_KEY, addOwnedArea, afterTickingAreaAdd, areaChunkSpots, ownedAreaName, radiusProblem, readOwnedAreas, releaseOwnedAreas, tickingAreaCommandProblem } from "./tickingarea.js";
 
 const { world, system, GameMode, CommandPermissionLevel } = mc;
 
@@ -284,6 +284,41 @@ function removeOwnedAreas(what, { keepFailed = false } = {}) {
   }
 }
 
+/**
+ * Ticks loadArea (and a phase start, for the saved areas) waits after the last chunk of an area can be read, before
+ * the area may be removed. Measured on BDS 1.26.52 with two busy CPU loops beside it (the perf soak's spawn pattern,
+ * 12 spawns a run, x 2 runs each): removed 2 ticks after, 2 to 5 of 12 spawns a chunk over failed; 10, 20 or 40 ticks
+ * after, none did. 20 is twice the shortest that held.
+ */
+const AREA_SETTLE_TICKS = 20;
+
+/**
+ * The areas an earlier phase saved with the world load again when the server starts, and one removed before its chunks
+ * have loaded leaves them unloadable for the whole run (areaChunkSpots in tickingarea.js). So the start of a phase waits
+ * (up to `timeout` ticks) until every chunk of each listed area can be read, before they are removed.
+ * @param {number} [timeout]
+ */
+async function settleOwnedAreas(timeout = 400) {
+  let listed;
+  try {
+    listed = readOwnedAreas(world.getDynamicProperty(OWNED_AREAS_KEY)).areas;
+  } catch (e) {
+    return;
+  }
+  // An entry saved without its place (a list from before places were kept): give the world's areas the time an area of
+  // radius 4 takes to load all its chunks (30 ticks after its middle in BDS 1.26.52), with room to spare.
+  if (listed.some((a) => a.radius === undefined)) await system.waitTicks(Math.min(timeout, 100));
+  const areas = listed.filter((a) => a.radius !== undefined);
+  if (!areas.length) return;
+  const spots = areas.flatMap((a) => areaChunkSpots(/** @type {number} */ (a.x), /** @type {number} */ (a.z), /** @type {number} */ (a.radius)).map((s) => ({ ...s, dimension: a.dimension })));
+  const loading = () => spots.filter((s) => { try { return !world.getDimension(s.dimension).getBlock({ x: s.x, y: 0, z: s.z }); } catch (e) { return true; } });
+  const end = system.currentTick + timeout;
+  while (loading().length && system.currentTick < end) await system.waitTicks(1);
+  const left = loading().length;
+  if (!left) await system.waitTicks(AREA_SETTLE_TICKS);
+  if (left) out({ type: "log", msg: `ticking area cleanup: ${left} of the ${spots.length} chunks of ${areas.map((a) => a.name).join(", ")} still loading after ${timeout} ticks; removing them anyway` });
+}
+
 function matches(text, pattern) {
   if (pattern === undefined) return true;
   if (pattern instanceof RegExp) return pattern.test(text);
@@ -360,7 +395,7 @@ function makeT(cfg) {
     get formTimeout() { return formTimeout; },
     set echoActionBar(v) { echoActionBar = !!v; },
 
-    /** Waits until the chunk column at x,z can be read, loading it with a ticking area (circle radius 1 to 4). */
+    /** Waits until the chunk column at x,z can be read, loading it with a ticking area (circle radius 1 to 4), and until every chunk of that area is loaded, so the area can be removed at once. */
     async loadArea(x, z, { dimension = world.getDimension("overworld"), radius = 2, timeout = 400 } = {}) {
       const badRadius = radiusProblem(radius);
       if (badRadius) throw new Stop(false, `loadArea(${x}, ${z}): ${badRadius}`);
@@ -368,7 +403,7 @@ function makeT(cfg) {
       const add = runCmd(dimension, `tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} ${radius} ${name} true`);
       if (add.ok) {
         try {
-          owned = addOwnedArea(owned, { name, dimension: dimension.id });
+          owned = addOwnedArea(owned, { name, dimension: dimension.id, x: Math.floor(x), z: Math.floor(z), radius });
           world.setDynamicProperty(OWNED_AREAS_KEY, JSON.stringify(owned));
         } catch (e) {
           out({ type: "log", msg: `ticking area ${name} is not in the harness's saved list, so the next phase will not remove it: ${e}` });
@@ -388,7 +423,20 @@ function makeT(cfg) {
         if (after.action === "fail") throw new Stop(false, after.message);
         out({ type: "log", msg: `loadArea: ${after.message}` });
       }
+      const startTick = system.currentTick;
       const ground = await t.waitUntil(readGround, { timeout, message: `chunk at ${x},${z} did not load in ${timeout} ticks` });
+      if (add.ok) {
+        // The rest of the area too: removing an area while some of its chunks are still loading leaves them
+        // unloadable for the whole run (tickingarea.js, areaChunkSpots), and scenarios remove it right after.
+        const spots = areaChunkSpots(x, z, radius);
+        const y = ground.location.y;
+        const loading = () => spots.filter((s) => { try { return !dimension.getBlock({ x: s.x, y, z: s.z }); } catch (e) { return true; } });
+        const left = Math.max(1, timeout - (system.currentTick - startTick));
+        const all = await t.waitUntil(() => loading().length === 0, { timeout: left }).then(() => true, () => false);
+        if (!all) throw new Stop(false, `chunk at ${x},${z} loaded, but ${loading().length} of the ${spots.length} chunks of its ticking area ${name} did not load in ${timeout} ticks`);
+        // A chunk that can be read is not quite done yet: removed within 2 ticks of that, chunks still got stuck.
+        await system.waitTicks(AREA_SETTLE_TICKS);
+      }
       return { top: ground, name };
     },
 
@@ -492,6 +540,7 @@ async function run(cfg) {
   started = true;
   const t = makeT(cfg);
   out({ type: "start", tick: system.currentTick });
+  await settleOwnedAreas();
   removeOwnedAreas("ticking areas from earlier phases");
   let ok = true, msg = "scenario finished", restart = false;
   try {

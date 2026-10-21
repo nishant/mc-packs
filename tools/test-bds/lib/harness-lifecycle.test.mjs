@@ -28,13 +28,36 @@ function startServer(saved, scenarioSource) {
   const game = createGame();
   saved.runs++;
   const startedAt = 0;
-  /** area name -> tick its chunks can be read: an area saved with the world loads over the first second of the run */
+  /**
+   * area name -> tick its middle chunk can be read: an area saved with the world loads over the first second of the run.
+   * As in BDS 1.26.52, an area loads the whole square of (2r + 1)^2 chunks around its middle, the middle first and each
+   * ring of chunks further out 3 ticks later; and a chunk still loading when the last area over it is removed can never
+   * be loaded again in this run (F73: "chunk at x,z did not load in 400 ticks" for every area added over it later).
+   */
   const readyAt = new Map(saved.areas.map((a) => [a.name, startedAt + 30]));
+  /** @type {Set<string>} chunks that will never load again in this run */
+  const stuck = new Set();
   const commands = [];
   const players = [];
   const chunkOf = (v) => Math.floor(v / 16);
-  const loaded = (x, z) =>
-    saved.areas.some((a) => (readyAt.get(a.name) ?? Infinity) <= game.tick && Math.hypot(chunkOf(x) - chunkOf(a.x), chunkOf(z) - chunkOf(a.z)) <= a.radius);
+  const ring = (a, cx, cz) => Math.max(Math.abs(cx - chunkOf(a.x)), Math.abs(cz - chunkOf(a.z)));
+  const chunkReady = (a, cx, cz) => ring(a, cx, cz) <= a.radius && (readyAt.get(a.name) ?? Infinity) + 3 * ring(a, cx, cz) <= game.tick;
+  // A chunk can be read a few ticks before it is done: removed in between, it is stuck all the same (on BDS, spawns a
+  // chunk over failed when the area went 2 ticks after its last chunk could be read, never 10 or more ticks after).
+  const chunkDone = (a, cx, cz) => chunkReady(a, cx, cz) && (readyAt.get(a.name) ?? Infinity) + 3 * ring(a, cx, cz) + 5 <= game.tick;
+  const loaded = (x, z) => {
+    const cx = chunkOf(x), cz = chunkOf(z);
+    return !stuck.has(`${cx},${cz}`) && saved.areas.some((a) => chunkReady(a, cx, cz));
+  };
+  /** Removing an area: its chunks that it had not finished loading, and no other area has, are stuck. */
+  const removing = (gone) => {
+    const others = saved.areas.filter((a) => a !== gone);
+    for (let dx = -gone.radius; dx <= gone.radius; dx++)
+      for (let dz = -gone.radius; dz <= gone.radius; dz++) {
+        const cx = chunkOf(gone.x) + dx, cz = chunkOf(gone.z) + dz;
+        if (!chunkDone(gone, cx, cz) && !others.some((a) => chunkDone(a, cx, cz))) stuck.add(`${cx},${cz}`);
+      }
+  };
 
   const dimension = {
     id: "minecraft:overworld",
@@ -53,11 +76,13 @@ function startServer(saved, scenarioSource) {
         if (saved.throwOnRemove) throw new Error("CommandError: tickingarea remove blew up");
         const i = saved.areas.findIndex((a) => a.name === remove[1]);
         if (i < 0 || saved.failRemove.has(remove[1])) return { successCount: 0 };
+        removing(saved.areas[i]);
         saved.areas.splice(i, 1);
         return { successCount: 1 };
       }
       if (command === "tickingarea remove_all") {
         const n = saved.areas.length;
+        for (const a of [...saved.areas]) removing(a);
         saved.areas.length = 0;
         return { successCount: n ? 1 : 0 };
       }
@@ -99,7 +124,7 @@ function startServer(saved, scenarioSource) {
   const harnessUrl = dataUrl(
     `${rewriteImports(harnessSource, { stubs: { "@minecraft/server": serverUrl, "@minecraft/server-gametest": gametestUrl }, relative: { "./scenario.js": scenarioUrl, "./tickingarea.js": tickingAreaUrl } })}\n// ${unique}`,
   );
-  return { game, system: game.system, world, gametest, harnessUrl, saved, commands, players };
+  return { game, system: game.system, world, gametest, harnessUrl, saved, commands, players, stuck };
 }
 
 /** Runs one phase of the scenario on the saved world and returns what the harness reported. */
@@ -124,7 +149,7 @@ async function runPhase(saved, scenarioSource, phase) {
   const done = out.find((o) => o.type === "done");
   assert.ok(done, `phase ${phase} never finished: ${JSON.stringify(out.slice(-3))}`);
   const logs = out.filter((o) => o.type === "log").map((o) => o.msg);
-  return { done, out, logs, commands: server.commands, areas: saved.areas.map((a) => a.name) };
+  return { done, out, logs, commands: server.commands, areas: saved.areas.map((a) => a.name), stuck: [...server.stuck] };
 }
 
 const RESTART_SCENARIO = `export default async function (t) {
@@ -263,4 +288,41 @@ test("a rejected add of a name the game never saw is still a hard failure with t
   const r = await runPhase(saved, `export default async function (t) { await t.loadArea(163, 170, { radius: 2 }); }`, 1);
   assert.equal(r.done.ok, false);
   assert.match(r.done.msg, /tickingarea add circle 163 0 170 2 failed/);
+});
+
+// F73/F75: the perf soak and saga-perf-quests remove each spawn's ticking area right after the spawn (Bedrock allows
+// 10). loadArea used to return once the middle chunk could be read, while the rest of the area was still loading, so
+// that removal left those chunks unloadable for the whole run, and the next player's spawn a chunk over failed with
+// "chunk at 193,170 did not load in 400 ticks" (every row of saga-perf-quests at x 193-207 in one run).
+test("an area removed right after loadArea returns leaves no chunk unloadable, so the next spawn a chunk over loads", async () => {
+  const saved = savedWorld();
+  const scenario = `export default async function (t) {
+    const clear = () => {
+      for (const a of JSON.parse(t.world.getDynamicProperty("harness:tickingAreas") ?? "[]")) t.dimension.runCommand("tickingarea remove " + a.name);
+    };
+    let made = 0;
+    for (let i = 0; i < 10; i++) {
+      clear();
+      try { await t.player("P" + i, { x: 163 + 6 * (i % 5), z: 170 + 6 * Math.floor(i / 5), settle: 2 }); made++; }
+      catch (e) { t.log("could not spawn P" + i + ": " + e.message); }
+    }
+    clear();
+    t.assert(made === 10, "spawned " + made + " of 10");
+  }`;
+  const r = await runPhase(saved, scenario, 1);
+  assert.equal(r.done.ok, true, `${r.done.msg}\n${r.logs.join("\n")}`);
+  assert.deepEqual(r.stuck, [], "no chunk was left loading when its area was removed");
+});
+
+test("loadArea fails with the chunks it waited for when the rest of its area never loads", async () => {
+  const saved = savedWorld();
+  const scenario = `export default async function (t) {
+    t.dimension.runCommand("tickingarea add circle 200 0 170 1 other true");
+    t.dimension.runCommand("tickingarea remove other");
+    await t.loadArea(163, 170, { radius: 2, timeout: 100 });
+  }`;
+  const r = await runPhase(saved, scenario, 1);
+  assert.equal(r.done.ok, false);
+  assert.deepEqual(r.stuck.length, 9, "the other area's 9 chunks are stuck");
+  assert.match(r.done.msg, /chunk at 163,170 loaded, but 6 of the 25 chunks of its ticking area harness_1_1 did not load in 100 ticks/);
 });

@@ -223,6 +223,21 @@ failed with `tickingarea add circle ... failed: the command did not succeed` (th
 chunks were not readable yet). `lib/harness-lifecycle.test.mjs` runs `harness.js` against a fake game whose areas
 survive a restart; `lib/rain-seabed.test.mjs` runs Rain's real scripts, the scenario's hook and the scenario itself.
 
+The same rule holds inside a run: an area removed while some of its chunks are still loading leaves them unloadable
+for the rest of the run, and any area added over one of them later never finishes loading either (its middle cannot be
+read). BDS 1.26.52 loads the whole square of (2r + 1) x (2r + 1) chunks of `tickingarea add circle ... r` (corners
+included, measured for r = 1, 2 and 4), the middle up to 30 ticks before the corners, and a chunk that can be read is
+not quite done: removed 2 ticks after the last chunk could be read, 2 to 5 of 12 spawns a chunk over still failed;
+10 or more ticks after, none did. So `t.loadArea` returns only 20 ticks after every chunk of its area can be read
+(failing with `... loaded, but N of the 25 chunks of its ticking area ... did not load` otherwise), and a scenario may
+remove the area right after; the start of a phase waits the same way for the listed areas of earlier phases, which
+load again from the save, before removing them. A scenario that adds its own
+areas and removes them (the perf soak's Nether pocket, maps-hunt) waits for all of their chunks too. Before this, the
+perf soak and saga-perf-quests, which remove each spawn's area before the next spawn (Bedrock allows 10), lost players
+to `chunk at 193,170 did not load in 400 ticks` (F73: a whole column of chunks next to an earlier spawn), and
+maps-hunt timed out once its stuck legs had used up the 10 areas. `lib/harness-lifecycle.test.mjs`'s fake game models
+the stuck chunks.
+
 ## Inventory persistence regression
 
 `node tools/test-bds/stash-persistence.mjs` stages a test-only copy of `stash_bp` and runs
@@ -311,7 +326,8 @@ Waiting
 - `await t.waitUntil(() => cond, { timeout: 200, interval: 1, message })`: polls until truthy,
   returns the value, fails the scenario on timeout. Errors inside the function count as "not yet".
 - `await t.loadArea(x, z, { radius: 2 })`: loads a spot with a ticking area and returns
-  `{ top }`, the highest solid block there.
+  `{ top }`, the highest solid block there, once every chunk of the area is loaded (so it can be removed at once; about
+  1 s more than the spot alone).
 - `t.tick`: the current tick.
 
 Messages (what packs tell players)

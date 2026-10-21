@@ -142,26 +142,37 @@ export default async function (t) {
   let areas = [];
   let areaN = 0;
   const clearAreas = () => { for (const a of areas) t.server(`/tickingarea remove ${a}`); areas = []; };
-  /** Loads land (water too, unlike t.loadArea) and returns its top block. */
+  /**
+   * Loads land (water too, unlike t.loadArea) and returns its top block, once the whole area (9 x 9 chunks) is loaded
+   * when that happens in time: an area removed while some of its chunks are still loading leaves them unloadable for
+   * the rest of the run, and so does every area added over them later (F75: this used to remove a slow area and add it
+   * again, which could only fail, and its "did not load" legs leaked their areas until the world's 10 were used up and
+   * the run timed out). New land far out can take minutes to generate on a busy server, so a middle that loaded is
+   * enough to go on with when the rest is still generating (as before).
+   */
   async function load(x, z) {
     const name = `maps_${++areaN}`;
-    const add = (n) => {
-      t.server(`/tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} 4 ${n} true`);
-      areas.push(n);
-    };
-    add(name);
-    const loaded = () => {
+    const add = t.server(`/tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} 4 ${name} true`);
+    if (!add.ok) throw new Error(`the game refused the ticking area ${name} at ${Math.round(x)}, ${Math.round(z)}`);
+    areas.push(name);
+    const cx = Math.floor(Math.floor(x) / 16), cz = Math.floor(Math.floor(z) / 16);
+    const middle = () => {
       const top = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
       return top && top.typeId && top.location.y < 319 ? top : undefined;
     };
-    try {
-      return await t.waitUntil(loaded, { timeout: 600, message: "" });
-    } catch {
-      // A busy server (several test servers on few cores) sometimes leaves new land unloaded for minutes: ask again.
-      t.server(`/tickingarea remove ${name}`);
-      add(`${name}b`);
-      return t.waitUntil(loaded, { timeout: 600, message: `land at ${Math.round(x)}, ${Math.round(z)} did not load` });
-    }
+    const loading = (y) => {
+      let n = 0;
+      for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) if (!dim.getBlock({ x: (cx + dx) * 16 + 8, y, z: (cz + dz) * 16 + 8 })) n++;
+      return n;
+    };
+    const t0 = t.tick;
+    const top = await t.waitUntil(middle, { timeout: 1200, message: `land at ${Math.round(x)}, ${Math.round(z)} did not load` });
+    const y = top.location.y;
+    const all = await t.waitUntil(() => loading(y) === 0, { timeout: Math.max(1, 1200 - (t.tick - t0)) }).then(() => true, () => false);
+    // A chunk that can be read is not quite done: the harness's t.loadArea waits 20 ticks more too.
+    if (all) await t.wait(20);
+    else t.log(`  ${name}: ${loading(y)} of its 81 chunks still loading after 60 s; going on with the middle loaded`);
+    return top;
   }
   /**
    * Like a player traveling: the land where the player stands stays loaded until they have arrived somewhere else
@@ -171,7 +182,14 @@ export default async function (t) {
     const old = areas;
     areas = [];
     if (old.length > 2) for (const a of old) t.server(`/tickingarea remove ${a}`); // after a scan: at most 10 areas
-    const top = await load(x, z);
+    let top;
+    try {
+      top = await load(x, z);
+    } catch (e) {
+      // The player stays where they were: keep that land, and this spot's area, listed so the next move removes them.
+      areas = old.length > 2 ? areas : [...old, ...areas];
+      throw e;
+    }
     p.teleport({ x: Math.floor(x) + 0.5, y: top.location.y + 1, z: Math.floor(z) + 0.5 });
     if (old.length <= 2) for (const a of old) t.server(`/tickingarea remove ${a}`);
     await t.wait(20);
