@@ -27,8 +27,8 @@
       "notes": "The welcome page lists Town Projects: towns that grow as you help, each with its mayor."
     },
     "admin_bp": {
-      "version": "1.6.11",
-      "notes": "The setup checklist says towns pick their own project spots, so setting one is optional, and a spot an operator sets is never leveled."
+      "version": "1.6.12",
+      "notes": "Server size's Large server note gives the Minimap's new budgets: about 0.7 ms a tick instead of 1."
     },
     "silly_bp": {
       "version": "1.2.13",
