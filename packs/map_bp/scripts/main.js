@@ -595,7 +595,7 @@ const terrain = new TerrainWorld(6000, 24);
  * those). A player who doesn't move or turn far enough for the terrain to change costs no terrain lookups.
  * `need` is what the scanner should read for it (missing columns nearest first, then stale ones), made at `needAt`.
  * `slot`: the player's turn for the STALE_EVERY rebuild (staleSlot).
- * @type {Map<string, { key: string, base: string[], rows: string[], touched: number[], need: import("./terrain.js").Pick[], needAt: number, needStore?: import("./terrain.js").Store, slot: number }>}
+ * @type {Map<string, { key: string, base: string[], rows: string[], touched: number[], need: import("./terrain.js").Pick[], needAt: number, needStore?: import("./terrain.js").Store, slot: number, bucket?: number }>}
  */
 const terrainBaseMemo = new Map();
 /** The store each player's radar reads, set by the scan every tick (roofed players read their layer). @type {Map<string, import("./terrain.js").Store>} */
@@ -942,6 +942,15 @@ function staleSlot(id) {
   for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
   return h % STALE_EVERY;
 }
+/**
+ * Is this player's STALE_EVERY rebuild due (their turn came since their radar's terrain was last built)? A still
+ * player's refresh then builds the radar instead of only drawing the same title again, so stale columns are listed
+ * for the scanner and read again. @param {string} id @param {number} now
+ */
+function staleDue(id, now) {
+  const memo = terrainBaseMemo.get(id);
+  return !!memo && memo.bucket !== undefined && Math.floor((now + memo.slot) / STALE_EVERY) !== memo.bucket;
+}
 /** The terrain grid turns in steps of this many degrees and moves in whole blocks (an edge cell moves under a block). */
 const TERRAIN_TURN = 2;
 
@@ -1040,6 +1049,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     }
     for (let i = 0; i < RADAR_PIECES; i++) rows[i] = base[i];
     memo.key = key;
+    if (store) memo.bucket = Math.floor((now + memo.slot) / STALE_EVERY);
   } else {
     for (const i of touched) rows[i] = base[i];
   }
@@ -1403,7 +1413,7 @@ system.runInterval(() => {
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
       /** @type {number | undefined} read only when a new pass didn't already settle it; render() reads it otherwise, inside the draw budget */
       let heading;
-      const changed = !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      const changed = !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && (v.tv !== terrainVerOf(p.id, v.dim, at, v.radius) || (refresh && staleDue(p.id, now))));
       const moved = refresh || changed;
       if (!moved && !v.lag) continue;
       // Moving fast (flying, riding): the scanner plans ahead for them often.

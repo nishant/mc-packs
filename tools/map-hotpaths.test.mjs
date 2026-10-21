@@ -200,6 +200,25 @@ test("titles about to fade are drawn before players who waited longer for a redr
   assert.deepEqual(order, ["fading", "waited"]);
 });
 
+test("a still player's refresh builds the radar when their 200-tick stale rebuild came up, so old terrain is read again (map-flight)", () => {
+  const renders = [];
+  const kept = [];
+  const mkView = (id) => ({ player: { id, isValid: true, dimension: { id: "d" }, location: { x: 0, y: 0, z: 0 } }, dim: "d", px: 0, pz: 0, heading: 0, x: 0, y: 0, z: 0, radar: true, terrain: true, tv: "v", drawn: 0 });
+  const views = new Map([["due", mkView("due")], ["fresh", mkView("fresh")]]);
+  const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: 10, rtext: "r", rat: 10, compass: true, radar: true }]));
+  const sandbox = {
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => "v",
+    wrap: (a) => a, headingOf: () => 0, staleDue: (id) => id === "due",
+    render: (p) => (renders.push(p.id), true),
+    keepAlive: (p) => (kept.push(p.id), true),
+  };
+  const run = vm.runInNewContext(`let turnFirst = 0, turnMs = 0, turnTicks = 0, turnDraws = 0, turnSends = 0, refreshSends = 0, keepSends = 0, turnCheckMs = 0;\n(${callbackSource(1)})`, sandbox);
+  run();
+  assert.deepEqual(renders, ["due"], "the player whose stale rebuild is due is built");
+  assert.deepEqual(kept, ["fresh"], "the other still player is only drawn again");
+});
+
 /** A top-level function of main.js (from `function name(` to its closing brace at the start of a line). */
 function functionSource(name) {
   const at = mainSource.indexOf(`\nfunction ${name}(`);
