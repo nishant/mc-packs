@@ -6,6 +6,7 @@ import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./r
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
+import { keepInPot, oweMore, settleOwed } from "./settle.js";
 
 const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
@@ -495,6 +496,8 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 
 /** Players whose pot is bubbling right now. @type {Set<string>} */
 const cooking = new Set();
+/** The batch in each cook's pot, saved as owed when it started but not ready yet. @type {Map<string, { d: Dish, n: number }>} */
+const inPot = new Map();
 
 /** Servings the player could cook right now (ignoring maxBatch). @param {Player} player @param {Dish} d */
 const servingsNow = (player, d) => timesAffordable(player, d.needs);
@@ -513,8 +516,11 @@ function cook(player, d, times, pot) {
   const pid = player.id;
   // The ingredients are gone now: the dish is owed until it is handed over, so a restart or a script
   // reload mid-cook hands it over on the next join instead of losing it.
-  const owed = owe(pid, d, n);
+  // A save that reports failure can still have landed (value written, index not): what is in the store is owed,
+  // and only a batch that is not there is due straight from the pot (else the next join would pay it again).
+  const owed = oweMore(owedStore, pid, d.id, n) > 0;
   cooking.add(pid);
+  if (owed) inPot.set(pid, { d, n });
   const ticks = Math.max(1, Math.round(CONFIG.cookSeconds * 20));
   const top = { x: pot.loc.x + 0.5, y: pot.loc.y + 1.1, z: pot.loc.z + 0.5 };
   let t = 0;
@@ -530,7 +536,8 @@ function cook(player, d, times, pot) {
     if (t < ticks) return;
     system.clearRun(run);
     cooking.delete(pid);
-    finish(player, pid, d, n, pot, top, owed);
+    inPot.delete(pid);
+    finish(online(pid) ?? player, pid, d, n, pot, top, owed);
   }, 5);
   return undefined;
 }
@@ -547,8 +554,8 @@ function finish(player, pid, d, n, pot, top, owed) {
     if (!owed) owe(pid, d, n);
     return;
   }
-  // Only what is still owed: a cook who left and came back mid-cook already got it on joining. If saving
-  // it as owed failed, nothing could hand it over early, so all of it is due.
+  // Only what is still owed (the join handover keeps a batch that is still in the pot, so a cook who left and came
+  // back mid-cook gets it here, as the player now online). If saving it as owed failed, all of it is due.
   const due = owed ? settle(pid, d, n) : n;
   if (due) deliver(player, d, due, pot);
 }
@@ -582,25 +589,21 @@ function owe(pid, d, n) {
   });
 }
 
-/** Takes up to `n` batches of `d` off what `pid` is owed; returns how many were owed. @param {string} pid @param {Dish} d @param {number} n */
+/** Takes up to `n` batches of `d` off what `pid` is owed; returns how many really left the store (0 when saving failed, so they stay owed for the next join). @param {string} pid @param {Dish} d @param {number} n */
 function settle(pid, d, n) {
-  let due = 0;
-  owedStore.update(pid, (cur) => {
-    if (!cur || typeof cur !== "object" || Array.isArray(cur)) return cur;
-    const have = Math.floor(Number(cur[d.id]) || 0);
-    due = Math.max(0, Math.min(n, have));
-    if (!due) return cur;
-    if (have - due > 0) cur[d.id] = have - due;
-    else delete cur[d.id];
-    return Object.keys(cur).length ? cur : undefined;
-  });
-  return due;
+  return settleOwed(owedStore, pid, d.id, n);
 }
 
 /** Dishes that finished cooking after the player left (or that a restart interrupted). `pid` and `failIds` are for the native test hook. @param {Player} player @param {string} [pid] @param {Set<string>} [failIds] */
 function applyOwed(player, pid = player.id, failIds) {
   const mine = owedStore.take(pid);
   if (!mine || typeof mine !== "object" || Array.isArray(mine)) return;
+  // A batch still in the pot stays owed until the pot is done (finish settles it): it is saved so a restart can't lose
+  // it, but it isn't cooked yet. Handing it over here made a cook in a player's first 5 s (or the world's) instant.
+  // If it can't be saved again, it is handed over now rather than lost.
+  // A save that fails after writing the value still keeps it, so only what the store does not hold is handed over.
+  const pot = inPot.get(pid);
+  keepInPot(owedStore, pid, mine, pot && { id: pot.d.id, n: pot.n });
   const parts = Object.entries(mine)
     .map(([id, n]) => /** @type {[string, number]} */ ([id, Math.floor(Number(n))]))
     .filter(([id, n]) => dishById.has(id) && n > 0);

@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get } from "./settings.js";
+import { get, set } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
 const PROP_SHARD = "find:idx:"; // world: find:idx:0, find:idx:1, … JSON shards of the index
@@ -65,37 +65,31 @@ const valid = (v) =>
 /** The shards as last written, so a save only rewrites the ones that changed. @type {string[]} */
 let written = [];
 
-/** Saved data other packs write by themselves when a world loads: not a sign of an older world (as in Welcome's own check). */
-const BOOT_PREFIXES = ["diag:", "settings:", "admin:", "news:", "help:", "realm:", "weather:"];
-const BOOT_KEYS = new Set(["atlas:origin", "expedition:migrated", "bounty:day", "caravan:last"]);
-
 /**
- * Decides the index mode once, when the world loads and before the settings cache is read. A world that already had
- * data (a saved index, saved Chest Finder settings, or any player or progress data) keeps the world-wide index it was
- * promised unless an operator already chose; a world with nothing saved but load-time data starts private.
- * Written straight into find:cfg so the settings module only ever sees the final value.
+ * Decides the index mode once, when the world loads. Only Chest Finder's own saved data counts as a sign that it ran
+ * here before (a saved index shard or saved Chest Finder settings): such a world keeps the world-wide index it was
+ * promised unless an operator already chose. Anything else starts private. Other packs' data proves nothing: in the
+ * Realm Bundle every pack shares one store, and many write on world load before this runs, so a brand-new world
+ * would look old; and a world where Chest Finder never saved anything has no index to keep world-wide.
+ * Saved through the settings module, so a value it already cached is replaced too.
  */
 function decideMode() {
   try {
     if (world.getDynamicProperty(PROP_MIGRATED) !== undefined) return;
     const cfgRaw = world.getDynamicProperty("find:cfg");
-    let cfg = {};
+    let chosen = false;
     if (typeof cfgRaw === "string") {
       try {
         const p = JSON.parse(cfgRaw);
-        if (p && typeof p === "object" && !Array.isArray(p)) cfg = p;
+        chosen = !!p && typeof p === "object" && !Array.isArray(p) && Object.hasOwn(p, "privateIndex");
       } catch {
-        // damaged: leave it for the settings module to report
+        // damaged: the settings module reports it and starts over from config.js
       }
     }
-    const existing =
-      typeof cfgRaw === "string" ||
-      world.getDynamicProperty(PROP_SHARD + 0) !== undefined ||
-      world
-        .getDynamicPropertyIds()
-        .some((k) => !k.startsWith("find:") && !BOOT_PREFIXES.some((p) => k.startsWith(p)) && !BOOT_KEYS.has(k));
-    if (existing && !Object.hasOwn(cfg, "privateIndex")) {
-      world.setDynamicProperty("find:cfg", JSON.stringify({ ...cfg, privateIndex: false }));
+    const existing = typeof cfgRaw === "string" || world.getDynamicProperty(PROP_SHARD + 0) !== undefined;
+    if (existing && !chosen) {
+      const why = set("privateIndex", false);
+      if (why) throw new Error(`privateIndex ${why}`);
     }
     world.setDynamicProperty(PROP_MIGRATED, 1);
   } catch (e) {

@@ -61,12 +61,15 @@ export default async function (t) {
       const hp = p.getComponent("minecraft:health");
       hp.resetToMaxValue();
       const before = hp.currentValue;
-      // Count fall damage only: the Spider Nest's mobs can hit the player during the 120 ticks (CI: 20 -> 5.29 with
-      // no fall at all), and that isn't what this checks.
-      /** @type {Record<string, number>} */
-      const hurt = {};
-      const onHurt = t.world.afterEvents.entityHurt.subscribe(({ hurtEntity, damage, damageSource }) => {
-        if (hurtEntity.id === p.id) hurt[damageSource.cause] = (hurt[damageSource.cause] ?? 0) + damage;
+      // What hurt the player during the fall, by cause. Resistance and Regeneration are off for these 6 s, and the
+      // rooms this scenario skips leave their mobs alive (Spider Nest at Nightmare 9: spiders, poisoning cave spiders,
+      // skeletons and bogged), so a hit then is not the fall: only fall damage counts against the drift down, and any
+      // health lost to neither still fails (F75: one "20 -> 13" in six suite runs, with Slow Falling seen).
+      /** @type {{ cause: string, damage: number, by?: string }[]} */
+      const hurts = [];
+      const onHurt = t.world.afterEvents.entityHurt.subscribe((ev) => {
+        if (ev.hurtEntity.id !== p.id) return;
+        hurts.push({ cause: String(ev.damageSource.cause), damage: ev.damage, by: ev.damageSource.damagingEntity?.typeId });
       });
       p.teleport(local(rm, 2, 1, 14));
       let slow = false;
@@ -77,9 +80,11 @@ export default async function (t) {
       await t.wait(2); // entityHurt arrives after the tick
       t.world.afterEvents.entityHurt.unsubscribe(onHurt);
       const after = hp.currentValue;
-      const fall = hurt.fall ?? 0;
-      t.log(`shaft fall from 13 blocks: health ${before} -> ${after}, damage by cause ${JSON.stringify(hurt)}, slow falling ${slow}, now ${(p.location.y - (rm.c.y)).toFixed(1)} above the floor`);
-      t.check(fall === 0, `a fall in the shaft doesn't hurt (fall damage ${fall}; health ${before} -> ${after})`);
+      const fallHurt = hurts.filter((h) => h.cause === "fall").reduce((n, h) => n + h.damage, 0);
+      const other = hurts.filter((h) => h.cause !== "fall");
+      const otherHurt = other.reduce((n, h) => n + h.damage, 0);
+      t.log(`shaft fall from 13 blocks: health ${before} -> ${after}, fall damage ${fallHurt}, other damage ${otherHurt}${other.length ? ` (${other.map((h) => `${h.cause}${h.by ? ` by ${h.by}` : ""} ${h.damage}`).join(", ")})` : ""}, slow falling ${slow}, now ${(p.location.y - (rm.c.y)).toFixed(1)} above the floor`);
+      t.check(fallHurt === 0 && after >= before - otherHurt, `a fall in the shaft doesn't hurt (${before} -> ${after}, ${fallHurt} of it from the fall)`);
       t.check(slow, "slow falling caught the fall");
       falls++;
       p.addEffect("resistance", 20000, { amplifier: 4, showParticles: false });

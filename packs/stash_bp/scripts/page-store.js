@@ -5,7 +5,7 @@ import { StructureSaveMode, world } from "@minecraft/server";
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {{ s: number, item: ItemStack }} Entry */
 /** @typedef {{ id: string, slots: number[], layout?: 2 }} Ref */
-/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, idx?: Record<string, { r: string, k: Record<string, number> }>, pending?: { before: Ref, after: Ref, out?: { d: string, p: [number, number, number][], x?: [number, number][], f?: number[] } } }} State */
+/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, idx?: Record<string, { r: string, k: Record<string, number>, p?: string[] }>, pending?: { before: Ref, after: Ref, out?: { d: string, p: [number, number, number][], x?: [number, number][], f?: number[] } } }} State */
 const STATE = "stash:native";
 const NEXT = "stash:snapshot_next";
 const ENTITY = "realm:stash_page_store";
@@ -44,11 +44,12 @@ export function stateOf(player) {
 
 /**
  * The page-content index rides in the same property as the page refs, so one write commits both. `idx[page]` is
- * `{ r, k }`: `r` is the id of the snapshot the counts were taken from, `k` maps a kind ("redstone" for
+ * `{ r, k, p }`: `r` is the id of the snapshot the counts were taken from, `k` maps a kind ("redstone" for
  * minecraft:redstone, a custom id as is, "id|Name" for a named stack) to how many are on that page. An entry whose
  * `r` is not the page's current snapshot, or a page without an entry (saved before the index existed, or dropped to
  * stay under the property limit), is unknown: readers must open that page, never treat it as empty.
- * @typedef {{ r: string, k: Record<string, number> }} PageIndex
+ * `p` (since 1.8.9) lists the kinds, keyed like `k`, that have a stack with room left; without it the room is unknown.
+ * @typedef {{ r: string, k: Record<string, number>, p?: string[] }} PageIndex
  */
 /** Longest a name may be and still be indexed whole; a page holding a longer one stays unindexed (unknown, read when needed). */
 const KEY_NAME = 64;
@@ -86,6 +87,32 @@ export function kindsOfRecs(recs) {
 }
 
 /**
+ * The kinds (same keys as `kindsOfRecs`) that have a stack with room left: stackable and below its stack size.
+ * @param {{ id: string, name?: string, n: number }[]} recs @param {(id: string) => number} maxOf @returns {string[]}
+ */
+export function roomOfRecs(recs, maxOf) {
+  /** @type {Set<string>} */
+  const room = new Set();
+  for (const r of recs) {
+    const max = maxOf(r.id);
+    if (max > 1 && r.n < max) room.add(kindKey(r.id, r.name));
+  }
+  return [...room];
+}
+
+/**
+ * Which kinds a saved page could top up, from the committed index, or undefined when that isn't recorded (an entry for
+ * another snapshot, an unreadable one, or one written before `p` existed).
+ * @param {State} state @param {number} page @returns {Set<string> | undefined}
+ */
+export function indexedRoom(state, page) {
+  if (!indexedKinds(state, page)) return undefined;
+  const p = /** @type {PageIndex} */ (state.idx?.[page]).p;
+  if (!Array.isArray(p) || p.some((k) => typeof k !== "string")) return undefined;
+  return new Set(p);
+}
+
+/**
  * What the committed index says a saved page holds, as full item id (and "|name") -> count, or undefined when the
  * page's contents are unknown (no entry, an entry for another snapshot, or an unreadable one).
  * @param {State} state @param {number} page @returns {Map<string, number> | undefined}
@@ -109,10 +136,14 @@ export function indexedEntries(state, page) {
   return Object.entries(/** @type {PageIndex} */ (state.idx?.[page]).k).map(([key, n]) => ({ ...parseKind(key), n }));
 }
 
-/** Records one page's kinds against the snapshot it came from; forgets every entry for a page that changed or went away. @param {State} state @param {number} page @param {Ref} ref @param {Record<string, number> | undefined} kinds */
-export function recordIndex(state, page, ref, kinds) {
+/**
+ * Records one page's kinds (and the kinds it could top up) against the snapshot it came from; forgets every entry for
+ * a page that changed or went away.
+ * @param {State} state @param {number} page @param {Ref} ref @param {Record<string, number> | undefined} kinds @param {string[]} [room]
+ */
+export function recordIndex(state, page, ref, kinds, room) {
   const idx = { ...state.idx };
-  if (kinds) idx[page] = { r: ref.id, k: kinds };
+  if (kinds) idx[page] = room ? { r: ref.id, k: kinds, p: room } : { r: ref.id, k: kinds };
   else delete idx[page];
   state.idx = idx;
 }

@@ -66,7 +66,106 @@ export function heldItemCached(player, maxAge = 0) {
         && (c.tick === now || (now - c.tick <= maxAge && !isBook(c.item) && !isTutorialBook(c.item)))) return c.item;
     const item = heldItem(player);
     heldCache.set(player.id, { tick: now, slot: player.selectedSlotIndex, item });
+    setHand(player, item?.typeId);
     return item;
+}
+
+// What each player holds, kept from the hotbar and inventory events instead of polling every hand: the loops that only
+// care about Building Book or Tutorial Book holders walk those few players, and the tool gate asks here without a read.
+/** player id -> type id in the selected slot (null: empty hand) */
+const handTypes = new Map();
+/** player ids whose hand changed and must be read once */
+const handDirty = new Map();
+/** player id -> player, for those holding the Building Book */
+const bookHands = new Map();
+/** player id -> player, for those holding the Tutorial Book */
+const tutorialHands = new Map();
+
+function isBookId(typeId) {
+    return typeId === BOOK_ID || typeId === LEGACY_BOOK_ID;
+}
+
+/** Records what the player holds now. A change wakes the tool gate for that player. */
+function setHand(player, typeId) {
+    const id = player.id;
+    const next = typeId ?? null;
+    const had = handTypes.has(id);
+    const prev = handTypes.get(id);
+    handTypes.set(id, next);
+    handDirty.delete(id);
+    if (isBookId(next)) bookHands.set(id, player); else bookHands.delete(id);
+    if (next === TUTORIAL_BOOK_ID) tutorialHands.set(id, player); else tutorialHands.delete(id);
+    if (!had || prev !== next) markHolderDirty(id);
+}
+
+/** Reads the hand of every player whose hand changed since the last look (once each). */
+function syncHands() {
+    if (handDirty.size === 0) return;
+    for (const player of [...handDirty.values()]) {
+        try {
+            if (player.isValid === false) { handDirty.delete(player.id); continue; }
+            heldCache.delete(player.id);
+            heldItemCached(player, 0);
+        } catch { handDirty.delete(player.id); }
+    }
+}
+
+/** The type id in the player's selected slot, from the events (one read the first time or after a change). */
+export function handTypeId(player) {
+    const id = player.id;
+    if (handDirty.has(id) || !handTypes.has(id)) {
+        heldCache.delete(id);
+        return heldItemCached(player, 0)?.typeId ?? null;
+    }
+    return handTypes.get(id) ?? null;
+}
+
+/** Players holding the Building Book right now (id -> player). */
+export function buildingBookHands() {
+    syncHands();
+    return bookHands;
+}
+
+/** Players holding the Tutorial Book right now (id -> player). */
+export function tutorialBookHands() {
+    syncHands();
+    return tutorialHands;
+}
+
+/** Re-reads one player's hand (the slow safety sweep for a missed event). */
+export function refreshHand(player) {
+    try {
+        heldCache.delete(player.id);
+        heldItemCached(player, 0);
+    } catch {}
+}
+
+/** Marks a player's hand to be read again at the next look (the tool gate hears of it only if the item changed). */
+export function markHandDirty(player) {
+    if (!player?.id) return;
+    handDirty.set(player.id, player);
+}
+
+/**
+ * Backstop for a hotbar slot change that sent no event (a script that sets the slot, for one): a slot that differs
+ * from the one the hand was read in is treated as a change. One property read, no inventory read.
+ */
+export function checkSlot(player) {
+    const c = heldCache.get(player.id);
+    if (!c) { if (!handDirty.has(player.id)) markHandDirty(player); return; }
+    if (c.slot !== player.selectedSlotIndex) touch(player);
+}
+
+/** Whether this player's hand was ever read or reported (the sweep adds the others). */
+export function handKnown(id) {
+    return handTypes.has(id) || handDirty.has(id);
+}
+
+function forgetHand(id) {
+    handTypes.delete(id);
+    handDirty.delete(id);
+    bookHands.delete(id);
+    tutorialHands.delete(id);
 }
 /** player -> tick their hand last changed (slot change or an item change in the inventory) */
 const handTouched = new WeakMap();
@@ -85,7 +184,7 @@ export function nextIdlePhase() {
     return idleClock.tick();
 }
 export function idleSkip(player, index, busy, phase = playersTick, window = 1) {
-    const now = playersTick; // the loops call allPlayers() first, this tick
+    const now = system.currentTick;
     const span = Math.max(1, Number(window) || 1);
     const handFresh = (handTouched.get(player) ?? -Infinity) >= now - span;
     return !idleDue(index, phase, busy.has(player), handFresh);
@@ -93,17 +192,30 @@ export function idleSkip(player, index, busy, phase = playersTick, window = 1) {
 const touch = (player) => {
     heldCache.delete(player.id);
     handTouched.set(player, system.currentTick);
-    markHolderDirty(player.id);
+    markHandDirty(player);
 };
 try {
-    world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player }) => touch(player));
-    world.afterEvents.playerInventoryItemChange.subscribe(({ player }) => touch(player));
+    world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player, itemStack, newSlotSelected }) => {
+        touch(player);
+        // The event names the new held item: no read needed.
+        try {
+            heldCache.set(player.id, { tick: system.currentTick, slot: newSlotSelected, item: itemStack });
+            setHand(player, itemStack?.typeId);
+        } catch {}
+    });
+    // Only a change in the selected slot can change what is in hand (picking up items elsewhere costs nothing).
+    world.afterEvents.playerInventoryItemChange.subscribe(({ player, slot }) => {
+        try { if (slot === player.selectedSlotIndex) touch(player); } catch { touch(player); }
+    });
     world.afterEvents.playerLeave.subscribe(({ playerId }) => {
         heldCache.delete(playerId);
+        forgetHand(playerId);
         forgetHolder(playerId);
     });
     world.afterEvents.playerSpawn.subscribe(({ player }) => {
-        if (player?.id) markHolderDirty(player.id);
+        if (!player?.id) return;
+        markHandDirty(player);
+        markHolderDirty(player.id);
     });
 } catch {}
 

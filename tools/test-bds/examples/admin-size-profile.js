@@ -50,8 +50,12 @@ export default async function (t) {
   const eliteLarge = 80;
   const LARGE = { "map_bp:budgetLevel": "low", "map_bp:mobRadiusMax": 24, "elite_bp:maxAlive": eliteLarge, "cleanup_bp:threshold": 1500, "find_bp:liveScanRadius": 8, "admin_bp:checkSeconds": 60, "mail_bp:sendCooldownSeconds": 30, "afk_bp:sleep.percent": 50 };
   const SMALL = { "map_bp:budgetLevel": "normal", "map_bp:mobRadiusMax": 32, "elite_bp:maxAlive": eliteSmall, "cleanup_bp:threshold": 500, "find_bp:liveScanRadius": 16, "admin_bp:checkSeconds": 30, "mail_bp:sendCooldownSeconds": 10, "afk_bp:sleep.percent": 100 };
-  const changes = Object.keys(LARGE).filter((k) => LARGE[k] !== SMALL[k]).length;
-  t.assert(changes >= 7, `at least the 7 other settings differ between sizes (${changes})`);
+  // Owner answer (F10, October 20): Champions keep their per-player scaling, so the Large server preset leaves the
+  // Champions ceiling where it is (80 both ways): exactly the 7 other settings change and Champions already matches.
+  t.assert(eliteLarge === eliteSmall, `the Large server preset leaves the Champions ceiling alone (${eliteSmall} -> ${eliteLarge})`);
+  const changed = Object.keys(LARGE).filter((k) => LARGE[k] !== SMALL[k]);
+  const changes = changed.length;
+  t.assert(changes === 7 && !changed.includes("elite_bp:maxAlive"), `exactly the 7 settings other than Champions differ between sizes (${changed.join(", ")})`);
   const alike = Object.keys(LARGE).length - changes;
   const matches = (/** @type {Map<string, any>} */ v, /** @type {Record<string, any>} */ want) => Object.entries(want).filter(([k, x]) => v.get(k) !== x).map(([k, x]) => `${k} is ${v.get(k)}, not ${x}`);
 
@@ -92,7 +96,9 @@ export default async function (t) {
   let ask = await tap(page, "Large server");
   t.assert(ask?.type === "message" && title(ask) === "Apply Large server?", `a confirmation with the list came first (got "${title(ask)}")`);
   t.log(plain(ask.body));
-  t.check(alike === 0 || new RegExp(`${alike} more already match\\.`).test(plain(ask.body)), `the list says how many settings already match (${alike})`);
+  t.check(alike === 1 && /\n1 more already match\./.test(plain(ask.body)), `the list says the one setting that already matches (Champions) (${alike})`);
+  const listed = plain(ask.body).split("\n\n")[0].split("\n").slice(1);
+  t.check(listed.length === 7 && listed.every((l) => / -> /.test(l)) && !listed.some((l) => /Champion/i.test(l)), `exactly 7 changes are listed, none of them Champions (${listed.join(" | ")})`);
   t.check(new RegExp(`^These ${changes} settings change, for the whole world:\nMinimap: Minimap script time a tick: Normal \\(about 2\\.9 ms a tick\\) -> Low \\(about 2 ms a tick\\)\nMinimap: Largest mob range players may pick \\(blocks\\): 32 -> 24\n`).test(plain(ask.body)), "it lists each change, old -> new, in menu words");
   page = await tap(ask, 1);
   t.check(title(page) === "Operator Tools", `Cancel goes back (got "${title(page)}")`);

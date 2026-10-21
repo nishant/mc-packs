@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, onChange, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, exportPending, indexedEntries, InventoryRecoveryError, inventoryReady, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, saveSnapshot, signature, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, exportPending, indexedEntries, indexedRoom, InventoryRecoveryError, inventoryReady, kindKey, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, roomOfRecs, saveSnapshot, signature, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -210,7 +210,11 @@ function readPage(player, page) {
     const state = stateOf(player);
     if (state.pending) throw new Error("inventory recovery is pending; tell an operator");
     const ref = state.pages[page];
-    if (ref) return loadSnapshot(player, ref).map(({ s, item }) => ({ s: pageSlot(s, ref.layout), ...toRecord(item) }));
+    if (ref) {
+      const recs = loadSnapshot(player, ref).map(({ s, item }) => ({ s: pageSlot(s, ref.layout), ...toRecord(item) }));
+      learnRoom(ref.id, roomOfRecs(recs, maxOf));
+      return recs;
+    }
     const key = PAGE_PROP + page;
     const raw = player.getDynamicProperty(key);
     if (raw === undefined) return [];
@@ -242,6 +246,18 @@ function readPage(player, page) {
     console.warn(`[stash] reading page ${page}: ${e}`);
     return undefined;
   }
+}
+
+/**
+ * Per snapshot id, the kinds that page could top up (a stack that isn't full). A snapshot never changes and its id is
+ * never reused, so this stays true; it covers pages whose committed index was written before it recorded room.
+ * @type {Map<string, Set<string>>}
+ */
+const roomByRef = new Map();
+/** @param {string} refId @param {string[] | Set<string>} room */
+function learnRoom(refId, room) {
+  if (roomByRef.size >= 2000) roomByRef.clear();
+  roomByRef.set(refId, new Set(room));
 }
 
 /** @param {Rec[]} entries @returns {import("./page-store.js").Entry[]} */
@@ -281,6 +297,31 @@ function announceChange(player) {
 /** @type {Map<string, { sig: string, rows: Map<string, CountRow[]> }>} per player: what each ask has on saved pages, valid while the page refs are the same */
 const storedCache = new Map();
 
+/** @type {Map<string, Set<number>>} per player: the pages found holding an old JSON page property */
+const legacyCache = new Map();
+
+/**
+ * The pages without a native snapshot that hold an old JSON page property. A page with a snapshot never reads its old
+ * property (the snapshot shadows it), and nothing in this version writes or deletes one, so a property found once is
+ * never read again for this; only pages not yet known to have one are checked, which is cheap while they have none.
+ * @param {Player} player @param {import("./page-store.js").State} state @returns {number[]}
+ */
+function legacyPages(player, state) {
+  let known = legacyCache.get(player.id);
+  if (!known) legacyCache.set(player.id, (known = new Set()));
+  /** @type {number[]} */
+  const pages = [];
+  for (let p = 1; p <= totalPages(player); p++) {
+    if (state.pages[p]) continue;
+    if (!known.has(p)) {
+      if (player.getDynamicProperty(PAGE_PROP + p) === undefined) continue;
+      known.add(p);
+    }
+    pages.push(p);
+  }
+  return pages;
+}
+
 /** Could a saved page hold a named stack? False only when the committed index says it holds none. @param {Player} player @param {number} page */
 function mayHoldNamed(player, page) {
   try {
@@ -310,14 +351,10 @@ export function storedCount(player, id, name) {
   if (state.pending) return undefined;
   const cur = curPage(player);
   const pagesNow = new Set(Object.keys(state.pages).map(Number));
-  /** @type {string[]} */
-  const legacy = [];
-  for (let p = 1; p <= totalPages(player); p++) {
-    const raw = player.getDynamicProperty(PAGE_PROP + p);
-    if (raw === undefined) continue;
-    pagesNow.add(p);
-    if (!state.pages[p]) legacy.push(`${p}:L${typeof raw === "string" ? raw.length : "?"}`);
-  }
+  // A legacy page is only ever read (its first write makes it native, which changes state.pages), so what it holds is
+  // fixed: the signature needs only the native refs and which pages are still legacy.
+  const legacy = legacyPages(player, state);
+  for (const p of legacy) pagesNow.add(p);
   const sig = `${cur}|${Object.entries(state.pages).map(([p, r]) => `${p}:${r.id}`).join(",")}|${legacy.join(",")}`;
   let cache = storedCache.get(player.id);
   if (!cache || cache.sig !== sig) {
@@ -370,7 +407,9 @@ function commitPages(player, edits, after, cur = curPage(player), decorate) {
       ref.layout = 2;
       created.push(ref);
       next.pages[page] = ref;
-      recordIndex(next, page, ref, kindsOfRecs(entries));
+      const room = roomOfRecs(entries, maxOf);
+      learnRoom(ref.id, room);
+      recordIndex(next, page, ref, kindsOfRecs(entries), room);
     }
     pruneIndex(next);
     decorate?.(next, edits);
@@ -413,17 +452,26 @@ function addToEntries(entries, rec, mode) {
 }
 
 /**
- * Could a saved page take this item (a matching stack or a free slot)? False only when the committed index and the
- * page's saved stack count prove it can't; an unknown page is read, never skipped.
- * @param {Player} player @param {number} page @param {string} id
+ * Could a saved page take this item? "merge" needs a stack of its kind with room left; "fill" also takes a free slot.
+ * False only when the page's saved stack count and what is known about its stacks (the committed index's room list, or
+ * what this script saw when it last loaded that snapshot) prove it can't, so a full page of full stacks is never
+ * loaded for nothing. An unknown page is read, never skipped.
+ * @param {Player} player @param {number} page @param {{ id: string, name?: string }} rec @param {"merge" | "fill"} mode
  */
-function mayTake(player, page, id) {
+function mayTake(player, page, rec, mode) {
   try {
     const state = stateOf(player);
-    if (state.pending || !state.pages[page]) return true;
+    const ref = state.pages[page];
+    if (state.pending || !ref) return true;
+    const free = !Array.isArray(ref.slots) || ref.slots.length < PAGE_SIZE;
+    let room = roomByRef.get(ref.id);
+    if (!room) {
+      room = indexedRoom(state, page);
+      if (room) learnRoom(ref.id, room);
+    }
+    if (room) return room.has(kindKey(rec.id, rec.name)) || (mode === "fill" && free);
     if (!indexedEntries(state, page)) return true;
-    const held = savedStacks(player, page);
-    return held === undefined || held < PAGE_SIZE || mayHold(player, page, id);
+    return free || mayHold(player, page, rec.id);
   } catch {
     return true;
   }
@@ -447,7 +495,7 @@ function storeOnPages(player, item, pages, edits = new Map(), perPage = false) {
   /** @param {number} p @param {"merge" | "fill"} mode */
   const put = (p, mode) => {
     if (!left) return;
-    if (!loaded.has(p) && !edits.has(p) && !mayTake(player, p, rec.id)) return;
+    if (!loaded.has(p) && !edits.has(p) && !mayTake(player, p, rec, mode)) return;
     if (!loaded.has(p)) loaded.set(p, edits.get(p) ?? readPage(player, p));
     const entries = loaded.get(p);
     if (!entries) throw new Error(`page ${p} can't be read; nothing moved`);
@@ -547,8 +595,10 @@ function usedOnPage(inv) {
 const switching = new Set();
 /** @type {Set<string>} */
 const recoveryWarned = new Set();
-/** @type {Map<string, { page: number, amounts: Map<string, number>, live: Map<string, number> }>} what each player's page, and everything they carry, held at the last auto-store look */
+/** @type {Map<string, { page: number, amounts: Map<string, number>, empty: number, live: Map<string, number> | undefined }>} what each player's page, its free slots and everything they carry (only near a full page) held at the last auto-store look */
 const snapshots = new Map();
+/** Free page slots at or below which an auto-store look also totals everything carried (see autoStore). */
+const LIVE_MARGIN = 4;
 /**
  * Saves the active page and shows another. The page being left is saved and read back before anything
  * is cleared; whatever of the new page doesn't fit (a carried item is in its slot) stays saved on that page.
@@ -1125,7 +1175,7 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 });
 world.afterEvents.playerDimensionChange.subscribe(({ player }) => bumpLife(player.id));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff, lifeGen]) m.delete(playerId);
+  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff, lifeGen, legacyCache, storedCache]) m.delete(playerId);
   recoveryWarned.delete(playerId);
   dead.delete(playerId);
   queuedButtons.delete(playerId);
@@ -1234,15 +1284,25 @@ function autoStore(player) {
   const total = totalPages(player);
   const cur = curPage(player);
   const now = lookAtPage(inv);
-  const live = liveTotals(player, inv, now.amounts);
+  // Everything carried is only compared on a page down to one free slot, against the look before it; a page with
+  // more room than LIVE_MARGIN can't get there by the next look short of several new stacks at once, so its look
+  // skips the hotbar, cursor and worn gear. When such a burst (a broken chest, mob loot) does fill a roomy page
+  // within one look, there are no carried totals to compare with: every new stack on the page counts as arrived,
+  // as if nothing else carried changed. Otherwise a full page and a full hotbar could never see another pickup
+  // and would stay stuck. A misread move only sends the player's own stack to another of their pages.
+  const live = now.empty <= LIVE_MARGIN ? liveTotals(player, inv, now.amounts) : undefined;
   const before = snapshots.get(player.id);
-  snapshots.set(player.id, { page: cur, amounts: now.amounts, live });
-  if (!before || before.page !== cur || now.empty > 1) return;
+  snapshots.set(player.id, { page: cur, amounts: now.amounts, empty: now.empty, live });
+  if (!before || before.page !== cur || now.empty > 1 || !live) return;
+  const burst = !before.live;
+  if (burst && !(before.empty > LIVE_MARGIN)) return;
+  const was = before.live;
 
   /** @type {Map<string, number>} */
   const gains = new Map();
   for (const [k, n] of now.amounts) {
-    const gain = Math.min(n - (before.amounts.get(k) ?? 0), (live.get(k) ?? 0) - (before.live.get(k) ?? 0));
+    const onPage = n - (before.amounts.get(k) ?? 0);
+    const gain = was ? Math.min(onPage, (live.get(k) ?? 0) - (was.get(k) ?? 0)) : onPage;
     if (gain > 0) gains.set(k, gain);
   }
   if (!gains.size) return;
@@ -1303,7 +1363,7 @@ function autoStore(player) {
     return;
   }
   const look = lookAtPage(inv);
-  snapshots.set(player.id, { page: cur, amounts: look.amounts, live: liveTotals(player, inv, look.amounts) });
+  snapshots.set(player.id, { page: cur, amounts: look.amounts, empty: look.empty, live: look.empty <= LIVE_MARGIN ? liveTotals(player, inv, look.amounts) : undefined });
   const dest = [...perPage.entries()].sort((a, b) => a[0] - b[0]).sort((a, b) => b[1] - a[1])[0][0];
   hooks.bar(player, `§8[§bPage #${dest}§8] §7Auto-stored §f${movedCount}x ${name} §7(${freeEverywhere(player, inv)} slots left)`);
 }

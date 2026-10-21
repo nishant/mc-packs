@@ -106,6 +106,9 @@ counts. During development use 120 s windows (the default); release validation u
 `examples/perf-soak.js` spreads `players` simulated players around spawn in groups (two near spawn,
 the others 240+ blocks apart, two in a pool, two in the Nether), makes them walk, look around, sneak
 and jump, and run a few common commands for `seconds` (see its header for the other arguments).
+For a memory soak (no `--profile`), `--arg probe=300` logs every 300 s what the world holds that could grow: entities
+by type, scoreboard participants, structures and every pack's saved world data (from `realm:diag_ping`), and ends
+with the change from the first probe to the last (`probe change ...`, also reported as `perf-probe`).
 
 ## Running every example (`suite.mjs`)
 
@@ -124,7 +127,17 @@ Test hooks that a scenario needs inside a pack (packs can't read each other's dy
 `hooks/` and are appended to the test copy by the recipe (`hooks/maps-rvtest.js` for maps-cleanup and
 maps-leave, `hooks/rainbow-rvtest.js` for rainbow-race, the `hooks/limit_bp` probe pack for
 harness-event-limit, Node stagers such as `hooks/saga-starfall-stage.mjs` and `hooks/stage-saga-softlock.mjs`); a `--packs`
-header without a recipe is skipped ("needs hook copy"). A header whose
+header without a recipe is skipped ("needs hook copy").
+**Fail before for the right reason.** A probe that a scenario's assertions depend on must not depend on the fix it
+checks, or the scenario fails on the old code only because the probe is missing there. The probe hooks take the source
+tree as their last argument (`git archive <commit> packs | tar -x -C <dir>`), so the same recipe runs the code from
+before a fix: `hooks/owed-probe.mjs` (seeds and reads a pack's own world or player properties and replays its
+playerSpawn listeners; owed-legacy-restart, owed-legacy-consumers, party-moderation, crowns-limit),
+`hooks/milestones-rejoin.mjs` (the same player joining again after a restart; w10-milestones-flag),
+`hooks/stash-loads.mjs` (counts the saved pages Quick Stack & Sort loads; refill-pages), `hooks/elite-remove.mjs` (removes chosen spawns in elite_bp's own flush, after its spawn handler; elite-invalid) and `hooks/claims-taps.mjs` (hands claims_bp's own tap handlers a real player's tap: a simulated player's
+`interactWithEntity` never fires `beforeEvents.playerInteractWithEntity`, and its block taps arrive with `isFirstEvent`
+false; claims-animals). `probe-hooks.test.mjs` checks them offline. The suite builds each header recipe's copy in a
+fresh folder, retries included. A header whose
 command runs another scenario file fails (and `npm run check` catches it too). A few have no plain command and are listed in
 `SPECIAL` in `suite.mjs` (smoke and restart with every pack, forms, domt-champion, the
 npc-name-capability probe, saga-lighthouse, bundle-smoke (builds `dist/realm_bundle.mcpack` first and runs it as one
@@ -221,6 +234,35 @@ failed with `tickingarea add circle ... failed: the command did not succeed` (th
 chunks were not readable yet). `lib/harness-lifecycle.test.mjs` runs `harness.js` against a fake game whose areas
 survive a restart; `lib/rain-seabed.test.mjs` runs Rain's real scripts, the scenario's hook and the scenario itself.
 
+The same rule holds inside a run: an area removed while some of its chunks are still loading leaves them unloadable
+for the rest of the run, and any area added over one of them later never finishes loading either (its middle cannot be
+read). BDS 1.26.52 loads the whole square of (2r + 1) x (2r + 1) chunks of `tickingarea add circle ... r` (corners
+included, measured for r = 1, 2 and 4), the middle up to 30 ticks before the corners, and a chunk that can be read is
+not quite done: removed 2 ticks after the last chunk could be read, 2 to 5 of 12 spawns a chunk over still failed;
+10 or more ticks after, none did. So `t.loadArea` returns only 20 ticks after every chunk of its area can be read
+(failing with `ticking area <name> at x,z: chunks ... of 25 did not load` otherwise; `whole: false` skips the wait), and a scenario may
+remove the area right after; the start of a phase waits the same way for the listed areas of earlier phases, which
+load again from the save, before removing them. A scenario that adds its own
+areas and removes them (the perf soak's Nether pocket, maps-hunt) waits for all of their chunks too. Before this, the
+perf soak and saga-perf-quests, which removed each spawn's area before the next spawn (Bedrock allows 10), lost players
+to `chunk at 193,170 did not load in 400 ticks` (F73: a whole column of chunks next to an earlier spawn), and
+maps-hunt timed out once its stuck legs had used up the 10 areas; both now load whole loaders once and spawn under them. `lib/harness-lifecycle.test.mjs`'s fake game models
+the stuck chunks.
+
+## Memory soaks (`rss-soak.mjs`)
+
+`node tools/test-bds/rss-soak.mjs --every 5 --out <file.json> -- <run.mjs arguments>` runs one `run.mjs` command and
+samples the resident memory (VmRSS, and the peak VmHWM) of the `bedrock_server` it starts every 5 seconds, from
+`/proc` (Linux only), without the profiler. The JSON keeps every sample (with its pid) and a summary of one process:
+when `run.mjs` starts more than one server (a template server first, a restart), only the one sampled longest is
+judged, its warm-up counted from its own first sample, and every pid is listed in `summary.pids`. The summary has
+10-minute medians after a 5-minute warm-up, the slope in MiB per minute over the first and second half, and a verdict: `growing` (the second
+half still rises more than 0.5 MiB/min and ends at its highest), `leveled`, `falling or noisy`, or `too short` (under
+30 minutes after the warm-up). For O4: `-- --quiet --no-relay --flat --scenario tools/test-bds/examples/perf-soak.js
+--arg players=40 --arg seconds=3600 --timeout 4500`, then the same with `--only` halves of the pack list to find a
+growing pack. The file is rewritten every 60 samplings while it runs, so a run that dies keeps its samples.
+`rss-soak.test.mjs` checks the verdicts.
+
 ## Inventory persistence regression
 
 `node tools/test-bds/stash-persistence.mjs` stages a test-only copy of `stash_bp` and runs
@@ -309,12 +351,13 @@ Waiting
 - `await t.wait(ticks)`, `await t.seconds(s)` (20 ticks = 1 s).
 - `await t.waitUntil(() => cond, { timeout: 200, interval: 1, message })`: polls until truthy,
   returns the value, fails the scenario on timeout. Errors inside the function count as "not yet".
-- `await t.loadArea(x, z, { radius: 2, whole: false, timeout: 400 })`: loads a spot with a ticking area and returns
-  `{ top, name }`, the highest solid block there. It waits for the center column only; `whole: true` also waits until
-  every chunk of the area can be read. Despite the name, a `circle` area loads a square of chunks (3x3 at radius 1, 5x5
-  at 2, 7x7 at 3; `circleChunks` in `lib/tickingarea.js`). Remove an area only after it loaded whole: BDS leaves the
-  chunks of an area removed while they were still loading unloadable for the rest of the run, even under a new area
-  or next to a player (F73: the perf soak's `chunk at -78,168 did not load in 400 ticks`).
+- `await t.loadArea(x, z, { radius: 2, whole: true, timeout: 400 })`: loads a spot with a ticking area and returns
+  `{ top, name }`, the highest solid block there, once every chunk of the area can be read and 20 ticks more (so it can
+  be removed at once; about 1 s more than the spot alone). Despite the name, a `circle` area loads a square of chunks
+  (3x3 at radius 1, 5x5 at 2, 7x7 at 3; `circleChunks` in `lib/tickingarea.js`). `whole: false` waits for the center
+  column only: use it only for an area kept until the end of the phase. BDS leaves the chunks of an area removed while
+  they were still loading unloadable for the rest of the run, even under a new area or next to a player (F73: the perf
+  soak's `chunk at -78,168 did not load in 400 ticks`).
 - `t.tick`: the current tick.
 
 Messages (what packs tell players)

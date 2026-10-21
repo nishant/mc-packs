@@ -1,4 +1,273 @@
 {
-  "notes": [],
-  "packNotes": {}
+  "notes": [
+    "Kitchen: a dish started in your first few seconds online is no longer handed over before it has cooked.",
+    "Auto-store skips a full saved page without opening it (lighter on the server).",
+    "Easy Building: anchors survive switching items, pickaxes no longer build an anchored shape, previews count their blocks again, and a dimension change clears the anchor.",
+    "Kitchen: a finished dish is never handed over twice, even if a save fails.",
+    "Chest Finder: new worlds start with the private index; switching to world-wide takes effect at once.",
+    "Realm Stats: a lighter stats ticker, and tied players share a place.",
+    "Diagnostics: shared saved-data prefixes stay unowned in /realm:diag instead of going to the first pack that touches them."
+  ],
+  "packNotes": {
+    "cooking_bp": {
+      "version": "1.1.16",
+      "notes": "A batch still in the pot is no longer handed over early by the join handover (a cook in a player's first 5 seconds online, or the world's, was instant), and a dish is never handed over twice when the world fails to save at that moment (when the pot finishes, when it starts, or when you join while it cooks)."
+    },
+    "admin_bp": {
+      "version": "1.6.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "afk_bp": {
+      "version": "1.3.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "atlas_bp": {
+      "version": "1.1.10",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "bounty_bp": {
+      "version": "1.3.9",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "build_bp": {
+      "version": "3.0.10",
+      "notes": "Your shape's first anchor stays when you switch to a sword, food or an empty hand; a pickaxe right-click no longer builds an anchored shape; previews show their outline and block count again; changing dimension clears the anchor; holding a block with building off costs the server almost nothing."
+    },
+    "calendar_bp": {
+      "version": "1.0.17",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "caravan_bp": {
+      "version": "1.2.9",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "chairs_bp": {
+      "version": "1.3.12",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "claims_bp": {
+      "version": "1.5.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "cleanup_bp": {
+      "version": "1.2.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "climate_bp": {
+      "version": "1.0.10",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "crowns_bp": {
+      "version": "1.1.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "death_bp": {
+      "version": "1.3.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "dolphin_bp": {
+      "version": "1.2.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "domt_bp": {
+      "version": "1.1.14",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "durability_bp": {
+      "version": "1.2.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "elite_bp": {
+      "version": "1.3.13",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "elytra_bp": {
+      "version": "1.3.19",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "expedition_bp": {
+      "version": "2.4.13",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "farm_bp": {
+      "version": "1.4.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "find_bp": {
+      "version": "1.4.8",
+      "notes": "A brand-new world starts with the private index, and switching to world-wide takes effect at once."
+    },
+    "fishing_bp": {
+      "version": "1.1.14",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "goals_bp": {
+      "version": "1.1.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "guard_bp": {
+      "version": "1.4.10",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "guilds_bp": {
+      "version": "1.1.12",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "harvest_bp": {
+      "version": "1.3.9",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "hud_bp": {
+      "version": "1.3.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "journal_bp": {
+      "version": "1.1.10",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "leaves_bp": {
+      "version": "1.0.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "mail_bp": {
+      "version": "1.2.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "map_bp": {
+      "version": "1.3.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "maps_bp": {
+      "version": "1.8.12",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "meteor_bp": {
+      "version": "1.2.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "milestones_bp": {
+      "version": "1.0.7",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "mobhp_bp": {
+      "version": "1.2.16",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "moon_bp": {
+      "version": "1.2.13",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "nick_bp": {
+      "version": "1.1.9",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "night_bp": {
+      "version": "1.1.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "npc_bp": {
+      "version": "1.7.17",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "party_bp": {
+      "version": "1.2.9",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "phantom_bp": {
+      "version": "1.2.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "platypus_bp": {
+      "version": "1.1.7",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "quests_bp": {
+      "version": "1.3.7",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "rain_bp": {
+      "version": "1.5.16",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "rainbow_bp": {
+      "version": "1.4.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "refill_bp": {
+      "version": "1.1.6",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "relics_bp": {
+      "version": "1.2.16",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "saga_bp": {
+      "version": "1.16.13",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "settings_bp": {
+      "version": "1.4.5",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "silly_bp": {
+      "version": "1.2.10",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "skills_bp": {
+      "version": "1.1.9",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "slots_bp": {
+      "version": "1.0.13",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "stash_bp": {
+      "version": "1.8.9",
+      "notes": "Auto-store skips a saved page that is full of full stacks of what you pick up without opening it, and checks your hotbar and gear totals only when the page is nearly full."
+    },
+    "stats_bp": {
+      "version": "1.4.13",
+      "notes": "The stats ticker redraws when its stat changes and otherwise every 2 seconds, so it costs the server less with many players online; tied players share the same place in My stats and the leaderboards."
+    },
+    "storm_bp": {
+      "version": "1.1.12",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "titles_bp": {
+      "version": "1.2.12",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "tornado_bp": {
+      "version": "1.2.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "town_bp": {
+      "version": "1.2.10",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "translucent_bp": {
+      "version": "1.0.7",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "wander_bp": {
+      "version": "1.2.18",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "waystone_bp": {
+      "version": "1.3.8",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "weather_bp": {
+      "version": "1.3.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "welcome_bp": {
+      "version": "1.5.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    },
+    "zones_bp": {
+      "version": "1.0.11",
+      "notes": "Diagnostics: /realm:diag no longer gives a saved-data key whose prefix two packs share to whichever pack touched it first."
+    }
+  }
 }

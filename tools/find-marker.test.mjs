@@ -122,7 +122,7 @@ const settings = { get: (key) => (key === "highlightSeconds" ? 10 : undefined) }
 
 const serverUrl = dataUrl(`const s = globalThis.__findMc; export const { Block, BlockTypes, BlockVolume, CommandPermissionLevel, Container, CustomCommandParamType, CustomCommandStatus, Dimension, EquipmentSlot, Player, MolangVariableMap, CustomCommandRegistry, System, World, system, world } = s;`);
 const uiUrl = dataUrl(`const u = globalThis.__findUi; export const { ActionFormData, FormCancelationReason } = u;`);
-const settingsUrl = dataUrl(`const g = globalThis.__findSettings; export const get = (key) => g.get(key);`);
+const settingsUrl = dataUrl(`const g = globalThis.__findSettings; export const get = (key) => g.get(key); export const set = () => undefined;`);
 globalThis.__findMc = server;
 globalThis.__findUi = ui;
 globalThis.__findSettings = settings;

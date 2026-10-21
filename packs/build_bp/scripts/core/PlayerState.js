@@ -1,6 +1,10 @@
 // @ts-nocheck
 import { markHolderDirty } from "../utils/tool-gate.js";
 const states = new Map();
+/** player id -> player, for those with a build anchor (the FOV zoom loop walks only these) */
+const anchored = new Map();
+/** player id -> player, for those with a build mode on (their hotbar slot is watched every tick) */
+const building = new Map();
 
 const MODIFIER_KEY = "eb:modifiers";
 
@@ -32,6 +36,7 @@ function saveModifiers(player) {
     try {
         player.setDynamicProperty(MODIFIER_KEY, JSON.stringify(getState(player).modifiers));
     } catch {}
+    markHolderDirty(player.id);
 }
 
 function defaultState() {
@@ -60,8 +65,10 @@ export function setMode(player, mode) {
         s.secondAnchor = null;
         s.blockTypeId  = null;
         s.waypoints    = [];
+        anchored.delete(player.id);
 
     }
+    if (mode && mode !== "disable") building.set(player.id, player); else building.delete(player.id);
     markHolderDirty(player.id);
 }
 export function clearClipboard(player) {
@@ -72,6 +79,7 @@ export function setAnchor(player, location, typeId, blockStates) {
     s.anchor = { x: location.x, y: location.y, z: location.z, dimensionId: player.dimension.id };
     s.blockTypeId = typeId;
     s.blockStates = blockStates ?? {};
+    anchored.set(player.id, player);
     markHolderDirty(player.id);
 }
 export function setSecondAnchor(player, location) {
@@ -85,6 +93,7 @@ export function clearAnchor(player) {
     s.blockTypeId  = null;
     s.blockStates  = {};
     s.waypoints    = [];
+    anchored.delete(player.id);
     markHolderDirty(player.id);
 }
 export function addWaypoint(player, location) {
@@ -96,6 +105,16 @@ export function getWaypoints(player) {
 }
 export function removeState(playerId) {
     states.delete(playerId);
+    anchored.delete(playerId);
+    building.delete(playerId);
+}
+/** Players with a build mode on (id -> player). */
+export function buildingPlayers() {
+    return building;
+}
+/** Players with a build anchor right now (id -> player). */
+export function anchoredPlayers() {
+    return anchored;
 }
 
 export function getModifiers(player) {

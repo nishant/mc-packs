@@ -17,15 +17,29 @@ export default async function (t) {
   };
 
   if (t.phase === 1) {
+    // The flat world starts with animals near spawn, and one standing on a cell blocks the placement there (the earlier
+    // flake: "the player placed 30 pumpkins (28)", fine on a retry). No mob spawning, and the row is cleared of mobs.
+    t.server("/gamerule doMobSpawning false");
+    const clearRow = () => {
+      for (const e of dim.getEntities({ location: { x: X0 + N / 2, y: Y, z: Z }, maxDistance: N })) if (e.typeId !== "minecraft:player") e.remove();
+    };
+    clearRow();
     const p = await t.player("Pip", { x: X0, z: Z - 2, gameMode: "survival" });
     const inv = p.getComponent("inventory").container;
     inv.clearAll();
     inv.setItem(0, new ItemStack("minecraft:pumpkin", 64));
     p.selectedSlotIndex = 0;
+    /** @type {string[]} */
+    const trouble = [];
     for (let i = 0; i < N; i++) {
       const at = { x: X0 + i, y: Y, z: Z };
       // A simulated player places at most one block every few ticks: try again until it's there.
       for (let k = 0; k < 5 && dim.getBlock(at)?.typeId !== "minecraft:pumpkin"; k++) {
+        if (k > 0) {
+          const inTheWay = dim.getEntities({ location: { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, maxDistance: 1.5 }).filter((e) => e.typeId !== "minecraft:player");
+          trouble.push(`x${i} try ${k + 1}: ${inTheWay.map((e) => e.typeId).join(",") || "nothing in the way"}`);
+          clearRow();
+        }
         p.teleport({ x: X0 + i + 0.5, y: Y, z: Z - 1.5 }, { dimension: dim });
         await t.wait(3);
         p.useItemInSlotOnBlock(0, { x: X0 + i, y: Y - 1, z: Z }, t.mc.Direction.Up);
@@ -33,6 +47,7 @@ export default async function (t) {
         p.stopInteracting();
       }
     }
+    if (trouble.length) t.log(`placement retries: ${trouble.join("; ")}`);
     t.assert(pumpkins() === N, `the player placed ${N} pumpkins (${pumpkins()})`);
     p.disconnect();
     await t.wait(40);

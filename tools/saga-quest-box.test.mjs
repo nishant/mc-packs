@@ -10,6 +10,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 import { STORIES } from "../packs/saga_bp/scripts/stories.js";
 import { FAVORS, HOSTILES, WANDER_TEMPLATES } from "../packs/saga_bp/scripts/stories/index.js";
+import { clientRows } from "./lib/client-font.mjs";
 
 const read = (/** @type {string} */ file) => fs.readFileSync(new URL(file, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const uiSource = read("../packs/saga_bp/scripts/ui.js");
@@ -227,6 +228,9 @@ function assertBox(what, { out, all }, mustShow) {
   assert.ok(bytes <= BOX_BYTES, `${what}: ${bytes} bytes is over the box's ${BOX_BYTES}\n${out}`);
   const rows = rowsOfBox(out);
   assert.ok(rows <= BOX_ROWS, `${what}: ${rows} rows is over the box's ${BOX_ROWS}\n${out}`);
+  // And as a client draws it: the default font's real glyph widths in the label's 200 pixels (tools/lib/client-font.mjs).
+  const drawn = clientRows(out, 200);
+  assert.ok(drawn <= BOX_ROWS, `${what}: a client wraps it to ${drawn} rows, over the box's ${BOX_ROWS}\n${out}`);
   // With room for everything, every step label is there whole (the client wraps it), never cut with "...".
   const allPlain = plainOf(all);
   for (const text of mustShow) assert.ok(allPlain.includes(text), `${what}: "${text}" is cut when the box has room for everything\n${all}`);
