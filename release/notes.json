@@ -145,7 +145,7 @@
     },
     "map_bp": {
       "version": "1.3.11",
-      "notes": "About half the server time: budgetLevel normal now has 1 ms of budgets a tick (measured 1.5 ms with 10 players moving, 1.9 with 40; it was 2.8 and 4.3). High has the earlier normal budgets. Titles held longer, shared mob searches, fewer wasted redraws and re-plans."
+      "notes": "About half the server time: budgetLevel normal now has 1 ms of budgets a tick (measured 1.5 ms with 10 players moving, 2.1 with 40; it was 2.8 and 4.4). High has the earlier normal budgets. Titles held longer, shared townsfolk searches, fewer wasted redraws and re-plans."
     },
     "maps_bp": {
       "version": "1.8.14",

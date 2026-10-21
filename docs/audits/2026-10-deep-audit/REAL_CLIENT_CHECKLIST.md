@@ -72,7 +72,7 @@ Useful commands (operator):
 
 ### A4. Minimap budget and the black square (O15, O69)
 Since October 2026 **normal** has budgets of about 1 ms a tick (the owner's Minimap budget; measured 1.5 ms with 10
-players moving, 1.9 with 40) and **high** has the earlier normal's (about 2.9 ms; measured 2.6 and 3.7), so this check also decides whether normal still looks right: compare normal with high side by side.
+players moving, 2.1 with 40) and **high** has the earlier normal's (about 2.9 ms; measured 2.5 and 3.6), so this check also decides whether normal still looks right: compare normal with high side by side.
 1. `/realm:config` → **Minimap** → **Minimap script time a tick**: try **low**, then **normal**, then **high**.
    With each: walk for 30 seconds, sprint, fly in creative across new land for 30 seconds, then stand at spawn with
    the other player and some animals around.
