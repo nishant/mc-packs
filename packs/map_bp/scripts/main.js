@@ -510,10 +510,12 @@ function npcsNear(player) {
 
 /**
  * The nearest `max` monsters within `radius` of the player: from a search made for a player near them in the last
- * INTERVAL ticks (it reaches MOB_SHARE farther), else from a new one.
- * @param {Player} player @param {number} radius @param {number} max @returns {{ x: number, z: number }[]}
+ * INTERVAL ticks, else from a new one. A search reaches MOB_SHARE farther (for others to use) only when another player
+ * was that near at the last look (`seen`, plus what they may have walked since): a wider search costs more, about the
+ * area (24 to 32 blocks: a pass 0.6 ms instead of 0.5 in map.js), so a player on their own searches only their range.
+ * @param {Player} player @param {number} radius @param {number} max @param {Seen[]} seen @returns {{ x: number, z: number }[]}
  */
-function mobsNear(player, radius, max) {
+function mobsNear(player, radius, max, seen) {
   const at = player.location;
   const dim = player.dimension;
   const now = system.currentTick;
@@ -521,8 +523,9 @@ function mobsNear(player, radius, max) {
   if (!found) {
     /** @type {{ x: number, z: number }[]} */
     const mobs = [];
-    const r = radius + MOB_SHARE;
-    for (const e of dim.getEntities({ location: at, maxDistance: r, families: ["monster"], excludeTags: [NPC_TAG], closest: max * 4 })) {
+    const company = seen.some((q) => q.id !== player.id && q.dim === dim.id && Math.hypot(q.x - at.x, q.z - at.z) <= MOB_SHARE + 4);
+    const r = company ? radius + MOB_SHARE : radius;
+    for (const e of dim.getEntities({ location: at, maxDistance: r, families: ["monster"], excludeTags: [NPC_TAG], closest: company ? max * 4 : max })) {
       try {
         const l = e.location;
         mobs.push({ x: l.x, z: l.z });
@@ -566,7 +569,7 @@ function gather(player, seen, pr) {
   }
   if (pr.mobs) {
     const max = Math.max(1, Number(get("maxMobs")) || 8);
-    for (const m of mobsNear(player, pr.radius, max)) add("mob", m.x, m.z, true);
+    for (const m of mobsNear(player, pr.radius, max, seen)) add("mob", m.x, m.z, true);
   }
   const tag = seen.find((s) => s.id === player.id)?.party;
   const others = get("showOthers") === true;
