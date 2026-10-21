@@ -259,7 +259,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:stats§r to open §lRealm Stats§r. §lMy stats§r shows every stat, with your rank (§e#2 of 7§r) in each one you've scored in, and the date you first joined (UTC); §lLeaderboards§r and a stat shows the top 10.",
+        "text": "Run §e/realm:stats§r to open §lRealm Stats§r. §lMy stats§r shows every stat, with your rank (§e#2 of 7§r) in each one you've scored in (players with the same score share a place, here, on the leaderboards and on the ticker), and the date you first joined (UTC); §lLeaderboards§r and a stat shows the top 10.",
         "ops": false
       },
       {
@@ -2779,7 +2779,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lTwo-click shapes§r (Line, Diagonal Line, Wall, Floor, Circle, Semicircle, Sphere): hold any block and right-click to set the §lfirst anchor§r (§eAnchor set§r). As you look around, the live 3D outline preview stretches to your aim and shows the dimensions and block count above the hotbar. Right-click again to place the entire shape.",
+        "text": "§lTwo-click shapes§r (Line, Diagonal Line, Wall, Floor, Circle, Semicircle, Sphere): hold any block and right-click to set the §lfirst anchor§r (§eAnchor set§r). As you look around, the live 3D outline preview stretches to your aim and shows the dimensions and block count above the hotbar. Right-click again to place the entire shape. The anchor stays while you hold something else (a sword, food, an empty hand): its outline just isn't drawn until you hold that block again. Right-clicking with a different block or a digging tool starts a new anchor instead; changing the mode or going to another dimension clears it.",
         "ops": false
       },
       {
@@ -2819,7 +2819,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r (or the §lAdmin§r tab in §e/realm:build_settings§r) sets realm-wide limits and permissions. Prefer standard menus instead of 3D floating panels? Switch §lMenu Style§r to §lPlain§r under Controls in §e/realm:build_settings§r (or enable §eplainMenusForAll§r for everyone). Beds use Bedrock's §eminecraft:bed§r and §eminecraft:straw_bed§r, not Java color-specific ids. A complete bed is two blocks but costs one bed item. Placement, clipboard limits and undo keep both halves together; an unavailable partner rejects the pair. Native item data and supported facing states are retained. Preview and modifier loops close their tool-holder gate when nobody is using them; the exact server cost remains part of the measured audit, not a claimed speedup from a unit counter.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r (or the §lAdmin§r tab in §e/realm:build_settings§r) sets realm-wide limits and permissions. Prefer standard menus instead of 3D floating panels? Switch §lMenu Style§r to §lPlain§r under Controls in §e/realm:build_settings§r (or enable §eplainMenusForAll§r for everyone). Beds use Bedrock's §eminecraft:bed§r and §eminecraft:straw_bed§r, not Java color-specific ids. A complete bed is two blocks but costs one bed item. Placement, clipboard limits and undo keep both halves together; an unavailable partner rejects the pair. This holds in every shape mode (Line through Cone), with Mirror, Array and Radial, in Air Build, for paste and for Destroy (breaking one half takes the other). Native item data and supported facing states are retained. Preview and modifier loops run only for players holding a building tool (see How it works).",
         "ops": true
       }
     ],
