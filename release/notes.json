@@ -3,15 +3,18 @@
     "Every town now has a mayor of its own, waiting at the town center to take deliveries for that town. Mayor Bram keeps his town; every other town gets its own mayor the next time someone visits it.",
     "Towns pick their own building spots on natural ground and level it gently (never more than 3 blocks), and never touch anything you built, placed or planted.",
     "As towns grow they build houses, lay grass paths to the center, light them with lantern posts and keep a garden pen with sheep and chickens.",
-    "Villagers now move into growing towns: 2 by the well, then a family for each house. They never take your bed, never harvest your crops and wander home when they stray."
+    "Villagers now move into growing towns: 2 by the well, then a family for each house. They never take your bed, never harvest your crops and wander home when they stray.",
+    "Town Projects: removing a build puts back only the town's own blocks, so your blocks there stay even when they are the same kind (cobblestone by a well, dirt on its ground).",
+    "Town Projects: a removed town's villagers move away instead of staying behind, and a garden pen never ends up with extra animals.",
+    "Town Projects: a new town build no longer walls in a villager, pet or animal standing on its spot; they are moved aside first."
   ],
   "resourceNotes": [
     "Easy Building's resources: line endings tidied (no change for players)."
   ],
   "packNotes": {
     "town_bp": {
-      "version": "1.7.2",
-      "notes": "A mayor per town, building spots the town picks and levels gently (at most 3 blocks, never your blocks), houses, paths, lantern posts, a garden pen whose animals come back if they wander off, and villagers who move in (Enabled), never take beds or harvest crops, and come home when they stray."
+      "version": "1.7.3",
+      "notes": "Remove spot never touches your blocks, even of a kind the build uses; builds move mobs and dropped items aside instead of walling them in; a removed town's residents move away (what they carry drops); the garden pen keeps exactly its 2 sheep and 2 chickens; spot picking does less work per spot."
     },
     "npc_bp": {
       "version": "1.9.0",

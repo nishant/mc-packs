@@ -319,6 +319,13 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - ship5: the g5 risks that stay open are recorded as O76-O79 in OPEN.md (breeding without a long soak, a removed town's villagers, pen top-up, Remove spot and slow hillside picking).
 - ship5: PR #119's CI had 90 scenarios: 88 passed and 2 were flaky (town-auto-spots, town-houses), both in this release's code. No cause was found from the logs. The scenarios got failure diagnostics instead of longer waits, and the flakes are recorded as O80.
 
+- towns-followups (O76-O80): O79 first (owner rule F37). Remove spot restores only blocks the build changed and that still hold what it put there, or air (D78; restoring into air puts terrain back and overwrites nothing). Relocate and Rebuild use the same rule.
+- towns-followups: a removed town's residents are removed (they drop what they carry), not released: released villagers would keep the resident group or, without it, claim players' beds, and add-and-remove cycles piled them up (D80). Only towns listed in `town:gone` lose villagers this way, so an unreadable town record never costs its villagers.
+- towns-followups: a pen animal beyond the pen's count loses the pen's tag rather than being removed (D79), like the residents' duplicates (D44).
+- towns-followups: residents not breeding is kept by design (D83, 0 born in a 20-minute soak with bread and free beds).
+- towns-followups: O80's flakes were the scenarios (slimes on the flat world killed the survival Ann; a 16-block home check stricter than the 32-block leash) and the pack (a build walled in a resident). Builds now move mobs and dropped items off the region before blocks go in (D81). Every flat town scenario turns mob spawning off.
+- towns-followups: the scan keeps `SCAN.workTick` 100 and gets cheaper per spot without changing any pick (D82); the per-tick cost was measured on BDS before and after, not assumed. A larger cut (cheaper lookups on QuickJS) is left open.
+
 ## Blockers and highs
 
 - [x] (FIXED on master in 4a9e3b85 (unit probe passes; still add a BDS scenario)) **F1 (blocker, item loss) stash_bp: "Fill earlier pages" deletes slot-locked stacks.**
