@@ -1399,8 +1399,7 @@ system.runInterval(() => {
     const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
     // A new pass, a radar waiting for its terrain or a title about to fade (the refresh: with many players their turn
     // could come after HOLD ran out, O5) is always due; the others are looked at in turns.
-    // Out of budget, only those wait for no one (a turn's check reads the game, so it is charged to the budget too).
-    if (!v.dirty && !v.lag && !refresh && ((k - turnFirst + n) % n >= checks || !drawBudget.ok)) continue;
+    if (!v.dirty && !v.lag && !refresh && (k - turnFirst + n) % n >= checks) continue;
     try {
       // No isValid first: on a handle kept from an earlier tick it makes every read after it several times dearer
       // (BDS 1.26). A player who left is dropped from views by playerLeave; one leaving this tick throws here.
@@ -1424,9 +1423,7 @@ system.runInterval(() => {
     }
   }
   if (n) turnFirst = (turnFirst + checks) % n;
-  const checkTook = Date.now() - t0;
-  turnCheckMs += checkTook;
-  drawBudget.spend(checkTook);
+  turnCheckMs += Date.now() - t0;
   // Titles about to fade first (O5), then the longest-waiting: a lagging radar waits since it was last up to date.
   const waited = (/** @type {View} */ v) => (v.lag ? v.fresh ?? 0 : v.drawn ?? 0);
   if (due.length > 1) due.sort((a, b) => Number(b.refresh) - Number(a.refresh) || waited(a.v) - waited(b.v));
