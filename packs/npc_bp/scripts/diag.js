@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "npc_bp";
-const VERSION = "1.7.18";
+const VERSION = "1.9.0";
 const NAME = "Townsfolk";
 /** @type {string[]} */
 const PREFIXES = ["npc"];

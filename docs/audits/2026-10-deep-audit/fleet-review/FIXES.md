@@ -306,6 +306,18 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - ship4: claims-own-pet (F29) could never pass on BDS (a simulated tap fires no before event, so no tamer is recorded and no tap is refused); it now uses master's claims-taps probe like claims-animals: each bone is tapped through the probe and fed for real, and both leash taps in the claim go through the probe. Its first probe run also showed the tamed wolf teleporting back to its owner 24 blocks away, so the tamer now comes into the claim with it, and the scenario asserts the wolf is in the claim. Fails before F29 (5f88e080^: the tamer's tap is canceled), passes after 3 of 3. Nothing is checked less: the stranger's refusal is now observable at all.
 - ship4: F22 stays PARTLY DONE (the guards ship; BDS can't reproduce the leave race). F19 ships as a correctness change without a perf claim.
 
+- group 5: D72, a resident claiming a bed is detected by `isSleeping` on the bed, since villagers never set `occupied_bit` (town-resident-poi has a working control now).
+- group 5: D73, residents default to Enabled: no resident slept in 5 runs while an ordinary villager did in the same bed, residents never work (0 of 48 crops), strays come home, a removed town's residents live on untagged, the world cap held at 20 and no villager was born in any run.
+- group 5: D74, residents get the vanilla jobless schedule and lose the work groups, work goals and love group (`realm:become_resident`); they keep their profession look.
+- group 5: D75, the census leash is 32 blocks from home (`HOME_LEASH`), skipped while a player is within 16 blocks.
+- group 5: D76, garden pen animals that vanish come back while a player stands by the pen for 30 s; killed ones (`k`) never do, so the pen is no free food.
+- group 5: D77, the spot scan is paced for QuickJS (workTick 100, grading per row): performance before UX. Flat ground takes about a minute a level, a steep hillside up to about ten (town-hillside: 81 / 510 / 0 / 308 s).
+- group 5: the shareables override (stopping residents picking up food) was tried and dropped: the bread probe showed no pickup without it, and an empty `items` array is invalid content.
+- ship5: merged origin/master (release 4, 174a0486) into group 5 with a merge commit (5d01c897). Conflicts: the six manifests and diag.js (master's versions, then bumped; town_bp keeps group 5's manifest for its new data module and description), stash's page-store.js (master's, a superset of the int23 typedef port) and release/notes.json (rebuilt). town_bp's spawn.js had mixed endings from before F67 and went to LF (check-eol).
+- ship5: versions above master: town_bp 1.7.2, npc_bp 1.9.0, welcome_bp 1.5.13 (both sides were at 1.5.12), admin_bp 1.6.11, help_bp 1.1.81 by hand (help-catalog was current), news_bp 1.7.86 by gen-news. caravan_bp and stash_bp take master's (group 5's int23 ports were already there). release/notes.json holds only this release's 4 bundle lines and 4 packNotes.
+- ship5: CLAUDE.md's "Vanilla entity overrides" now names `town_bp/entities/villager_v2.json` and its three additions (WORKING.md already did).
+- ship5: the g5 risks that stay open are recorded as O76-O79 in OPEN.md (breeding without a long soak, a removed town's villagers, pen top-up, Remove spot and slow hillside picking).
+
 ## Blockers and highs
 
 - [x] (FIXED on master in 4a9e3b85 (unit probe passes; still add a BDS scenario)) **F1 (blocker, item loss) stash_bp: "Fill earlier pages" deletes slot-locked stacks.**
@@ -666,7 +678,7 @@ alive. This is a feature across town_bp, npc_bp and wander_bp. Build it after F1
 Packs: town_bp (owner), npc_bp (the mayor townsfolk, the resident labels), wander_bp (reuse its villager spawning
 and the identity checks from the shared spawn module).
 
-- [ ] **F36 A mayor per town.**
+- [x] DONE (2bf082d9, 51bd025b, dd54767a, dad21197, edba2e2d; BDS town-mayor-add, town-two-towns, town-bram-migrate): every town gets a `mayor:<town>` townsfolk, Bram keeps his town, others get theirs on the next visit, operators move or rename them. **F36 A mayor per town.**
   - Every town gets its own mayor NPC: a named townsfolk generated for that town, with a name from a list, a
     skin and the `mayor` role, created when the town is added and standing at the town's center or town hall.
   - Mayor Bram stays the realm's main mayor (the story and the cast use `bram`) and the mayor of the first town.
@@ -683,7 +695,7 @@ and the identity checks from the shared spawn module).
   - Until this ships, the owner's workaround for a second town: turn on `deliverWithCommand` (Town Projects in
     Realm Configuration), so `/realm:town` takes deliveries inside any town's radius, and set its level 1 spots
     (`well`, `notice_board`) by hand.
-- [ ] **F37 Project spots chosen automatically.**
+- [x] DONE (1a7524c6, 336160a8, 71fc5c82, c8028632, a5df65d4, a8068c8e, 2a09f958, 475dd5f0, d122b6a3; BDS town-auto-spots, town-hillside, town-claims-spots, town-placed-marks, town-unloaded, town-terrain-restore, town-build-resume, town-resume-guards): automatic spots on natural ground, leveling at most 3 blocks with steps of 1, never a placed block, claim, path or house; the scan is paced for QuickJS (D77: 2.86 -> 1.32 ms a scanning tick at 10 players). **F37 Project spots chosen automatically.**
   - When a town is added (and when it reaches a new level), town_bp picks a spot for each project of that level
     within the town radius, so operators no longer have to set them.
   - **Never touch a man-made block.** A build may only replace air, natural terrain (grass, dirt, sand, gravel,
@@ -714,13 +726,13 @@ and the identity checks from the shared spawn module).
     still move any spot (Manage spots) and preview it before the build.
   - Before a project is built, show its outline to players who are near it for a few seconds, so nobody is
     surprised.
-- [ ] **F38 The town grows as players progress.**
+- [x] DONE (d8734dfb, 11638f97; BDS town-two-towns, town-hillside, town-news): the mayor tells the town's story, why each project matters and the next level. **F38 The town grows as players progress.**
   - The mayor drives it. Talking to the mayor shows the town's story so far, what the next project is for ("a
     well so the families can move in"), and the projects of the current level.
   - Finishing a level unlocks the next, as now. Each finished project and level adds visible life (F39).
   - Keep the existing projects, rewards and saved data. New towns pick spots per F37. Existing towns keep spots
     already set and get automatic spots for the rest.
-- [ ] **F39 Residents move in.**
+- [x] DONE (9ed193c1, 13943910, b8c14d14, f7e90dac; BDS town-residents, town-resident-poi, town-resident-farm): residents through a `villager_v2` override that claims no bed or job site, never work (0 of 48 crops taken), are brought home past 32 blocks; default Enabled (D73), world cap 20. **F39 Residents move in.**
   - Ordinary villagers (vanilla `minecraft:villager_v2` with professions, spawned the way wander_bp spawns its
     villagers, checked with spawnFresh) move into a town as it grows. For example:
     - 2 at Settlement with a well
@@ -740,7 +752,7 @@ and the identity checks from the shared spawn module).
   - **Cost budget:** residents are vanilla mobs, so their AI cost is the game's. The script side must be event
     driven (no per-tick loops over residents). Measure 2 towns at Capital at 10 players. Mob count is a known
     Realm limit, so keep the per-world cap small (default 20) and document it in SERVER_SETUP.md.
-- [ ] **F40 Houses and small life.**
+- [x] DONE (1694313a, 11638f97, ae0980ce, 6ca3b27d, 8280bea1, 41e2c7f9, 3c8ec8ab, 7cf55eb2; BDS town-houses, town-life): houses from Village on, grass paths, lantern posts, a garden pen whose despawned animals come back (killed ones never), town news from the town's mayor. **F40 Houses and small life.**
   - Add a project kind "house": a small built-in cottage with a bed and a job-site block. A town builds one per
     resident slot at levels 2+, at automatic spots (F37), so residents have homes.
   - Add small touches when projects finish:
@@ -749,7 +761,7 @@ and the identity checks from the shared spawn module).
     - the notice board listing new residents
     - gossip from the town's mayor through `realm:gossip`
   - Keep each touch cheap: blocks placed once, no per-tick work.
-- [ ] **F41 Docs and tests.**
+- [x] DONE (a986f325, 39d8f95c, 470e95db, f7e623b3; 15 town scenarios plus town-capital-perf, 9 unit test files): PACKS.md, README, SERVER_SETUP (resident cap), the welcome feature list, CLAUDE.md's vanilla entity overrides; 2 towns at Capital cost Town Projects 0.013 ms/tick at 10 players and 0.025 at 40. **F41 Docs and tests.**
   - PACKS.md: Town Projects (How to use without the operator spot step, mayors, residents, houses, options,
     saved data, cost) and Townsfolk (town mayors). Add Town Projects' new behavior to "How the packs work
     together".

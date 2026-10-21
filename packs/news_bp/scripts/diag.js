@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "news_bp";
-const VERSION = "1.7.85";
+const VERSION = "1.7.86";
 const NAME = "Realm News & Tips";
 /** @type {string[]} */
 const PREFIXES = ["news"];

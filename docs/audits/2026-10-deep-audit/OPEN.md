@@ -313,6 +313,15 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   Camera/respawn-screen pixels and simultaneous unrelated add-on forms remain later private W2 human acceptance;
   headless results do not certify them.
 
+## T14. Living towns follow-ups (group 5, F36-F41; report `campaign-reports/g5.md`)
+
+F36-F41 are done (FIXES.md). What the verification left open:
+
+- O76 **OPEN (F39, no long soak).** Breeding: the jobless schedule's wander and home events add `make_and_receive_love` back. Breeding needs claimable beds and residents claim none; no villager was born in any run, but no run was longer than about 20 minutes.
+- O77 **OPEN (F39).** A removed town's residents stay as ordinary villagers that keep the resident group (no POI claims), so each add-and-remove cycle of a town can leave up to 10 villagers.
+- O78 **OPEN (F40, low).** Pen top-up: the g5 report flags that animals that wandered more than about 40 blocks from the pen while still loaded could be duplicated (the count uses every loaded animal with the pen's tag). Not reproduced; in practice the fence keeps them in.
+- O79 **OPEN (F37, unchanged from before group 5).** Remove spot can still overwrite a player's block of a kind the build uses inside the build's box (containers spill, nothing is lost). Spot picking on steep ground takes up to about 8.5 minutes for a Village's 6 projects (D77, performance first).
+
 ## Owner decisions (no task; for nishant)
 
 - O63 Public release packaging: ship build_bp and translucent_bp outside the bundle; slots_bp off by default; maybe
