@@ -251,3 +251,22 @@ export function penMissing(alive, killed, animals) {
   }
   return out;
 }
+
+/**
+ * Pen animals beyond the pen's own (O78): an animal that wandered into ground that wasn't loaded was missed and spawned
+ * again, and the first one came back when its ground loaded. Of each type, the pen keeps as many as `animals` has, minus
+ * those killed (penMissing counts them the same way); the farthest from the pen beyond that lose the pen's tag (they stay,
+ * ordinary animals, never killed). `found`: every pen animal found, its type and distance to the pen. Returns their
+ * indexes in `found`.
+ * @param {{ type: string, d: number }[]} found @param {string[]} killed @param {string[]} animals @returns {number[]}
+ */
+export function penSurplus(found, killed, animals) {
+  /** @type {number[]} */
+  const out = [];
+  for (const type of new Set(found.map((f) => f.type))) {
+    const keep = Math.max(0, animals.filter((a) => a === type).length - killed.filter((k) => k === type).length);
+    const mine = found.map((f, i) => ({ ...f, i })).filter((f) => f.type === type).sort((a, b) => a.d - b.d);
+    for (const f of mine.slice(keep)) out.push(f.i);
+  }
+  return out.sort((a, b) => a - b);
+}

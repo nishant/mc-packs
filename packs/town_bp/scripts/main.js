@@ -24,7 +24,7 @@ import { BUILDS, FORWARD, buildCells, design, designFootprint, isOptionalPlace, 
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
 import { PEN_ID, addLog, cleanText, houseCount, isWorkId, logLine, makePen, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
-import { CLEARABLE, POSTS_MAX, boardTexts, packCells, penMissing, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
+import { CLEARABLE, POSTS_MAX, boardTexts, packCells, penMissing, penSurplus, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
 import { HOME_LEASH, TICKS_PER_MINUTE, addNew, allocate, homeAt, homesFor, livingOf, lookEvent, lookFor, pickName, plan, readResidents, reconcile, ridOf, ridTag, slotCount } from "./residents.js";
 import { spawnFresh } from "./spawn.js";
@@ -2716,7 +2716,13 @@ function penTick(players) {
     penAt.set(t.id, now);
     try {
       const dim = world.getDimension(t.dim);
-      const alive = dim.getEntities({ tags: [`town:a:${t.id}`] }).map((e) => e.typeId);
+      // Every pen animal loaded, however far it wandered, counts: only those really gone are spawned again (O78).
+      const tag = `town:a:${t.id}`;
+      const found = dim.getEntities({ tags: [tag] });
+      const middle = toWorld(s, 0, 0, 3);
+      const extra = new Set(penSurplus(found.map((e) => ({ type: e.typeId, d: Math.hypot(e.location.x - middle.x, e.location.z - middle.z) })), pr.k ?? [], ANIMALS));
+      for (const i of extra) found[i].removeTag(tag); // one that came back after its stand-in was spawned: an ordinary animal now
+      const alive = found.filter((_, i) => !extra.has(i)).map((e) => e.typeId);
       penMissing(alive, pr.k ?? [], ANIMALS).forEach((type, i) => spawnPenAnimal(t, s, dim, type, i));
     } catch (e) {
       console.warn(`[town] ${t.n}'s pen: ${e}`);
