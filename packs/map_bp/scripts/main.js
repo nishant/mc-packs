@@ -881,7 +881,10 @@ function planIdle(id, now) {
   const plan = scanPlans.get(id);
   const v = views.get(id);
   if (!plan || !v || v.dim !== plan.dim.id) return false;
-  if (Math.abs(v.x - plan.x) + Math.abs(v.z - plan.z) >= IDLE_MOVE || Math.floor(v.y) !== plan.py) return false;
+  if (Math.abs(v.x - plan.x) + Math.abs(v.z - plan.z) >= IDLE_MOVE) return false;
+  // Under a roof every layer is a store of its own; in the open a jump changes nothing (the roof probe sees a new roof).
+  const dy = Math.floor(v.y) - plan.py;
+  if (plan.roof ? dy !== 0 : Math.abs(dy) >= LAYER_KEEP) return false;
   const memo = terrainBaseMemo.get(id);
   if (memo && memo.needAt > plan.at) return false;
   const top = terrain.get(terrain.store(v.dim, undefined), v.x, v.z, 1, true);
@@ -984,6 +987,9 @@ function planFor(player, now) {
       old.dim = dim;
       old.py = py;
       old.roof = roof;
+      // Checked here: the rotating check skips them until they move on from this point (planIdle).
+      old.x = at.x;
+      old.z = at.z;
       return old.pos < old.picks.length ? old : undefined;
     }
   }
