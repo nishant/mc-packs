@@ -584,6 +584,7 @@ function build(t, p, fresh) {
   const box = clampBox(footprint(p, s), dim);
   if (!boxLoaded(dim, box)) return waiting();
   if (!s.snap && !s.old) snapshot(t, p, s, dim, box);
+  clearMobs(dim, box); // nothing walled in (O80)
   let skipped = 0;
   let placed = 0;
   try {
@@ -2518,6 +2519,8 @@ function stepBuild() {
         return;
       }
       if (!cellsOf(t)) return; // the placed cells aren't readable yet
+      // Mobs and items on the region (a resident strolling by) step aside first, so nothing is walled in (O80).
+      clearMobs(dim, { min: { x: geo.region.x1, y: geo.pad - 4, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.fpBox.max.y + 2, z: geo.region.z2 } });
       job.out ??= { placed: 0, skipped: 0 };
       job.gen ??= applyBuild(dim, p, s, geo, job.out, placedBy(t));
       try {
@@ -3484,6 +3487,43 @@ function standAt(dim, v) {
     }
   }
   return undefined;
+}
+
+/**
+ * Moves the mobs and dropped items inside a build's box to just outside it, before blocks go in (O80): a build used to
+ * wall in a resident that stood there (it suffocated), and a pet or a dropped item would fare no better. Players are
+ * waited for instead ("Step off the spot"). Paintings, leash knots and other entities without health stay. Each goes to
+ * the nearest side with room to stand; one with no room anywhere near stays (the next tick tries again).
+ * @param {Dimension} dim @param {Box} box
+ */
+function clearMobs(dim, box) {
+  /** @type {import("@minecraft/server").Entity[]} */
+  let ents;
+  try {
+    ents = dim.getEntities({ location: { x: box.min.x, y: box.min.y, z: box.min.z }, volume: { x: box.max.x - box.min.x + 1, y: box.max.y - box.min.y + 1, z: box.max.z - box.min.z + 1 } });
+  } catch {
+    return;
+  }
+  for (const e of ents) {
+    try {
+      if (e.typeId === "minecraft:player" || (e.typeId !== "minecraft:item" && !e.getComponent("minecraft:health"))) continue;
+      const { x, y, z } = e.location;
+      const sides = [
+        { x: box.min.x - 1, z: Math.floor(z), d: x - box.min.x },
+        { x: box.max.x + 1, z: Math.floor(z), d: box.max.x + 1 - x },
+        { x: Math.floor(x), z: box.min.z - 1, d: z - box.min.z },
+        { x: Math.floor(x), z: box.max.z + 1, d: box.max.z + 1 - z },
+      ].sort((a, b) => a.d - b.d);
+      for (const side of sides) {
+        const to = standAt(dim, { x: side.x, y: Math.floor(y), z: side.z });
+        if (!to) continue;
+        e.teleport(to, { dimension: dim });
+        break;
+      }
+    } catch {
+      // gone or unloaded meanwhile
+    }
+  }
 }
 
 /** Drops what a villager carries (its inventory) where it stands, before it is removed. @param {import("@minecraft/server").Entity} e */
