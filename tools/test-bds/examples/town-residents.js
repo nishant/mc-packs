@@ -9,7 +9,7 @@
 export default async function (t) {
   const dim = t.dimension;
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
-  await t.loadArea(0, 0, { radius: 4 });
+  await t.loadArea(0, 0, { radius: 4, whole: true });
   const cfg = (key, value) => t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `${key}${t.tick}`, pack: "town_bp", key, value }));
   cfg("residents", true);
   cfg("replaceMinutes", 5);

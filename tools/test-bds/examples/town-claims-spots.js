@@ -3,7 +3,7 @@
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp,claims_bp --scenario tools/test-bds/examples/town-claims-spots.js --timeout 3000
 export default async function (t) {
   const own = await t.player("Ann", { op: true, x: 0, z: 0 });
-  await t.loadArea(0, 0, { radius: 4 });
+  await t.loadArea(0, 0, { radius: 4, whole: true });
   t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "c1", pack: "claims_bp", key: "enabled", value: true }));
   await t.wait(3);
   t.answerForm(own, "Claim this land");

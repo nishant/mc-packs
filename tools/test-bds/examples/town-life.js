@@ -25,7 +25,7 @@ export default async function (t) {
   const of = (id) => events.filter((e) => e.id === id).map((e) => e.m);
   t.server("/gamerule domobspawning false");
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
-  await t.loadArea(0, 0, { radius: 4 });
+  await t.loadArea(0, 0, { radius: 4, whole: true });
   const town = (action, extra = {}) => sys.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
   const dump = async (id) => {
     await t.wait(1); // a dump just before answered in this tick: never take its message for this one

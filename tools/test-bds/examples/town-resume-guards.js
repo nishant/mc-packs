@@ -17,7 +17,7 @@ export default async function (t) {
   };
   const built = async () => (await dump()).progress.find(([x]) => x === "well")[1].built === 1;
   if (t.phase === 1) {
-    await t.loadArea(0, 0, { radius: 4 });
+    await t.loadArea(0, 0, { radius: 4, whole: true });
     // A gentle slope, so the well's spot is leveled.
     for (let x = -50; x <= 50; x += 3) {
       const h = Math.floor((x + 50) / 6) - 8;
@@ -44,7 +44,7 @@ export default async function (t) {
     t.restart("restarting mid-build");
   }
   const s = JSON.parse(String(t.world.getDynamicProperty("harness:spot")));
-  await t.loadArea(0, 0, { radius: 4 });
+  await t.loadArea(0, 0, { radius: 4, whole: true });
   // Ann on the spot: the resumed build waits for her.
   p.teleport({ x: s.x + 0.5, y: s.y + 1, z: s.z + 0.5 });
   const since = t.tick;

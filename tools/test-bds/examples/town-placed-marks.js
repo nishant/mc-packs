@@ -5,7 +5,7 @@
 export default async function (t) {
   const G = -61;
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
-  await t.loadArea(0, 0, { radius: 4 });
+  await t.loadArea(0, 0, { radius: 4, whole: true });
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", town: "marks", ...extra }));
   const dump = async () => {
     await t.wait(1); // a dump just before answered in this tick: never take its message for this one

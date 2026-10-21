@@ -7,7 +7,7 @@
 export default async function (t) {
   const dim = t.dimension;
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
-  await t.loadArea(0, 0, { radius: 4 });
+  await t.loadArea(0, 0, { radius: 4, whole: true });
   t.server("/gamerule dodaylightcycle true");
   t.server("/gamerule domobspawning false"); // no zombies at night: they would scatter or kill the villagers being watched
   t.server("/time set 1000");

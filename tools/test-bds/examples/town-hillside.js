@@ -10,7 +10,7 @@ export default async function (t) {
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
   // No mobs: in the 20 minutes this runs, endermen on the plain pick up grass blocks (one did, outside every region).
   t.server("/gamerule domobspawning false");
-  for (const [x, z] of [[0, 0], [-48, -48], [48, -48], [-48, 48], [48, 48]]) await t.loadArea(x, z, { radius: 4 });
+  for (const [x, z] of [[0, 0], [-48, -48], [48, -48], [-48, 48], [48, 48]]) await t.loadArea(x, z, { radius: 4, whole: true });
   // Terraces: x from -R, one block higher every 4 blocks (up to 34 blocks over the plain at the east edge).
   for (let x = -R; x <= R; x += 4) {
     const h = Math.floor((x + R) / 4);

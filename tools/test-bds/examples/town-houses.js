@@ -10,7 +10,7 @@ export default async function (t) {
   const dim = t.dimension;
   const JOBS = ["composter", "lectern", "barrel", "smoker", "cartography_table", "brewing_stand", "fletching_table", "loom", "stonecutter_block", "grindstone"].map((b) => `minecraft:${b}`);
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
-  await t.loadArea(0, 0, { radius: 4 });
+  await t.loadArea(0, 0, { radius: 4, whole: true });
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", ...extra }));
   const dump = async (id) => {
     await t.wait(1); // a dump just before answered in this tick: never take its message for this one
@@ -59,9 +59,14 @@ export default async function (t) {
   town("finish", { town: "elm", project: "house_1" });
   await t.waitMessage(p, /built by the town itself/, { since, timeout: 40 });
 
+  const housesFrom = t.tick;
+  let shown = -1;
   await t.waitUntil(async () => {
     d = await dump("elm");
-    return houses.every((h) => prog(d, h)?.built === 1);
+    const n = houses.filter((h) => prog(d, h)?.built === 1).length;
+    if (n !== shown) t.log(`${n} houses built after ${((t.tick - housesFrom) / 20).toFixed(0)} s (spots: ${houses.filter((h) => d.town.spots[h]).length}, building ${JSON.stringify(d.building)}, scanning ${d.scanning})`);
+    shown = n;
+    return n === houses.length;
   }, { timeout: 12000, interval: 100, message: "4 houses built" }); // the paced scan picks 4 house spots in a few minutes (D77)
   t.log("house spots:", JSON.stringify(houses.map((h) => d.town.spots[h])));
   t.check(!houses.some((h) => d.town.nos?.includes(h)), "every house found a spot");

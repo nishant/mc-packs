@@ -5,7 +5,7 @@ export default async function (t) {
   const dim = t.dimension;
   const G = -61;
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
-  await t.loadArea(0, 0, { radius: 4 });
+  await t.loadArea(0, 0, { radius: 4, whole: true });
   // A gentle slope: one block every 3 blocks to the east, so every spot needs some leveling. It stays inside the
   // loaded circle (z -32 .. 31) and above bedrock (flat 2 below the plain on the west side).
   const failed = [];

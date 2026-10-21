@@ -43,7 +43,7 @@ export default async function (t) {
     cfg("residentCapWorld", 20);
     await t.wait(5);
     for (const c of CENTERS) {
-      const { top } = await t.loadArea(c.x, c.z, { radius: 4 });
+      const { top } = await t.loadArea(c.x, c.z, { radius: 4, whole: true });
       op.teleport({ x: c.x + 0.5, y: top.y + 1, z: c.z + 0.5 });
       await t.wait(20);
       const since = t.tick;
@@ -77,7 +77,7 @@ export default async function (t) {
   if (BASELINE && String(t.args.npc ?? "0") === "1") {
     // The baseline with one townsfolk placed where Birch's mayor stands (the towns soak has that one NPC): what one
     // more townsfolk costs, without towns.
-    const { top } = await t.loadArea(300, 0, { radius: 4 });
+    const { top } = await t.loadArea(300, 0, { radius: 4, whole: true });
     op.teleport({ x: 300.5, y: top.y + 1, z: 0.5 });
     await t.wait(20);
     t.assert(t.cmd(op, "/realm:npc_add bram").ok, "npc_add bram");
@@ -103,8 +103,8 @@ export default async function (t) {
     // Each simulated player took one of the world's 10 ticking areas (they load no chunks themselves): they all stand
     // inside Ash's and Birch's, so those two are added again and Cedar gets the third.
     t.server("/tickingarea remove_all");
-    for (const c of CENTERS) await t.loadArea(c.x, c.z, { radius: 4 });
-    const { top } = await t.loadArea(600, 0, { radius: 4 });
+    for (const c of CENTERS) await t.loadArea(c.x, c.z, { radius: 4, whole: true });
+    const { top } = await t.loadArea(600, 0, { radius: 4, whole: true });
     const last = players.at(-1);
     last.home = { x: 600, z: 0 };
     last.p.teleport({ x: 600.5, y: top.y + 1, z: 0.5 });

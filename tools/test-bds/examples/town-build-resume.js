@@ -33,8 +33,8 @@ export default async function (t) {
   };
   const built = async (id) => (await dump(id)).progress.find(([x]) => x === "well")[1].built === 1;
   if (t.phase === 1) {
-    await t.loadArea(0, 0, { radius: 4 });
-    await t.loadArea(400, 0, { radius: 4 });
+    await t.loadArea(0, 0, { radius: 4, whole: true });
+    await t.loadArea(400, 0, { radius: 4, whole: true });
     await t.wait(40); // the areas' edges load after their centers
     slope(0);
     slope(400);
@@ -68,7 +68,7 @@ export default async function (t) {
     t.check(!(await built("oakfield")), "not built yet");
     t.restart("restarting mid-build");
   }
-  await t.loadArea(400, 0, { radius: 4 });
+  await t.loadArea(400, 0, { radius: 4, whole: true });
   p.teleport({ x: 400.5, y: G + 2, z: 0.5 });
   await t.waitUntil(() => built("oakfield"), { timeout: 1200, interval: 40, message: "Oakfield's well resumed and finished" });
   const s = (await dump("oakfield")).town.spots.well;
