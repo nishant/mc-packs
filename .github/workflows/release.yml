@@ -1,0 +1,83 @@
+# Releases master on mc.nish.software by itself: CLAUDE.md's "Ship every change" steps 2-3 (publish-packs, pack-docs and
+# its check, check-site realm, the hosting PR merged = the deploy, then check-live), run by tools/ci-release.mjs once the
+# check workflow passed on a push to master (or by hand: Actions > release > Run workflow). The notes come from
+# release/notes.json, written in the same PR as the change (tools/release-notes.mjs, in npm run check).
+#
+# It needs the secret HOSTING_TOKEN (a fine-grained token with Contents and Pull requests read and write on
+# nishant/hosting; see "Releases from CI" in docs/WORKING.md). Without it the workflow only writes a summary saying
+# how to add it, and succeeds. It is idempotent: with nothing new to publish and an up-to-date realm page it opens no
+# PR and only runs check-live, so a rerun, or a run after a session published by hand, does no harm.
+name: release
+on:
+  workflow_run:
+    workflows: [check]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+concurrency:
+  group: release
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  token:
+    # Only after check succeeded on a push to master (not on a pull request's run), or when started by hand.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.token.outputs.ready }}
+    steps:
+      - id: token
+        env:
+          HOSTING_TOKEN: ${{ secrets.HOSTING_TOKEN }}
+        run: |
+          if [ -n "$HOSTING_TOKEN" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release skipped: no HOSTING_TOKEN"
+            echo
+            echo "This workflow publishes master on mc.nish.software through a PR in nishant/hosting, and needs a token for it."
+            echo
+            echo "1. GitHub > Settings > Developer settings > Fine-grained tokens > Generate new token: resource owner \`nishant\`,"
+            echo "   only the repository \`nishant/hosting\`, permissions **Contents: Read and write** and **Pull requests: Read and write**."
+            echo "2. nishant/mc-packs > Settings > Secrets and variables > Actions > New repository secret: name \`HOSTING_TOKEN\`, the token as its value."
+            echo "3. Actions > release > Run workflow (or merge the next change)."
+            echo
+            echo "Until then, release by hand with the hosting steps in CLAUDE.md."
+          } >> "$GITHUB_STEP_SUMMARY"
+  release:
+    needs: token
+    if: needs.token.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out mc-packs master
+        uses: actions/checkout@v4
+        with:
+          ref: master # the newest master, so a run that waited in the queue releases everything merged meanwhile
+          path: mc-packs
+          fetch-depth: 0
+      - name: Check out nishant/hosting
+        uses: actions/checkout@v4
+        with:
+          repository: nishant/hosting
+          ref: master
+          token: ${{ secrets.HOSTING_TOKEN }}
+          path: hosting
+          fetch-depth: 0 # publish-packs compares with hosting's origin/master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # mc-packs' build and bundle tools need no packages. hosting/minecraft has no lockfile: marked and Playwright.
+      - name: Install the hosting tools
+        working-directory: hosting/minecraft
+        run: |
+          npm install --no-save --no-package-lock --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.HOSTING_TOKEN }}
+        run: |
+          git -C hosting config user.name "mc-packs release"
+          git -C hosting config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node mc-packs/tools/ci-release.mjs --hosting hosting --from mc-packs
