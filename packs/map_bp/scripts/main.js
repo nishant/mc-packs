@@ -871,15 +871,16 @@ system.runInterval(() => {
 /** Blocks a viewer moves before the rotating check plans them again (their own radar asks sooner when it needs land). */
 const IDLE_MOVE = 16;
 /**
- * Can the rotating check skip this viewer (no game reads)? Their plan is read out with no failed reads, they haven't
- * moved IDLE_MOVE blocks (a chunk) or changed height since it was made (their last draw says where they are), their radar listed nothing newer, and their
- * roof probe isn't due. Moving viewers are planned when their radar is built again (planNow).
+ * Can the rotating check skip this viewer (no game reads)? They haven't moved IDLE_MOVE blocks (a chunk), changed height
+ * or dimension since their plan was made (their last draw says where they are), their radar listed nothing newer and
+ * their roof probe isn't due. A plan still being read goes on being read as it is; one whose reads failed is asked again
+ * by retryAt, a radar's new list by planNow, a fast mover by the turn check (planNow).
  * @param {string} id @param {number} now
  */
 function planIdle(id, now) {
   const plan = scanPlans.get(id);
   const v = views.get(id);
-  if (!plan || !v || plan.pos < plan.picks.length || plan.missed || v.dim !== plan.dim.id) return false;
+  if (!plan || !v || v.dim !== plan.dim.id) return false;
   if (Math.abs(v.x - plan.x) + Math.abs(v.z - plan.z) >= IDLE_MOVE || Math.floor(v.y) !== plan.py) return false;
   const memo = terrainBaseMemo.get(id);
   if (memo && memo.needAt > plan.at) return false;
