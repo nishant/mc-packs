@@ -155,7 +155,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - [x] DONE (atlas: 86a28e4, d074d47, 6c96787, bd653ab; wander: 9f5b835; wander-walk: 8a56f9e, 58b4851, b6f227c, b50c8ba): harness ticking-area removal and scenario races (atlas), unloaded camp chunk (wander), a lightning witch bug and fixture deaths (wander-walk); all three pass on the merged tree, no assertion weakened. **F69 (high) Root-cause the 3 failing scenarios at 8aa5cf06:** atlas, wander-walk and wander (above). Run them
   alone first to rule out load. Fix the pack or the scenario, without weakening what it checks.
 
-- [ ] **F70 (high, scope) Finish the plan items that are still open in `../OPEN.md`, not only the F-items.**
+- [ ] PARTLY DONE (group 3 + ship3, October 21): W1 measured at 10 and 40 and worked: O5, O6, O9 and O19 DONE, O7 DONE scoped, O2 and O10 PARTLY DONE, O1 and O3 OPEN with numbers, O4 waits on validate.yml's memory A/B (F74); dispositions in `../OPEN.md`. Remaining: the map_bp redesign (O1), silly_bp (O2), the night champion count and the npc label loop (O3, O10), O47/O48 (group 2), O11-O16 (F71). **F70 (high, scope) Finish the plan items that are still open in `../OPEN.md`, not only the F-items.**
   - #96 marked several plan items WON'T FIX or DONE without the work (F58): O1, O2, O4, O5, O10-O15, O19, O47 and
     O48. Others are marked DONE although open F-items cover them: O3, O7, O17, O71.
   - After F58 re-marks them honestly, implement every one that is still open, as `../PLAN.md` describes:
@@ -276,6 +276,23 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - rel2 review: the early-window coverage gap (decision above) is closed by cooking-early (119d9561): it cooks 70 ticks after the spawn, asserts no dish 110 ticks after the spawn, one dish after the full 3 s and nothing owed. cooking-restart keeps cooking after the window; its pass rate is not counted as proof of the pack fix.
 - rel2 review: the integrator report's --pack-notes were paraphrases. The publish takes its strings from release/notes.json (the release workflow, or the fallback `publish-packs.mjs` run with the notes copied from that file), and the updated report quotes that file.
 - rel2 review: CRLF restored in tools/test-bds/lib/tickingarea.js and tools/stats-ticker-prefs.test.mjs (9f7250cd). No .gitattributes rule is added here: the repo mixes endings by file and a repo-wide normalization would rewrite many files and conflict with every open branch; that is a separate change for the lead.
+
+- group 3: measured both trees with the verifier's harness (`run.mjs --packs <7aa0cce>/packs`), so only pack code differs; 10 and 40 players, 120 s windows (owner answer); the 100-player windows (O5, O6) ran at 40; no 60-minute soaks locally (O4 waits on CI).
+- group 3: WS4's sweep spreader runs with one share per sweep, because measured: spread it was +47% at 40 / +84% at 10 (`isValid` first on a handle read ticks earlier costs about 0.08 ms on BDS 1.26), with one share -11% / -13%. The spreader module and WS4's other changes stay.
+- group 3: map_bp's budgets are unchanged: 0.9 ms in all starved a single turning player (map-turn) and the flier (map-flight); the 1 ms target needs a redesign of the per-tick work (budgetLevel low: 3.5 ms at 40). Owner F56 answer applies: improve where measured; a perf/map-redesign workstream follows.
+- group 3: out of draw budget, a title about to fade is drawn again unchanged (cheap) rather than skipped (O5).
+- group 3: silly_bp's gear sweep reads one player every 4 ticks instead of every tick (each still at most every 20 ticks); servers up to 5 players are unchanged.
+- group 3: side.js reads the kept messages before every own write, in arrival order; the lazy inbox stays, so the traffic win stays.
+- group 3: elite_bp's night cost is not changed (per champion flat; near champions step more often by WS3's design); why more champions stay alive is an open item (O3). The npc label loop (0.178 ms a tick in the 40-player stress only) is not changed this late (shared module, O3/O10).
+- group 3: Expedition build steps are not split (O10): one step in four at 26 ms against the plan's 25 ms rule.
+- group 3: scenario fixes (silly-gear-events, expedition-carts-window, side-boxes, admin-diag, admin-diag-bundle) keep every check; each now measures what it says.
+- ship3: merged origin/master (release 2) into group 3 with a merge commit; conflicts in news_bp (master's 1.7.83 kept, then gen-news), stash_bp's PageIndex typedef (master's documented one), tools/test-bds/README.md (master's section kept) and perf-soak.js's header (both the `hud` and `probe` arguments described).
+- ship3: every pack group 3 changed was already at master's version after release 2, so all 25 went up one patch (admin 1.6.9, afk 1.3.12, atlas 1.1.11, calendar 1.0.18, dolphin 1.2.9, durability 1.2.12, elite 1.3.14, elytra 1.3.20, expedition 2.4.14, guilds 1.1.13, hud 1.3.9, journal 1.1.11, map 1.3.9, maps 1.8.13, milestones 1.0.8, mobhp 1.2.17, moon 1.2.14, nick 1.1.10, quests 1.3.8, relics 1.2.17, saga 1.16.14, silly 1.2.11, skills 1.1.10, titles 1.2.13, wander 1.2.19); gen-news moved news_bp to 1.7.84; help-catalog and admin-catalog were current; every sync tool was current.
+- ship3: O19 item safety (20713fd5). The invariant is that a stash or parcel record is never forgotten while its structure is saved: when nothing may come back, the structure is deleted first, and a structure that can't be deleted keeps the record (tried again). How each seen cart left the world is recorded in `expedition:cart_gone` from a remove listener that is now always on (one type check per removed entity) plus a cart death listener: a cart removed still holding its items, with no death, is put down again from the structure and handed back; a broken, emptied, killed or unreadable one never is (O19's no-duplicate rule), and its part is listed in the record's `skip` so its copy is taken away empty whenever it turns up. Classification probed on BDS 1.26.52: remove() 2 of 2 stacks still in the cart at entityRemove, kill 2 (items also dropped, entityDie fired), applyDamage 0, lava 0, unload 2.
+- ship3: the group 3 failures of expedition-nether-carts (3 in 13, two "Your stored items couldn't be found") are explained by the Nether floor flake master fixed in 19bca74d (the fill placed nothing on a slow runner, so the runner and the carts put down at their feet fell into the lava sea: burned carts are "seen, gone" and O19 rightly refused a second copy, but the record was cleared while the structure was still saved). On the merged tree: RUNS_PLACEHOLDER
+- ship3: parcels made from now on tag their carts `realm:exp_parcel_part_<k>` like stash carts, so a parcel's parts can be told apart too; an older parcel whose carts are gone keeps O19's rule (never put down again).
+- ship3: the "couldn't be found" message now says why ("their storage carts were broken or emptied before they came back to you") and still asks the player to tell an operator.
+- ship3: map_bp stays about 4.2 ms at 40 players and is recorded open (O1, F46), per the owner's F56 answer; not changed in this release.
 
 ## Blockers and highs
 
@@ -494,7 +511,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - spread players over the second
     - skip players whose bar is held by another pack (the actionbar protocol)
   - Re-measure at 10 and 40 players.
-- [ ] **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
+- [ ] PARTLY DONE (group 3: 6a439ead, a250925b, d2530c33, 9ba983c, ec6fa11, 01e59ad and the workstream commits in `campaign-reports/g3.md`; shipped in the ship3 PR): at 40 players, steady window, before 7aa0cce vs after: elytra 0.280 -> 0.157, saga 0.209 -> 0.179, silly 0.382 -> 0.192, admin 0.131 -> 0.130, wander and the WS3 set 0.215 -> 0.205; the one-context Realm Bundle 8.004 -> 7.108 ms (10 players: 4.941 -> 3.981). Remaining: map_bp 4.185 against 1 (O1; owner F56: improve where measured, a perf/map-redesign workstream follows) and silly_bp 0.192; build_bp, stash_bp and stats_bp are group 2's. **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
   - map_bp 3.6-3.8 ms against its 1 ms budget
   - build_bp 0.73-0.78
   - stash_bp 0.53-0.57
