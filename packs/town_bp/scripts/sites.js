@@ -168,6 +168,19 @@ export function facingOut(dx, dz) {
  * @returns {{ ok: true, vol: number, t: number[], g: number[] } | { ok: false, why: string }}
  */
 export function gradePlan(region, fp, col, pad, depth) {
+  const steps = gradeSteps(region, fp, col, pad, depth);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+/**
+ * gradePlan in steps: it yields (nothing) after each row of the region, so the scan can end its tick in the middle
+ * of a big region's plan (one plan for a bell tower is over 1,000 lookups: 17-20 ms in one tick on BDS).
+ * @param {Rect} region @param {Rect} fp @param {(x: number, z: number) => Column} col @param {number} pad @param {number} depth
+ * @returns {Generator<void, { ok: true, vol: number, t: number[], g: number[] } | { ok: false, why: string }, void>}
+ */
+export function* gradeSteps(region, fp, col, pad, depth) {
   const rd = region.z2 - region.z1 + 1;
   const rw = region.x2 - region.x1 + 1;
   /** @type {number[]} */
@@ -175,7 +188,7 @@ export function gradePlan(region, fp, col, pad, depth) {
   /** @type {number[]} */
   const g = new Array(rw * rd);
   let vol = 0;
-  for (let i = 0; i < rw; i++)
+  for (let i = 0; i < rw; i++) {
     for (let j = 0; j < rd; j++) {
       const x = region.x1 + i;
       const z = region.z1 + j;
@@ -188,43 +201,43 @@ export function gradePlan(region, fp, col, pad, depth) {
       g[i * rd + j] = c.g;
       vol += Math.abs(to - c.g);
     }
-  /** Height for the step rule: a region column's new top, a natural or water column outside at its own. @param {number} x @param {number} z */
-  const heightAt = (x, z) => {
-    if (x >= region.x1 && x <= region.x2 && z >= region.z1 && z <= region.z2) {
-      const k = (x - region.x1) * rd + (z - region.z1);
-      return { h: t[k], changed: t[k] !== g[k] };
-    }
-    const c = col(x, z);
-    if (c.k === "N" && typeof c.g === "number") return { h: c.g, changed: false };
-    if (c.k === "W" && typeof c.w === "number") return { h: c.w, changed: false };
-    return undefined;
-  };
-  const SIDES = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ];
-  for (let i = 0; i < rw; i++)
+    yield;
+  }
+  const inRegion = (/** @type {number} */ x, /** @type {number} */ z) => x >= region.x1 && x <= region.x2 && z >= region.z1 && z <= region.z2;
+  for (let i = 0; i < rw; i++) {
     for (let j = 0; j < rd; j++) {
       const x = region.x1 + i;
       const z = region.z1 + j;
       const k = i * rd + j;
-      const mine = { h: t[k], changed: t[k] !== g[k] };
-      const cut = t[k] < g[k];
-      for (const [dx, dz] of SIDES) {
-        const nx = x + dx;
-        const nz = z + dz;
-        const other = heightAt(nx, nz);
-        if (other && (mine.changed || other.changed) && Math.abs(mine.h - other.h) > 1) return { ok: false, why: "step" };
+      const h = t[k];
+      const changed = h !== g[k];
+      const cut = h < g[k];
+      for (let side = 0; side < 4; side++) {
+        const nx = side === 0 ? x + 1 : side === 1 ? x - 1 : x;
+        const nz = side === 2 ? z + 1 : side === 3 ? z - 1 : z;
+        // The neighbor's height for the step rule: a region column's new top, a natural or water column outside at its own.
+        let oh = NaN;
+        let oChanged = false;
+        if (inRegion(nx, nz)) {
+          const o = (nx - region.x1) * rd + (nz - region.z1);
+          oh = t[o];
+          oChanged = t[o] !== g[o];
+        } else {
+          const c = col(nx, nz);
+          if (c.k === "N" && typeof c.g === "number") oh = c.g;
+          else if (c.k === "W" && typeof c.w === "number") oh = c.w;
+        }
+        if (!Number.isNaN(oh) && (changed || oChanged) && Math.abs(h - oh) > 1) return { ok: false, why: "step" };
         if (cut) {
           const c = col(nx, nz);
           if (c.k === "L") return { ok: false, why: "lava" };
-          if (c.k === "W" && typeof c.w === "number" && c.w > t[k]) return { ok: false, why: "water" };
+          if (c.k === "W" && typeof c.w === "number" && c.w > h) return { ok: false, why: "water" };
           if (c.k === "U") return { ok: false, why: "unknown" };
         }
       }
     }
+    yield;
+  }
   return { ok: true, vol, t, g };
 }
 
@@ -287,9 +300,11 @@ export function compareKeys(a, b) {
  * (answer nothing; the caller ends its tick).
  * @typedef {["c", number, number] | ["b", number, number, number] | ["claims", number, number, number, number] | ["tick"]} ScanRequest
  * @typedef {{ x: number, z: number, f: number, pad: number, vol: number, lv?: string, lt?: string, dist: number, key: number[], region: Rect, cuts: { x: number, z: number, t: number }[] }} Candidate
+ * @typedef {{ vol: number, cuts: { x: number, z: number, t: number }[], lv?: string, lt?: string } | null} PadPlan
+ * @typedef {null | "wait" | { m: number, gs: number[], plans: Map<number, PadPlan> }} Look
  */
 
-export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear: 9, maxNear: 30, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3, workTick: 400 };
+export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear: 9, maxNear: 30, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3, workTick: 100 };
 
 /**
  * Picks a spot for each project, one after another (the well first), reading columns as it goes (yield). Returns
@@ -325,6 +340,8 @@ export function* scanTown(input) {
     work++;
     return cache.get((x + 32768) * 65536 + (z + 32768)) ?? UNKNOWN;
   };
+  /** What each footprint looked at so far was (look), by "x1,z1,x2,z2". @type {Map<string, Look>} */
+  const looked = new Map();
   const taken = [...(input.taken ?? [])];
   const pads = [...(input.pads ?? [])];
   /** @type {{ id: string, spot: AutoSpot }[]} */
@@ -431,63 +448,109 @@ export function* scanTown(input) {
     const region = regionOf(fp);
     yield* pace();
     if (blockedWithoutReads(region)) return undefined;
+    // The columns don't change during a scan: a footprint looked at before (houses re-walk the rings the first house
+    // read) reuses what was found there and the plans made for it.
+    const key = `${fp.x1},${fp.z1},${fp.x2},${fp.z2}`;
+    let seen = looked.get(key);
+    if (seen === undefined) looked.set(key, (seen = yield* look(region, fp)));
+    else work += 8;
+    if (seen === null || seen === "wait") return seen ?? undefined;
+    const dist = Math.hypot(x - o.x, z - o.z);
+    /** @type {Candidate[]} */
+    const out = [];
+    let bestVol = Infinity;
+    for (const pad of [seen.m, seen.m - 1, seen.m + 1]) {
+      yield* pace();
+      // The footprint alone moves at least this much: when that is a worse leveling bucket (scoreKey) than a plan
+      // already found here, this pad can't win, so its plan isn't made.
+      if (Number.isFinite(bestVol)) {
+        work += seen.gs.length;
+        if (Math.floor(seen.gs.reduce((v, g) => v + Math.abs(g - pad), 0) / 6) > Math.floor(bestVol / 6)) continue;
+      }
+      let plan = seen.plans.get(pad);
+      if (plan === undefined) {
+        const steps = gradeSteps(region, fp, known, pad, input.depth);
+        let st = steps.next();
+        while (!st.done) {
+          yield* pace();
+          st = steps.next();
+        }
+        const g = st.value;
+        if (!g.ok) plan = null;
+        else {
+          const rd = region.z2 - region.z1 + 1;
+          /** @type {{ x: number, z: number, t: number }[]} */
+          const cuts = [];
+          g.t.forEach((to, k) => {
+            if (to < g.g[k]) cuts.push({ x: region.x1 + Math.floor(k / rd), z: region.z1 + (k % rd), t: to });
+          });
+          plan = { vol: g.vol, cuts, ...(g.vol > 0 ? { lv: encodePlan(g.t, g.g, pad), lt: yield* topOf(region) } : {}) };
+        }
+        seen.plans.set(pad, plan);
+      } else work += 8;
+      if (!plan) continue;
+      if (input.placed?.(region, pad - 5, pad + 12)) return undefined;
+      bestVol = Math.min(bestVol, plan.vol);
+      const variety = pads.filter((q) => Math.abs(q - pad) <= 1).length;
+      /** @type {Candidate} */
+      const c = { x, z, f, pad, vol: plan.vol, dist, key: scoreKey({ vol: plan.vol, dist, variety, well: !!p.well }), region, cuts: plan.cuts };
+      if (plan.lv !== undefined) {
+        c.lv = plan.lv;
+        c.lt = plan.lt;
+      }
+      out.push(c);
+      if (plan.vol === 0) break; // already level: the other pads here can't score better (scoreKey), so skip their plans
+    }
+    return out.length ? out : undefined;
+  }
+
+  /**
+   * A footprint's columns: null (something not natural, or a tree's leaves reaching in), "wait" (a column isn't
+   * loaded) or the median ground height of the footprint, with room for the plans made for each pad.
+   * @param {Rect} region @param {Rect} fp
+   * @returns {Generator<ScanRequest, Look, any>}
+   */
+  function* look(region, fp) {
     let unknown = false;
-    for (let i = region.x1; i <= region.x2; i++)
+    for (let i = region.x1; i <= region.x2; i++) {
+      yield* pace();
       for (let j = region.z1; j <= region.z2; j++) {
         const c = yield* col(i, j);
         if (c.k === "U") unknown = true;
-        else if (c.k !== "N") return undefined;
+        else if (c.k !== "N") return null;
       }
+    }
     if (unknown) return "wait";
     // The ring just outside: for the step rule, cut columns next to water, and trees whose leaves reach in.
-    for (let i = region.x1 - 1; i <= region.x2 + 1; i++)
+    for (let i = region.x1 - 1; i <= region.x2 + 1; i++) {
+      yield* pace();
       for (let j = region.z1 - 1; j <= region.z2 + 1; j++) {
         if (i >= region.x1 && i <= region.x2 && j >= region.z1 && j <= region.z2) continue;
         const c = yield* col(i, j);
         if (c.k === "U") return "wait";
         if (c.k === "T") {
-          for (let a = i - 2; a <= i + 2; a++) for (let b = j - 2; b <= j + 2; b++) if (distTo(region, a, b) === 0 && known(a, b).lf) return undefined;
+          for (let a = i - 2; a <= i + 2; a++) for (let b = j - 2; b <= j + 2; b++) if (distTo(region, a, b) === 0 && known(a, b).lf) return null;
         }
       }
+    }
     /** @type {number[]} */
     const gs = [];
     for (let i = fp.x1; i <= fp.x2; i++) for (let j = fp.z1; j <= fp.z2; j++) gs.push(/** @type {number} */ (known(i, j).g));
-    const m = median(gs);
-    const dist = Math.hypot(x - o.x, z - o.z);
-    /** @type {Candidate[]} */
-    const out = [];
-    for (const pad of [m, m - 1, m + 1]) {
-      yield* pace();
-      const plan = gradePlan(region, fp, known, pad, input.depth);
-      if (!plan.ok) continue;
-      if (input.placed?.(region, pad - 5, pad + 12)) return undefined;
-      const variety = pads.filter((q) => Math.abs(q - pad) <= 1).length;
-      const rd = region.z2 - region.z1 + 1;
-      /** @type {{ x: number, z: number, t: number }[]} */
-      const cuts = [];
-      plan.t.forEach((to, k) => {
-        if (to < plan.g[k]) cuts.push({ x: region.x1 + Math.floor(k / rd), z: region.z1 + (k % rd), t: to });
-      });
-      /** @type {Candidate} */
-      const c = { x, z, f, pad, vol: plan.vol, dist, key: scoreKey({ vol: plan.vol, dist, variety, well: !!p.well }), region, cuts };
-      if (plan.vol > 0) {
-        c.lv = encodePlan(plan.t, plan.g, pad);
-        c.lt = topOf(region);
-      }
-      out.push(c);
-    }
-    return out.length ? out : undefined;
+    return { m: median(gs), gs, plans: new Map() };
   }
 
-  /** The most common top block of a region (what a fill gets on top), without "minecraft:". @param {Rect} region */
-  function topOf(region) {
+  /** The most common top block of a region (what a fill gets on top), without "minecraft:". @param {Rect} region @returns {Generator<ScanRequest, string, any>} */
+  function* topOf(region) {
     /** @type {Map<string, number>} */
     const n = new Map();
-    for (let i = region.x1; i <= region.x2; i++)
+    for (let i = region.x1; i <= region.x2; i++) {
+      yield* pace();
       for (let j = region.z1; j <= region.z2; j++) {
         const top = known(i, j).top;
+        work++; // the count below costs as much as the lookup
         if (top) n.set(top, (n.get(top) ?? 0) + 1);
       }
+    }
     let pick = "minecraft:grass_block";
     let most = 0;
     for (const [k, v] of n)

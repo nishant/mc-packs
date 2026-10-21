@@ -371,3 +371,41 @@ test("scan pacing: work on columns already read still ends the tick (F37 review)
   const src = readFileSync(new URL("../packs/town_bp/scripts/main.js", import.meta.url), "utf8");
   assert.match(src, /if \(q\[0\] === "tick"\) return;/, "stepScan ends its tick on the scan's request");
 });
+
+test("scan pacing: no single step does much more than SCAN.workTick lookups, grading plans included (QuickJS spikes)", () => {
+  // On BDS a single gradePlan over a big region took 17-20 ms in one tick. Each column lookup (read or cached) is one
+  // cache Map get: count them between two requests the scan makes.
+  const roll = worldOf((x, z) => 64 + Math.round(2 * Math.sin(x / 9) + 2 * Math.cos(z / 11)));
+  const projects = [
+    { id: "well", well: true, box: box("well") },
+    { id: "bell_tower", box: box("bell_tower") },
+    { id: "garden", box: box("garden") },
+    { id: "stall", box: box("stall") },
+    ...["house_1", "house_2", "house_3"].map((hid) => ({ id: hid, box: box("house") })),
+  ];
+  const get = Map.prototype.get;
+  let gets = 0;
+  Map.prototype.get = function (k) {
+    gets++;
+    return get.call(this, k);
+  };
+  let most = 0;
+  let res;
+  try {
+    const gen = scanTown({ ...base, projects });
+    let r = gen.next();
+    while (!r.done) {
+      most = Math.max(most, gets);
+      gets = 0;
+      const q = r.value;
+      r = gen.next(q[0] === "c" ? roll(q[1], q[2]) : q[0] === "b" ? { id: id("stone") } : q[0] === "claims" ? 0 : undefined);
+    }
+    most = Math.max(most, gets);
+    res = r.value;
+  } finally {
+    Map.prototype.get = get;
+  }
+  assert.equal(res.picks.length, projects.length, "every project still gets a spot");
+  // A grading row of the biggest region (13 columns, each with 4 sides and 2 lookups) may cross the budget once.
+  assert.ok(most <= SCAN.workTick + 160, `lookups in one step: ${most} (workTick ${SCAN.workTick})`);
+});

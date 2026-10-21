@@ -48,7 +48,7 @@ export default async function (t) {
     await t.waitUntil(async () => {
       d = await dump();
       return !d.town.scan;
-    }, { timeout: 6000, interval: 100, message: `level ${level}: spots picked` });
+    }, { timeout: 12000, interval: 100, message: `level ${level}: spots picked` });
     t.log(`level ${level}: spots picked in ${((t.tick - scanFrom) / 20).toFixed(0)} s`);
     // Every open project (the dock too: no water, so no good spot, but the level still rises).
     for (const id of open) town("finish", { project: id });
