@@ -468,9 +468,16 @@ function makeT(cfg) {
       const x = opts.x ?? sp.x, z = opts.z ?? sp.z;
       let y = opts.y, groundId;
       if (opts.area === false) {
-        // The caller loaded this column already (t.loadArea): no ticking area of the player's own.
-        const ground = await t.waitUntil(() => groundAt(dimension, x, z), { timeout: opts.timeout ?? 400, message: `chunk at ${x},${z} is not loaded (t.player with area: false needs t.loadArea over it first)` });
-        if (y === undefined) { groundId = ground.typeId; y = ground.location.y + 1; }
+        // The caller loaded this column already (t.loadArea): no ticking area of the player's own. With a y of its own
+        // the spot only has to be readable: a ground search there fails in a column with nothing solid under the top,
+        // such as the perf soak's pool dug to the bottom of a flat world (water players never spawned in --flat runs).
+        const message = `chunk at ${x},${z} is not loaded (t.player with area: false needs t.loadArea over it first)`;
+        if (y === undefined) {
+          const ground = await t.waitUntil(() => groundAt(dimension, x, z), { timeout: opts.timeout ?? 400, message });
+          groundId = ground.typeId; y = ground.location.y + 1;
+        } else {
+          await t.waitUntil(() => !!dimension.getBlock({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }), { timeout: opts.timeout ?? 400, message });
+        }
       } else if (y === undefined) {
         const { top: ground } = await t.loadArea(x, z, { dimension });
         groundId = ground.typeId;

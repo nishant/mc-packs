@@ -171,6 +171,10 @@ wave settle 10 ticks, then removes only its own temporary ticking areas, never a
 player added its own loader and the soak removed it 2 ticks later, while the far groups' outer chunks were still
 generating: BDS then never loaded those chunks (F73, 36 of 40 and 96 of 100 spawned), and the ramp took about 3 game
 seconds a player. Population, group/spread, water/Nether placement and the steady window are unchanged.
+The pool's stone floor stays inside the world (in a `--flat` world it is the bottom layer, -64), and a `t.player` with
+`area: false` and its own `y` waits only for that block to be readable, not for solid ground under the column (F76: in
+`--flat` runs the pool was dug below the world, the ground search under its water found nothing, and the two water
+players never spawned, so every `--flat --bundle` soak was INVALID at 8 of 10 and 38 of 40).
 Use the same setup version for the frozen before packs and candidate packs; retain invalid population attempts.
 
 The shim also checks the script event rule: a pack that sends a `realm:` script event of 2048 characters or

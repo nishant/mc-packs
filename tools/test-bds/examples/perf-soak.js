@@ -112,10 +112,13 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
     const { top } = await loadWhole(c.x + 20, c.z);
     const y = top.location.y;
     const x = Math.floor(c.x + 20), z = Math.floor(c.z);
-    t.server(`/fill ${x - 3} ${y - 3} ${z - 4} ${x + 3} ${y + 3} ${z + 3} air`);
-    t.server(`/fill ${x - 4} ${y - 4} ${z - 4} ${x + 4} ${y - 4} ${z + 4} stone`);
-    t.server(`/fill ${x - 3} ${y - 3} ${z - 3} ${x + 3} ${y} ${z + 3} water`);
-    pool = { x, y: y - 2, z };
+    // 3 deep, but its stone floor stays in the world: in a flat world (grass at -61) a floor at y - 4 is below the
+    // bottom, the water replaced the bedrock and a swimmer could sink into the void.
+    const floor = Math.max(y - 4, (over.heightRange?.min ?? -64));
+    t.server(`/fill ${x - 3} ${floor + 1} ${z - 4} ${x + 3} ${y + 3} ${z + 3} air`);
+    t.server(`/fill ${x - 4} ${floor} ${z - 4} ${x + 4} ${floor} ${z + 4} stone`);
+    t.server(`/fill ${x - 3} ${floor + 1} ${z - 3} ${x + 3} ${y} ${z + 3} water`);
+    pool = { x, y: Math.max(y - 2, floor + 1), z };
   }
   // Nether pocket.
   let pocket = null;
