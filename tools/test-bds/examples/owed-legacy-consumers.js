@@ -118,7 +118,7 @@ export default async function (t) {
       t.log(`${pack.folder} after migration: ${JSON.stringify(r).slice(0, 400)}`);
       t.assert(r.keys.includes(`${pack.base}:7001`) && r.keys.includes(`${pack.base}_idx`), `${pack.folder}: per-player key and index exist (${r.keys})`);
       t.check(JSON.stringify(r.index) === JSON.stringify(["7001"]), `${pack.folder}: the index lists only the migrated player (${JSON.stringify(r.index)})`);
-      const want = { ...pack.seed["7001"] };
+      const want = pack.seed["7001"]; // a number, an array or an object: compared as it was seeded
       const got = r.values["7001"];
       if (pack.folder === "town_bp") t.check(got?.cr === 120 && got?.note === "kept" && JSON.stringify(got?.q) === JSON.stringify(want.q), `${pack.folder}: the record is migrated, unknown fields kept (${JSON.stringify(got)})`);
       else t.check(JSON.stringify(got) === JSON.stringify(want), `${pack.folder}: the record is migrated as it was, unknown fields kept (${JSON.stringify(got)})`);

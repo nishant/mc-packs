@@ -3,16 +3,23 @@
 // Overworld at the same coordinates, where world.structureManager.place() leaves a structure's entities while that
 // Overworld chunk is loaded), and no stash cart is left anywhere afterwards. On BDS the engine bug shows only for a
 // player who spawned in the Nether and stayed there (a simulated player sent back by teleport is placed correctly,
-// and one that rejoins gets a new id), so this is NOT a fail-before test: the claim that it fails on the old code is\n// withdrawn (not reproducible on BDS). It guards the round trip only.
+// and one that rejoins gets a new id), so this is NOT a fail-before test: the claim that it fails on the old code is
+// withdrawn (not reproducible on BDS). It guards the round trip only.
 // node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-nether-carts.js --timeout 600
 export default async function (t) {
   t.formTimeout = 400;
   const nether = t.world.getDimension("nether");
   const x = 0, z = 0;
   try { nether.runCommand(`tickingarea add circle ${x} 0 ${z} 2 exp_nether true`); } catch (e) { t.log(`ticking area: ${e}`); }
-  await t.waitUntil(() => nether.getBlock({ x, y: 64, z }), { timeout: 600, message: "nether chunk loaded" });
+  // The fills span chunks -1 and 0 on both axes, and a fill with any part in an unloaded chunk places nothing: wait for
+  // all four corners (on a slow runner the center chunk loads first, and the runner then fell to the lava sea).
+  const corners = [[x - 4, z - 4], [x - 4, z + 4], [x + 4, z - 4], [x + 4, z + 4]];
+  const readable = () => corners.every(([cx, cz]) => { try { return !!nether.getBlock({ x: cx, y: 64, z: cz }); } catch (e) { return false; } });
+  await t.waitUntil(readable, { timeout: 600, message: "nether chunks loaded" });
+  await t.wait(20);
   nether.runCommand(`fill ${x - 4} 64 ${z - 4} ${x + 4} 69 ${z + 4} air`);
   nether.runCommand(`fill ${x - 4} 63 ${z - 4} ${x + 4} 63 ${z + 4} netherrack`);
+  t.assert(corners.every(([cx, cz]) => nether.getBlock({ x: cx, y: 63, z: cz })?.typeId === "minecraft:netherrack"), "the Nether floor is in place");
   // The bug shows when the Overworld at the same coordinates is loaded (someone there, a ticking area): the
   // structure's entities go there instead.
   await t.loadArea(x, z, { radius: 2 });

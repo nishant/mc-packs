@@ -382,6 +382,25 @@ test("silly: gear is read by a slow sweep and on events, not every half second, 
   assert.ok(!fx.includes("realm:silly_floor"), `no Disco once it is off: ${fx.join(", ")}`);
 });
 
+test("silly: the sweep reads at most one player every 4 ticks, so 40 players cost a quarter of the reads", async () => {
+  const sim = createSim();
+  const calls = { equip: 0 };
+  const fx = [];
+  for (let i = 0; i < 40; i++) sillyPlayer(sim, `p${i}`, {}, calls, fx);
+  class MolangVariableMap {
+    setFloat() {}
+    setColorRGBA() {}
+  }
+  await loadReal(sim, "silly_bp", { MolangVariableMap, PlayerInventoryType: { Hotbar: "Hotbar", Inventory: "Inventory" } });
+  sim.boot();
+  sim.step(40);
+  const before = calls.equip;
+  sim.step(400);
+  // One player a tick read 400 x 5 slots; one every 4 ticks reads 100 x 5.
+  assert.ok(calls.equip - before <= 500, `${calls.equip - before} equipment reads in 400 ticks for 40 players`);
+  assert.ok(calls.equip - before >= 400, `the sweep still runs: ${calls.equip - before} reads`);
+});
+
 test("silly: swapping the held stack for a plain stack of the same item, but another size, drops its hand enchants at once", async () => {
   const sim = createSim();
   const calls = { equip: 0 };

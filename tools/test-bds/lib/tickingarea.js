@@ -44,7 +44,17 @@ const DIMENSIONS = new Set(["minecraft:overworld", "minecraft:nether", "minecraf
 // The game allows far fewer areas than this; the bound only keeps a damaged list from being walked forever.
 const MAX_OWNED_AREAS = 100;
 
-/** @typedef {{ name: string, dimension: string }} OwnedArea */
+/**
+ * Where an area is (x, z, radius) is kept too, so the next phase can wait for its chunks to load from the save before it
+ * removes it (see circleChunks). A list saved without them still works: its areas are removed at once.
+ * @typedef {{ name: string, dimension: string, x?: number, z?: number, radius?: number }} OwnedArea
+ */
+
+/** The area's place, when the entry has a usable one. @param {any} entry */
+function placeOf(entry) {
+  const { x, z, radius } = entry;
+  return Number.isFinite(x) && Number.isFinite(z) && radiusProblem(radius) === null ? { x, z, radius } : {};
+}
 
 /** The name of the n-th area (from 1) that loadArea adds in a phase (from 1). @param {number} phase @param {number} n */
 export const ownedAreaName = (phase, n) => `harness_${phase}_${n}`;
@@ -83,7 +93,7 @@ export function readOwnedAreas(raw) {
       problems.push(`refused ${shown(entry)}: not a ticking area the harness added`);
       continue;
     }
-    if (!areas.some((a) => a.name === entry.name && a.dimension === entry.dimension)) areas.push({ name: entry.name, dimension: entry.dimension });
+    if (!areas.some((a) => a.name === entry.name && a.dimension === entry.dimension)) areas.push({ name: entry.name, dimension: entry.dimension, ...placeOf(entry) });
   }
   return { areas, problems };
 }
@@ -93,7 +103,7 @@ export function addOwnedArea(areas, area) {
   if (!isOwnedAreaName(area.name)) throw new Error(`${shown(area.name)} is not a harness area name (harness_<phase>_<n>)`);
   if (!DIMENSIONS.has(area.dimension)) throw new Error(`${shown(area.dimension)} is not a known dimension for a harness area`);
   if (areas.some((a) => a.name === area.name && a.dimension === area.dimension)) return areas;
-  return [...areas, { name: area.name, dimension: area.dimension }];
+  return [...areas, { name: area.name, dimension: area.dimension, ...placeOf(area) }];
 }
 
 /**
@@ -119,6 +129,14 @@ export function releaseOwnedAreas(raw, remove) {
   }
   return { removed, problems };
 }
+
+// A ticking area has to finish loading before it is removed. `tickingarea add circle <x> <y> <z> <r>` loads the whole
+// square of (2r + 1) x (2r + 1) chunks around the chunk of x, z (measured on BDS 1.26.52 for r = 1, 2 and 4: the
+// corners load too), and its middle can be read up to 30 ticks before its corners. An area removed while some of its
+// chunks are still loading leaves those chunks unloadable for the rest of the run: no area added over them later
+// loads them, and a simulated player standing on one is in an unloaded chunk. That was every "chunk at x,z did not
+// load in 400 ticks" spawn failure of the perf soak, saga-perf-quests and maps-hunt (F73, F75), because those
+// scenarios remove each spawn's area right after the spawn. So loadArea returns only once every chunk is readable (harness.js).
 
 /**
  * The chunks a `tickingarea add circle <x> <y> <z> <radius>` loads. Despite the name, BDS 1.26 loads a square: every

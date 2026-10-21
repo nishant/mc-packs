@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "map_bp";
-const VERSION = "1.3.8";
+const VERSION = "1.3.10";
 const NAME = "Minimap";
 /** @type {string[]} */
 const PREFIXES = ["map"];

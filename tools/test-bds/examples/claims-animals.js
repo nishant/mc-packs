@@ -1,14 +1,22 @@
 // Land Claims, O27 (W5): animals, the "Visitors may open doors" switch and the operators' audit list, natively.
-// - protectAnimals (default on): a visitor can't feed a cow or shear a sheep in someone's claim (the interaction is
-//   canceled: the wheat stays in hand, the wool on the sheep, and the visitor is told whose land it is); the same
-//   visitor can outside the claim (the positive control: the harness's interactions really reach the game), and the
-//   owner can inside it. With protectAnimals disabled the visitor can feed a cow in the claim again.
+// - protectAnimals (default on): a visitor's tap on a cow (wheat in hand) or a sheep (shears in hand) in someone's claim
+//   is canceled and the visitor is told whose land it is; outside the claim and for the owner it is not. With
+//   protectAnimals disabled the visitor's tap in the claim goes through again.
 // - The door switch: a visitor can't flip a trapdoor in the claim until the owner enables "Visitors may open doors"
 //   in the claim menu; then the trapdoor opens, while a chest next to it stays closed to them (doors only).
 // - The audit list: an operator's "All claims (operator)" lists the claim with its size and last visit, and re-sorts it.
+// Two things a simulated player can't show, so a harness-only probe in a copy of claims_bp (tools/test-bds/hooks/
+// claims-taps.mjs) hands claims_bp's own tap handlers the tap a real player's would be, with the real player, animal or
+// block: a simulated player's interactWithEntity never fires beforeEvents.playerInteractWithEntity (the game feeds the
+// cow anyway), and its block taps arrive with isFirstEvent false, so the pack never says whose land it is to it. The
+// trapdoor is also tapped for real (that cancel does reach the pack), and a real feed and shear outside the claim show
+// the game takes the harness's interactions. Before O27 (4dc2433^ as the hook's second argument) the probe's tap on the
+// cow in the claim goes through: this fails at the first in-claim check.
 // Animal damage, fire, flowing liquids, pistons and endermen are not covered: the stable API has no cancelable event for
 // them (PACKS.md says so), so nothing here claims them.
-//   node tools/test-bds/run.mjs --quiet --flat --only claims_bp --scenario tools/test-bds/examples/claims-animals.js --timeout 600
+//   mkdir -p /tmp/claims-animals
+//   node tools/test-bds/hooks/claims-taps.mjs /tmp/claims-animals/packs
+//   node tools/test-bds/run.mjs --quiet --flat --packs /tmp/claims-animals/packs --only claims_bp --scenario tools/test-bds/examples/claims-animals.js --timeout 600
 export default async function (t) {
   const { ItemStack, Direction } = t.mc;
   const dim = t.dimension;
@@ -29,6 +37,29 @@ export default async function (t) {
   };
   const held = (p, slot) => p.getComponent("minecraft:inventory").container.getItem(slot)?.amount ?? 0;
   const told = (p, since) => t.messages(p, { since }).some((m) => /This land is claimed by Owner/.test(m.plain));
+  // claims_bp's own tap handlers, through the probe (see the header): { handlers, cancel }.
+  const reports = new Map();
+  t.system.afterEvents.scriptEventReceive.subscribe(
+    ({ id, message }) => {
+      if (id !== "harness:claims_tap_report") return;
+      try {
+        const r = JSON.parse(message);
+        reports.set(r.id, r);
+      } catch {}
+    },
+    { namespaces: ["harness"] },
+  );
+  let seq = 0;
+  const probeTap = async (req) => {
+    const id = `c${++seq}`;
+    await t.console(`scriptevent harness:claims_tap ${JSON.stringify({ id, ...req })}`);
+    const r = await t.waitUntil(() => reports.get(id), { timeout: 60, message: "the tap probe in claims_bp answered" });
+    t.assert(!r.error && r.handlers >= 1, `the probe reached claims_bp's ${req.kind} tap handlers (${r.error ?? r.handlers})`);
+    await t.wait(3); // the pack says whose land it is a tick later (system.run)
+    return r.cancel;
+  };
+  const tapEntity = (p, e, item) => probeTap({ kind: "entity", player: p.name, entity: e.id, item });
+  const tapBlock = (p, at, item) => probeTap({ kind: "block", player: p.name, block: at, face: Direction.Up, item });
   const spawn = (type, x, z) => {
     const e = dim.spawnEntity(type, { x: x + 0.5, y, z: z + 0.5 });
     t.assert(e?.typeId === type, `${type} spawned at ${x}, ${z}`);
@@ -71,18 +102,16 @@ export default async function (t) {
   t.assert(sheared(sheepOut), "outside a claim the visitor shears a sheep");
 
   // In the owner's claim: canceled, and the visitor is told.
-  hand(vis, 0, "minecraft:wheat", 5);
   let since = t.tick;
-  await use(vis, cowIn);
-  t.check(held(vis, 0) === 5, `the visitor can't feed a cow in the claim (${held(vis, 0)} wheat of 5)`);
+  t.check(await tapEntity(vis, cowIn, "minecraft:wheat"), "the visitor can't feed a cow in the claim (the tap is canceled)");
   t.check(told(vis, since), "the visitor is told whose land it is");
-  hand(vis, 1, "minecraft:shears");
   since = t.tick;
-  await use(vis, sheepIn);
-  t.check(!sheared(sheepIn), "the visitor can't shear a sheep in the claim");
+  t.check(await tapEntity(vis, sheepIn, "minecraft:shears"), "the visitor can't shear a sheep in the claim (the tap is canceled)");
   t.check(told(vis, since), "and is told whose land it is");
+  t.check(!(await tapEntity(vis, cowOut, "minecraft:wheat")), "outside the claim the same tap goes through");
 
-  // The owner can.
+  // The owner can, for real too.
+  t.check(!(await tapEntity(own, cowOwn, "minecraft:wheat")), "the owner's tap on a cow in their claim goes through");
   hand(own, 0, "minecraft:wheat", 5);
   await use(own, cowOwn);
   t.check(held(own, 0) === 4, `the owner feeds a cow in their claim (${held(own, 0)} wheat left of 5)`);
@@ -90,11 +119,10 @@ export default async function (t) {
   // protectAnimals disabled: the visitor can feed a cow in the claim again.
   cfg("protectAnimals", false);
   await t.wait(5);
-  hand(vis, 0, "minecraft:wheat", 5);
-  await use(vis, cowIn);
-  t.check(held(vis, 0) === 4, `with protectAnimals disabled the visitor feeds the cow in the claim (${held(vis, 0)} wheat left of 5)`);
+  t.check(!(await tapEntity(vis, cowIn, "minecraft:wheat")), "with protectAnimals disabled the visitor's tap on the cow in the claim goes through");
   cfg("protectAnimals", true);
   await t.wait(5);
+  t.check(await tapEntity(vis, cowIn, "minecraft:wheat"), "enabled again, it is canceled again");
 
   // The door switch. A trapdoor and a chest in the claim, tapped with a stick in hand (a simulated player's empty-hand
   // tap fires no event; a stick does nothing to either but open it).
@@ -112,9 +140,10 @@ export default async function (t) {
     return r;
   };
   t.assert(!open(), "the trapdoor starts closed");
-  since = t.tick;
   await tap(vis, trap);
   t.check(!open(), "with the switch disabled the visitor can't open the trapdoor");
+  since = t.tick;
+  t.check(await tapBlock(vis, trap, "minecraft:stick"), "the probe's tap on it is canceled too");
   t.check(told(vis, since), "and is told whose land it is");
 
   let f = t.waitForm(own, { timeout: 60 });
@@ -128,8 +157,9 @@ export default async function (t) {
   await tap(vis, trap);
   t.check(open(), "with the switch enabled the visitor opens the trapdoor");
   since = t.tick;
-  await tap(vis, chest);
-  t.check(told(vis, since), "a chest stays closed to the visitor: the switch is for doors, trapdoors and gates only");
+  t.check(await tapBlock(vis, chest, "minecraft:stick"), "a chest stays closed to the visitor: the switch is for doors, trapdoors and gates only");
+  t.check(told(vis, since), "and the visitor is told whose land it is");
+  t.check(!(await tapBlock(own, chest, "minecraft:stick")), "the owner opens the chest");
 
   // The audit list (operators): every claim with its size and last visit, and the sorts.
   const admin = await t.player("Admin", { op: true, x: 40, z: 0 });

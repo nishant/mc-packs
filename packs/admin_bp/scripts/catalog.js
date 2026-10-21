@@ -122,7 +122,7 @@ export const PACKS = [
     pack: "Crowns",
     commands: [
       {"name":"realm:crowns","description":"Crowns: a menu of what you can do (balance, pay, market; operators: give)","permission":"any","params":[]},
-      {"name":"realm:crowns_audit","description":"Crowns: the last 200 pays and gives (operators)","permission":"op","params":[]},
+      {"name":"realm:crowns_audit","description":"Crowns: the newest 50 pays and gives (operators)","permission":"op","params":[]},
       {"name":"realm:crowns_balance","description":"Crowns: your balance and the richest players","permission":"any","params":[]},
       {"name":"realm:crowns_give","description":"Crowns: give players Crowns (a negative amount takes them)","permission":"op","params":[{"name":"player","type":"PlayerSelector","optional":false},{"name":"amount","type":"Integer","optional":false}]},
       {"name":"realm:crowns_market","description":"Crowns: open the market (where the realm allows it)","permission":"any","params":[]},

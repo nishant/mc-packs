@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "relics_bp";
-const VERSION = "1.2.16";
+const VERSION = "1.2.18";
 const NAME = "Relics";
 /** @type {string[]} */
 const PREFIXES = ["relics"];

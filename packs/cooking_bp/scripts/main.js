@@ -1,12 +1,13 @@
 import "./diag.js";
-import { CommandPermissionLevel, CustomCommandStatus, ItemStack, Player, ScriptEventSource, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, ItemStack, Player, PlayerInventoryType, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./recipes.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
-import { settleOwed } from "./settle.js";
+import { keepInPot, oweMore, settleOwed } from "./settle.js";
+import { DISH_MARK, upgradeDishLore } from "./dish-lore.js";
 
 const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
@@ -29,7 +30,8 @@ const owedStore = createOwedStore(world, {
     return v;
   },
   summarize: (v) => `dishes ${JSON.stringify(v)}`,
-});const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
+});
+const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
 const PROP_STAR = "cooking:star"; // world: ms of the last aurora or meteor (realm:sky_event)
 const MINUTE = 60000;
 const MOON_MAX_MS = 20 * MINUTE; // a moon night lasts about 10 minutes; forget a moon that never set (saved before game ticks were)
@@ -232,13 +234,16 @@ function fxLore([id, amp, secs]) {
   return `§9${name} ${ROMAN[amp] ?? amp + 1} (${clock(secs)})`;
 }
 
+/** @param {Dish} d */
+const tierLine = (d) => (d.tier === "rare" ? "§6Rare dish" : "§8Kitchen dish");
+
 /** The lore every serving of a dish has (the same always, so servings stack). @param {Dish} d */
 function dishLore(d) {
   const lines = [`§7${d.blurb}`];
   if (d.roll) lines.push("§dRolls for a surprise");
   else lines.push(...d.effects.map(fxLore));
-  lines.push(d.tier === "rare" ? "§6Rare dish" : "§8Kitchen dish");
-  lines.push(`§8Dish: ${d.name}`); // the mark a renamed dish can't fake: the Story Log's deliveries check it
+  lines.push(tierLine(d));
+  lines.push(`§8Dish: ${d.name}`); // the mark (DISH_MARK) a renamed dish can't fake: the Story Log's deliveries check it
   return lines;
 }
 
@@ -487,8 +492,61 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     } catch (e) {
       console.warn(`[cooking] pending: ${e}`);
     }
+    try {
+      if (player.isValid) upgradeInventory(player);
+    } catch (e) {
+      console.warn(`[cooking] old dishes: ${e}`);
+    }
   }, 100);
 });
+
+// ---------------------------------------------------------------------------
+// Old dishes (before the Dish: lore line) get the current lore, so they stack with new servings
+// ---------------------------------------------------------------------------
+
+/**
+ * Gives an old serving in this slot the current lore. The slot is read again and must still hold a genuine dish;
+ * only the lore changes (same item, amount and name), so nothing can be lost or copied.
+ * @param {Container} inv @param {number} slot @returns {boolean} whether it changed
+ */
+function upgradeSlot(inv, slot) {
+  const s = inv.getItem(slot);
+  const d = dishOf(s);
+  if (!s || !d) return false;
+  const lore = upgradeDishLore(s.getLore(), dishLore(d), tierLine(d));
+  if (!lore) return false;
+  s.setLore(lore);
+  inv.setItem(slot, s);
+  return true;
+}
+
+/** Every old serving in a player's inventory. @param {Player} player */
+function upgradeInventory(player) {
+  const inv = containerOf(player);
+  if (!inv) return;
+  for (let i = 0; i < inv.size; i++) {
+    try {
+      upgradeSlot(inv, i);
+    } catch (e) {
+      console.warn(`[cooking] old dish in slot ${i}: ${e}`);
+    }
+  }
+}
+
+// An old serving picked up, taken from a chest or moved: only the dishes' own food items wake this (filtered natively),
+// and setting the lore wakes it once more for a stack that is already marked, which returns at once.
+world.afterEvents.playerInventoryItemChange.subscribe(
+  ({ player, itemStack, inventoryType, slot }) => {
+    if (inventoryType !== PlayerInventoryType.Inventory || !itemStack?.nameTag || !dishOf(itemStack)) return;
+    try {
+      const inv = containerOf(player);
+      if (inv) upgradeSlot(inv, slot);
+    } catch (e) {
+      console.warn(`[cooking] old dish: ${e}`);
+    }
+  },
+  { includeItems: [...new Set(DISHES.map((d) => d.base))], ignoreQuantityChange: true },
+);
 
 // ---------------------------------------------------------------------------
 // Cooking
@@ -496,6 +554,8 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 
 /** Players whose pot is bubbling right now. @type {Set<string>} */
 const cooking = new Set();
+/** The batch in each cook's pot, saved as owed when it started but not ready yet. @type {Map<string, { d: Dish, n: number }>} */
+const inPot = new Map();
 
 /** Servings the player could cook right now (ignoring maxBatch). @param {Player} player @param {Dish} d */
 const servingsNow = (player, d) => timesAffordable(player, d.needs);
@@ -514,8 +574,11 @@ function cook(player, d, times, pot) {
   const pid = player.id;
   // The ingredients are gone now: the dish is owed until it is handed over, so a restart or a script
   // reload mid-cook hands it over on the next join instead of losing it.
-  const owed = owe(pid, d, n);
+  // A save that reports failure can still have landed (value written, index not): what is in the store is owed,
+  // and only a batch that is not there is due straight from the pot (else the next join would pay it again).
+  const owed = oweMore(owedStore, pid, d.id, n) > 0;
   cooking.add(pid);
+  if (owed) inPot.set(pid, { d, n });
   const ticks = Math.max(1, Math.round(CONFIG.cookSeconds * 20));
   const top = { x: pot.loc.x + 0.5, y: pot.loc.y + 1.1, z: pot.loc.z + 0.5 };
   let t = 0;
@@ -531,7 +594,8 @@ function cook(player, d, times, pot) {
     if (t < ticks) return;
     system.clearRun(run);
     cooking.delete(pid);
-    finish(player, pid, d, n, pot, top, owed);
+    inPot.delete(pid);
+    finish(online(pid) ?? player, pid, d, n, pot, top, owed);
   }, 5);
   return undefined;
 }
@@ -548,8 +612,8 @@ function finish(player, pid, d, n, pot, top, owed) {
     if (!owed) owe(pid, d, n);
     return;
   }
-  // Only what is still owed: a cook who left and came back mid-cook already got it on joining. If saving
-  // it as owed failed, nothing could hand it over early, so all of it is due.
+  // Only what is still owed (the join handover keeps a batch that is still in the pot, so a cook who left and came
+  // back mid-cook gets it here, as the player now online). If saving it as owed failed, all of it is due.
   const due = owed ? settle(pid, d, n) : n;
   if (due) deliver(player, d, due, pot);
 }
@@ -588,17 +652,31 @@ function settle(pid, d, n) {
   return settleOwed(owedStore, pid, d.id, n);
 }
 
-/** Dishes that finished cooking after the player left (or that a restart interrupted). `pid` and `failIds` are for the native test hook. @param {Player} player @param {string} [pid] @param {Set<string>} [failIds] */
-function applyOwed(player, pid = player.id, failIds) {
+/**
+ * Set only for the length of one realm:cooking_owed_test claim (console only), never in play: the stored id whose debt
+ * is handed to the named player, and dish ids whose grant throws, so the test sees failed parts stay owed.
+ * @type {{ pid: string, fail: Set<string> } | null}
+ */
+let owedTest = null;
+
+/** Dishes that finished cooking after the player left (or that a restart interrupted). @param {Player} player */
+function applyOwed(player) {
+  const pid = owedTest?.pid ?? player.id;
   const mine = owedStore.take(pid);
   if (!mine || typeof mine !== "object" || Array.isArray(mine)) return;
+  // A batch still in the pot stays owed until the pot is done (finish settles it): it is saved so a restart can't lose
+  // it, but it isn't cooked yet. Handing it over here made a cook in a player's first 5 s (or the world's) instant.
+  // If it can't be saved again, it is handed over now rather than lost.
+  // A save that fails after writing the value still keeps it, so only what the store does not hold is handed over.
+  const pot = inPot.get(pid);
+  keepInPot(owedStore, pid, mine, pot && { id: pot.d.id, n: pot.n });
   const parts = Object.entries(mine)
     .map(([id, n]) => /** @type {[string, number]} */ ([id, Math.floor(Number(n))]))
     .filter(([id, n]) => dishById.has(id) && n > 0);
   applyParts(
     parts,
     ([id, n]) => {
-      if (failIds?.has(id)) throw new Error("test: grant failed");
+      if (owedTest?.fail.has(id)) throw new Error("test: grant failed");
       deliver(player, /** @type {Dish} */ (dishById.get(id)), n);
     },
     (failed) => {
@@ -1236,7 +1314,14 @@ onScriptEvent(
         if (msg.seed && typeof msg.seed === "object") world.setDynamicProperty("cooking:owed", JSON.stringify(msg.seed));
         if (typeof msg.claim === "string" && typeof msg.as === "string") {
           const who = world.getPlayers({ name: msg.as })[0];
-          if (who) applyOwed(who, msg.claim, Array.isArray(msg.fail) ? new Set(msg.fail.map(String)) : undefined);
+          if (who) {
+            owedTest = { pid: msg.claim, fail: new Set(Array.isArray(msg.fail) ? msg.fail.map(String) : []) };
+            try {
+              applyOwed(who);
+            } finally {
+              owedTest = null;
+            }
+          }
         }
         const ids = owedStore.ids().slice(0, 10);
         /** @type {Record<string, unknown>} */

@@ -146,7 +146,7 @@ const refreshAll = () => world.getAllPlayers().forEach((p) => refresh(p));
 
 // The tag changes when the AFK pack marks a player away or back, or the Titles pack changes the title they wear: both
 // send realm:nametag { player } right after, and the tag is put right at once. Every player is also looked at every
-// 5 seconds, a tenth of them every 10 ticks (scripts/spread.js), for anything that said nothing (an operator's /tag,
+// 5 seconds (scripts/spread.js, one share: see the AFK pack's note), for anything that said nothing (an operator's /tag,
 // an older AFK or Titles pack).
 onScriptEvent("realm:nametag", ({ id, message }) => {
   if (id !== "realm:nametag") return;
@@ -161,7 +161,7 @@ onScriptEvent("realm:nametag", ({ id, message }) => {
 });
 spreadPlayers(system, world, {
   every: 100,
-  parts: 10,
+  parts: 1,
   visit: (share) => {
     for (const p of share) refresh(p);
   },
@@ -204,7 +204,8 @@ function* forgetOld() {
     },
     warn: (e) => console.warn(`[nick] ${e}`),
   });
-}system.runTimeout(() => system.runJob(forgetOld()), 1200);
+}
+system.runTimeout(() => system.runJob(forgetOld()), 1200);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {

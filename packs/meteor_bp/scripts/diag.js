@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "meteor_bp";
-const VERSION = "1.2.11";
+const VERSION = "1.2.12";
 const NAME = "Meteor Strikes";
 /** @type {string[]} */
 const PREFIXES = ["meteor"];

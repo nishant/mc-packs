@@ -1,4 +1,5 @@
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, MolangVariableMap, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -442,21 +443,9 @@ function checkPending() {
 
 // Town news: at most one piece per in-game hour from this pack, each crater once. Dropped, not queued.
 // The seen list is process memory (cleared on script restart). impact.found is the durable one-off.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg @returns {boolean} */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => system.sendScriptEvent("realm:gossip", JSON.stringify(msg)), () => system.currentTick);
 
 function checkFound() {
   const list = impacts().filter((i) => i.state === "made" && typeof i.y === "number");

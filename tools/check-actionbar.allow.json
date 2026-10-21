@@ -1,13 +1,14 @@
 {
-  "comment": "setActionBar call sites with no realm:actionbar request in their function or a helper (file -> function names). hud_bp and stats_bp (anonymous): the Coordinates HUD and the stats ticker are the lowest steady lines, which only listen and wait (by design, but their redraw could announce a rank too); stats_bp clearTicker and hud_bp onChange clear the bar with an empty string, only once another pack's note has run out. stash_bp (top level): the default hook that main.js replaces. Remove a line with its fix.",
+  "comment": "setActionBar call sites with no realm:actionbar request in their function or a helper (file -> function names; \"(anonymous)\" is never accepted, so name the function). hud_bp hudLoop and stats_bp tickerLoop: the Coordinates HUD and the stats ticker are the lowest steady lines, which only listen and wait (by design, but their redraw could announce a rank too); stats_bp clearTicker and hud_bp clearOnChange clear the bar with an empty string, only once another pack's note has run out. stash_bp (top level): the default hook that main.js replaces. Remove a line with its fix.",
   "packs/hud_bp/scripts/main.js": [
-    "(anonymous)"
+    "clearOnChange",
+    "hudLoop"
   ],
   "packs/stash_bp/scripts/pages.js": [
     "(top level)"
   ],
   "packs/stats_bp/scripts/main.js": [
-    "(anonymous)",
-    "clearTicker"
+    "clearTicker",
+    "tickerLoop"
   ]
 }

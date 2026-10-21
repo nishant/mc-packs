@@ -245,8 +245,14 @@ onScriptEvent(
       const req = JSON.parse(message);
       if (!req || typeof req !== "object" || typeof req.player !== "string" || !req.player) return;
       const name = online(req.player)?.name;
-      if (id === "realm:title_unlock") unlockTitle(req.player, req.title, name);
-      else unlockTrail(req.player, req.trail, name);
+      if (id === "realm:title_unlock") {
+        unlockTitle(req.player, req.title, name);
+        // A sender that asks (`ack`, its folder) hears that the title was handled, new or already owned, so it can
+        // stop sending it again (Milestones' backfill).
+        if (typeof req.ack === "string" && req.ack && req.ack.length <= 40 && typeof req.title === "string" && req.title.length <= 200) {
+          system.sendScriptEvent("realm:title_ack", JSON.stringify({ player: req.player.slice(0, 40), title: req.title, ack: req.ack }));
+        }
+      } else unlockTrail(req.player, req.trail, name);
     } catch {
       // not JSON: ignore
     }
@@ -343,7 +349,8 @@ function* forgetOld() {
     },
     warn: (e) => console.warn(`[titles] ${e}`),
   });
-}system.runTimeout(() => system.runJob(forgetOld()), 1400);
+}
+system.runTimeout(() => system.runJob(forgetOld()), 1400);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -353,14 +360,15 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   trailSpot.delete(playerId);
 });
 
-// Each player once a second as before, a tenth of them every 2 ticks (scripts/spread.js), so a full server doesn't
-// count (and save) everyone on one tick. The time of day and the weather are read once a second, as before.
+// Each player once a second. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
+// The time of day and the weather are read once a second, as before.
 let on = false;
 let night = false;
 let storm = false;
 spreadPlayers(system, world, {
   every: 20,
-  parts: 10,
+  parts: 1,
   start: () => {
     on = enabled();
     if (!on) {
@@ -373,7 +381,7 @@ spreadPlayers(system, world, {
   },
   visit: (share, { round, part }) => {
     if (!on) return;
-    // Saved every SAVE_EVERY seconds, each tenth on a different second.
+    // Saved every SAVE_EVERY seconds.
     const saving = (round + part) % SAVE_EVERY === 0;
     for (const player of share) countSecond(player, saving);
   },

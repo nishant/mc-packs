@@ -345,3 +345,15 @@ test("cooking owed test hook reports an oversize answer as an error, never over 
   assert.match(src, /text\.length < 2000\) send\("realm:cooking_owed_test_report", full\)/);
   assert.match(src, /error: "too long", length: text\.length/);
 });
+test("cooking's owed hand-over has no test parameters: the test hook sets a module flag only for its own claim (F50)", () => {
+  const src = readFileSync(join(root, "packs", "cooking_bp", "scripts", "main.js"), "utf8");
+  assert.match(src, /\nfunction applyOwed\(player\) \{/);
+  assert.doesNotMatch(src, /failIds/);
+  // Every assignment of the flag outside its declaration is inside the server-only test hook, and is reset in a finally.
+  const sets = [...src.matchAll(/(?<!let )owedTest = /g)].map((m) => m.index);
+  assert.equal(sets.length, 2);
+  const hook = src.indexOf('if (id === "realm:cooking_owed_test")');
+  const gate = src.indexOf("if (sourceType !== ScriptEventSource.Server) return;", hook);
+  assert.ok(hook > 0 && gate > hook && sets.every((i) => i > gate && i < gate + 800));
+  assert.match(src, /\} finally \{\s*owedTest = null;/);
+});

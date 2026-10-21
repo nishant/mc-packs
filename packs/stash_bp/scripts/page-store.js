@@ -44,10 +44,11 @@ export function stateOf(player) {
 
 /**
  * The page-content index rides in the same property as the page refs, so one write commits both. `idx[page]` is
- * `{ r, k }`: `r` is the id of the snapshot the counts were taken from, `k` maps a kind ("redstone" for
+ * `{ r, k, p }`: `r` is the id of the snapshot the counts were taken from, `k` maps a kind ("redstone" for
  * minecraft:redstone, a custom id as is, "id|Name" for a named stack) to how many are on that page. An entry whose
  * `r` is not the page's current snapshot, or a page without an entry (saved before the index existed, or dropped to
  * stay under the property limit), is unknown: readers must open that page, never treat it as empty.
+ * `p` (since 1.8.9) lists the kinds, keyed like `k`, that have a stack with room left; without it the room is unknown.
  * @typedef {{ r: string, k: Record<string, number>, p?: string[] }} PageIndex
  */
 /** Longest a name may be and still be indexed whole; a page holding a longer one stays unindexed (unknown, read when needed). */

@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "bounty_bp";
-const VERSION = "1.3.9";
+const VERSION = "1.3.10";
 const NAME = "Bounty Board";
 /** @type {string[]} */
 const PREFIXES = ["bounty"];

@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "settings_bp";
-const VERSION = "1.4.5";
+const VERSION = "1.4.6";
 const NAME = "Realm Settings";
 /** @type {string[]} */
 const PREFIXES = [];

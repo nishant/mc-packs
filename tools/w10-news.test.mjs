@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import vm from "node:vm";
 import ts from "typescript";
 import { GOSSIP, HEARTH } from "../packs/npc_bp/scripts/hearth.js";
@@ -13,11 +14,15 @@ import { CONFIG as GUILD_CONFIG } from "../packs/guilds_bp/scripts/config.js";
 const root = path.join(import.meta.dirname, "..");
 const pack = (folder, file = "main.js") => path.join(root, "packs", folder, "scripts", file);
 
-const GATE = [
-  "const NEWS_GAP = 1000;",
-  "let newsAt = -NEWS_GAP;",
-  "const newsSeen = new Set();",
-].join("\n");
+/** Each sender's own copy of the shared gate (scripts/gossip.js, kept equal to tools/gossip-shared.js by sync-gossip). */
+const gateOf = async (file) => import(pathToFileURL(path.join(path.dirname(file), "gossip.js")).href);
+
+/** The sender's wiring line: `const gossip = createGossip(<post>, <tick>);`. @param {string} file */
+function gossipWiring(file) {
+  const text = fs.readFileSync(file, "utf8");
+  const m = /^import \{ createGossip \} from "\.\/gossip\.js";$/m.test(text) ? text.match(/^const gossip = createGossip\(.*\);$/m) : null;
+  return m?.[0];
+}
 
 /** @param {string} file @param {string} name */
 function extractFunction(file, name) {
@@ -45,8 +50,11 @@ function evalPack(file, required, optional, sandbox, extra = "", footer = "") {
   const missing = required.filter((name) => !extractFunction(file, name));
   assert.deepEqual(missing, [], path.basename(path.dirname(path.dirname(file))) + " missing " + missing.join(","));
   const names = [...required, ...optional.filter((name) => extractFunction(file, name))];
-  const code = ['"use strict";', GATE, extra, ...names.map((name) => extractFunction(file, name)), footer || "({" + names.join(",") + "})"].join("\n");
-  return vm.runInNewContext(code, sandbox, { filename: path.basename(file) });
+  // gossip is the pack's own wiring of its gossip.js gate (the real copy, imported once below).
+  const wiring = optional.includes("gossip") ? gossipWiring(file) : undefined;
+  if (optional.includes("gossip")) assert.ok(wiring, path.basename(path.dirname(path.dirname(file))) + " gossip gate wiring missing");
+  const code = ['"use strict";', wiring ?? "", extra, ...names.map((name) => extractFunction(file, name)), footer || "({" + names.join(",") + "})"].join("\n");
+  return vm.runInNewContext(code, { createGossip: gates.get(file), ...sandbox }, { filename: path.basename(file) });
 }
 
 function recorder() {
@@ -77,27 +85,33 @@ const SENDERS = [
   ["skills_bp", pack("skills_bp", "calling.js")],
 ];
 
+/** Every sender's real gate, by file. @type {Map<string, Function>} */
+const gates = new Map();
+for (const file of [...SENDERS.map(([, f]) => f), pack("calendar_bp"), pack("milestones_bp"), pack("goals_bp")]) gates.set(file, (await gateOf(file)).createGossip);
+
 test("each owned sender gates town news at 1000 game ticks, once per key, 64 remembered", () => {
   for (const [name, file] of SENDERS) {
-    const src = extractFunction(file, "gossip");
-    assert.equal(typeof src, "string", name + " gossip gate missing");
-    assert.equal(src.includes("Date.now"), false, name + " must not time the gate with Date.now");
-    assert.equal(src.includes("getDynamicProperty"), false, name + " gate is process memory, not saved data");
+    const wiring = gossipWiring(file);
+    assert.equal(typeof wiring, "string", name + " gossip gate missing");
+    assert.match(wiring, /"realm:gossip"/, name + " posts realm:gossip");
+    assert.match(wiring, /, \(\) => system\.currentTick\);$/, name + " times the gate with game ticks");
+    const gateSrc = fs.readFileSync(path.join(path.dirname(file), "gossip.js"), "utf8");
+    assert.equal(gateSrc.includes("Date.now"), false, name + " must not time the gate with Date.now");
+    assert.equal(gateSrc.includes("getDynamicProperty"), false, name + " gate is process memory, not saved data");
+    /** @type {string[]} */
+    const sent = [];
     const api = vm.runInNewContext(
       [
         '"use strict";',
-        GATE,
-        "const sent = [];",
         "const system = { currentTick: 0, sendScriptEvent(id, payload) { sent.push(payload); } };",
         "const send = (id, msg) => system.sendScriptEvent(id, JSON.stringify(msg));",
-        src,
+        wiring,
         "({",
         "  go(key, tick) { system.currentTick = tick; return gossip(key, { kind: 'x', player: 'p' }); },",
         "  sent: () => sent.length,",
-        "  size: () => newsSeen.size,",
         "})",
       ].join("\n"),
-      {},
+      { createGossip: gates.get(file), sent },
       { filename: name + "-gate.js" },
     );
     assert.equal(api.go("a", 0), true, name + " first event");
@@ -107,21 +121,23 @@ test("each owned sender gates town news at 1000 game ticks, once per key, 64 rem
     assert.equal(api.go("b", 2000), false, name + " the same key is told once");
     assert.equal(api.sent(), 2, name);
     for (let i = 0; i < 63; i++) assert.equal(api.go("k" + i, 3000 + i * 1000), true, name + " key " + i);
-    assert.equal(api.size(), 64, name + " seen list stays at 64");
     const at = 3000 + 62 * 1000;
     assert.equal(api.go("a", at), false, name + " evicted key still waits for the hour");
+    assert.equal(api.sent(), 65, name);
+    // The seen list stays at 64: after the hour "b" (the 64th newest of the 65 keys told) is still refused as told,
+    // and "a" (the 65th, the oldest) was dropped from it and can be told again.
+    assert.equal(api.go("b", at + 1000), false, name + " seen list keeps 64 keys");
     assert.equal(api.sent(), 65, name);
     assert.equal(api.go("a", at + 1000), true, name + " oldest key can be told again after the hour");
     const again = vm.runInNewContext(
       [
         '"use strict";',
-        GATE,
         "const system = { currentTick: 0, sendScriptEvent() {} };",
         "const send = (id, msg) => system.sendScriptEvent(id, JSON.stringify(msg));",
-        src,
+        wiring,
         "gossip('a', { kind: 'x' })",
       ].join("\n"),
-      {},
+      { createGossip: gates.get(file) },
     );
     assert.equal(again, true, name + " script restart clears the in-memory gate");
   }
@@ -616,10 +632,21 @@ test("guard: playerless champion news is stored, not dropped, and the 24/4 caps 
   assert.ok(all.length <= 24);
 });
 
-function milestoneSession(record, milestones, valueOf = () => 0) {
+// `titles`: whether a Titles pack answers each `ack` request with realm:title_ack (as titles_bp does), or nothing listens.
+function milestoneSession(record, milestones, valueOf = () => 0, titles = true) {
   const box = recorder();
-  const api = evalPack(pack("milestones_bp"), ["check", "topTier", "recheck"], ["gossip"], {
+  const send = box.system.sendScriptEvent;
+  /** @type {any} */
+  let api;
+  box.system.sendScriptEvent = (id, payload) => {
+    send(id, payload);
+    const m = id === "realm:title_unlock" ? JSON.parse(payload) : undefined;
+    if (titles && m?.ack) api.confirmTitle({ player: m.player, title: m.title, ack: m.ack });
+  };
+  api = evalPack(pack("milestones_bp"), ["check", "topTier", "recheck", "sendTop", "confirmTitle", "markConfirmed"], ["gossip"], {
     ...box,
+    unconfirmed: new Map(),
+    records: () => new Map([["ada", record]]),
     recordOf: () => record,
     milestones,
     backfilled: new Set(),
@@ -650,6 +677,75 @@ test("old top-tier titles are not sent again on the next join", () => {
   assert.equal(record.g.m0, 3);
 });
 
+test("without Titles confirming, old top tiers go out again on the next join until it does (F32)", () => {
+  const milestones = Array.from({ length: 3 }, (_, i) => ({ id: "m" + i, stat: "mined", name: "Mile" + i, tiers: [1, 2, 3] }));
+  const record = { n: "Ada", c: { mined: 1 }, g: Object.fromEntries(milestones.map((m) => [m.id, 3])), legacy: 9 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const first = milestoneSession(record, milestones, () => 0, false);
+  first.check(player);
+  assert.equal(count(first.events, "realm:title_unlock"), 3);
+  assert.equal(record.tf, undefined, "no Titles pack confirmed: the backfill is not marked done");
+  const second = milestoneSession(record, milestones, () => 0, false);
+  second.check(player);
+  assert.equal(count(second.events, "realm:title_unlock"), 3, "the next join tries again");
+  const third = milestoneSession(record, milestones, () => 0, true);
+  third.check(player);
+  assert.equal(count(third.events, "realm:title_unlock"), 3);
+  assert.equal(record.tf, 1, "marked done once Titles confirmed every title");
+  const fourth = milestoneSession(record, milestones, () => 0, true);
+  fourth.check(player);
+  assert.equal(count(fourth.events, "realm:title_unlock"), 0);
+  assert.equal(record.legacy, 9);
+});
+
+test("a new top tier sent while Titles is missing clears the flag, so the next join sends it again (F32)", () => {
+  const milestones = [
+    { id: "old", stat: "mined", name: "Old", tiers: [1, 2, 3] },
+    { id: "neu", stat: "mined", name: "Neu", tiers: [1, 2, 3] },
+  ];
+  const record = { n: "Ada", c: { mined: 100 }, g: { old: 3 }, tf: 1, tc: 1 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const session = milestoneSession(record, milestones, () => 100, false);
+  session.check(player);
+  assert.equal(record.tf, undefined);
+  assert.equal(record.tc, undefined);
+  const next = milestoneSession(record, milestones, () => 100, true);
+  next.check(player);
+  const titles = next.events.filter((e) => e.id === "realm:title_unlock").map((e) => JSON.parse(e.payload).title);
+  assert.deepEqual(titles.sort(), ["Neu 3", "Old 3"]);
+  assert.equal(record.tf, 1);
+});
+
+test("a legacy tf saved without confirmation gets one more backfill, then is confirmed (F32)", () => {
+  const milestones = [{ id: "m0", stat: "mined", name: "Mile0", tiers: [1, 2, 3] }];
+  const record = { n: "Ada", c: { mined: 1 }, g: { m0: 3 }, tf: 1 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const first = milestoneSession(record, milestones, () => 0, true);
+  first.check(player);
+  const titles = first.events.filter((e) => e.id === "realm:title_unlock").map((e) => JSON.parse(e.payload).title);
+  assert.deepEqual(titles, ["Mile0 3"], "the old code's unconfirmed tf does not skip the backfill");
+  assert.equal(record.tc, 1, "confirmed once Titles answered");
+  assert.equal(record.tf, 1, "tf kept beside tc for older pack versions");
+  const second = milestoneSession(record, milestones, () => 0, true);
+  second.check(player);
+  assert.equal(count(second.events, "realm:title_unlock"), 0, "sent once more, not on every join");
+});
+
+test("a legacy tf with no Titles to confirm is not marked confirmed (F32)", () => {
+  const milestones = [{ id: "m0", stat: "mined", name: "Mile0", tiers: [1, 2, 3] }];
+  const record = { n: "Ada", c: { mined: 1 }, g: { m0: 3 }, tf: 1 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const session = milestoneSession(record, milestones, () => 0, false);
+  session.check(player);
+  assert.equal(count(session.events, "realm:title_unlock"), 1);
+  assert.equal(record.tc, undefined);
+});
+
+test("titles_bp answers a title_unlock that asks for it with realm:title_ack", () => {
+  const main = fs.readFileSync(pack("titles_bp"), "utf8");
+  assert.match(main, /sendScriptEvent\("realm:title_ack", JSON\.stringify\(\{ player: req\.player\.slice\(0, 40\), title: req\.title, ack: req\.ack \}\)\)/);
+});
+
 test("a recheck after the join flag sends no extra title", () => {
   const milestones = Array.from({ length: 9 }, (_, i) => ({ id: "m" + i, stat: "mined", name: "Mile" + i, tiers: [1, 2, 3] }));
   const record = { n: "Ada", c: { mined: 1 }, g: Object.fromEntries(milestones.map((m) => [m.id, 3])), legacy: 9 };
@@ -664,7 +760,7 @@ test("a recheck after the join flag sends no extra title", () => {
 });
 
 test("the owning report reads the saved flag, not another add-on's store", () => {
-  const store = new Map([["milestones:p:ada", JSON.stringify({ n: "Ann", c: { joins: 400 }, g: { joins: 3 }, tf: 1, legacy: 9 })]]);
+  const store = new Map([["milestones:p:ada", JSON.stringify({ n: "Ann", c: { joins: 400 }, g: { joins: 3 }, tf: 1, tc: 1, legacy: 9 })]]);
   /** @type {{ id: string, payload: string }[]} */
   const sent = [];
   const api = evalPack(pack("milestones_bp"), ["reportSaved", "flush", "records", "recordReport", "boundedReport"], [], {
@@ -697,7 +793,7 @@ test("a new top tier still unlocks after the join flag is set", () => {
     { id: "old", stat: "mined", name: "Old", tiers: [1, 2, 3] },
     { id: "neu", stat: "mined", name: "Neu", tiers: [1, 2, 3] },
   ];
-  const record = { n: "Ada", c: { mined: 100 }, g: { old: 3 }, tf: 1, legacy: 4 };
+  const record = { n: "Ada", c: { mined: 100 }, g: { old: 3 }, tf: 1, tc: 1, legacy: 4 };
   const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
   const session = milestoneSession(record, milestones, () => 100);
   session.check(player);

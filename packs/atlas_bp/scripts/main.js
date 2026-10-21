@@ -20,6 +20,7 @@
 //   realm:atlas_ping         { player? }                              <- send the region and sites again
 // See "Atlas of the Realm" in docs/PACKS.md.
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import { BlockPermutation, CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -83,21 +84,9 @@ const send = (id, msg) => {
 };
 // Town news: Townsfolk gossip at most once per in-game hour from this pack, each event once, so a busy server
 // doesn't flood the townsfolk.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  send("realm:gossip", msg);
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => send("realm:gossip", msg), () => system.currentTick);
 
 /** @param {number} ticks */
 const wait = (ticks) => new Promise((r) => system.runTimeout(() => r(undefined), ticks));
@@ -1063,11 +1052,11 @@ function tickPlayer(player) {
       }
 }
 
-// Each player every 2 seconds as before, a tenth of them every 4 ticks (scripts/spread.js), so a full server never
-// does every player's cell math on one tick.
+// Each player every 2 seconds. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
 spreadPlayers(system, world, {
   every: 40,
-  parts: 10,
+  parts: 1,
   visit: (share) => {
     if (!enabled()) return;
     for (const p of share) {

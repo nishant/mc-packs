@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "town_bp";
-const VERSION = "1.7.2";
+const VERSION = "1.2.11";
 const NAME = "Town Projects";
 /** @type {string[]} */
 const PREFIXES = ["town"];

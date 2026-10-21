@@ -82,6 +82,7 @@ function makeWorld(stub) {
       getTopmostBlock: () => undefined,
       spawnParticle() {},
       playSound(sound) { dimensionSounds.push(sound); },
+      runCommand(cmd) { stops.push({ dimension: id, cmd }); return { successCount: 1 }; },
     });
     return d;
   };
@@ -206,7 +207,7 @@ test("only Overworld players hear it; Nether players never do, and nothing is br
   spawnTornado(stub, spawner).seconds(3);
   assert.ok(w.sounds.some((s) => s.player === "near"));
   assert.ok(!w.sounds.some((s) => s.player === "hell"));
-  assert.ok(!w.stops.some((s) => s.player === "hell"));
+  assert.ok(!w.stops.some((s) => s.player === "hell" || (s.dimension && s.dimension !== "minecraft:overworld")));
   assert.equal(stub.__h.worldPlaySounds, 0, "no world-wide playSound");
   assert.equal(w.dimensionSounds.length, 0, "no dimension-wide playSound");
 });
@@ -222,7 +223,12 @@ test("each sound goes to its own listener from the tornado's direction, at a nea
   assert.equal(s.location.x, at(30) + 6, "6 blocks from the listener toward the funnel");
   assert.equal(s.location.y, 65);
   assert.equal(s.pitch, 0.7);
-  assert.ok(w.stops.some((x) => x.player === "far" && x.cmd === `stopsound @s ${config.sounds.wind}`), "the wind's own stopsound");
+  // F19: the wind's stopsound is one command for every listener: a box around the funnel that holds this one.
+  const stop = w.stops.find((x) => x.dimension === "minecraft:overworld" && x.cmd.startsWith("stopsound @a[") && x.cmd.endsWith(` ${config.sounds.wind}`));
+  assert.ok(stop, "the wind's own stopsound");
+  const box = Object.fromEntries(stop.cmd.slice(stop.cmd.indexOf("[") + 1, stop.cmd.indexOf("]")).split(",").map((kv) => kv.split("=").map((v, i) => (i ? Number(v) : v))));
+  assert.ok(box.x <= at(30) && at(30) <= box.x + box.dx && box.z <= 0 && 0 <= box.z + box.dz, `the box ${stop.cmd} holds the listener`);
+  assert.equal(w.stops.filter((x) => x.player).length, 0, "no per-player stopsound");
 });
 
 test("an invalid entity is skipped and the players after it still hear the tornado", async () => {

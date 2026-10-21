@@ -1,4 +1,5 @@
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import { CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -164,21 +165,9 @@ function unlockTitle(p, g, r) {
 
 // Town news: at most one piece per in-game hour from this pack, each master once. Dropped, not queued.
 // The seen list is process memory (cleared on script restart). Rank titles stay outside this gate.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg @returns {boolean} */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => system.sendScriptEvent("realm:gossip", JSON.stringify(msg)), () => system.currentTick);
 
 /** @param {Player} p @param {Guild} g @param {number} from @param {number} to @param {number} rep */
 function rankedUp(p, g, from, to, rep) {
@@ -591,12 +580,13 @@ function saveProgress(p) {
   }
 }
 
-// Each player once a second as before, a tenth of them every 2 ticks (scripts/spread.js), so a full server doesn't
-// do (or save) everyone on one tick. Each tenth saves on a different second of the 30. The placed blocks save every
+// Each player once a second, saved every 30 seconds. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
+// The placed blocks save every
 // 30 seconds from `start`, which runs each round whoever is online (a share, even share 0, can stay empty).
 spreadPlayers(system, world, {
   every: 20,
-  parts: 10,
+  parts: 1,
   start: (_, round) => {
     if (round % 30 === 0) savePlaced();
   },

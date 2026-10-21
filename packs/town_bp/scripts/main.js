@@ -1,4 +1,5 @@
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import {
   BlockPermutation,
   CommandPermissionLevel,
@@ -418,22 +419,10 @@ const ranking = (pr) =>
 // Town news: a finished project is Townsfolk gossip about the top contributor (at most one piece per in-game hour
 // from this pack, each project once) and a letter through Realm Mail to the contributors who are offline (the
 // biggest LETTERS_MAX), so they hear of it before they next join.
-const NEWS_GAP = 1000; // ticks, an in-game hour
 const LETTERS_MAX = 10;
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  send("realm:gossip", msg);
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => send("realm:gossip", msg), () => system.currentTick);
 
 /** @param {Town} t @param {Project} p @param {Progress} pr */
 function finishProject(t, p, pr) {

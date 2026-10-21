@@ -20,14 +20,24 @@ async function world(seed = {}) {
   return sim;
 }
 
-/** Answers the pack's installed-packs ping the way the other packs do. */
-function installedPacks(sim, packs) {
+/**
+ * Answers the pack's installed-packs ping the way the other packs do. With npc_bp installed, Townsfolk also answers
+ * realm:npc_places_ping with the placed townsfolk (`placed`, by default Old Tobin and Mara).
+ */
+function installedPacks(sim, packs, placed = ["tobin", "mara"]) {
   const sys = sim.server.system;
   const orig = sys.sendScriptEvent;
   sys.sendScriptEvent = (id, message) => {
     orig(id, message);
     if (id === "realm:help_ping") for (const p of packs) orig("realm:help_pong", p);
+    if (id === "realm:npc_places_ping" && packs.includes("npc_bp")) sendPlaces(sim, placed, orig);
   };
+}
+
+/** Townsfolk's realm:npc_places list (one part, or parts 0 when nobody is placed). */
+function sendPlaces(sim, ids, send = sim.server.system.sendScriptEvent) {
+  const folk = ids.map((id, i) => ({ id, n: id, dim: "minecraft:overworld", x: i, z: 0 }));
+  send("realm:npc_places", JSON.stringify({ part: 1, parts: folk.length ? 1 : 0, folk }));
 }
 
 async function joinAndRead(sim, name = "Pat", props = {}) {
@@ -192,4 +202,145 @@ test("O43: saving the editor untouched stores nothing", async () => {
   sim.answer({ formValues: values });
   await sim.settle();
   assert.equal(sim.props.has("welcome:settings"), false);
+});
+
+// F64 (N12): Townsfolk installed is not townsfolk placed. The start line names only the prologue givers who live
+// somewhere (realm:npc_places), so a fresh world never sends players looking for Old Tobin and Mara.
+test("F64: with Townsfolk installed but nobody placed, the welcome names no townsfolk; it follows placements", async () => {
+  const sim = await world();
+  installedPacks(sim, ALL, []);
+  const t = text((await joinAndRead(sim, "Pat")).form);
+  assert.doesNotMatch(t, /Old Tobin|Mara|Tap /, "nobody to tap yet");
+  assert.match(t, /harbor/, "the story paragraph stays");
+  sim.answer({ selection: 0 });
+  sendPlaces(sim, ["reyes", "mara"]); // an operator places Mara (Townsfolk broadcasts every change)
+  const t2 = text((await joinAndRead(sim, "Sam")).form);
+  assert.match(t2, new RegExp(`Tap ${S}bMara${S}r in town to begin`));
+  assert.doesNotMatch(t2, /Old Tobin/, "Old Tobin is not placed");
+  sim.answer({ selection: 0 });
+  sendPlaces(sim, ["tobin", "mara"]);
+  const t3 = text((await joinAndRead(sim, "Lee")).form);
+  assert.match(t3, new RegExp(`Tap ${S}bOld Tobin${S}r or ${S}bMara${S}r in town to begin ${S}eThe Lantern and the Hollow`));
+  sim.answer({ selection: 0 });
+  sendPlaces(sim, []);
+  assert.doesNotMatch(text((await joinAndRead(sim, "Kim")).form), /Old Tobin|Mara/, "both removed again");
+});
+
+test("F64: a Townsfolk list sent in two parts is read whole", async () => {
+  const sim = await world();
+  installedPacks(sim, ALL, []);
+  const send = sim.server.system.sendScriptEvent;
+  send("realm:npc_places", JSON.stringify({ part: 1, parts: 2, folk: [{ id: "reyes" }] }));
+  send("realm:npc_places", JSON.stringify({ part: 2, parts: 2, folk: [{ id: "tobin" }] }));
+  // The join's own ping gets "nobody placed" from this fixture, so read the broadcast before it: skip the ping.
+  const sys = sim.server.system;
+  const wrapped = sys.sendScriptEvent;
+  sys.sendScriptEvent = (id, m) => (id === "realm:npc_places_ping" ? undefined : wrapped(id, m));
+  const t = text((await joinAndRead(sim)).form);
+  assert.match(t, /Old Tobin/);
+  assert.doesNotMatch(t, /Mara/);
+});
+
+// F64 (N10): the migration keeps what it takes out, so an operator's edits around the old sentence are not lost.
+test("F64: the migration keeps a copy of the old body; the first operator is told once; Restore brings it back", async () => {
+  const sim = await world({ "welcome:settings": LEGACY, "welcome:revision": 2 });
+  installedPacks(sim, ALL);
+  assert.equal(sim.props.has("welcome:settings"), false, "the default shows");
+  const kept = JSON.parse(sim.props.get("welcome:legacy"));
+  assert.deepEqual(kept, { body: LEGACY_BODY, title: `${S}l${S}6Welcome to the Realm!`, button: `${S}lLet's go!` });
+
+  const op = sim.join("Op", { op: true });
+  sim.game.emit("world.after.playerSpawn", { player: op, initialSpawn: true });
+  await sim.nextForm(600);
+  sim.answer({ selection: 0 });
+  await sim.settle();
+  assert.equal(op.messages.filter((m) => /copy is kept/.test(m)).length, 1, "told once");
+  const op2 = sim.join("Op2", { op: true });
+  sim.game.emit("world.after.playerSpawn", { player: op2, initialSpawn: true });
+  await sim.nextForm(600);
+  sim.answer({ selection: 0 });
+  await sim.settle();
+  assert.equal(op2.messages.filter((m) => /copy is kept/.test(m)).length, 0, "only the first operator");
+  const pat = sim.join("Pat");
+  sim.game.emit("world.after.playerSpawn", { player: pat, initialSpawn: true });
+  await sim.nextForm(600);
+  sim.answer({ selection: 0 });
+  await sim.settle();
+  assert.equal(pat.messages.filter((m) => /copy is kept/.test(m)).length, 0, "never a player");
+
+  sim.run("realm:welcome", op);
+  const menu = await sim.nextForm(600);
+  const idx = menu.form.buttons.findIndex((b) => /Old welcome/.test(b));
+  assert.ok(idx > 0, "an Old welcome button for operators");
+  sim.answer({ selection: idx });
+  const page = await sim.nextForm(600);
+  assert.match(page.form.bodyText, /Be kind, no griefing/, "the kept text is shown");
+  sim.answer({ selection: 0 });
+  await sim.settle();
+  assert.deepEqual(JSON.parse(sim.props.get("welcome:settings")), JSON.parse(LEGACY));
+  assert.equal(sim.props.has("welcome:legacy"), false, "the copy is used up");
+  assert.equal(sim.props.get("welcome:migrated"), 1, "never migrated again");
+  const { form } = await joinAndRead(sim, "Sam");
+  assert.match(form.bodyText, /Be kind, no griefing/);
+  assert.equal(form.titleText, `${S}l${S}6Welcome to the Realm!`);
+});
+
+test("F64: Delete the copy forgets it; players never get the Old welcome button; a de-opped operator can't use it", async () => {
+  const sim = await world({ "welcome:settings": JSON.stringify({ body: LEGACY_BODY, title: "Mine" }) });
+  installedPacks(sim, ALL);
+  assert.deepEqual(JSON.parse(sim.props.get("welcome:legacy")), { body: LEGACY_BODY }, "only what was taken out");
+  assert.deepEqual(JSON.parse(sim.props.get("welcome:settings")), { title: "Mine" });
+
+  const pat = sim.join("Pat");
+  sim.run("realm:welcome", pat);
+  const w = await sim.nextForm(600);
+  assert.deepEqual(w.form.buttons, [`${S}lClose`], "a player goes straight to the message");
+  sim.answer({ selection: 0 });
+
+  const op = sim.join("Op", { op: true });
+  sim.run("realm:welcome", op);
+  let menu = await sim.nextForm(600);
+  sim.answer({ selection: menu.form.buttons.findIndex((b) => /Old welcome/.test(b)) });
+  await sim.nextForm(600);
+  op.commandPermissionLevel = 0;
+  sim.answer({ selection: 1 });
+  await sim.settle();
+  assert.equal(sim.props.has("welcome:legacy"), true, "refused after de-op");
+  op.commandPermissionLevel = 2;
+  sim.run("realm:welcome", op);
+  menu = await sim.nextForm(600);
+  sim.answer({ selection: menu.form.buttons.findIndex((b) => /Old welcome/.test(b)) });
+  await sim.nextForm(600);
+  sim.answer({ selection: 1 });
+  await sim.settle();
+  assert.equal(sim.props.has("welcome:legacy"), false);
+  assert.deepEqual(JSON.parse(sim.props.get("welcome:settings")), { title: "Mine" }, "nothing else changed");
+  sim.run("realm:welcome", op);
+  menu = await sim.nextForm(600);
+  assert.equal(menu.form.buttons.some((b) => /Old welcome/.test(b)), false, "no button without a copy");
+});
+
+test("F64: Restore keeps a title or button saved after the migration", async () => {
+  const sim = await world({ "welcome:settings": LEGACY, "welcome:revision": 2 });
+  installedPacks(sim, ALL);
+  sim.props.set("welcome:settings", JSON.stringify({ title: "Newer title" })); // an operator's later edit
+  const op = sim.join("Op", { op: true });
+  sim.run("realm:welcome", op);
+  const menu = await sim.nextForm(600);
+  sim.answer({ selection: menu.form.buttons.findIndex((b) => /Old welcome/.test(b)) });
+  await sim.nextForm(600);
+  sim.answer({ selection: 0 });
+  await sim.settle();
+  const saved = JSON.parse(sim.props.get("welcome:settings"));
+  assert.equal(saved.title, "Newer title", "the later title stays");
+  assert.equal(saved.body, LEGACY_BODY, "the old body is back");
+  assert.equal(saved.button, `${S}lLet's go!`, "the old button, with no newer one saved, is back");
+});
+
+// F64 (N11): the retired welcome:profile key is deleted, also in worlds that migrated before this fix.
+test("F64: the retired welcome:profile key is deleted on load", async () => {
+  for (const seed of [{ "welcome:profile": "realm" }, { "welcome:profile": "realm", "welcome:migrated": 1 }]) {
+    const sim = await world(seed);
+    assert.equal(sim.props.has("welcome:profile"), false, JSON.stringify(seed));
+  }
 });

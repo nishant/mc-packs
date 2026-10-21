@@ -32,7 +32,7 @@ Minecraft Bedrock packs for a Realm. Each folder in `packs/` is a self-contained
 ## Commands
 
 ```bash
-npm run check 2>&1 | tail -30   # every check (tsc, check-pipeline, ASCII, docs coverage, commands, stories, ids, script events, action bar, unit tests, settings/zones/side/diag/labels copies, catalogs, news, generated packs, versions last); stops at the first failure
+npm run check 2>&1 | tail -30   # every check (tsc, check-pipeline, ASCII, docs coverage, commands, stories, ids, script events, action bar, event guards, line endings, unit tests, settings/zones/side/diag/labels copies, catalogs, news, generated packs, versions last); stops at the first failure
 npm run test                    # the unit tests alone (tools/**/*.test.mjs)
 npm run build 2>&1 | tail -3    # dist/<folder>.mcpack
 npm run bundle -- --all         # or --resources; --list [--json]; see the bundle-packs skill. Refreshes the Realm News release first
@@ -47,6 +47,7 @@ node tools/sync-zones.mjs       # copy tools/zones-shared.js into every safe-zon
 node tools/sync-side.mjs        # copy tools/side-shared.js into every pack that writes the side boxes (scripts/side.js)
 node tools/sync-diag.mjs        # copy tools/diag-shared.js into every behavior pack (scripts/diag.js, first import of main.js): after EVERY version bump
 node tools/sync-labels.mjs      # copy tools/name-labels-shared.js into the four packs with townsfolk name labels
+node tools/sync-gossip.mjs      # also sync-prune, sync-weather, sync-spread, sync-owed, sync-spawn, sync-tether: copy tools/<name>-shared.js into the packs that use it
 node tools/check-ids.mjs --list # also check-events, check-actionbar: every case, ignoring the allow list (fix a case, remove its line)
 node tools/test-bds/setup.mjs   # download BDS once; then:
 node tools/test-bds/run.mjs --quiet --only <a_bp,b_bp> --scenario <file>

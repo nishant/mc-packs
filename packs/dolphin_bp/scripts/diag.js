@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "dolphin_bp";
-const VERSION = "1.2.8";
+const VERSION = "1.2.10";
 const NAME = "Dolphin Friends";
 /** @type {string[]} */
 const PREFIXES = ["dolphin"];

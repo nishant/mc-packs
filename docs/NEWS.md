@@ -7,6 +7,35 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Pets in claims, a saved Expedition line and small fixes
+
+- Land Claims: your own pets now work in other people's claims too. A wolf, cat or parrot you feed tame, or a horse you ride tame, can be leashed, ridden or told to sit by you anywhere. Pets tamed before this update stay locked in others' claims.
+- Expeditions: the line for a dungeon now survives a reload or a restart. Leaders are told they're still number N of M, and after a restart you have 5 minutes to come back and keep your place.
+- Kitchen: old dishes from before the Dish: line now stack with new servings once they are in your inventory or when you join.
+- Story: when a quest step is too long for the quest box, its name is shortened and the direction, distance or time left always stays visible.
+- Minimap: new players are no longer told an operator reset their map; only players whose destination or marked spots were actually cleared get that message.
+- Milestones: top-tier titles you missed while Titles & Trails was off are now sent again until Titles confirms them.
+- Realm Mail: a pack letter refused because the realm's mail is full no longer deletes your oldest letters.
+- The welcome only tells new players to tap Old Tobin or Mara once they actually stand in town.
+
+## Smoother with many players, steadier side boxes and safer Expeditions
+
+- The Minimap's compass strip and radar no longer blink off now and then when many players are on.
+- Side boxes keep the right text: a box from one pack no longer covers or blanks another pack's newer box (for example the Coordinates HUD after a Blood Moon title).
+- Fewer slowdowns with many players on: the Minimap shares its title with the other side boxes, and many once-a-second checks are cheaper.
+- The Blood Moon's first wave no longer stalls the server for a moment.
+- Expeditions: your stored items are never handed back twice when you leave or a cart breaks during the hand-back, and storage carts that only unloaded are put down again instead of your items being reported lost.
+
+## Lighter auto-store, steadier Easy Building and Kitchen fixes
+
+- Auto-store is lighter: a saved page that is full of full stacks of what you are picking up is skipped without being opened.
+- Easy Building: your shape's first anchor now stays when you switch to a sword, food or an empty hand. Hold the block again to see it and finish the shape. Right-clicking with a different block or a tool starts over.
+- Easy Building: right-clicking with a pickaxe while a block shape is anchored no longer builds the shape, and going to another dimension clears the anchor, so a shape is never built in the wrong world.
+- Easy Building: shape previews show their outline and block count again (they showed 0 blocks).
+- Kitchen: a dish you start in your first few seconds online is no longer handed over before it has cooked, and a finished dish waiting for you is never handed over twice, even if the world fails to save at that moment.
+- Chest Finder: a brand-new world now starts with the private index (you find what you placed or opened), and switching to world-wide takes effect at once.
+- Realm Stats: the stats ticker costs the server less with many players online, and tied players now share the same place in My stats and the leaderboards.
+
 ## Calmer wanderers and party quests together
 
 - Wanderers and caravan llamas no longer jump back to camp: one that strays slows down and walks back, and one stuck behind a wall gets a moment to find its way around.

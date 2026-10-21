@@ -128,11 +128,12 @@ function setAfk(player, afk) {
   }
 }
 
-// Each player once a second (CHECK_TICKS) as before, a tenth of them every 2 ticks (scripts/spread.js), so a full
-// server doesn't read everyone's rotation and input on one tick. The night skip is counted once a second.
+// Each player once a second (CHECK_TICKS). The night skip is counted once a second.
+// One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
+// isValid made every read after it several times dearer (BDS 1.26), so the spread cost more than it saved.
 spreadPlayers(system, world, {
   every: CHECK_TICKS,
-  parts: 10,
+  parts: 1,
   start: () => {
     try {
       if (get("sleep.enabled")) checkSleep();

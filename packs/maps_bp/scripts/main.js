@@ -1,4 +1,5 @@
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -83,21 +84,9 @@ function send(id, data) {
 
 // Town news: Townsfolk gossip at most once per in-game hour from this pack, each event once, so a busy server
 // doesn't flood the townsfolk.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  send("realm:gossip", msg);
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => send("realm:gossip", msg), () => system.currentTick);
 
 // Crowns: the shared `crowns` scoreboard (the Crowns pack shows balances; any pack may pay or charge).
 function crownsObjective() {

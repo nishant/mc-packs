@@ -784,7 +784,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 
   customCommandRegistry.registerCommand(
-    { name: "realm:crowns_audit", description: "Crowns: the last 200 pays and gives (operators)", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
+    { name: "realm:crowns_audit", description: "Crowns: the newest 50 pays and gives (operators)", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
     (origin) => {
       const player = playerOf(origin);
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
