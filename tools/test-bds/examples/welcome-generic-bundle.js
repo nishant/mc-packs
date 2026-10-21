@@ -8,7 +8,7 @@
 //      node tools/test-bds/run.mjs --quiet --flat --bundle <stage>/realm_bundle --arg expect=default --scenario tools/test-bds/examples/welcome-generic-bundle.js --timeout 1200
 // 2. The Realm's old saved welcome migrates once (small bundle; disclosed adaptation, the probe saves it before Welcome loads):
 //      mkdir -p <d> && node tools/test-bds/hooks/diag-bundle.mjs <d> admin_bp,help_bp,find_bp,settings_bp,welcome_bp,saga_bp,npc_bp --probe-first --first-key welcome:settings --first-value '{"body":"Tap Old Tobin or Mara in town to begin\n== Rules ==","showOnce":true}'
-//      node tools/test-bds/run.mjs --quiet --flat --packs <d> --arg expect=default --scenario tools/test-bds/examples/welcome-generic-bundle.js
+//      node tools/test-bds/run.mjs --quiet --flat --packs <d> --arg features=0 --arg expect=default --scenario tools/test-bds/examples/welcome-generic-bundle.js
 // 3. An operator's saved welcome stays (the same with --first-value '{"body":"Saved old body"}' and --arg expect=saved).
 // Phase 2 repeats the check after a restart: the migration must not run again and the text must be the same.
 // F64: Townsfolk installed is not townsfolk placed. In phase 1 (expect=default) the first joiner sees no "Tap Old
@@ -31,7 +31,9 @@ export default async function (t) {
   if (expect === "default") {
     t.check(!(f.elements ?? []).some((e) => e.kind === "header"), "section titles are labels, never headers");
     // The official form observer strips formatting codes; producer tests check bold/gold, not client pixels.
-    const headingNames = ["The World", "What You Can Do", "Where To Go Next"];
+    // `What You Can Do` lists installed feature packs only; the small bundles (--arg features=0) have none.
+    const features = String(t.args?.features ?? "1") !== "0";
+    const headingNames = ["The World", ...(features ? ["What You Can Do"] : []), "Where To Go Next"];
     const heads = labels.map(plain).filter((l) => headingNames.includes(l));
     t.check(heads.join(",") === headingNames.join(","), `sections in order: ${heads.join(", ")}`);
     t.check(f.type === "action" && text.length <= 1800 && text.split(/\s+/).filter(Boolean).length <= 200, "one action form stays within the documented text budget, not a client-fit proof");
