@@ -51,8 +51,9 @@ export const CONFIG = {
   intervalTicks: 10,
 
   /**
-   * How much script time the minimap may use a tick, for everyone together: "low" (about 0.7 ms a tick at most),
-   * "normal" (about 1 ms) or "high" (about 2.9 ms, the budgets before October 2026). With many players moving, a lower
+   * How much script time the minimap may use a tick, for everyone together: "low" (budgets of about 0.7 ms a
+   * tick; measured 1.2 ms with 10 players moving, 1.7 with 40), "normal" (1 ms; measured 1.5 and 1.9) or "high" (2.9 ms,
+   * the budgets before October 2026; measured 2.6 and 3.7). With many players moving, a lower
    * level makes the strip and radar follow a little later and the radar's land and mob dots lag more; a strip never
    * fades for it. See BUDGET_LEVELS in scripts/main.js.
    */
