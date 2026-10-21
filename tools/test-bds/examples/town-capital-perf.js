@@ -3,8 +3,9 @@
 // (5 in each town) walking about. The soak measures the steady cost with no scan or build running: Town Projects at
 // most 0.15 ms/tick, Townsfolk no more than 0.05 above its baseline (the same soak without towns). The spots are set
 // by hand (autoSpots Disabled during setup), so nothing is scanned or leveled before the soak starts.
-// Meant for run.mjs --profile; the soak window is reported as perf-workload (as perf-soak.js does).
-//   node tools/test-bds/run.mjs --quiet --flat --no-relay --profile --profile-json /tmp/town-capital.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=120 --timeout 9000
+// Meant for run.mjs --profile, without --no-relay: the setup reads the towns' dumps from chat (the soak window sends
+// next to none). The soak window is reported as perf-workload (as perf-soak.js does).
+//   node tools/test-bds/run.mjs --quiet --flat --profile --profile-json /tmp/town-capital.json --only town_bp,npc_bp --scenario tools/test-bds/examples/town-capital-perf.js --arg players=10 --arg seconds=120 --timeout 9000
 //   the Townsfolk baseline: the same with --arg baseline=1 (no towns), --only town_bp,npc_bp as above
 //   the transients, measured on their own: --arg transient=scan (a third town is added at the soak's start, so its
 //   scan runs in the window; autoSpots Enabled) or --arg transient=build (its well and notice board are finished at the
@@ -105,6 +106,14 @@ export default async function (t) {
     await t.wait(10);
   }
   if (!BASELINE && TRANSIENT === "none") {
+    // Pen animals despawn while nobody is near (Ann was in the other town): standing by each pen brings them back.
+    for (const c of [...CENTERS].reverse()) {
+      const pen = (await dump(c.id)).town.spots.pen;
+      op.teleport({ x: pen.x + 0.5, y: pen.y, z: pen.z - 4.5 });
+      await t.waitUntil(() => dim.getEntities({ tags: [`town:a:${c.id}`] }).length >= 4, { timeout: 1600, interval: 20, message: `${c.name}'s pen animals back` });
+    }
+    op.teleport({ x: 0.5, y: op.location.y, z: 0.5 });
+    await t.wait(10);
     const d = await dump("ash");
     t.check(!d.scanning && !d.building && !d.living, `no scan, build or path running before the soak (${JSON.stringify([d.scanning, d.building, d.living])})`);
     const residents = dim.getEntities({ type: "minecraft:villager_v2", tags: ["realm:resident"] }).length;
