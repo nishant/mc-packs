@@ -108,7 +108,11 @@ export default async function (t) {
   t.log(`Caver coarse sample ages before idle: ${last[b.id].terrain.samples.map((s) => s.data ? sys.currentTick - s.data.tick : "missing").join(",")}`);
   t.check(expiring.length > 0, "long flight reaches the stationary caver's existing age-refresh cohort");
   const refreshed = () => expiring.every((old) => last[b.id].terrain.samples.some((s) => s.x === old.x && s.z === old.z && s.data?.tick > old.data.tick));
-  for (let i = 0; i < 48 && !refreshed(); i++) {
+  // map_bp reads a column again once it is older than SCAN_MAX_AGE (2400 ticks), found by the stale scan whose key
+  // changes every STALE_EVERY (200) ticks: from age 2300 that is at most 100 + 200 ticks, plus a scan. A fixed 48 polls
+  // (about 290 ticks) only held while the cohort was first seen past 2300; now it is seen at 2300 itself.
+  const refreshBy = sys.currentTick + (2400 - 2300) + 200 + 40;
+  while (sys.currentTick < refreshBy && !refreshed()) {
     await t.wait(5);
     await radarOf(b);
   }
