@@ -20,7 +20,7 @@ import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
-import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, placeStates, toWorld } from "./designs.js";
+import { BUILDS, FORWARD, buildCells, design, designFootprint, isOptionalPlace, placeStates, structureLocal, toWorld } from "./designs.js";
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
 import { PEN_ID, addLog, cleanText, houseCount, isWorkId, logLine, makePen, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
@@ -746,10 +746,7 @@ function unbuild(t, p, s, keep = false) {
   const st = s.snap ? savedStructure(id) : undefined;
   try {
     if (st) {
-      const kinds = buildKinds(p);
-      // Leveling filled with dirt and the surrounding top block: those go back too.
-      if (s.a) for (const k of ["minecraft:dirt", fillTop(s)]) kinds.add(k);
-      restoreGround(dim, st, box, kinds);
+      restoreGround(dim, st, box, cellsOfBuild(p, s));
       if (!keep) deleteStructure(id);
     } else clearBuild(dim, p, s, box);
   } catch (e) {
@@ -763,36 +760,42 @@ function unbuild(t, p, s, keep = false) {
 }
 
 /**
- * The kinds of block a project's build is made of: its saved structure's, else its built-in design's.
- * @param {Project} p @returns {Set<string>}
+ * What the build put in each block it may have changed ("x,y,z" -> block ids, designs.js buildCells): the leveling plan
+ * at an automatic spot, then its saved structure's blocks (turned with the spot) or its built-in design's.
+ * @param {Project} p @param {Spot} s @returns {Map<string, Set<string>>}
  */
-function buildKinds(p) {
-  /** @type {Set<string>} */
-  const kinds = new Set();
+function cellsOfBuild(p, s) {
+  const plan = s.a && s.lv !== undefined ? autoGeometry(p, s).plan : [];
   const st = p.structure ? savedStructure(p.structure) : undefined;
-  if (st) {
-    const { x: sx, y: sy, z: sz } = st.size;
-    if (sx * sy * sz > 200000) throw new Error("the structure is too big to clear");
-    for (let x = 0; x < sx; x++)
-      for (let y = 0; y < sy; y++)
-        for (let z = 0; z < sz; z++) {
-          const type = st.getBlockPermutation({ x, y, z })?.type.id;
-          if (type && type !== "minecraft:air" && type !== "minecraft:structure_void") kinds.add(type);
-        }
-    return kinds;
-  }
-  for (const pl of designOf(p)) kinds.add(pl.block);
-  if (kinds.has("minecraft:farmland")) kinds.add("minecraft:dirt"); // trampled farmland
-  return kinds;
+  if (!st) return buildCells(s, designOf(p), plan, fillTop(s));
+  const cells = buildCells(s, [], plan, fillTop(s));
+  const size = st.size;
+  if (size.x * size.y * size.z > 200000) throw new Error("the structure is too big to clear");
+  const box = footprint(p, s);
+  for (let x = box.min.x; x <= box.max.x; x++)
+    for (let z = box.min.z; z <= box.max.z; z++) {
+      const at = structureLocal(s, size, x, z);
+      if (!at) continue;
+      for (let y = 0; y < size.y; y++) {
+        const id = st.getBlockPermutation({ x: at.x, y, z: at.z })?.type.id;
+        if (!id || id === "minecraft:structure_void") continue;
+        const k = `${x},${s.y + y},${z}`;
+        const set = cells.get(k) ?? new Set();
+        set.add(id);
+        cells.set(k, set);
+      }
+    }
+  return cells;
 }
 
 /**
- * Puts the saved ground back, block by block, where the build (or nothing) is now: a block of a kind the build
- * isn't made of, placed or left there since (a chest, a path, a torch), stays as it is, and so does a block that
- * still matches the snapshot (so a chest that was there all along keeps what's in it now).
- * @param {Dimension} dim @param {import("@minecraft/server").Structure} st @param {Box} box @param {Set<string>} kinds
+ * Puts the saved ground back, block by block, only in the blocks the build changed (`cells`, cellsOfBuild) and only
+ * where the block now is still what the build put there, or air (its block was taken): every other block is a player's
+ * and stays as it is, even of a kind the build is made of (F37: never touch placed blocks). A block that still matches
+ * the snapshot stays too (so a chest that was there all along keeps what's in it now).
+ * @param {Dimension} dim @param {import("@minecraft/server").Structure} st @param {Box} box @param {Map<string, Set<string>>} cells
  */
-function restoreGround(dim, st, box, kinds) {
+function restoreGround(dim, st, box, cells) {
   const air = perm("minecraft:air");
   // Twice: first what becomes air, top down (so nothing left above falls), then the rest, bottom up (so sand and
   // gravel always land on what holds them).
@@ -801,13 +804,15 @@ function restoreGround(dim, st, box, kinds) {
       const y = pass === 0 ? box.max.y - k : box.min.y + k;
       for (let x = box.min.x; x <= box.max.x; x++)
         for (let z = box.min.z; z <= box.max.z; z++) {
+          const ours = cells.get(`${x},${y},${z}`);
+          if (!ours) continue; // the build never changed it
           const want = st.getBlockPermutation({ x: x - box.min.x, y: y - box.min.y, z: z - box.min.z }) ?? air;
           if ((want.type.id === "minecraft:air") !== (pass === 0)) continue;
           if (want.type.id === "minecraft:structure_void") continue;
           const b = dim.getBlock({ x, y, z });
           if (!b) continue;
           if (b.permutation.matches(want.type.id, want.getAllStates())) continue;
-          if (!b.isAir && !b.isLiquid && !kinds.has(b.typeId)) continue; // someone's own block
+          if (!b.isAir && !ours.has(b.typeId)) continue; // someone's own block
           spill(dim, b);
           b.setPermutation(want);
         }
@@ -839,13 +844,13 @@ function clearBuild(dim, p, s, box) {
   const air = perm("minecraft:air");
   const st = p.structure ? savedStructure(p.structure) : undefined;
   if (st) {
-    // A saved structure: clear the blocks in its box that are of a kind the structure has.
-    const kinds = buildKinds(p);
+    // A saved structure: clear the blocks in its box that are still the structure's own block there.
+    const cells = cellsOfBuild(p, s);
     for (let x = box.min.x; x <= box.max.x; x++)
       for (let y = box.min.y; y <= box.max.y; y++)
         for (let z = box.min.z; z <= box.max.z; z++) {
           const b = dim.getBlock({ x, y, z });
-          if (!b || !kinds.has(b.typeId)) continue;
+          if (!b || b.isAir || !cells.get(`${x},${y},${z}`)?.has(b.typeId)) continue;
           spill(dim, b);
           b.setPermutation(air);
         }
@@ -1472,7 +1477,7 @@ async function confirmRemoveSpot(player, townId, projectId) {
     ? `Forget where ${t.n}'s ${p.name} goes? Nothing is built yet, so nothing in the world changes.`
     : legacyBuild(t, p)
       ? `Take ${t.n}'s ${p.name} away?\n\n§eIt was built before the ground under builds was saved, so its own blocks are cleared: ground blocks become grass, a dock's posts water, the rest air. Anything else (paths, decorations you added) stays.§r\n\nIt stays finished: set a new spot to build it again.`
-      : `Take ${t.n}'s ${p.name} away and put the ground back the way it was before it was built? Blocks added inside its outline since then stay, unless they are of a kind the build is made of.\n\nIt stays finished: set a new spot to build it again.`;
+      : `Take ${t.n}'s ${p.name} away and put the ground back the way it was before it was built? Blocks added inside its outline since then stay, even of a kind the build is made of: only the build's own blocks are taken away.\n\nIt stays finished: set a new spot to build it again.`;
   if (await confirm(player, "§lRemove spot?", body, pr.built ? "§cRemove the build" : "Forget the spot")) removeSpot(t, p, (m) => player.sendMessage(m));
 }
 
@@ -1483,7 +1488,7 @@ async function confirmRebuild(player, townId, projectId) {
   if (!t || !p || !t.spots[p.id]) return;
   const body = legacyBuild(t, p)
     ? `Rebuild ${t.n}'s ${p.name}? It was built before the ground was saved, so missing blocks are put back; changed blocks stay as they are.`
-    : `Rebuild ${t.n}'s ${p.name}? Its outline goes back to the ground saved before it was built, and it's built again, fresh. Blocks added inside its outline since then stay, unless they are of a kind the build is made of.`;
+    : `Rebuild ${t.n}'s ${p.name}? Its outline goes back to the ground saved before it was built, and it's built again, fresh. Blocks added inside its outline since then stay, even of a kind the build is made of.`;
   if (await confirm(player, "§lRebuild?", body, "Rebuild")) rebuildSpot(t, p, (m) => player.sendMessage(m));
 }
 
