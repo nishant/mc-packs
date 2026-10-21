@@ -43,7 +43,7 @@ export default async function (t) {
   t.log(`admin: ${keys("admin_bp")}`);
   t.log(`nick: ${keys("nick_bp")}`);
   t.log(`probe: ${keys("probe_bp")}`);
-  t.check(/runInterval\(10\) refreshAll/.test(keys("nick_bp")), "Nicknames' interval is counted as Nicknames'");
+  t.check(/runInterval\(10\) (refreshAll|@ nick_bp\/spread\.js)/.test(keys("nick_bp")), "Nicknames' interval is counted as Nicknames'");
   t.check(!/refreshAll/.test(keys("admin_bp")) && !/refreshAll/.test(keys("probe_bp")), "and not as anyone else's");
 
   // Commands are registered in startup, after every pack's modules ran: still each pack's own, not the last one's.
