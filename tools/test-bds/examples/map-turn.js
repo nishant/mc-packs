@@ -134,17 +134,38 @@ export default async function (t) {
   if (c.scanPeak !== undefined) t.check(c.scanPeak <= 96 && c.scanEachPeak <= 48, "rotating viewers retain the shared real-operation budget");
   t.check(perSend < 4, `each strip sent costs under 4 ms with 10 players turning nonstop (${perSend.toFixed(2)} ms)`);
 
-  // The same 10 players standing still (after the last of them got their final strip and terrain picture, which
-  // may lag while everyone turns, and the exact near-field columns read once they stopped): the per-tick check only
-  // reads their rotation and place.
-  await t.wait(120);
-  send("realm:map_debug", { player: p.id, action: "cost" });
+  // The same 10 players standing still, once the land around them is read: the per-tick check only reads their
+  // rotation and place. While everyone turns the scanner's shared budget falls behind, and for several hundred ticks
+  // after they stop it still lands new columns around the 10 radars; each one changes that radar's picture, so the
+  // redraw rightly sends it (O81: such a send in the 100-tick window, which started a fixed 120 ticks after the turn,
+  // failed this check 4 runs in 10). So first wait until the shared surface store has gained no column for 60 ticks
+  // (re-reading a known column that didn't change leaves its picture alone), at most 1500 ticks.
+  const stateNow = async (action) => {
+    const at = t.tick;
+    send("realm:map_debug", { player: p.id, action });
+    await t.waitUntil(() => ev.some((e) => e.tick >= at), { timeout: 20, message: "realm:map_state" });
+    return ev.filter((e) => e.tick >= at).at(-1).m;
+  };
+  const landOf = (m) => `${m.terrain?.surface?.columns}/${m.terrain?.surface?.fine}`;
+  const settleFrom = t.tick;
+  let land = landOf(await stateNow("state"));
+  let settled = false;
+  while (t.tick - settleFrom < 1500) {
+    await t.wait(60);
+    const now = landOf(await stateNow("state"));
+    if (now === land) {
+      settled = true;
+      break;
+    }
+    land = now;
+  }
+  t.log(`land around the 10 radars complete ${t.tick - settleFrom} ticks after they stopped (columns/fine ${land})`);
+  t.check(settled, `the scanner finishes the land around 10 standing players within 1500 ticks (${t.tick - settleFrom})`);
+  await stateNow("cost");
   await t.wait(100);
-  since = t.tick;
-  send("realm:map_debug", { player: p.id, action: "cost" });
-  await t.waitUntil(() => ev.some((e) => e.tick >= since), { timeout: 20, message: "realm:map_state" });
-  const idle = ev.filter((e) => e.tick >= since).at(-1).m.cost;
-  t.log(`standing still: ${idle.turnMs} ms over ${idle.turnTicks} ticks = ${(idle.turnMs / Math.max(1, idle.turnTicks)).toFixed(3)} ms a tick, ${idle.turnSends} sent`);
+  const idleM = await stateNow("cost");
+  const idle = idleM.cost;
+  t.log(`standing still: ${idle.turnMs} ms over ${idle.turnTicks} ticks = ${(idle.turnMs / Math.max(1, idle.turnTicks)).toFixed(3)} ms a tick, ${idle.turnSends} sent, ${idle.scanReads} terrain re-reads, land ${landOf(idleM)}`);
   t.check(idle.turnSends === 0, `nothing sent by the per-tick redraw while nobody turns (${idle.turnSends})`);
 
   // What one realm:side message costs each other pack (side.js: JSON.parse and clean on ~250 bytes), timed here.
