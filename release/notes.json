@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Minimap: uses about half the server time it did; with many players moving the radar's land and mob dots catch up a few seconds later. Operators can pick High in /realm:config -> Minimap for the earlier behavior.",
     "Silly Enchants costs less on a busy server: its every-tick checks run only while someone wears Hyper Jump boots.",
     "Expedition dungeons build in shorter steps, so a busy server no longer hitches while one is built.",
     "Champions cost less at night: their aura and approach read less from the game.",
@@ -9,6 +10,10 @@
     "Easy Building's resources: line endings tidied (no change for players)."
   ],
   "packNotes": {
+    "map_bp": {
+      "version": "1.3.11",
+      "notes": "About half the server time: budgetLevel normal now has 1 ms of budgets a tick (measured 1.5 ms with 10 players moving, 2.1 with 40; it was 2.8 and 4.4). High has the earlier normal budgets. Titles held longer, shared townsfolk searches, fewer wasted redraws and re-plans."
+    },
     "town_bp": {
       "version": "1.7.2",
       "notes": "A mayor per town, building spots the town picks and levels gently (at most 3 blocks, never your blocks), houses, paths, lantern posts, a garden pen whose animals come back if they wander off, and villagers who move in (Enabled), never take beds or harvest crops, and come home when they stray."
@@ -22,8 +27,8 @@
       "notes": "The welcome page lists Town Projects: towns that grow as you help, each with its mayor."
     },
     "admin_bp": {
-      "version": "1.6.11",
-      "notes": "The setup checklist says towns pick their own project spots, so setting one is optional, and a spot an operator sets is never leveled."
+      "version": "1.6.12",
+      "notes": "Server size's Large server note gives the Minimap's new budgets: about 0.7 ms a tick instead of 1."
     },
     "silly_bp": {
       "version": "1.2.13",

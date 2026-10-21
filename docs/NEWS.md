@@ -7,6 +7,11 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## A lighter Minimap
+
+- The Minimap uses about half the server time it did. With many players moving at once, the land under your radar and the mob dots can take a few seconds longer to catch up; standing still, everything catches up.
+- Operators who want the earlier, faster Minimap can pick High in /realm:config -> Minimap -> Minimap script time a tick.
+
 ## A quieter server log
 
 - Champions: leaving the game while the Champions menu is open no longer leaves an error behind on the server.

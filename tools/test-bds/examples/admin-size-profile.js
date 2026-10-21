@@ -1,6 +1,6 @@
 // Server size (admin_bp, Operator Tools > Server size): Large server lists every setting it changes, old -> new,
 // before anything changes; Cancel changes nothing; Yes sets each pack's option through Realm Settings (realm:cfg_set),
-// including the Minimap's budget level (its budgets drop to 0.6 of normal); Small Realm puts every one back to the
+// including the Minimap's budget level (its budgets drop to 0.71 of normal); Small Realm puts every one back to the
 // pack's default. Also: "Don't remind operators" stops the chat line for every operator, and a player who isn't an
 // operator can't open any of it.
 //   node tools/test-bds/run.mjs --quiet --only admin_bp,map_bp,elite_bp,cleanup_bp,find_bp,afk_bp,mail_bp --scenario tools/test-bds/examples/admin-size-profile.js --timeout 600
@@ -81,7 +81,7 @@ export default async function (t) {
   let v = await values();
   t.check(!matches(v, SMALL).length, `every option starts at its default (${matches(v, SMALL).join("; ")})`);
   let ms = await mapState();
-  t.check(ms.budgetLevel === "normal" && Math.abs(ms.perTick - 2.9) < 0.01, `the Minimap's budgets are normal (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
+  t.check(ms.budgetLevel === "normal" && Math.abs(ms.perTick - 1.0) < 0.01, `the Minimap's budgets are normal (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
 
   // 4. Operator Tools > Server size > Large server: the list first, Cancel changes nothing.
   shown = t.waitForm(op, { timeout: 100 });
@@ -99,7 +99,7 @@ export default async function (t) {
   t.check(alike === 1 && /\n1 more already match\./.test(plain(ask.body)), `the list says the one setting that already matches (Champions) (${alike})`);
   const listed = plain(ask.body).split("\n\n")[0].split("\n").slice(1);
   t.check(listed.length === 7 && listed.every((l) => / -> /.test(l)) && !listed.some((l) => /Champion/i.test(l)), `exactly 7 changes are listed, none of them Champions (${listed.join(" | ")})`);
-  t.check(new RegExp(`^These ${changes} settings change, for the whole world:\nMinimap: Minimap script time a tick: Normal \\(about 2\\.9 ms a tick\\) -> Low \\(about 2 ms a tick\\)\nMinimap: Largest mob range players may pick \\(blocks\\): 32 -> 24\n`).test(plain(ask.body)), "it lists each change, old -> new, in menu words");
+  t.check(new RegExp(`^These ${changes} settings change, for the whole world:\nMinimap: Minimap script time a tick: Normal \\(about 1\\.5 ms a tick\\) -> Low \\(about 1\\.2 ms a tick\\)\nMinimap: Largest mob range players may pick \\(blocks\\): 32 -> 24\n`).test(plain(ask.body)), "it lists each change, old -> new, in menu words");
   page = await tap(ask, 1);
   t.check(title(page) === "Operator Tools", `Cancel goes back (got "${title(page)}")`);
   v = await values();
@@ -114,21 +114,21 @@ export default async function (t) {
   v = await values();
   t.check(!matches(v, LARGE).length, `every option has its Large server value (${matches(v, LARGE).join("; ")})`);
   ms = await mapState();
-  t.check(ms.budgetLevel === "low" && Math.abs(ms.perTick - 2.0) < 0.01, `the Minimap's budgets are low (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
+  t.check(ms.budgetLevel === "low" && Math.abs(ms.perTick - 0.71) < 0.01, `the Minimap's budgets are low (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
   t.check(title(page) === "Operator Tools" && lines(page).some((/** @type {string} */ b) => b.startsWith("[x] Server Size")), `Operator Tools comes back with the size checked off (${lines(page).filter((/** @type {string} */ b) => b.includes("Server Size")).join("")})`);
 
   // 6. The size page now says Large; Small Realm puts every option back.
   page = await tap(page, "Server size");
   t.check(/Now: Large server/.test(plain(page.body)) && lines(page).some((/** @type {string} */ b) => b.startsWith("Large server (now)")), "the size page says Large server now");
   ask = await tap(page, "Small Realm");
-  t.check(new RegExp(`^These ${changes} settings change, for the whole world:\nMinimap: Minimap script time a tick: Low \\(about 2 ms a tick\\) -> Normal`).test(plain(ask.body)), "Small Realm lists the way back");
+  t.check(new RegExp(`^These ${changes} settings change, for the whole world:\nMinimap: Minimap script time a tick: Low \\(about 1\\.2 ms a tick\\) -> Normal`).test(plain(ask.body)), "Small Realm lists the way back");
   const back = t.waitMessage(op, new RegExp(`Server size: Small Realm\\. Changed ${changes} settings\\.`), { pack: "admin_bp", timeout: 100 });
   page = await tap(ask, 0);
   await back;
   v = await values();
   t.check(!matches(v, SMALL).length, `every option is back at its default (${matches(v, SMALL).join("; ")})`);
   ms = await mapState();
-  t.check(ms.budgetLevel === "normal" && Math.abs(ms.perTick - 2.9) < 0.01, `the Minimap's budgets are normal again (${ms.perTick} ms a tick)`);
+  t.check(ms.budgetLevel === "normal" && Math.abs(ms.perTick - 1.0) < 0.01, `the Minimap's budgets are normal again (${ms.perTick} ms a tick)`);
 
   // 7. Applied again: nothing left to change.
   page = await tap(page, "Server size");
