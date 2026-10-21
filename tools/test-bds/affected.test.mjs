@@ -52,3 +52,24 @@ test("shard balances seconds, sizes the shard count to the work, and builds anch
   const all = shard(Array.from({ length: 30 }, (_, i) => `s${i}`), { shards: 3, perShard: 5 }).flatMap((x) => x.scenarios);
   assert.equal(new Set(all).size, 30, "every scenario lands in exactly one shard");
 });
+
+test("incremental reruns what didn't pass and what changed since, and carries the rest", async () => {
+  const { incremental } = await import("./affected.mjs");
+  const r = incremental(["a", "b", "c", "d"], new Set(["a", "b", "c"]), new Set(["b"]));
+  assert.deepEqual(r.run, ["b", "d"], "b changed since, d never passed");
+  assert.deepEqual(r.carried, ["a", "c"]);
+  assert.deepEqual(incremental(["a"], new Set(), new Set()).run, ["a"], "no previous run: everything");
+});
+
+test("readPassed reads pass and flaky results and carried lists, and ignores the rest", async () => {
+  const { readPassed } = await import("./affected.mjs");
+  const fs = await import("node:fs"), os = await import("node:os"), path = await import("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "affected-prev-"));
+  fs.mkdirSync(path.join(dir, "scenarios-1"));
+  fs.writeFileSync(path.join(dir, "scenarios-1", "suite.json"), JSON.stringify({ results: [{ name: "a", result: "pass" }, { name: "b", result: "flaky" }, { name: "c", result: "fail" }, { name: "d", result: "timeout" }, null] }));
+  fs.mkdirSync(path.join(dir, "scenarios-carried"));
+  fs.writeFileSync(path.join(dir, "scenarios-carried", "carried.json"), JSON.stringify(["e", 7]));
+  fs.mkdirSync(path.join(dir, "scenarios-2")); // a shard that wrote nothing
+  assert.deepEqual([...readPassed(dir)].sort(), ["a", "b", "e"]);
+  assert.equal(readPassed(path.join(dir, "missing")).size, 0);
+});

@@ -5,6 +5,9 @@
 //        prints JSON: { reason, packs, scenarios, shards: [{ index, filter, scenarios, seconds }] }
 //   node tools/test-bds/affected.mjs ... --shard 2/4      prints only shard 2's --filter regex for suite.mjs
 //   node tools/test-bds/affected.mjs ... --packs-changed  prints "true" or "false": did the change touch packs/
+//   node tools/test-bds/affected.mjs ... --since <sha> --prev <dir>   a follow-up push: of the scenarios the PR needs,
+//        run only those the last run didn't pass (its scenarios-* artifacts in <dir>: suite.json results, carried.json)
+//        and those the commits since <sha> touch; the rest are carried as passed (written to "carried" in the JSON).
 // A scenario is picked when its own file changed, a hook its header names changed, or the packs it runs (--only, a
 // runner's fixed packs) meet the changed packs; scenarios that run every pack (smoke, restart, the bundle ones,
 // perf-soak) are picked by any pack change. A harness change (tools/test-bds/lib, testpack, run.mjs, suite.mjs,
@@ -98,6 +101,37 @@ export function shard(names, { shards = 4, perShard = 8, times = new Map() } = {
 
 const escape = (/** @type {string} */ s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/**
+ * A follow-up push's share of the needed scenarios: rerun what the last run didn't pass and what changed since it.
+ * @param {string[]} needed what the whole PR needs (select against its base)
+ * @param {Set<string>} passed what the last run passed or carried
+ * @param {Set<string>} touched what the commits since the last run select
+ */
+export function incremental(needed, passed, touched) {
+  return { run: needed.filter((n) => !passed.has(n) || touched.has(n)), carried: needed.filter((n) => passed.has(n) && !touched.has(n)) };
+}
+
+/**
+ * The scenarios a previous pr-tests run passed or carried, from its downloaded scenarios-* artifacts: each folder's
+ * suite.json (pass or flaky; a missing shard counts as not passed) and carried.json (the list it carried).
+ * @param {string} dir
+ */
+export function readPassed(dir) {
+  const passed = new Set();
+  if (!dir || !fs.existsSync(dir)) return passed;
+  for (const d of fs.readdirSync(dir)) {
+    const at = path.join(dir, d);
+    if (!fs.statSync(at).isDirectory()) continue;
+    try {
+      for (const r of JSON.parse(fs.readFileSync(path.join(at, "suite.json"), "utf8")).results ?? []) if (r && (r.result === "pass" || r.result === "flaky")) passed.add(r.name);
+    } catch { /* no report: nothing passed there */ }
+    try {
+      for (const n of JSON.parse(fs.readFileSync(path.join(at, "carried.json"), "utf8"))) if (typeof n === "string") passed.add(n);
+    } catch { /* not the carried artifact */ }
+  }
+  return passed;
+}
+
 /** The hook files a scenario's header names (tools/test-bds/hooks/<file>). @param {string} file */
 function headerHooks(file) {
   const head = fs.readFileSync(file, "utf8").split("\n").filter((l) => /^\s*\/\//.test(l)).join("\n");
@@ -118,16 +152,16 @@ function main() {
       base: { type: "string", default: "origin/master" }, all: { type: "boolean", default: false },
       shards: { type: "string", default: "4" }, "per-shard": { type: "string", default: "8" }, shard: { type: "string" },
       times: { type: "string" }, "packs-changed": { type: "boolean", default: false }, files: { type: "string" },
+      since: { type: "string" }, prev: { type: "string" },
     },
   });
   // --files: a newline-separated list instead of git (tests, or a CI step that already has the diff).
-  const files = a.files !== undefined
-    ? a.files.split("\n").map((x) => x.trim()).filter(Boolean)
-    : (() => {
-        const r = spawnSync("git", ["diff", "--name-only", `${a.base}...HEAD`], { cwd: ROOT, encoding: "utf8" });
-        if (r.status !== 0) throw new Error(`git diff ${a.base}...HEAD failed: ${r.stderr.trim()}`);
-        return r.stdout.split("\n").filter(Boolean);
-      })();
+  const diff = (/** @type {string} */ ref) => {
+    const r = spawnSync("git", ["diff", "--name-only", `${ref}...HEAD`], { cwd: ROOT, encoding: "utf8" });
+    if (r.status !== 0) throw new Error(`git diff ${ref}...HEAD failed: ${r.stderr.trim()}`);
+    return r.stdout.split("\n").filter(Boolean);
+  };
+  const files = a.files !== undefined ? a.files.split("\n").map((x) => x.trim()).filter(Boolean) : diff(a.base);
   const change = classify(files);
   if (a["packs-changed"]) {
     console.log(String(change.packs.size > 0 || change.harness));
@@ -139,7 +173,17 @@ function main() {
     const file = path.join(HERE, "examples", `${p.name}.js`);
     return { ...p, hooks: fs.existsSync(file) ? headerHooks(file) : [] };
   });
-  const { reason, scenarios } = select(plans, change, { all: a.all });
+  let { reason, scenarios } = select(plans, change, { all: a.all });
+  /** @type {string[]} */
+  let carried = [];
+  if (a.since && a.prev) {
+    const passed = readPassed(a.prev);
+    const touched = new Set(select(plans, classify(diff(a.since))).scenarios);
+    const inc = incremental(scenarios, passed, touched);
+    reason += `; follow-up push: ${inc.run.length} to run (not passed last time, or touched since ${a.since.slice(0, 7)}), ${inc.carried.length} carried as passed`;
+    scenarios = inc.run;
+    carried = inc.carried;
+  }
   const shards = shard(scenarios, { shards: Math.max(1, Math.min(8, Number(a.shards) || 4)), perShard: Number(a["per-shard"]) || 8, times: readTimes(a.times) });
   if (a.shard) {
     const [k, n] = a.shard.split("/").map(Number);
@@ -147,7 +191,7 @@ function main() {
     console.log(shards[k - 1]?.filter ?? "");
     return;
   }
-  console.log(JSON.stringify({ reason, packs: [...change.packs].sort(), scenarios, shards }, null, 2));
+  console.log(JSON.stringify({ reason, packs: [...change.packs].sort(), scenarios, carried, shards }, null, 2));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
