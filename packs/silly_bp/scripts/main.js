@@ -339,8 +339,10 @@ system.runInterval(() => {
     sweepList = world.getAllPlayers();
     sweepAt = 0;
   }
+  // No isValid first (it makes the reads after it on a kept handle several times dearer): refresh() catches a player
+  // who left and drops their gear.
   const p = sweepList[sweepAt++];
-  if (p?.isValid) refresh(p);
+  if (p) refresh(p);
 }, 1);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
