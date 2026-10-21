@@ -207,6 +207,12 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
 ## Decisions made in the fix campaign (October 20)
 
+- perf-tail: silly_bp's per-tick work runs only when it is needed (a Hyper Jump wearer or a flight) instead of an always-on 1-tick interval that returns early: the measured cost was the callbacks themselves, about 0.04 ms a tick each at 40 players even when they did nothing. The 4-tick gear sweep and its cadence (each player at most every 20 ticks) are unchanged (0c6e1e84).
+- perf-tail: elite night cost: the per-player and nearby caps count right (instrumented night soaks on both trees); the extra champions in group 3's night soak were run-to-run deaths, not a cap bug. Owner answer F10 (0.8 a player) is kept. The read cuts (4d870867) are kept although their gain is within noise, because the unit tests show fewer native reads and the BDS elite scenarios pass.
+- perf-tail: the night soak's far champions despawn at once (more than 128 blocks from every player): the far-champion path it was meant to measure is not exercised. Recorded, not changed here (scenario work, not a pack fix).
+- perf-tail: the name-label changes (per-dimension observers, cached target names, helper lookups by id) were reverted (1ecf250c) because two A/B rounds showed no gain; a change that measures worse is not shipped. The label loop stays open (O3, O10).
+- perf-tail: Expedition fills split by volume (2,048 blocks a step) rather than by a fixed layer count, so every room size and the reset get the same bound; a room's parts yield on time (8 ms), since a part's cost depends on what it places.
+
 - tether: The tether steers with the stable minecraft:movement attribute, applyImpulse and setRotation, not with camp fences: no blocks are placed and every camp prefab works.
 - tether: Camp soft radius 3, road 6, hard limit 12: the documented limit and wander-walk's 20-block snap check still hold.
 - tether: Speed comes back only a block inside the soft radius (hysteresis), so it doesn't flip at the edge.
@@ -536,7 +542,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - spread players over the second
     - skip players whose bar is held by another pack (the actionbar protocol)
   - Re-measure at 10 and 40 players.
-- [ ] PARTLY DONE (group 3: 6a439ead, a250925b, d2530c33, 9ba983c, ec6fa11, 01e59ad and the workstream commits in `campaign-reports/g3.md`; shipped in the ship3 PR): at 40 players, steady window, before 7aa0cce vs after: elytra 0.280 -> 0.157, saga 0.209 -> 0.179, silly 0.382 -> 0.192, admin 0.131 -> 0.130, wander and the WS3 set 0.215 -> 0.205; the one-context Realm Bundle 8.004 -> 7.108 ms (10 players: 4.941 -> 3.981). Remaining: map_bp 4.185 against 1 (O1; owner F56: improve where measured, a perf/map-redesign workstream follows) and silly_bp 0.192; build_bp, stash_bp and stats_bp are group 2's. **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
+- [ ] PARTLY DONE (perf-tail, PR #121: silly_bp 0c6e1e84 0.165 / 0.161 -> 0.110 / 0.101 ms/tick at 40, done; elite night 4d870867 within noise, see OPEN O3; Expedition build steps f96e23c4 22-30 -> 9-17 ms, see OPEN O10; npc labels measured, no gain, reverted 1ecf250c; map_bp O1 still open). Earlier: (group 3: 6a439ead, a250925b, d2530c33, 9ba983c, ec6fa11, 01e59ad and the workstream commits in `campaign-reports/g3.md`; shipped in the ship3 PR): at 40 players, steady window, before 7aa0cce vs after: elytra 0.280 -> 0.157, saga 0.209 -> 0.179, silly 0.382 -> 0.192, admin 0.131 -> 0.130, wander and the WS3 set 0.215 -> 0.205; the one-context Realm Bundle 8.004 -> 7.108 ms (10 players: 4.941 -> 3.981). Remaining: map_bp 4.185 against 1 (O1; owner F56: improve where measured, a perf/map-redesign workstream follows) and silly_bp 0.192; build_bp, stash_bp and stats_bp are group 2's. **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
   - map_bp 3.6-3.8 ms against its 1 ms budget
   - build_bp 0.73-0.78
   - stash_bp 0.53-0.57
