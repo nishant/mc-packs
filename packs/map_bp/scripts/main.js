@@ -711,7 +711,7 @@ world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
 const SCAN_TOTAL = 48;
 const SCAN_EACH = 24;
 /** The scanner's time: planning checks and reads (a read is one native block query or ray, ~0.1 ms). */
-const scanBudget = new Budget(1, 30, 4);
+const scanBudget = new Budget(0.25, 15, 3);
 /** What one read took lately (ms), to fit the reads to the time left. */
 let readCost = 0.06;
 let readMsSum = 0;
@@ -868,9 +868,11 @@ system.runInterval(() => {
   scanTicks++;
 }, 1);
 
+/** Blocks a viewer moves before the rotating check plans them again (their own radar asks sooner when it needs land). */
+const IDLE_MOVE = 16;
 /**
  * Can the rotating check skip this viewer (no game reads)? Their plan is read out with no failed reads, they haven't
- * moved a block (or changed height) since it was made (their last draw says where they are), their radar listed nothing newer, and their
+ * moved IDLE_MOVE blocks (a chunk) or changed height since it was made (their last draw says where they are), their radar listed nothing newer, and their
  * roof probe isn't due. Moving viewers are planned when their radar is built again (planNow).
  * @param {string} id @param {number} now
  */
@@ -878,7 +880,7 @@ function planIdle(id, now) {
   const plan = scanPlans.get(id);
   const v = views.get(id);
   if (!plan || !v || plan.pos < plan.picks.length || plan.missed || v.dim !== plan.dim.id) return false;
-  if (Math.abs(v.x - plan.x) + Math.abs(v.z - plan.z) >= 1 || Math.floor(v.y) !== plan.py) return false;
+  if (Math.abs(v.x - plan.x) + Math.abs(v.z - plan.z) >= IDLE_MOVE || Math.floor(v.y) !== plan.py) return false;
   const memo = terrainBaseMemo.get(id);
   if (memo && memo.needAt > plan.at) return false;
   const top = terrain.get(terrain.store(v.dim, undefined), v.x, v.z, 1, true);
@@ -1480,8 +1482,8 @@ let turnFirst = 0;
  * picture again (rebuildBudget, ~1 ms each). With many players moving at once a player's strip comes a few ticks
  * later and their terrain picture lags (it is drawn with the markers of the same moment), instead of the server.
  */
-const drawBudget = new Budget(1, 8, 3);
-const rebuildBudget = new Budget(0.4, 6, 2);
+const drawBudget = new Budget(0.4, 6, 2);
+const rebuildBudget = new Budget(0.15, 4, 2);
 let turnMs = 0;
 let turnTicks = 0;
 let turnDraws = 0;
@@ -1526,7 +1528,8 @@ system.runInterval(() => {
     // of them a tick (about one picture fits in a tick's rebuild time): the others wait their turn.
     const lagDue = v.lag && rebuildBudget.ok && lagChecks < LAG_CHECKS;
     if (lagDue) lagChecks++;
-    if (!v.dirty && !lagDue && !refresh && (k - turnFirst + n) % n >= checks) continue;
+    // A turn's check reads the game: it is charged to the drawing budget, and the turns stop when that is spent.
+    if (!v.dirty && !lagDue && !refresh && ((k - turnFirst + n) % n >= checks || !drawBudget.ok)) continue;
     // A player drawn a moment ago waits DRAW_MIN ticks, unless the pass found something new or the title is due.
     if (busy && !v.dirty && !refresh && (now - (v.drawn ?? -Infinity) < DRAW_MIN || now - (v.checked ?? -Infinity) < DRAW_MIN)) continue;
     v.checked = now;
@@ -1550,7 +1553,9 @@ system.runInterval(() => {
     }
   }
   if (n) turnFirst = (turnFirst + checks) % n;
-  turnCheckMs += Date.now() - t0;
+  const checkTook = Date.now() - t0;
+  turnCheckMs += checkTook;
+  drawBudget.spend(checkTook);
   // Titles about to fade first (O5), then the longest-waiting: a lagging radar waits since it was last up to date.
   const waited = (/** @type {View} */ v) => (v.lag ? v.fresh ?? 0 : v.drawn ?? 0);
   if (due.length > 1) due.sort((a, b) => Number(b.refresh) - Number(a.refresh) || waited(a.v) - waited(b.v));
@@ -1621,31 +1626,31 @@ function arrival(player, dest) {
 const INTERVAL = Math.max(10, Math.round(Number(CONFIG.intervalTicks) || 10));
 const PASS_EACH = 2;
 /** The passes' time (two entity searches each, ~0.3-0.4 ms): with more than ~15 players a pass comes less often. */
-const passBudget = new Budget(0.5, 6, 2);
+const passBudget = new Budget(0.2, 4, 2);
 /** Player id -> tick of their last pass. @type {Map<string, number>} */
 const passAt = new Map();
 
 /**
- * budgetLevel: each budget's share of its normal size (perTick, max and tickMax alike), in the order drawing, terrain
- * pictures, passes, scanner. "low" keeps the drawing budget: with many players it is what keeps every strip and radar
- * from fading (one refresh per player every REFRESH ticks fills about 1 ms a tick at 100 players); the terrain pictures,
- * passes and scanner give: the radar's land and mob markers lag more, about 2.0 ms a tick in all instead of 2.9.
+ * budgetLevel: each budget's [perTick, max, tickMax] (ms), in the order drawing, terrain pictures, passes, scanner.
+ * "normal" is about 1 ms a tick in all (the owner's budget for the Minimap): with many players moving, strips and
+ * radars come a little later, mob dots and land a few seconds later. "high" is the earlier normal (about 2.9 ms a
+ * tick), for a server with time to spare; "low" about 0.7 ms. A title about to fade is drawn again whatever the level.
  */
-const BUDGET_LEVELS = { low: [1, 0.5, 0.6, 0.5], normal: [1, 1, 1, 1], high: [1.5, 1.5, 1.5, 1.5] };
-/** @type {[Budget, number, number, number][]} each budget with its normal perTick, max and tickMax */
-const BUDGETS = [drawBudget, rebuildBudget, passBudget, scanBudget].map((b) => [b, b.perTick, b.max, b.tickMax]);
+const BUDGET_LEVELS = /** @type {Record<string, [number, number, number][]>} */ ({
+  low: [[0.3, 5, 2], [0.1, 3, 2], [0.14, 3, 2], [0.17, 10, 3]],
+  normal: [[0.4, 6, 2], [0.15, 4, 2], [0.2, 4, 2], [0.25, 15, 3]],
+  high: [[1, 8, 3], [0.4, 6, 2], [0.5, 6, 2], [1, 30, 4]],
+});
+const BUDGETS = [drawBudget, rebuildBudget, passBudget, scanBudget];
 let budgetLevel = "";
 /** Sets the budgets to budgetLevel's share (at load and when an operator changes it). */
 function applyBudgetLevel() {
   const level = String(get("budgetLevel"));
   if (level === budgetLevel) return;
   budgetLevel = level;
-  const ks = BUDGET_LEVELS[/** @type {keyof typeof BUDGET_LEVELS} */ (level)] ?? BUDGET_LEVELS.normal;
-  for (const [i, [b, perTick, max, tickMax]] of BUDGETS.entries()) {
-    const k = ks[i];
-    b.perTick = perTick * k;
-    b.max = max * k;
-    b.tickMax = tickMax * k;
+  const ks = BUDGET_LEVELS[level] ?? BUDGET_LEVELS.normal;
+  for (const [i, b] of BUDGETS.entries()) {
+    [b.perTick, b.max, b.tickMax] = ks[i];
     b.left = Math.min(b.left, b.max);
   }
 }
@@ -2056,7 +2061,7 @@ function onEvent(id, m, source) {
         cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, keepSends, rebuilds: radarRebuilds, reuses: radarReuses, builds: radarBuilds, turnCheckMs, radarMs, readCost },
         budgets: { draw: drawBudget.left, rebuild: rebuildBudget.left, pass: passBudget.left, scan: scanBudget.left },
         budgetLevel,
-        perTick: BUDGETS.reduce((n, [b]) => n + b.perTick, 0),
+        perTick: BUDGETS.reduce((n, b) => n + b.perTick, 0),
         known: { folk: folk.size, camps: camps.size, towns: towns.size, pot: pot ?? null, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
       });
       if (m.action === "cost") {

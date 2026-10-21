@@ -57,6 +57,9 @@ function slot(sub, k) {
 }
 
 export default async function (t) {
+  // These checks describe the Minimap with the time it had before its 1 ms budget (October 2026): budgetLevel high
+  // gives it exactly those budgets, the same code with more time a tick. Its cost at normal is perf-soak's to measure.
+  await mapBudgetHigh(t);
   const sys = t.system;
   const dim = t.dimension;
   const Y = -60;
@@ -394,4 +397,23 @@ export default async function (t) {
   // A pass runs every 10 ticks, so 1 ms per player pass is 1 ms a tick for 10 players (the bar in WORKING.md).
   // Measured 0.57 to 0.62 on a 4-core container in October 2026, with the first Minimap too (0.5 was too tight).
   t.check(perPlayer < 1, `under 1 ms per player pass (${perPlayer.toFixed(3)})`);
+}
+
+// The Minimap at budgetLevel high (scenarios can't import: pasted where needed).
+async function mapBudgetHigh(t) {
+  let ack;
+  const sub = t.system.afterEvents.scriptEventReceive.subscribe(
+    ({ id, message }) => {
+      if (id !== "realm:cfg_ack") return;
+      try {
+        const m = JSON.parse(message);
+        if (m.id === "mapbudget") ack = m;
+      } catch {}
+    },
+    { namespaces: ["realm"] },
+  );
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "mapbudget", pack: "map_bp", key: "budgetLevel", value: "high" }));
+  await t.waitUntil(() => ack, { timeout: 60, message: "budgetLevel high was set" });
+  t.system.afterEvents.scriptEventReceive.unsubscribe(sub);
+  t.assert(ack.ok, `budgetLevel high: ${ack.error ?? "ok"}`);
 }
