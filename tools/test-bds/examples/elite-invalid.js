@@ -129,6 +129,9 @@ export default async function (t) {
   const far = { x: 400, z: 400 };
   const area = await t.loadArea(far.x, far.z, { radius: 2 });
   const farY = area.top.location.y + 1;
+  // The player stands by them first: Bedrock despawns a hostile mob more than 128 blocks from every player at once.
+  p.teleport({ x: far.x - 20.5, y: farY, z: far.z + 0.5 }, { dimension: dim });
+  await t.wait(10);
   const farTags = [];
   for (let i = 0; i < 6; i++) {
     const tag = `realm:o58_far_${i}`;
@@ -137,9 +140,9 @@ export default async function (t) {
   }
   await t.wait(20);
   t.check(farTags.filter((tag) => champions(tag).length).length >= 5, "the far champions were made");
-  // The player stands by them for the aura and approach, then leaves and the chunks unload under the pack.
-  p.teleport({ x: far.x - 20.5, y: farY, z: far.z + 0.5 }, { dimension: dim });
-  await t.wait(60);
+  // The player stays by them for the aura and approach, then leaves and they are gone under the pack (despawned, their
+  // chunks unloaded).
+  await t.wait(40);
   p.teleport({ x: 0.5, y, z: 0.5 }, { dimension: dim });
   t.server(`/tickingarea remove ${area.name}`);
   await t.wait(400);
