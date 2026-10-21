@@ -130,13 +130,26 @@ export default async function (t) {
     throw e;
   }
   await t.wait(10); // a family moved in this census's tick: its look (a profession event) applies on a later tick
+  // Each within HOME_LEASH (32) of its home: the census brings back one farther out (D75); its minecraft:home
+  // restriction (16) is not a wall, and one was found 24.6 blocks out mid-stroll (O80). Wait up to 30 s for all four.
+  const homeOf = (k) => at(d.town.spots[houses[k]], 0, 0, 4);
+  const away = () =>
+    houses
+      .map((h, k) => {
+        const r = d.residents.r.find((x) => x.s === k);
+        const e = residents().find((x) => x.id === r?.e);
+        return e ? Math.hypot(e.location.x - homeOf(k).x, e.location.z - homeOf(k).z) : Infinity;
+      })
+      .filter((dist) => dist > 32).length;
+  await t.waitUntil(() => away() === 0, { timeout: 600, interval: 20, message: "every family within 32 blocks of its home" }).catch(() => undefined);
   const rs = residents();
   t.check(rs.length === 4, `4 residents (${rs.length}), the well's 2 moved, not doubled`);
   for (const [k, h] of houses.entries()) {
     const r = d.residents.r.find((x) => x.s === k);
     const e = rs.find((x) => x.id === r.e);
     const home = at(d.town.spots[h], 0, 0, 4);
-    t.check(!!e && Math.hypot(e.location.x - home.x, e.location.z - home.z) <= 16, `${h}: ${r.n} is home`);
+    const far = e ? Math.hypot(e.location.x - home.x, e.location.z - home.z) : Infinity;
+    t.check(far <= 32, `${h}: ${r.n} is home (${far.toFixed(1)} blocks from ${home.x}, ${home.z}${e ? ` at ${e.location.x.toFixed(1)}, ${e.location.y.toFixed(1)}, ${e.location.z.toFixed(1)}` : ""})`);
     t.check(!!e && e.matches({ families: [LOOK[k]] }), `${h}: ${r.n} is a ${LOOK[k]} (its job site)`);
   }
   t.server("/tp Ann 0 -60 0");
