@@ -88,12 +88,15 @@ export default async function (t) {
   if (!BASELINE && TRANSIENT !== "none") {
     // A third town, Cedar, with the last player in it: its scan (and with "build", its first builds) run in the window.
     cfg("autoSpots", true);
-    // The players load Cedar's ground themselves: each simulated player took a ticking area of the world's 10.
+    // Each simulated player took one of the world's 10 ticking areas (they load no chunks themselves): they all stand
+    // inside Ash's and Birch's, so those two are added again and Cedar gets the third.
+    t.server("/tickingarea remove_all");
+    for (const c of CENTERS) await t.loadArea(c.x, c.z, { radius: 4 });
+    const { top } = await t.loadArea(600, 0, { radius: 4 });
     const last = players.at(-1);
     last.home = { x: 600, z: 0 };
-    last.p.teleport({ x: 600.5, y: -60, z: 0.5 });
-    op.teleport({ x: 600.5, y: -60, z: 2.5 });
-    await t.waitUntil(() => { try { return dim.getBlock({ x: 600, y: -61, z: 0 })?.typeId === "minecraft:grass_block"; } catch { return false; } }, { timeout: 400, message: "Cedar's ground loaded" });
+    last.p.teleport({ x: 600.5, y: top.y + 1, z: 0.5 });
+    op.teleport({ x: 600.5, y: top.y + 1, z: 2.5 });
     await t.wait(20);
     const since = t.tick;
     town("add", { name: "Cedar" });
