@@ -10,7 +10,8 @@
 //   the transients, measured on their own: --arg transient=scan (a third town is added at the soak's start, so its
 //   scan runs in the window; autoSpots Enabled) or --arg transient=build (its well and notice board are finished at the
 //   soak's start, so the outline, the check, the leveling, the builds and their paths run in the window)
-// Arguments: players (default 10), seconds (default 120), baseline (0), transient (none | scan | build).
+// Arguments: players (default 10), seconds (default 120), baseline (0), npc (0; 1: the baseline with one townsfolk
+// placed where Birch's mayor stands), transient (none | scan | build).
 export default async function (t) {
   const N = Math.max(2, Number(t.args.players ?? 10));
   const SECONDS = Math.max(10, Number(t.args.seconds ?? 120));
@@ -73,6 +74,17 @@ export default async function (t) {
     }
   }
 
+  if (BASELINE && String(t.args.npc ?? "0") === "1") {
+    // The baseline with one townsfolk placed where Birch's mayor stands (the towns soak has that one NPC): what one
+    // more townsfolk costs, without towns.
+    const { top } = await t.loadArea(300, 0, { radius: 4 });
+    op.teleport({ x: 300.5, y: top.y + 1, z: 0.5 });
+    await t.wait(20);
+    t.assert(t.cmd(op, "/realm:npc_add bram").ok, "npc_add bram");
+    await t.wait(40);
+    op.teleport({ x: 0.5, y: top.y + 1, z: 0.5 });
+  }
+
   // The players: Ann and N - 1 more, half in each town (in the baseline, the same places without towns).
   const players = [{ p: op, home: { x: 0, z: 0 } }];
   for (let i = 1; i < N; i++) {
@@ -127,7 +139,7 @@ export default async function (t) {
     t.check(animals.every((n) => n === 4), `each pen has its 4 animals (${animals})`);
   }
 
-  const declared = { players: N, seconds: SECONDS, baseline: BASELINE, transient: TRANSIENT, towns: BASELINE ? 0 : CENTERS.length };
+  const declared = { players: N, seconds: SECONDS, baseline: BASELINE, npc: BASELINE && String(t.args.npc ?? "0") === "1", transient: TRANSIENT, towns: BASELINE ? 0 : CENTERS.length };
   t.report("perf-workload", { schema: 1, declared, spawned: players.length });
   t.assert(players.length === N, `all ${N} declared players spawned (${players.length})`);
   const start = t.tick;
