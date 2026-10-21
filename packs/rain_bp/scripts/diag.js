@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "rain_bp";
-const VERSION = "1.5.16";
+const VERSION = "1.5.17";
 const NAME = "Rain Extras";
 /** @type {string[]} */
 const PREFIXES = ["rain"];

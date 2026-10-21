@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "domt_bp";
-const VERSION = "1.1.14";
+const VERSION = "1.1.15";
 const NAME = "Deck of Many Things";
 /** @type {string[]} */
 const PREFIXES = ["domt"];

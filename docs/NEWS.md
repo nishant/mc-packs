@@ -7,6 +7,17 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Pets in claims, a saved Expedition line and small fixes
+
+- Land Claims: your own pets now work in other people's claims too. A wolf, cat or parrot you feed tame, or a horse you ride tame, can be leashed, ridden or told to sit by you anywhere. Pets tamed before this update stay locked in others' claims.
+- Expeditions: the line for a dungeon now survives a reload or a restart. Leaders are told they're still number N of M, and after a restart you have 5 minutes to come back and keep your place.
+- Kitchen: old dishes from before the Dish: line now stack with new servings once they are in your inventory or when you join.
+- Story: when a quest step is too long for the quest box, its name is shortened and the direction, distance or time left always stays visible.
+- Minimap: new players are no longer told an operator reset their map; only players whose destination or marked spots were actually cleared get that message.
+- Milestones: top-tier titles you missed while Titles & Trails was off are now sent again until Titles confirms them.
+- Realm Mail: a pack letter refused because the realm's mail is full no longer deletes your oldest letters.
+- The welcome only tells new players to tap Old Tobin or Mara once they actually stand in town.
+
 ## Smoother with many players, steadier side boxes and safer Expeditions
 
 - The Minimap's compass strip and radar no longer blink off now and then when many players are on.

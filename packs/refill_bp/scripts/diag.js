@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "refill_bp";
-const VERSION = "1.1.6";
+const VERSION = "1.1.7";
 const NAME = "Hotbar Refill";
 /** @type {string[]} */
 const PREFIXES = ["refill"];

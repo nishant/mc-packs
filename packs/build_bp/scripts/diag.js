@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "build_bp";
-const VERSION = "3.0.10";
+const VERSION = "3.0.11";
 const NAME = "Easy Building";
 /** @type {string[]} */
 const PREFIXES = ["build","eb"];

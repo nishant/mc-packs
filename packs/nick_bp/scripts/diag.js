@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "nick_bp";
-const VERSION = "1.1.10";
+const VERSION = "1.1.11";
 const NAME = "Nicknames";
 /** @type {string[]} */
 const PREFIXES = ["nick"];

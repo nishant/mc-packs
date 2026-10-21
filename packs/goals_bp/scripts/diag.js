@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "goals_bp";
-const VERSION = "1.1.11";
+const VERSION = "1.1.12";
 const NAME = "Community Goals";
 /** @type {string[]} */
 const PREFIXES = ["goals"];

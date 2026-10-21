@@ -138,20 +138,20 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   was spawned for and wherever it dies. Count only mobs spawned for that player's (or party's) step.
 - [x] DONE (be962f3, 87edd82, 229d785): one group of mobs per party, place and step; saga-party-fight (9 alive -> 3) and saga-party-fight-helper fail before and pass after. **F63 (low, perf) Each party member gets their own group of story mobs** (N9): 4 mates at the Gray Ring means
   16 illagers. Use one shared group per place and step for a party, with F47.
-- [ ] **F64 (low) welcome_bp loose ends** (N10-N12):
+- [x] DONE (0e3f8c1b, a2544ac5, 71969eff; group 4): welcome-generic-bundle's small bundle fails before (3 F64 checks) and passes after; the genuine Realm Bundle and welcome-edit-concurrent pass. **F64 (low) welcome_bp loose ends** (N10-N12):
   - the migration drops an operator-edited body that still contains the old sentence, without keeping a copy
   - the retired `welcome:profile` key is never deleted
   - the welcome names Old Tobin and Mara whenever Townsfolk is installed, even with no townsfolk placed
-- [ ] **F65 (low, docs) The O66 wording** (N13, N14).
+- [x] DONE (cfc87885; group 4): SERVER_SETUP.md has generic update steps and the owner-uploads rule is in WORKING.md; hosting's CLAUDE.md already says the .mcpack files are no longer attached. **F65 (low, docs) The O66 wording** (N13, N14).
   - Hosting's CLAUDE.md still says to hand over the `.mcpack` files. Align it with the owner's answer: report that
     the site is up to date with the bundle versions; uploading is assumed.
   - Keep the "the owner uploads to the Realm" sentence out of SERVER_SETUP.md, which is for outside server
     owners; put it in the maintainers' docs instead.
 - [x] DONE (1f7dfe1, dfbb032, 92034d4, 162fc9c; rel2): diag-owned-reload (exactly 3 probe keys), find-index across a restart and admin-size-profile (exactly 7 changes) pass on BDS; size-profile-constants.test.mjs 2/2. **F66 (low, tests) Restore the narrowed fixtures listed above** (N15, N16): find-index across a restart with
   the private index; diag-owned-reload back to 3 after F23; admin-size-profile's exact change list after F10.
-- [ ] **F67 (low, quality) Shipped scripts with CRLF or mixed line endings** (N18). Normalize them to LF, and add a
+- [x] DONE (48d47ed4, 14094d65; ship4): 111 pack files and 3 shared sync sources normalized to LF (empty under --ignore-cr-at-eol); tools/check-eol.mjs in npm run check fails on any CR, 4 unit tests, and .gitattributes keeps them LF on Windows. **F67 (low, quality) Shipped scripts with CRLF or mixed line endings** (N18). Normalize them to LF, and add a
   check to `npm run check`.
-- [ ] **F68 (low, docs) The `map:reset` docs no longer say what the value is** (N19).
+- [x] DONE (1570cb81; group 4): PACKS.md and reset.js say map:reset is max(previous + 1, Unix seconds), not a count. **F68 (low, docs) The `map:reset` docs no longer say what the value is** (N19).
 - [x] DONE (atlas: 86a28e4, d074d47, 6c96787, bd653ab; wander: 9f5b835; wander-walk: 8a56f9e, 58b4851, b6f227c, b50c8ba): harness ticking-area removal and scenario races (atlas), unloaded camp chunk (wander), a lightning witch bug and fixture deaths (wander-walk); all three pass on the merged tree, no assertion weakened. **F69 (high) Root-cause the 3 failing scenarios at 8aa5cf06:** atlas, wander-walk and wander (above). Run them
   alone first to rule out load. Fix the pack or the scenario, without weakening what it checks.
 
@@ -293,6 +293,18 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - ship3: parcels made from now on tag their carts `realm:exp_parcel_part_<k>` like stash carts, so a parcel's parts can be told apart too; an older parcel whose carts are gone keeps O19's rule (never put down again).
 - ship3: the "couldn't be found" message now says why ("their storage carts were broken or emptied before they came back to you") and still asks the player to tell an operator.
 - ship3: map_bp stays about 4.2 ms at 40 players and is recorded open (O1, F46), per the owner's F56 answer; not changed in this release.
+- group 4: F28 was merged into F24's queue.js rather than reverting F24's module: the saved line (`saveQueue`, `loadQueue`, `queueLeft`, `queueRejoined`, `PROP_QUEUE`) lives in `createQueue` with `readJson`, `writeJson` and `dungeonById` as deps; main.js keeps the playerSpawn/playerLeave/worldLoad hooks, and the tests import the shipped module.
+- group 4: F28 drops a leader who left from the line 10 seconds later (QUEUE_GONE) instead of on the leave, so a server stop's disconnects don't empty it; such a leader stays in line up to about 15 s, and the start loop skips offline leaders. After a restart a leader has 5 minutes to come back.
+- group 4: F29 records a tamer only when exactly one player can account for the taming (one watch per animal and player); two players feeding the same animal in the same window record nobody (the pet stays locked, as before). Pets tamed before the update have no record and stay locked in others' claims.
+- group 4: F32 marks Titles' confirmation with a new `tc` key, so a legacy `tf` gets its top-tier titles sent once more on the first join after the update (Titles ignores ones a player owns).
+- group 4: F19 was measured at 10 and 40 players (the owner's rule) and is noise (the funnel drifts, 1-47 stopsounds per run), so it ships as one stopsound per wind pulse with no perf claim.
+- group 4: scenario fixes that make a check observable, none weaker: tornado-sound-perf (no waitMessage under --no-relay, `--arg players`, a 120 s window), cooking-old-dish-stack (bread, since a stew stacks to 1), welcome-generic-bundle (What You Can Do only with feature packs), admin-diag-bundle (Nicknames' interval is its spread.js sweep).
+- group 4: F71's real-client checklist gets E5 (a visitor's own pet in someone's claim); F17's and F64's look on a real client are on it too.
+- ship4: merged origin/master (release 3, 8ce8f6c2) into group 4 with a merge commit. Conflicts: cooking_bp's imports (both sides: master's `keepInPot`/`oweMore` and F31's dish-lore), stash's PageIndex typedef and admin-diag-bundle's Nicknames check (master's), tools/test-bds/README.md and probe-hooks.test.mjs (both hooks listed); admin_bp and news_bp manifests and diag.js taken from master, then bumped. O19 was kept by group 3, so nothing was reverted.
+- ship4: F67 is two commits: the normalization alone (48d47ed4: 111 pack files, all 67 behavior packs' script-events.js among them, plus tools/events-shared.js, owed-shared.js and spawn-shared.js so the sync copies stay byte-identical; empty under --ignore-cr-at-eol) and the check (14094d65: tools/check-eol.mjs in npm run check over packs/ and tools/*-shared.js, with a .gitattributes `eol=lf` for those paths so Windows checkouts stay LF). Test and tool files outside those paths keep their endings (rel2's decision: a repo-wide normalization conflicts with every open branch).
+- ship4: because F67 touches every behavior pack and build_rp, all 68 changed packs went up one patch above master (help_bp 1.1.80 by hand: help-catalog was current and only bumps on a catalog change; news_bp 1.7.85 by gen-news); release/notes.json was rebuilt from master's: group 4's 8 player lines plus one for the line endings, a `resourceNotes` line for build_rp, and 66 packNotes describing only what this release changes (group 4's stale entries for int23 work master already shipped were dropped).
+- ship4: claims-own-pet (F29) could never pass on BDS (a simulated tap fires no before event, so no tamer is recorded and no tap is refused); it now uses master's claims-taps probe like claims-animals: each bone is tapped through the probe and fed for real, and both leash taps in the claim go through the probe. Its first probe run also showed the tamed wolf teleporting back to its owner 24 blocks away, so the tamer now comes into the claim with it, and the scenario asserts the wolf is in the claim. Fails before F29 (5f88e080^: the tamer's tap is canceled), passes after 3 of 3. Nothing is checked less: the stranger's refusal is now observable at all.
+- ship4: F22 stays PARTLY DONE (the guards ship; BDS can't reproduce the leave race). F19 ships as a correctness change without a perf claim.
 
 ## Blockers and highs
 
@@ -390,48 +402,48 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
 ## Lows
 
-- [ ] **F15 hud_bp:** `statePartMessages` (`main.js` :94-108) re-encodes the whole growing chunk for every id when
+- [x] DONE (41890255; group 4): realm:hud_state parts counted as they grow; hud-state-parts unit test fails before; party-hud-coords passes; hud_bp at 40 players with the Coordinates HUD on 0.632/0.674 -> 0.261/0.266 ms/tick (-60%), at 10 0.120 -> 0.095. **F15 hud_bp:** `statePartMessages` (`main.js` :94-108) re-encodes the whole growing chunk for every id when
   it splits `realm:hud_state`. Build the parts incrementally.
-- [ ] **F16 map_bp:** after any `/realm:map_reset`, every brand-new player is told an operator reset their map
+- [x] DONE (3a1163f8; group 4): map-reset.js fails before ("operator with nothing saved is told", "later joiner is told") and passes after. **F16 map_bp:** after any `/realm:map_reset`, every brand-new player is told an operator reset their map
   (`applyReset`, `main.js` :299-313). Stamp new players with the current generation silently.
-- [ ] **F17 saga_bp:** when a long step label has to be cut, the quest box drops the direction and distance first
+- [x] DONE (68d9b67c; group 4): saga-quest-box unit test fails before; saga-quest-box and saga-quest-wrap pass on BDS. The look on a real client is on the F71 checklist. **F17 saga_bp:** when a long step label has to be cut, the quest box drops the direction and distance first
   (`ui.js` :1559-1585 `layoutBox`). Cut the label and keep the tail (" NE 240m", "1:20 left").
-- [ ] **F18 saga_bp:** dead code. `currentPage` (`ui.js` :1714-1715) has a second `needs.length` branch that can
+- [x] DONE (94c51bd2; group 4): the dead branch is removed; unit tests pass. **F18 saga_bp:** dead code. `currentPage` (`ui.js` :1714-1715) has a second `needs.length` branch that can
   never be reached.
-- [ ] **F19 tornado_bp:** the O9 "sound batching" saves nothing; it still makes one sound call per player
+- [x] DONE (94149a6f, d000841e; group 4): one stopsound per wind pulse; the band test fails before and passes after. Not a perf gain: tornado_bp at 10/40 players is within noise (the funnel drifts, so the workload is not controlled), so no perf claim. **F19 tornado_bp:** the O9 "sound batching" saves nothing; it still makes one sound call per player
   (`main.js` :361-426). Batch for real, or revert to the simpler code.
-- [ ] **F20 tools:** check-actionbar's allowlist entry `(anonymous)` exempts every anonymous `setActionBar` writer
+- [x] DONE (4b25390b; group 4): check-actionbar names the Coordinates HUD and stats ticker loops and refuses "(anonymous)" entries; its test fails before. **F20 tools:** check-actionbar's allowlist entry `(anonymous)` exempts every anonymous `setActionBar` writer
   in hud_bp and stats_bp main.js. Name the exact functions.
 - [x] (FIXED before the merge (70db7f4d); see also N5: the entry was never shown in game) **F21 stats_bp (owner awareness):** players whose "off" choice for the ticker was erased by the old rule
   (choices equal to the old default weren't saved) will see the ticker again now that it defaults on. Mention it in
   the release news.
-- [ ] **F22 elite_bp:** O58 added `isValid` in only two places, and no soak shows the recurring
+- [ ] PARTLY DONE (036f23da, 59c24ef1; group 4): Champions menus, commands and the shield break check isValid across the tick. Open: the leave race does not reproduce on BDS (elite-invalid-leave passes before and after, also with --strict), so the guards are unit-verified only. **F22 elite_bp:** O58 added `isValid` in only two places, and no soak shows the recurring
   `[elite] InvalidEntityError ... dimension` is gone. Soak and grep the log, then add the guards that are still
   missing.
 - [x] DONE (1f7dfe1, 5f826b90; rel2): diag-owned-reload fails on 5422aac and passes on rel2; sync-diag current in all 67 packs, each bumped. **F23 tools/diag-shared.js:** in `claim` (around :354), `??` treats `null` (a prefix two packs declare) as
   missing, so the first pack to touch such a key still claims it. Treat `null` as "ambiguous, unowned".
-- [ ] **F24 quality:** tests that extract and run code between comment markers in shipped files (expedition
+- [x] DONE (a167e947, dd6236b7, 885e9f56; group 4): expedition's queue and forget hook and saga's stash bridge are modules the tests import; expedition-queue, expedition-forget, stash-saga-solo-gather and saga-collect-count pass. **F24 quality:** tests that extract and run code between comment markers in shipped files (expedition
   `main.js` :370/401 and :1341/1441, saga `objectives.js` `stash-bridge:begin/end`). Move that code into small
   modules the tests import.
-- [ ] **F25 quality:** every converted listener repeats its id list in an inner guard (for example saga `main.js`
+- [x] DONE (300fd0ae; group 4): check-event-guards in npm run check, 7 unit tests, mutation runs. **F25 quality:** every converted listener repeats its id list in an inner guard (for example saga `main.js`
   :430-460, wander :1333-1360), so the two can drift. Remove the inner guards, or add a check that they match.
-- [ ] **F26 quality:** the same gossip limiter is pasted into saga, elite, expedition, calendar, fishing, relics and
+- [x] DONE (77871648, fee6b69f, 2d2c72c2; group 4): one gossip gate (tools/gossip-shared.js, 19 copies) and one prune.js (3 copies), with sync --check in npm run check; town news scenarios pass. **F26 quality:** the same gossip limiter is pasted into saga, elite, expedition, calendar, fishing, relics and
   guilds, and `prune.js` is copied by hand into party, nick and titles. Make each a shared module with a sync tool
   and `--check`, like settings, zones, side, diag and labels.
-- [ ] **F27 saga_bp:** `sessionChampions` never removes an id (`objectives.js` :3453-3469). Delete it on
+- [x] DONE (cf156e31; group 4): a dead champion's id is forgotten and the list is capped at 256; champions-session unit tests. **F27 saga_bp:** `sessionChampions` never removes an id (`objectives.js` :3453-3469). Delete it on
   entityRemove/entityDie.
-- [ ] **F28 expedition_bp:** the waiting queue is memory only and is lost on `/reload` or a restart without telling
+- [x] DONE (3d450868, 1e8498b7; group 4): expedition-queue-restart fails before ("the line is saved with Bob", saved: []) and passes after; expedition-queue and expedition-restart pass. **F28 expedition_bp:** the waiting queue is memory only and is lost on `/reload` or a restart without telling
   anyone (`main.js` :1341-1441). Tell online leaders on world load, or persist the queue.
-- [ ] **F29 claims_bp:** a visitor's own tamed pets are locked inside other people's claims. The comment says there
+- [x] DONE (5f88e080, 153bdc2e, 0060b002; group 4 + ship4): claims-tamer 10/10 unit; claims-own-pet now goes through the claims-taps probe (a simulated tap fires no before event) and fails before F29 (the tamer's tap is canceled) and passes after, 3 of 3. The real-client look is checklist E5. **F29 claims_bp:** a visitor's own tamed pets are locked inside other people's claims. The comment says there
   is no API for the tamer, but `tamedToPlayerId` exists in `@minecraft/server` 2.1.0. Let the tamer interact with
   their own pets.
-- [ ] **F30 mail_bp:** when the realm's mail is full, it still deletes the recipient's oldest pack letters and
+- [x] DONE (2dedd11c; group 4): mail-policy unit test fails before, passes after. **F30 mail_bp:** when the realm's mail is full, it still deletes the recipient's oldest pack letters and
   delivers nothing. Check for room before deleting anything.
-- [ ] **F31 cooking_bp:** the new `§8Dish:` lore line stops old and new dishes of the same kind from stacking. Add
+- [x] DONE (7814882a, f90db0e2; group 4): cooking-old-dish-stack fails before ("does not stack") and passes after (6 of 6 stack). **F31 cooking_bp:** the new `§8Dish:` lore line stops old and new dishes of the same kind from stacking. Add
   the line in a way that matches old stacks, or migrate old dishes when they are picked up.
-- [ ] **F32 milestones_bp:** the `tf` flag makes a title backfill that was missed permanent. Retry until the
+- [x] DONE (5c902061, 04de3ab8; group 4): milestones-title-ack fails before ("tf set with no Titles") and passes after; w10-milestones-flag passes. **F32 milestones_bp:** the `tf` flag makes a title backfill that was missed permanent. Retry until the
   Titles pack confirms.
-- [ ] **F33 quality:**
+- [x] DONE (c790ca2e, fca654a1; group 4): statements split, literal \n in comments fixed; no behavior change. **F33 quality:**
   - Statements glued onto one line by an automated edit: cooking `main.js` :31, nick :186, titles :340, mail :660.
   - A literal `\n` inside a mail `policy.js` comment.
   - Comments that don't match the code (see both reviews).
@@ -597,7 +609,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   (`pages.js` :314-322, item review #14). Up to 25 `stash:page_<n>` properties, some chunked to 30 KB, are read
   only to measure their length. Build the cache signature from the native index alone; a legacy page is migrated
   on its first load anyway.
-- [ ] **F50 (low, quality) Test parameters in production code** (item review #17):
+- [x] DONE (b9c4173c, fca654a1; group 4): cooking and find_bp drop their test parameters; owed-legacy-restart (owed-probe hook) and find-index pass. **F50 (low, quality) Test parameters in production code** (item review #17):
   - cooking `applyOwed(player, pid, failIds)` (:600) with `failIds` throwing "test: grant failed"
   - find's `world.afterEvents.playerPlaceBlock?.subscribe` (optional chaining kept for an older mock)
   - milestones' `recheck`/`report` hooks
@@ -605,10 +617,10 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   All are limited to `ScriptEventSource.Server`, so players can't reach them, and `realm:cooking_owed_ping` has no
   source check (read-only, harmless). Keep the gates; move test switches to a module-level test flag; fix the find
   mock instead of using optional chaining.
-- [ ] **F51 (low, docs) Descriptions that don't match the code** (item review #18):
+- [x] DONE (d2bc48a4; group 4): the crowns_audit description and the claims pet comment match the code; admin catalog regenerated. **F51 (low, docs) Descriptions that don't match the code** (item review #18):
   - `crowns_audit`'s description says "the last 200 pays and gives", but the form shows the newest 50.
   - claims_bp's comment and OPEN.md O27 say there is no tame-owner getter (fixed by F29).
-- [ ] **F52 (low, quality) The weather plan code is copied three times** (`planNow` in storm_bp, moon_bp and
+- [x] DONE (c3be2b93; group 4): one weather plan reader (tools/weather-plan-shared.js, 6 copies) with sync-weather --check; weather-plan-intake 39/39. **F52 (low, quality) The weather plan code is copied three times** (`planNow` in storm_bp, moon_bp and
   tornado_bp, engine review). Make it one shared module with a sync tool, or read `realm:weather_plan` as O57
   intended.
 - [x] DONE (verified on rel2): guilds-placed-restart 2/5 failed on 5422aac, 5/5 pass now; cleanup-keep 5/5 on both (its flake did not reproduce on base). **F53 (medium, tests) Failing and flaky scenarios not covered by F43** (`perf-report.md`):

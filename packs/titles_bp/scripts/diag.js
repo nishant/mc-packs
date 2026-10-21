@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "titles_bp";
-const VERSION = "1.2.13";
+const VERSION = "1.2.14";
 const NAME = "Titles & Trails";
 /** @type {string[]} */
 const PREFIXES = ["titles"];

@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "slots_bp";
-const VERSION = "1.0.13";
+const VERSION = "1.0.14";
 const NAME = "Slot Machine";
 /** @type {string[]} */
 const PREFIXES = ["slots"];
