@@ -216,8 +216,11 @@ function maybeStart() {
   bds.send(`scriptevent harness:start ${JSON.stringify(cfg)}`);
 }
 
-function onLine(line) {
-  logStream.write(line + "\n");
+function onLine(raw) {
+  logStream.write(raw + "\n");
+  // BDS follows a console line of over about 4 KB (a bundle's final profile row) with a NUL byte, which lands at the
+  // start of the next line: without stripping it, that line (a PROFILE_TICKS part) read as a continuation.
+  const line = raw.replace(/^\0+/, "");
   if (!line.trim()) return;
   const m = LINE.exec(line);
   if (!m) {
