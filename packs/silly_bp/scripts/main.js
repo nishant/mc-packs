@@ -234,8 +234,10 @@ function setGear(p, g) {
   gear.set(id, g);
   if (g.feet.size || g.armor.size || g.head.size) wearers.set(id, p);
   else if (wearers.delete(id)) lastPos.delete(id);
-  if (g.feet.has("hyper_jump")) jumpers.set(id, p);
-  else jumpers.delete(id);
+  if (g.feet.has("hyper_jump")) {
+    jumpers.set(id, p);
+    startJumpCheck();
+  } else jumpers.delete(id);
 }
 
 /** @param {string} id */
@@ -271,9 +273,25 @@ function setHand(p, item) {
 /** Players whose gear is read in full on the next tick. @type {Map<string, Player>} */
 const queued = new Map();
 /** @param {Player | undefined} p */
+let flushing = false;
 const queue = (p) => {
-  if (p) queued.set(p.id, p);
+  if (!p) return;
+  queued.set(p.id, p);
+  // Read on the next run, not by a callback every tick: most ticks nobody's gear changed.
+  if (!flushing) {
+    flushing = true;
+    system.run(readQueued);
+  }
 };
+function readQueued() {
+  flushing = false;
+  const list = [...queued.values()];
+  queued.clear();
+  for (const p of list) {
+    if (p.isValid) refresh(p);
+    else dropGear(p.id);
+  }
+}
 
 /** Can be worn as armor (put on from the inventory, or taken off into it). @param {ItemStack | undefined} item */
 const wearable = (item) => {
@@ -318,32 +336,27 @@ world.afterEvents.entityDie.subscribe(
  * The sweep: every player's gear read again, one player every SWEEP_STEP ticks, each at most every SWEEP_MIN ticks.
  * Only gear that changes with no event needs it (armor put on by a dispenser, a command or another pack's script),
  * so on a busy server it slows down: one full read every tick was a quarter of a millisecond a tick with 40 on.
+ * Its own callback runs every SWEEP_STEP ticks: nothing in this pack runs every tick unless someone wears Hyper Jump
+ * boots (a callback every tick cost about 0.04 ms a tick with 40 on even when it did nothing).
  */
 const SWEEP_MIN = 20;
 const SWEEP_STEP = 4;
 /** @type {Player[]} */
 let sweepList = [];
 let sweepAt = 0;
+let sweepListAt = -SWEEP_MIN;
 system.runInterval(() => {
-  if (queued.size) {
-    const list = [...queued.values()];
-    queued.clear();
-    for (const p of list) {
-      if (p.isValid) refresh(p);
-      else dropGear(p.id);
-    }
-  }
-  if (system.currentTick % SWEEP_STEP !== 0) return;
   if (sweepAt >= sweepList.length) {
-    if (system.currentTick % SWEEP_MIN !== 0) return;
+    if (system.currentTick - sweepListAt < SWEEP_MIN) return;
     sweepList = world.getAllPlayers();
+    sweepListAt = system.currentTick;
     sweepAt = 0;
   }
   // No isValid first (it makes the reads after it on a kept handle several times dearer): refresh() catches a player
   // who left and drops their gear.
   const p = sweepList[sweepAt++];
   if (p) refresh(p);
-}, 1);
+}, SWEEP_STEP);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   dropGear(playerId);
@@ -544,7 +557,18 @@ world.afterEvents.playerButtonInput.subscribe(
 
 /** @type {Map<string, boolean>} */
 const wasJumping = new Map();
-system.runInterval(() => {
+/** The per-tick Hyper Jump check, running only while someone wears the boots. @type {number | undefined} */
+let jumpRun;
+function startJumpCheck() {
+  if (jumpRun === undefined) jumpRun = system.runInterval(jumpTick, 1);
+}
+function jumpTick() {
+  if (!jumpers.size) {
+    if (jumpRun !== undefined) system.clearRun(jumpRun);
+    jumpRun = undefined;
+    wasJumping.clear();
+    return;
+  }
   if (get("enabled") !== true) return;
   for (const p of jumpers.values()) {
     const g = gear.get(p.id);
@@ -560,7 +584,7 @@ system.runInterval(() => {
       // left mid-tick
     }
   }
-}, 1);
+}
 
 /**
  * Players in a Hyper Jump flight: the tick it ends at the latest, and whether to cushion the landing.
@@ -685,11 +709,18 @@ function spaceProgram(p) {
 /** Watches a flight until the landing. @param {Player} p @param {number} ticks */
 function track(p, ticks) {
   flights.set(p.id, { start: system.currentTick, until: system.currentTick + ticks, cushion: get("hyperJumpSoftLanding") === true, rose: false });
+  if (flightRun === undefined) flightRun = system.runInterval(flightTick, 1);
 }
 
+/** The per-tick flight watch, running only while someone is in a Hyper Jump flight. @type {number | undefined} */
+let flightRun;
 // Flights: a soft landing (a moment of slow falling just above the ground) when enabled, else a real fall.
-system.runInterval(() => {
-  if (!flights.size) return;
+function flightTick() {
+  if (!flights.size) {
+    if (flightRun !== undefined) system.clearRun(flightRun);
+    flightRun = undefined;
+    return;
+  }
   for (const [id, f] of flights) {
     const p = world.getEntity(id);
     if (!(p instanceof Player) || system.currentTick > f.until) {
@@ -718,7 +749,7 @@ system.runInterval(() => {
       flights.delete(id);
     }
   }
-}, 1);
+}
 
 // Hits: Confetti Swing, Fish Slap, Hat Trick.
 world.afterEvents.entityHitEntity.subscribe(({ damagingEntity, hitEntity }) => {
