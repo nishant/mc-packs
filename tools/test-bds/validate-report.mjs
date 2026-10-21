@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// The post-release report of .github/workflows/validate.yml: reads every validate-<name> artifact (soak and bundle
-// pairs as suite --perf --json reports, memory RSS samples, suite shard reports) and writes one markdown report:
+// The post-release report of .github/workflows/validate.yml: reads every validate-<name> artifact (soak, bundle and
+// scenario pairs as suite --perf --json reports, base-<n>/head-<n> for repeats; memory RSS samples, one side per job
+// for memory-<n>-base / -head; suite shard reports) and writes one markdown report:
 // the same-runner comparisons (tools/test-bds/perf-compare.mjs), the head's budget lines, the memory curve and the
 // scenario totals. It also writes the scenario seconds (--times, a suite --json shape) for pr-tests.yml's shards.
 //   node tools/test-bds/validate-report.mjs --dir <artifacts> --base <sha> --head <sha> [--run <url>] --out report.md [--times t.json]
@@ -61,10 +62,11 @@ function main() {
   const { values: a } = parseArgs({ options: { dir: { type: "string" }, base: { type: "string", default: "" }, head: { type: "string", default: "" }, run: { type: "string", default: "" }, out: { type: "string", default: "report.md" }, times: { type: "string" } } });
   const dir = path.resolve(a.dir ?? ".");
   const jobs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((d) => d.startsWith("validate-")).sort() : [];
-  const L = [`## Post-release validation ${a.head.slice(0, 7)}`, "", `Base ${a.base.slice(0, 7) || "?"} (previous master) vs head ${a.head.slice(0, 7) || "?"}, each pair back to back on one runner.${a.run ? ` [Run](${a.run})` : ""}`, ""];
+  const L = [`## Validation ${a.head.slice(0, 7)}`, "", `Base ${a.base.slice(0, 7) || "?"} vs head ${a.head.slice(0, 7) || "?"}, each pair back to back on one runner.${a.run ? ` [Run](${a.run})` : ""}`, ""];
   let red = false;
   const suites = [];
-  const memory = [];
+  /** @type {Map<string, { name: string, base: ReturnType<typeof rssSummary>, head: ReturnType<typeof rssSummary>, exits: string[] }>} */
+  const memory = new Map();
   for (const d of jobs) {
     const at = path.join(dir, d);
     const name = read(path.join(at, "name.txt")).trim() || d.replace(/^validate-/, "");
@@ -74,10 +76,21 @@ function main() {
       continue;
     }
     if (name.startsWith("memory-")) {
-      memory.push({ name, base: rssSummary(read(path.join(at, "base.rss"))), head: rssSummary(read(path.join(at, "head.rss"))), exits: [read(path.join(at, "base.exit")).trim(), read(path.join(at, "head.exit")).trim()] });
+      // One job per side (memory-40-base, memory-40-head) or both sides in one job (memory-40).
+      const key = name.replace(/-(base|head)$/, "");
+      const m = memory.get(key) ?? { name: key, base: null, head: null, exits: ["", ""] };
+      for (const [i, side] of /** @type {const} */ (["base", "head"]).entries()) {
+        const s = rssSummary(read(path.join(at, `${side}.rss`)));
+        if (s) m[side] = s;
+        const exit = read(path.join(at, `${side}.exit`)).trim();
+        if (exit) m.exits[i] = exit;
+      }
+      memory.set(key, m);
       continue;
     }
-    const bases = [json(path.join(at, "base.json"))].filter(Boolean), heads = [json(path.join(at, "head.json"))].filter(Boolean);
+    const files = fs.readdirSync(at);
+    const side = (/** @type {string} */ s) => files.filter((f) => new RegExp(`^${s}(-\\d+)?\\.json$`).test(f)).map((f) => json(path.join(at, f))).filter(Boolean);
+    const bases = side("base"), heads = side("head");
     const counts = [...new Set([...bases, ...heads].flatMap((r) => Object.keys(r.perf ?? {})))];
     if (!counts.length) {
       L.push(`### ${name}: no report (the soak did not finish)`, "");
@@ -90,13 +103,13 @@ function main() {
       if (result.status !== "ok") red = true;
       L.push(markdown(count, b, h, result).replace(/^### /, `### ${name}, `), "");
     }
-    const over = read(path.join(at, "head.out")).split("\n").filter((l) => /^(OVER BUDGET|INVALID)/.test(l));
+    const over = (read(path.join(at, "head.out")) || read(path.join(at, "head-1.out"))).split("\n").filter((l) => /^(OVER BUDGET|INVALID)/.test(l));
     if (over.length) L.push("<details><summary>Head against the budget</summary>", "", ...over.map((l) => `- ${l}`), "", "</details>", "");
   }
-  if (memory.length) {
+  if (memory.size) {
     const f = (/** @type {number | undefined} */ v) => (v === undefined ? "-" : v.toFixed(0));
     L.push("### Memory (bedrock_server RSS, MB, unprofiled)", "", "| run | side | minutes | start | at 10 min | end | max | growth from 10 min | exit |", "|---|---|---:|---:|---:|---:|---:|---:|---|");
-    for (const m of memory) for (const [i, side] of /** @type {const} */ (["base", "head"]).entries()) {
+    for (const m of memory.values()) for (const [i, side] of /** @type {const} */ (["base", "head"]).entries()) {
       const s = m[side];
       L.push(`| ${m.name} | ${side} | ${s ? s.minutes.toFixed(0) : "-"} | ${f(s?.start)} | ${f(s?.at10)} | ${f(s?.end)} | ${f(s?.max)} | ${s ? `${s.growth >= 0 ? "+" : ""}${s.growth.toFixed(0)}` : "-"} | ${m.exits[i] || "-"} |`);
       if (!s) red = true;
