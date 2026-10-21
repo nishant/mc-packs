@@ -1,4 +1,11 @@
 {
-  "notes": [],
-  "packNotes": {}
+  "notes": [
+    "Kitchen: a dish started in your first few seconds online is no longer handed over before it has cooked."
+  ],
+  "packNotes": {
+    "cooking_bp": {
+      "version": "1.1.15",
+      "notes": "A batch still in the pot is no longer handed over early by the join handover (a cook in a player's first 5 seconds online, or the world's, was instant); a cook who comes back mid-cook gets it when the pot is done."
+    }
+  }
 }
