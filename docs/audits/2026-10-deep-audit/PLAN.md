@@ -91,7 +91,7 @@ This exception does not start later waves or relax any release gate.
 | 2 | W3 items, W4 stores, W9 Easy Building | Item safety first; W4 and W3 share stash and expedition but different files (agree on boundaries in the briefs) |
 | 3 | W6 story, W10 town news, W8 operator tools | saga_bp waits for msftMyt's PR #84 (W0); W8 and W4 both touch nick and titles, so W8 runs after W4 |
 | 4 | W5 public-server protections, W12b stability | W5 shares mail, party and nick with W4 and W8 |
-| 5 | W1 performance at 40 and 100 players | Measure last, after every behavior change, then tune |
+| 5 | W1 performance at 10 and 40 players (owner answer, October 20: no 100-player runs) | Measure last, after every behavior change, then tune |
 | 6 | W2 real-client pass (needs the owner), integration review, full suite, soaks, publish | See section 4 |
 
 Pack overlap to plan around:
@@ -138,7 +138,9 @@ Pack overlap to plan around:
   The audit's historical after-numbers are in `phase3-report.md`: bundle 6.56 ms at
   10 players, 9.74 at 40, 8.28 as one bundle; map_bp 3.96 at 40; 219 scenarios, 216 pass after the recheck.
 
-### W1. Performance budget at 40 and 100 players (suggested task 1)
+### W1. Performance budget at 10 and 40 players (suggested task 1)
+
+**Owner answer (October 20, 2026):** "The Realm will never have 100 players; 10 is the max. Performance testing uses 10 and 40 players only: 10 is the real Realm, 40 only shows how the packs scale. No 100-player (or 5-player) runs. Testing takes too long; keep it fast for all development." Items below that asked for 100 players are re-scoped to 40.
 
 Packs: map_bp, saga_bp, silly_bp, wander_bp, elytra_bp, stash_bp, relics_bp, durability_bp, calendar_bp, elite_bp,
 moon_bp, expedition_bp, npc_bp, build_bp (measurement only; W9 does build_bp's fix), plus hud_bp, stats_bp and
@@ -155,19 +157,19 @@ party_bp for O6. Tools: `tools/test-bds/suite.mjs`, perf-soak.
   server profile in admin_bp presets.
 - [ ] **O4** bedrock_server memory grew about 8.7 MiB/min (+126 MiB in 15 min) at 40 players without leveling off. Run
   a 60-minute soak with an RSS sampler. Confirm or rule out a leak, and find its pack if it is one.
-- [ ] **O5** 100-player soaks (perf-soak with `players=100`, and the saga quest perf scenario at 100). Watch whether
+- [ ] **O5** 40-player soaks (perf-soak with `players=40`, and the saga quest perf scenario at 40; re-scoped from 100 by the owner answer, October 20). Watch whether
   map_bp's keep-alive resends use up `drawBudget` (strips blink out), and whether the story tracker (about 0.8 ms at
   40 with quests) can skip unchanged draws for idle players.
-- [ ] **O6** Split `realm:hud_state` into `{part, parts, players}` like the safe zones protocol (it lists only 100
+- [ ] **O6** (load proof re-scoped to 40 players, owner answer October 20) Split `realm:hud_state` into `{part, parts, players}` like the safe zones protocol (it lists only 100
   players; above that, stats and the Party HUD draw over the HUD). Join the parts in stats_bp and party_bp.
 - [ ] **O7** Blood Moon at scale (moon_bp): each wave attempt runs a 9x9x9 containsBlock check over 641 block types.
   Cache "built" per 8-block cell for the night, and add a world cap on Blood Moon monsters (an option, docs and an
   admin_bp Large preset).
 - [ ] **O8** Expeditions allow at most 3 runs of 4 players. Allow 5-6 slots within the ticking-area budget (shown in the
   setup checklist), or a real queue that starts the next waiting party when a slot frees.
-- [ ] **O9** `suite.mjs --perf 10,40,100` must exit non-zero over budget. Add it and `weather-crowd.js` (the only
+- [ ] **O9** `suite.mjs --perf 10,40` must exit non-zero over budget (re-scoped from 10,40,100 by the owner answer, October 20). Add it and `weather-crowd.js` (the only
   scenario with weather events) to WORKING.md's finishing order. Batch tornado sounds by distance band.
-- [ ] **O10** Re-measure these D rows and act only if over budget:
+- [ ] **O10** Re-measure these D rows (at 10 and 40 players only, owner answer October 20) and act only if over budget:
   - the npc_bp 10-tick label loop (0.20 ms; real clients first, see W2)
   - build_bp's preview floor of 0.38 ms (measure without the profiler)
   - map_bp's rebuild wave every 200 ticks
@@ -503,14 +505,14 @@ in W2.
    was the contributor msftMyt's instruction to his own session (it names Nish in the third person).
    The remaining one-context 40/900 run was stopped with its partial evidence retained as
    `USER_DEFERRED_INTERRUPTED`, not PASS. Candidate 100/300, Saga 100/two-quest/120 and the unstarted
-   O10 idle measurement are `USER_DEFERRED` (by that user): open, for a later session (FIXES F57). Completed memory/performance observations
+   O10 idle measurement are `USER_DEFERRED` (by that user): open, for a later session (FIXES F57), and re-scoped to 40 players (candidate 40/300, Saga 40/two-quest/120) by the owner answer of October 20. Completed memory/performance observations
    remain source-labeled evidence; they are not rerun or relabeled. It does not supersede the soak/load
    gates below: they are still open (FIXES F57), and nothing here waives functional correctness, normal shipping,
    or future projects' testing policy.
 
    Original requirement: full suite on the frozen merged tree and on master with the same harness (`suite.mjs --jobs 2 --retry`). Then
    15-minute soaks at 10 and 40 players and a 5-minute 100-player soak with `--profile`, plus a 40-player soak of
-   the Realm Bundle as one pack. Nothing may regress from W0's baseline. Every new scenario fails before its fix and
+   the Realm Bundle as one pack. (Re-scoped by the owner answer, October 20: 10 and 40 players only, no 100-player soak.) Nothing may regress from W0's baseline. Every new scenario fails before its fix and
    passes after.
 3. Docs:
    - PACKS.md for every touched pack (Commands rows for players, How to use, Configuration, Saved data, "How the packs
@@ -523,7 +525,7 @@ in W2.
    - Mark every item in `OPEN.md`.
 4. Ship per section 1 item 8. Report to the owner with tables:
    - items done or not by id
-   - performance before and after per pack at 10, 40 and 100 players
+   - performance before and after per pack at 10 and 40 players
    - scenarios before and after
    - versions
    - open risks

@@ -1,9 +1,9 @@
 # Full validation after a release (docs/WORKING.md "Testing in CI"): every merge to master runs the long work that no
 # longer blocks a release, spread over parallel runners (4 at a time by default; the repository variable
 # VALIDATE_PARALLEL or the run's `parallel` input sets 1-8):
-#   soak-10, soak-40 (15 min each), soak-100 (5 min): the profiled perf soak, the previous master and this one back
+#   soak-10, soak-40 (15 min each; 10 and 40 players only, owner answer October 20, 2026): the profiled perf soak, the previous master and this one back
 #     to back on the same runner (runners differ by 10-40%, so only a same-runner pair shows a change);
-#   bundle-40 (5 min): the genuine one-context Realm Bundle under the same soak, both trees built, one harness;
+#   bundle-10, bundle-40 (5 min each): the genuine one-context Realm Bundle under the same soak, both trees built, one harness;
 #   memory-40-base, memory-40-head (60 min each, unprofiled, in parallel: RSS doesn't depend on runner speed the way
 #     ms/tick does): bedrock_server RSS every 10 s (F74);
 #   suite-1..4: the whole BDS scenario suite, split by the last run's seconds.
@@ -79,7 +79,7 @@ jobs:
             : [
                 { name: "soak-10", kind: "soak", players: 10, seconds: s(900) },
                 { name: "soak-40", kind: "soak", players: 40, seconds: s(900) },
-                { name: "soak-100", kind: "soak", players: 100, seconds: s(300) },
+                { name: "bundle-10", kind: "bundle", players: 10, seconds: s(300) },
                 { name: "bundle-40", kind: "bundle", players: 40, seconds: s(300) },
                 { name: "memory-40-base", kind: "memory", side: "base", players: 40, seconds: q ? 600 : 3600 },
                 { name: "memory-40-head", kind: "memory", side: "head", players: 40, seconds: q ? 600 : 3600 },

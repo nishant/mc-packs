@@ -3,6 +3,7 @@
 // and prints a table: scenario | result | seconds | first failure line.
 //   node tools/test-bds/suite.mjs [--jobs 2] [--filter <regex>] [--retry] [--json <out>] [--list] [--prepare-only]
 //   node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp | --perf-bundle <mcpack>] [--json <out>]
+//   (--perf default = 10,40: 10 is the real Realm, 40 shows how the packs scale; 120 s for development, 300 s for release)
 // Results: pass, fail, flaky (failed, then passed when rerun alone with --retry), timeout, skipped.
 // --prepare-only (offline, starts no BDS): stages every header recipe and checks the folder its run command points at.
 // --perf runs only the perf-soak scenario once per player count (with run.mjs --profile, one after another) and
@@ -52,7 +53,7 @@ try {
   process.exit(64);
 }
 if (args.help) {
-  console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 14).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+  console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 15).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(0);
 }
 const JOBS = Math.max(1, Number(args.jobs) || 2);
@@ -252,7 +253,9 @@ function runOne(p, logDir, tag = "") {
 
 /** --perf: perf-soak once per player count, one at a time, then ms/tick per pack side by side against the budget. */
 async function perf() {
-  const counts = String(args.perf).split(",").map((x) => Math.max(1, Math.floor(Number(x)))).filter(Number.isFinite);
+  // `--perf default` (or no usable count) runs the two counts the owner asked for: 10 (the Realm) and 40 (scaling).
+  const parsed = String(args.perf).split(",").map((x) => Math.max(1, Math.floor(Number(x)))).filter(Number.isFinite);
+  const counts = parsed.length ? parsed : [10, 40];
   const seconds = Math.max(10, Number(args["perf-seconds"]) || 120);
   fs.mkdirSync(logDir, { recursive: true });
   const soak = path.join(EXAMPLES, "perf-soak.js");
