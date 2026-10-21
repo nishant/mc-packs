@@ -3,6 +3,7 @@
 // stays in t.scan, no "no good spot"). When the player walks to the center, the next scan picks the spot.
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-unloaded.js --timeout 3000
 export default async function (t) {
+  t.server("/gamerule domobspawning false"); // a flat world spawns slimes by day; one killed a survival player mid-run (O80)
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
   const town = (action, extra = {}) => t.system.sendScriptEvent("realm:town_test", JSON.stringify({ action, player: "Ann", town: "far", ...extra }));
   const dump = async () => {

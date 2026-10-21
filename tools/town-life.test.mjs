@@ -292,6 +292,21 @@ test("the pen's animals: what vanished (despawned) comes back, what was killed d
   assert.deepEqual(penMissing([], [S, S, S, S, C, C], A), [], "more kills than animals: none");
 });
 
+test("the pen's surplus (O78): a wanderer that came back after its stand-in was spawned loses the tag, the farthest first", () => {
+  const S = "minecraft:sheep";
+  const C = "minecraft:chicken";
+  const A = [S, S, C, C];
+  const { penSurplus } = life;
+  assert.equal(typeof penSurplus, "function");
+  assert.deepEqual(penSurplus([], [], A), []);
+  assert.deepEqual(penSurplus([{ type: S, d: 2 }, { type: S, d: 60 }, { type: C, d: 3 }, { type: C, d: 1 }], [], A), [], "a sheep 60 blocks away is still one of the pen's: nothing extra, none spawned");
+  assert.deepEqual(penSurplus([{ type: S, d: 2 }, { type: S, d: 70 }, { type: S, d: 3 }, { type: C, d: 1 }], [], A), [1], "3 sheep: the farthest");
+  assert.deepEqual(penSurplus([{ type: S, d: 2 }, { type: S, d: 3 }], [S], A), [1], "a sheep was killed: the pen keeps one sheep");
+  assert.deepEqual(penSurplus([{ type: C, d: 9 }, { type: C, d: 1 }, { type: C, d: 5 }, { type: C, d: 2 }], [], A), [0, 2], "4 chickens: the 2 farthest");
+  const found = [{ type: S, d: 2 }, { type: S, d: 60 }, { type: C, d: 3 }, { type: C, d: 1 }];
+  assert.deepEqual(life.penMissing(found.map((f) => f.type), [], A), [], "and penMissing tops up nothing for them");
+});
+
 test("main.js: pen deaths are counted and the top-up runs only with a player near the pen for two checks", () => {
   const main = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "..", "packs", "town_bp", "scripts", "main.js"), "utf8");
   assert.match(main, /function penTick\(/);

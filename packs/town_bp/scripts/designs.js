@@ -219,3 +219,48 @@ export function designFootprint(kind, s) {
     max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) },
   };
 }
+
+/**
+ * The column (x, z) of a saved structure placed with its corner at a spot and turned `s.f` quarter turns clockwise
+ * (Bedrock's StructureRotation, as build() places it) that lies under the world column (wx, wz); undefined outside it.
+ * @param {Facing} s @param {{ x: number, z: number }} size the structure's own size @param {number} wx @param {number} wz
+ * @returns {{ x: number, z: number } | undefined}
+ */
+export function structureLocal(s, size, wx, wz) {
+  const dx = wx - s.x;
+  const dz = wz - s.z;
+  const f = (((s.f ?? 0) % 4) + 4) % 4;
+  const [x, z] = f === 0 ? [dx, dz] : f === 1 ? [dz, size.z - 1 - dx] : f === 2 ? [size.x - 1 - dx, size.z - 1 - dz] : [size.x - 1 - dz, dx];
+  return x < 0 || z < 0 || x >= size.x || z >= size.z ? undefined : { x, z };
+}
+
+/**
+ * What a build puts in each block it may change, "x,y,z" -> block ids: the leveling plan's cuts (air up to 5 above the
+ * new top), fills (dirt up to 3 under it) and new top, then the design's blocks. Remove spot puts the saved ground back
+ * only in these blocks, and only where the block now is one of these (or air): any other block is a player's (F37).
+ * Farmland also counts as dirt (trampled).
+ * @param {Facing} s @param {Place[]} places @param {{ x: number, z: number, t: number }[]} [plan] @param {string} [top]
+ * @returns {Map<string, Set<string>>}
+ */
+export function buildCells(s, places, plan = [], top = "minecraft:grass_block") {
+  /** @type {Map<string, Set<string>>} */
+  const out = new Map();
+  /** @param {number} x @param {number} y @param {number} z @param {string} id */
+  const add = (x, y, z, id) => {
+    const k = `${x},${y},${z}`;
+    let set = out.get(k);
+    if (!set) out.set(k, (set = new Set()));
+    set.add(id);
+    if (id === "minecraft:farmland") set.add("minecraft:dirt");
+  };
+  for (const c of plan) {
+    for (let y = c.t + 1; y <= c.t + 5; y++) add(c.x, y, c.z, "minecraft:air");
+    for (let y = c.t - 3; y <= c.t - 1; y++) add(c.x, y, c.z, "minecraft:dirt");
+    add(c.x, c.t, c.z, top);
+  }
+  for (const pl of places) {
+    const w = toWorld(s, pl.x, pl.y, pl.z);
+    add(w.x, w.y, w.z, pl.block);
+  }
+  return out;
+}

@@ -16,6 +16,7 @@ export default async function (t) {
       if (h !== 0) fill(`/fill ${ox + x} ${G + h} -32 ${ox + x + 2} ${G + h} 31 grass_block`); // h 0: the plain's own grass (a /fill that changes nothing fails)
     }
   };
+  t.server("/gamerule domobspawning false"); // a flat world spawns slimes by day; one killed a survival player mid-run (O80)
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
   // Paths and lanterns (townLife) come a few seconds after a build: kept out so both wells are compared alone.
   t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "nolife", pack: "town_bp", key: "townLife", value: false }));

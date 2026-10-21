@@ -4,7 +4,10 @@
     "Silly Enchants costs less on a busy server: its every-tick checks run only while someone wears Hyper Jump boots.",
     "Expedition dungeons build in shorter steps, so a busy server no longer hitches while one is built.",
     "Champions cost less at night: their aura and approach read less from the game.",
-    "Champions: a player who leaves the game with the Champions menu open no longer leaves an error in the server log."
+    "Champions: a player who leaves the game with the Champions menu open no longer leaves an error in the server log.",
+    "Town Projects: removing a build puts back only the town's own blocks, so your blocks there stay even when they are the same kind (cobblestone by a well, dirt on its ground).",
+    "Town Projects: a removed town's villagers move away instead of staying behind, and a garden pen never ends up with extra animals.",
+    "Town Projects: a new town build no longer walls in a villager, pet or animal standing on its spot; they are moved aside first."
   ],
   "resourceNotes": [
     "Easy Building's resources: line endings tidied (no change for players)."
@@ -15,8 +18,8 @@
       "notes": "About half the server time: budgetLevel normal now has 1 ms of budgets a tick (measured 1.5 ms with 10 players moving, 2.1 with 40; it was 2.8 and 4.4). High has the earlier normal budgets. Titles held longer, shared townsfolk searches, fewer wasted redraws and re-plans."
     },
     "town_bp": {
-      "version": "1.7.2",
-      "notes": "A mayor per town, building spots the town picks and levels gently (at most 3 blocks, never your blocks), houses, paths, lantern posts, a garden pen whose animals come back if they wander off, and villagers who move in (Enabled), never take beds or harvest crops, and come home when they stray."
+      "version": "1.7.3",
+      "notes": "Remove spot never touches your blocks, even of a kind the build uses; builds move mobs and dropped items aside instead of walling them in; a removed town's residents move away (what they carry drops); the garden pen keeps exactly its 2 sheep and 2 chickens; spot picking does less work per spot."
     },
     "npc_bp": {
       "version": "1.9.0",

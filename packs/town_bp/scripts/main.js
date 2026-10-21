@@ -20,11 +20,11 @@ import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
-import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, placeStates, toWorld } from "./designs.js";
+import { BUILDS, FORWARD, buildCells, design, designFootprint, isOptionalPlace, placeStates, structureLocal, toWorld } from "./designs.js";
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
 import { PEN_ID, addLog, cleanText, houseCount, isWorkId, logLine, makePen, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
-import { CLEARABLE, POSTS_MAX, boardTexts, packCells, penMissing, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
+import { CLEARABLE, POSTS_MAX, boardTexts, packCells, penMissing, penSurplus, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
 import { HOME_LEASH, TICKS_PER_MINUTE, addNew, allocate, homeAt, homesFor, livingOf, lookEvent, lookFor, pickName, plan, readResidents, reconcile, ridOf, ridTag, slotCount } from "./residents.js";
 import { spawnFresh } from "./spawn.js";
@@ -584,6 +584,7 @@ function build(t, p, fresh) {
   const box = clampBox(footprint(p, s), dim);
   if (!boxLoaded(dim, box)) return waiting();
   if (!s.snap && !s.old) snapshot(t, p, s, dim, box);
+  clearMobs(dim, box); // nothing walled in (O80)
   let skipped = 0;
   let placed = 0;
   try {
@@ -746,10 +747,7 @@ function unbuild(t, p, s, keep = false) {
   const st = s.snap ? savedStructure(id) : undefined;
   try {
     if (st) {
-      const kinds = buildKinds(p);
-      // Leveling filled with dirt and the surrounding top block: those go back too.
-      if (s.a) for (const k of ["minecraft:dirt", fillTop(s)]) kinds.add(k);
-      restoreGround(dim, st, box, kinds);
+      restoreGround(dim, st, box, cellsOfBuild(p, s));
       if (!keep) deleteStructure(id);
     } else clearBuild(dim, p, s, box);
   } catch (e) {
@@ -763,36 +761,42 @@ function unbuild(t, p, s, keep = false) {
 }
 
 /**
- * The kinds of block a project's build is made of: its saved structure's, else its built-in design's.
- * @param {Project} p @returns {Set<string>}
+ * What the build put in each block it may have changed ("x,y,z" -> block ids, designs.js buildCells): the leveling plan
+ * at an automatic spot, then its saved structure's blocks (turned with the spot) or its built-in design's.
+ * @param {Project} p @param {Spot} s @returns {Map<string, Set<string>>}
  */
-function buildKinds(p) {
-  /** @type {Set<string>} */
-  const kinds = new Set();
+function cellsOfBuild(p, s) {
+  const plan = s.a && s.lv !== undefined ? autoGeometry(p, s).plan : [];
   const st = p.structure ? savedStructure(p.structure) : undefined;
-  if (st) {
-    const { x: sx, y: sy, z: sz } = st.size;
-    if (sx * sy * sz > 200000) throw new Error("the structure is too big to clear");
-    for (let x = 0; x < sx; x++)
-      for (let y = 0; y < sy; y++)
-        for (let z = 0; z < sz; z++) {
-          const type = st.getBlockPermutation({ x, y, z })?.type.id;
-          if (type && type !== "minecraft:air" && type !== "minecraft:structure_void") kinds.add(type);
-        }
-    return kinds;
-  }
-  for (const pl of designOf(p)) kinds.add(pl.block);
-  if (kinds.has("minecraft:farmland")) kinds.add("minecraft:dirt"); // trampled farmland
-  return kinds;
+  if (!st) return buildCells(s, designOf(p), plan, fillTop(s));
+  const cells = buildCells(s, [], plan, fillTop(s));
+  const size = st.size;
+  if (size.x * size.y * size.z > 200000) throw new Error("the structure is too big to clear");
+  const box = footprint(p, s);
+  for (let x = box.min.x; x <= box.max.x; x++)
+    for (let z = box.min.z; z <= box.max.z; z++) {
+      const at = structureLocal(s, size, x, z);
+      if (!at) continue;
+      for (let y = 0; y < size.y; y++) {
+        const id = st.getBlockPermutation({ x: at.x, y, z: at.z })?.type.id;
+        if (!id || id === "minecraft:structure_void") continue;
+        const k = `${x},${s.y + y},${z}`;
+        const set = cells.get(k) ?? new Set();
+        set.add(id);
+        cells.set(k, set);
+      }
+    }
+  return cells;
 }
 
 /**
- * Puts the saved ground back, block by block, where the build (or nothing) is now: a block of a kind the build
- * isn't made of, placed or left there since (a chest, a path, a torch), stays as it is, and so does a block that
- * still matches the snapshot (so a chest that was there all along keeps what's in it now).
- * @param {Dimension} dim @param {import("@minecraft/server").Structure} st @param {Box} box @param {Set<string>} kinds
+ * Puts the saved ground back, block by block, only in the blocks the build changed (`cells`, cellsOfBuild) and only
+ * where the block now is still what the build put there, or air (its block was taken): every other block is a player's
+ * and stays as it is, even of a kind the build is made of (F37: never touch placed blocks). A block that still matches
+ * the snapshot stays too (so a chest that was there all along keeps what's in it now).
+ * @param {Dimension} dim @param {import("@minecraft/server").Structure} st @param {Box} box @param {Map<string, Set<string>>} cells
  */
-function restoreGround(dim, st, box, kinds) {
+function restoreGround(dim, st, box, cells) {
   const air = perm("minecraft:air");
   // Twice: first what becomes air, top down (so nothing left above falls), then the rest, bottom up (so sand and
   // gravel always land on what holds them).
@@ -801,13 +805,15 @@ function restoreGround(dim, st, box, kinds) {
       const y = pass === 0 ? box.max.y - k : box.min.y + k;
       for (let x = box.min.x; x <= box.max.x; x++)
         for (let z = box.min.z; z <= box.max.z; z++) {
+          const ours = cells.get(`${x},${y},${z}`);
+          if (!ours) continue; // the build never changed it
           const want = st.getBlockPermutation({ x: x - box.min.x, y: y - box.min.y, z: z - box.min.z }) ?? air;
           if ((want.type.id === "minecraft:air") !== (pass === 0)) continue;
           if (want.type.id === "minecraft:structure_void") continue;
           const b = dim.getBlock({ x, y, z });
           if (!b) continue;
           if (b.permutation.matches(want.type.id, want.getAllStates())) continue;
-          if (!b.isAir && !b.isLiquid && !kinds.has(b.typeId)) continue; // someone's own block
+          if (!b.isAir && !ours.has(b.typeId)) continue; // someone's own block
           spill(dim, b);
           b.setPermutation(want);
         }
@@ -839,13 +845,13 @@ function clearBuild(dim, p, s, box) {
   const air = perm("minecraft:air");
   const st = p.structure ? savedStructure(p.structure) : undefined;
   if (st) {
-    // A saved structure: clear the blocks in its box that are of a kind the structure has.
-    const kinds = buildKinds(p);
+    // A saved structure: clear the blocks in its box that are still the structure's own block there.
+    const cells = cellsOfBuild(p, s);
     for (let x = box.min.x; x <= box.max.x; x++)
       for (let y = box.min.y; y <= box.max.y; y++)
         for (let z = box.min.z; z <= box.max.z; z++) {
           const b = dim.getBlock({ x, y, z });
-          if (!b || !kinds.has(b.typeId)) continue;
+          if (!b || b.isAir || !cells.get(`${x},${y},${z}`)?.has(b.typeId)) continue;
           spill(dim, b);
           b.setPermutation(air);
         }
@@ -1364,6 +1370,8 @@ function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
   const mayors = get("townMayors") === true;
   if (mayors) Object.assign(t, { v: 2 }, newTownMayor([...allTowns().values()], t.id, t.n, CONFIG.mayorNames));
   saveTown(t);
+  const gone = goneTowns();
+  if (gone.includes(t.id)) saveGone(gone.filter((x) => x !== t.id)); // a new town of that name: no more an old one's
   zonesChanged();
   if (mayors && isTownMayorId(t.m)) mayorSet(t, { x: t.x, y: t.y, z: t.z }, player.getRotation().y);
   levelUp(t); // only if the config has no projects for level 1
@@ -1472,7 +1480,7 @@ async function confirmRemoveSpot(player, townId, projectId) {
     ? `Forget where ${t.n}'s ${p.name} goes? Nothing is built yet, so nothing in the world changes.`
     : legacyBuild(t, p)
       ? `Take ${t.n}'s ${p.name} away?\n\n§eIt was built before the ground under builds was saved, so its own blocks are cleared: ground blocks become grass, a dock's posts water, the rest air. Anything else (paths, decorations you added) stays.§r\n\nIt stays finished: set a new spot to build it again.`
-      : `Take ${t.n}'s ${p.name} away and put the ground back the way it was before it was built? Blocks added inside its outline since then stay, unless they are of a kind the build is made of.\n\nIt stays finished: set a new spot to build it again.`;
+      : `Take ${t.n}'s ${p.name} away and put the ground back the way it was before it was built? Blocks added inside its outline since then stay, even of a kind the build is made of: only the build's own blocks are taken away.\n\nIt stays finished: set a new spot to build it again.`;
   if (await confirm(player, "§lRemove spot?", body, pr.built ? "§cRemove the build" : "Forget the spot")) removeSpot(t, p, (m) => player.sendMessage(m));
 }
 
@@ -1483,7 +1491,7 @@ async function confirmRebuild(player, townId, projectId) {
   if (!t || !p || !t.spots[p.id]) return;
   const body = legacyBuild(t, p)
     ? `Rebuild ${t.n}'s ${p.name}? It was built before the ground was saved, so missing blocks are put back; changed blocks stay as they are.`
-    : `Rebuild ${t.n}'s ${p.name}? Its outline goes back to the ground saved before it was built, and it's built again, fresh. Blocks added inside its outline since then stay, unless they are of a kind the build is made of.`;
+    : `Rebuild ${t.n}'s ${p.name}? Its outline goes back to the ground saved before it was built, and it's built again, fresh. Blocks added inside its outline since then stay, even of a kind the build is made of.`;
   if (await confirm(player, "§lRebuild?", body, "Rebuild")) rebuildSpot(t, p, (m) => player.sendMessage(m));
 }
 
@@ -1778,7 +1786,7 @@ async function removeTown(player) {
     player,
     new MessageFormData()
       .title("§lRemove town?")
-      .body(`Remove ${t.n} (${levelName(t.lvl)}, level ${t.lvl}) and all its project progress? What's built stays standing.`)
+      .body(`Remove ${t.n} (${levelName(t.lvl)}, level ${t.lvl}) and all its project progress? What's built stays standing; its residents move away (what they carry drops).`)
       .button1("§cRemove it")
       .button2("Keep it"),
   );
@@ -2511,6 +2519,8 @@ function stepBuild() {
         return;
       }
       if (!cellsOf(t)) return; // the placed cells aren't readable yet
+      // Mobs and items on the region (a resident strolling by) step aside first, so nothing is walled in (O80).
+      clearMobs(dim, { min: { x: geo.region.x1, y: geo.pad - 4, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.fpBox.max.y + 2, z: geo.region.z2 } });
       job.out ??= { placed: 0, skipped: 0 };
       job.gen ??= applyBuild(dim, p, s, geo, job.out, placedBy(t));
       try {
@@ -2711,7 +2721,13 @@ function penTick(players) {
     penAt.set(t.id, now);
     try {
       const dim = world.getDimension(t.dim);
-      const alive = dim.getEntities({ tags: [`town:a:${t.id}`] }).map((e) => e.typeId);
+      // Every pen animal loaded, however far it wandered, counts: only those really gone are spawned again (O78).
+      const tag = `town:a:${t.id}`;
+      const found = dim.getEntities({ tags: [tag] });
+      const middle = toWorld(s, 0, 0, 3);
+      const extra = new Set(penSurplus(found.map((e) => ({ type: e.typeId, d: Math.hypot(e.location.x - middle.x, e.location.z - middle.z) })), pr.k ?? [], ANIMALS));
+      for (const i of extra) found[i].removeTag(tag); // one that came back after its stand-in was spawned: an ordinary animal now
+      const alive = found.filter((_, i) => !extra.has(i)).map((e) => e.typeId);
       penMissing(alive, pr.k ?? [], ANIMALS).forEach((type, i) => spawnPenAnimal(t, s, dim, type, i));
     } catch (e) {
       console.warn(`[town] ${t.n}'s pen: ${e}`);
@@ -3473,6 +3489,43 @@ function standAt(dim, v) {
   return undefined;
 }
 
+/**
+ * Moves the mobs and dropped items inside a build's box to just outside it, before blocks go in (O80): a build used to
+ * wall in a resident that stood there (it suffocated), and a pet or a dropped item would fare no better. Players are
+ * waited for instead ("Step off the spot"). Paintings, leash knots and other entities without health stay. Each goes to
+ * the nearest side with room to stand; one with no room anywhere near stays (the next tick tries again).
+ * @param {Dimension} dim @param {Box} box
+ */
+function clearMobs(dim, box) {
+  /** @type {import("@minecraft/server").Entity[]} */
+  let ents;
+  try {
+    ents = dim.getEntities({ location: { x: box.min.x, y: box.min.y, z: box.min.z }, volume: { x: box.max.x - box.min.x + 1, y: box.max.y - box.min.y + 1, z: box.max.z - box.min.z + 1 } });
+  } catch {
+    return;
+  }
+  for (const e of ents) {
+    try {
+      if (e.typeId === "minecraft:player" || (e.typeId !== "minecraft:item" && !e.getComponent("minecraft:health"))) continue;
+      const { x, y, z } = e.location;
+      const sides = [
+        { x: box.min.x - 1, z: Math.floor(z), d: x - box.min.x },
+        { x: box.max.x + 1, z: Math.floor(z), d: box.max.x + 1 - x },
+        { x: Math.floor(x), z: box.min.z - 1, d: z - box.min.z },
+        { x: Math.floor(x), z: box.max.z + 1, d: box.max.z + 1 - z },
+      ].sort((a, b) => a.d - b.d);
+      for (const side of sides) {
+        const to = standAt(dim, { x: side.x, y: Math.floor(y), z: side.z });
+        if (!to) continue;
+        e.teleport(to, { dimension: dim });
+        break;
+      }
+    } catch {
+      // gone or unloaded meanwhile
+    }
+  }
+}
+
 /** Drops what a villager carries (its inventory) where it stands, before it is removed. @param {import("@minecraft/server").Entity} e */
 function dropCarried(e) {
   const inv = e.getComponent("minecraft:inventory")?.container;
@@ -3702,17 +3755,61 @@ function residentTick(players) {
   }
 }
 
-/** Forgets a removed town's residents: those loaded lose our tags (never killed). @param {Town} t */
+const GONE_KEY = "town:gone";
+const GONE_MAX = 64;
+/** Ids of removed towns whose residents may still be out in unloaded ground (O77), newest last. @returns {string[]} */
+function goneTowns() {
+  const v = readJson(GONE_KEY);
+  return Array.isArray(v) ? v.filter((x) => typeof x === "string").slice(-GONE_MAX) : [];
+}
+/** @param {string[]} ids */
+function saveGone(ids) {
+  world.setDynamicProperty(GONE_KEY, ids.length ? JSON.stringify(ids.slice(-GONE_MAX)) : undefined);
+}
+
+/**
+ * A removed town's resident moves away (O77, D78): what it carries drops where it stands, then it is removed, so no
+ * villager, tag or override group of a town that is gone stays behind, and none can claim a player's bed later.
+ * @param {import("@minecraft/server").Entity} e
+ */
+function moveAway(e) {
+  try {
+    dropCarried(e);
+    e.remove();
+  } catch (err) {
+    console.warn(`[town] a resident of a removed town: ${err}`);
+  }
+}
+
+/** A removed town's residents move away: those loaded now, the rest when their ground loads (town:gone). @param {Town} t */
 function dropResidents(t) {
   resCache.delete(t.id);
   censusAt.delete(t.id);
   world.setDynamicProperty(RES_PREFIX + t.id, undefined);
+  saveGone([...goneTowns().filter((x) => x !== t.id), t.id]);
   try {
-    for (const e of world.getDimension(t.dim).getEntities({ type: VILLAGER, tags: [townTag(t.id)] })) untagResident(e, t.id);
+    for (const e of world.getDimension(t.dim).getEntities({ type: VILLAGER, tags: [townTag(t.id)] })) moveAway(e);
   } catch {
-    // fine: an unloaded one is untagged when tapped (its town is gone)
+    // fine: an unloaded one moves away when its ground loads (or when tapped)
   }
 }
+
+/** The town a resident belongs to, from its tags. @param {import("@minecraft/server").Entity} e */
+const residentTown = (e) => e.getTags().find((tag) => tag.startsWith("town:r:"))?.slice(7);
+
+/** Is `town` a removed town (listed in town:gone, and not added again)? @param {string | undefined} town */
+const isGone = (town) => !!town && !allTowns().has(town) && goneTowns().includes(town);
+
+// A removed town's resident that was in unloaded ground: it moves away as soon as its ground loads.
+world.afterEvents.entityLoad.subscribe(({ entity }) => {
+  try {
+    if (entity.typeId !== VILLAGER || !entity.hasTag(RESIDENT_TAG)) return;
+    const town = residentTown(entity);
+    if (isGone(town)) system.run(() => entity.isValid && moveAway(entity));
+  } catch {
+    // unloaded again meanwhile
+  }
+});
 
 // A resident died: a new family replaces it after replaceMinutes (in-game time).
 world.afterEvents.entityDie.subscribe(
@@ -3741,11 +3838,14 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
   if (ev.cancel) return;
   const e = ev.target;
   if (e.typeId !== VILLAGER || get("residentsTrade") === true || !e.hasTag(RESIDENT_TAG)) return;
-  const town = e.getTags().find((tag) => tag.startsWith("town:r:"))?.slice(7);
+  const town = residentTown(e);
   const t = town ? allTowns().get(town) : undefined;
   if (!t) {
-    // Its town was removed while it was far away: an ordinary villager from now on.
-    system.run(() => town && untagResident(e, town));
+    // Its town was removed while it was far away: it moves away now (an unknown town: an ordinary villager from now on).
+    if (isGone(town)) {
+      ev.cancel = true;
+      system.run(() => e.isValid && moveAway(e));
+    } else system.run(() => town && untagResident(e, town));
     return;
   }
   ev.cancel = true;

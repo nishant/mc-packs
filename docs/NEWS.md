@@ -7,6 +7,13 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Towns: your blocks stay when a build is taken away
+
+- Town Projects: when an operator takes a town's build away, only the town's own blocks go. Your blocks there stay, even when they are the same kind as the build's (your cobblestone next to a well, dirt you put on its leveled ground).
+- When a town is removed, its villagers move away instead of staying behind. Anything they carried drops where they stood.
+- A town's new build no longer walls in a villager, pet or animal standing where it goes up: they are moved just outside first.
+- A garden pen never ends up with extra animals: a sheep or chicken that wandered off still counts, and one that comes back after a new one took its place becomes an ordinary animal.
+
 ## A lighter Minimap
 
 - The Minimap uses about half the server time it did. With many players moving at once, the land under your radar and the mob dots can take a few seconds longer to catch up; standing still, everything catches up.

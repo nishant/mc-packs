@@ -246,6 +246,9 @@ test("main.js: taps on residents are canceled unless residentsTrade; a canceled 
     get: (k) => (k === "residentsTrade" ? trade : undefined),
     allTowns: () => new Map([["elm", { id: "elm", n: "Elm" }]]),
     untagResident() {},
+    residentTown: (e) => e.getTags().find((tag) => tag.startsWith("town:r:"))?.slice(7),
+    isGone: (town) => town === "gone",
+    moveAway() {},
     tapSaid: new Map(),
     system: { run: () => ran++, currentTick: 0 },
   };
@@ -265,7 +268,8 @@ test("main.js: taps on residents are canceled unless residentsTrade; a canceled 
   };
   assert.equal(tap(["realm:resident", "town:r:elm"]), true);
   assert.equal(tap([]), false, "an ordinary villager trades");
-  assert.equal(tap(["realm:resident", "town:r:gone"]), false, "a removed town's resident trades (and loses the tags)");
+  assert.equal(tap(["realm:resident", "town:r:gone"]), true, "a removed town's resident (town:gone) doesn't trade: it moves away (O77)");
+  assert.equal(tap(["realm:resident", "town:r:other"]), false, "a resident of a town that isn't known at all trades (and loses the tags)");
   trade = true;
   assert.equal(tap(["realm:resident", "town:r:elm"]), false, "residentsTrade Enabled");
   assert.ok(ran >= 2);
@@ -281,5 +285,7 @@ test("main.js: spawned the wander_bp way, look before the resident group, census
   assert.match(main, /residentTick\(players\);/);
   assert.match(main, /getEntities\(\{ type: VILLAGER, tags: \[townTag\(t\.id\)\] \}\)/, "one getEntities by tag per census");
   assert.doesNotMatch(main, /\.kill\(\)/, "residents are never killed");
-  assert.match(main, /dropResidents\(t\);/, "a removed town's residents lose the tags");
+  assert.match(main, /dropResidents\(t\);/, "a removed town's residents move away");
+  assert.match(main, /function moveAway\(e\) \{\s*try \{\s*dropCarried\(e\);\s*e\.remove\(\);/, "they drop what they carry first (O77)");
+  assert.match(main, /world\.afterEvents\.entityLoad\.subscribe/, "and one in unloaded ground goes when it loads");
 });

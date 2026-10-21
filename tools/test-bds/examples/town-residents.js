@@ -4,10 +4,11 @@
 // "A new family moved into Elm". One is killed: its record waits for replaceMinutes of in-game time (5 here), then a
 // new family comes with the message. One removed without a death (as a zombie conversion would) is missing for 2
 // censuses, then replaced too. A villager given a resident's tags by hand loses them and stays alive. The town removed,
-// its residents lose the tags and stay alive.
+// its residents move away (O77).
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-residents.js --timeout 4000
 export default async function (t) {
   const dim = t.dimension;
+  t.server("/gamerule domobspawning false"); // a flat world spawns slimes by day; one killed a survival player mid-run (O80)
   const p = await t.player("Ann", { op: true, x: 0, z: 0 });
   await t.loadArea(0, 0, { radius: 4, whole: true });
   const cfg = (key, value) => t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `${key}${t.tick}`, pack: "town_bp", key, value }));
@@ -107,14 +108,16 @@ export default async function (t) {
   t.check(stray.isValid && !stray.hasTag("town:r:elm") && !stray.hasTag("realm:resident"), "a stray loses the tags and stays");
   t.check(residents().length === 2, "still 2");
 
-  // The town removed: its residents lose our tags and stay, ordinary villagers (never killed), and its record goes.
+  // The town removed: its residents move away (O77, D78; town-remove-residents.js has the unloaded one and the drops),
+  // and its record goes.
   const ids = residents().map((e) => e.id);
+  t.check(ids.length === 2, `2 residents before the removal (${ids.length})`);
   since = t.tick;
   town("remove_town", { town: "elm" });
   await t.waitMessage(p, /town elm removed/, { since, timeout: 60 });
   await t.wait(5);
   const left = dim.getEntities({ type: "minecraft:villager_v2" }).filter((e) => ids.includes(e.id));
-  t.check(left.length === 2, `both residents still live (${left.length})`);
-  t.check(left.every((e) => !e.getTags().some((x) => x === "realm:resident" || x.startsWith("town:"))), "and carry none of our tags");
+  t.check(left.length === 0, `both residents moved away (${left.length} left)`);
+  t.check(dim.getEntities({ type: "minecraft:villager_v2" }).every((e) => !e.getTags().some((x) => x === "realm:resident" || x.startsWith("town:r:"))), "no villager carries the town's tags");
   t.check(t.world.getDynamicProperty("town:r:elm") === undefined, "the town's residents record is gone");
 }

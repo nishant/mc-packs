@@ -333,6 +333,13 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - map-redesign: map-flight flies until the store is full instead of a fixed length (it could end before the map had anything to show). Sharing mob searches between nearby players was reverted (d0709f06): it made every pass about 20% dearer and failed map.js's every-player-each-pass check, with no saving.
 - map-redesign: map-turn's idle-send check is a flake from before the branch (master 1 of 3, final tree 2 of 3), recorded as O81, not changed.
 
+- towns-followups (O76-O80): O79 first (owner rule F37). Remove spot restores only blocks the build changed and that still hold what it put there, or air (D78; restoring into air puts terrain back and overwrites nothing). Relocate and Rebuild use the same rule.
+- towns-followups: a removed town's residents are removed (they drop what they carry), not released: released villagers would keep the resident group or, without it, claim players' beds, and add-and-remove cycles piled them up (D80). Only towns listed in `town:gone` lose villagers this way, so an unreadable town record never costs its villagers.
+- towns-followups: a pen animal beyond the pen's count loses the pen's tag rather than being removed (D79), like the residents' duplicates (D44).
+- towns-followups: residents not breeding is kept by design (D83, 0 born in a 20-minute soak with bread and free beds).
+- towns-followups: O80's flakes were the scenarios (slimes on the flat world killed the survival Ann; a 16-block home check stricter than the 32-block leash) and the pack (a build walled in a resident). Builds now move mobs and dropped items off the region before blocks go in (D81). Every flat town scenario turns mob spawning off.
+- towns-followups: the scan keeps `SCAN.workTick` 100 and gets cheaper per spot without changing any pick (D82); the per-tick cost was measured on BDS before and after, not assumed. A larger cut (cheaper lookups on QuickJS) is left open.
+
 ## Blockers and highs
 
 - [x] (FIXED on master in 4a9e3b85 (unit probe passes; still add a BDS scenario)) **F1 (blocker, item loss) stash_bp: "Fill earlier pages" deletes slot-locked stacks.**

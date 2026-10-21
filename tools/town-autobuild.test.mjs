@@ -182,10 +182,8 @@ test("a leveled build on a hillside: the plan's rules hold in the world, twice c
   assert.equal(w.changes(), n, "a second run changes no block");
   // The saved region, put back (Remove spot), restores every block.
   const snap = { getBlockPermutation: ({ x, y, z }) => w.permOf(before.get(`${x + geo.region.x1},${y + geo.y1},${z + geo.region.z1}`)) };
-  const kinds = new Set(designs.design("well").map((p) => p.block));
-  kinds.add("minecraft:dirt");
-  kinds.add("minecraft:grass_block");
-  fns.restoreGround(w.dim, snap, { min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, kinds);
+  const cells = designs.buildCells(s, designs.design("well"), geo.plan, "minecraft:grass_block");
+  fns.restoreGround(w.dim, snap, { min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, cells);
   for (const [k, id] of before) assert.equal(w.read(...k.split(",").map(Number)).id, id, `restored at ${k}`);
 });
 
@@ -208,8 +206,8 @@ test("sand: nothing falls while the ground is leveled or put back", () => {
   drain(fns.applyBuild(w.dim, well, s, geo, { placed: 0, skipped: 0 }));
   assert.equal(w.falls(), 0, "leveling: cuts top down, fills bottom up");
   const snap = { getBlockPermutation: ({ x, y, z }) => w.permOf(before.get(`${x + geo.region.x1},${y + geo.y1},${z + geo.region.z1}`)) };
-  const kinds = new Set([...designs.design("well").map((p) => p.block), "minecraft:dirt", "minecraft:sand"]);
-  fns.restoreGround(w.dim, snap, { min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, kinds);
+  const cells = designs.buildCells(s, designs.design("well"), geo.plan, "minecraft:sand");
+  fns.restoreGround(w.dim, snap, { min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, cells);
   assert.equal(w.falls(), 0, "putting it back: air top down first, then the rest bottom up");
   for (const [k, id] of before) assert.equal(w.read(...k.split(",").map(Number)).id, id, `restored at ${k}`);
 });
@@ -395,10 +393,64 @@ test("Remove spot keeps the blocks players added on a leveled region since (a ch
   const commands = [];
   const dim = { ...w.dim, runCommand: (cmd) => commands.push(cmd) };
   const snap = { getBlockPermutation: ({ x, y, z }) => w.permOf(before.get(`${x + geo.region.x1},${y + geo.y1},${z + geo.region.z1}`)) };
-  const kinds = new Set([...designs.design("well").map((p) => p.block), "minecraft:dirt", "minecraft:grass_block"]);
-  fns.restoreGround(dim, snap, { min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, kinds);
+  const cells = designs.buildCells(s, designs.design("well"), geo.plan, "minecraft:grass_block");
+  fns.restoreGround(dim, snap, { min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, cells);
   assert.equal(w.read(...chestAt).id, "minecraft:chest", "the chest stays (and what it holds)");
   assert.equal(w.read(...bricksAt).id, "minecraft:bricks", "their bricks stay");
   assert.deepEqual(commands, [], "nothing of theirs broken");
   for (const [k, id] of before) if (k !== chestAt.join(",") && k !== bricksAt.join(",")) assert.equal(w.read(...k.split(",").map(Number)).id, id, `restored at ${k}`);
+});
+
+test("Remove spot never overwrites a player's block, even of a kind the build uses (O79, F37)", () => {
+  const w = fakeWorld(hill);
+  const fns = load(w);
+  const s = pick(w, fns);
+  const geo = fns.autoGeometry(well, s);
+  const before = new Map();
+  for (let x = geo.region.x1; x <= geo.region.x2; x++) for (let z = geo.region.z1; z <= geo.region.z2; z++) for (let y = geo.y1; y <= geo.y2; y++) before.set(`${x},${y},${z}`, w.read(x, y, z).id);
+  drain(fns.applyBuild(w.dim, well, s, geo, { placed: 0, skipped: 0 }));
+  const cells = designs.buildCells(s, designs.design("well"), geo.plan, "minecraft:grass_block");
+  // A player's blocks after the build, in blocks it left alone: dirt on the leveled apron (a kind leveling uses),
+  // cobblestone beside the ring and an oak fence on it (kinds the well is made of).
+  const apron = geo.plan.find((c) => sites.distTo(geo.fp, c.x, c.z) > 0);
+  const mine = [
+    [apron.x, apron.t + 1, apron.z, "minecraft:dirt"],
+    [...Object.values(designs.toWorld(s, 0, 4, 3)), "minecraft:cobblestone"],
+    [...Object.values(designs.toWorld(s, 0, 1, 1)), "minecraft:oak_fence"],
+  ];
+  for (const [x, y, z, id] of mine) {
+    assert.equal(w.read(x, y, z).id, "minecraft:air", `free before the player's block at ${x},${y},${z}`);
+    w.set.set(`${x},${y},${z}`, { id });
+  }
+  // The build's own block a player took (a ring stone mined): the ground goes back there.
+  const ring = designs.toWorld(s, 2, 0, 3);
+  w.set.set(`${ring.x},${ring.y},${ring.z}`, { id: "minecraft:air" });
+  const snap = { getBlockPermutation: ({ x, y, z }) => w.permOf(before.get(`${x + geo.region.x1},${y + geo.y1},${z + geo.region.z1}`)) };
+  fns.restoreGround(w.dim, snap, { min: { x: geo.region.x1, y: geo.y1, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.y2, z: geo.region.z2 } }, cells);
+  for (const [x, y, z, id] of mine) assert.equal(w.read(x, y, z).id, id, `the player's ${id} at ${x},${y},${z} stays`);
+  const skip = new Set(mine.map(([x, y, z]) => `${x},${y},${z}`));
+  for (const [k, id] of before) if (!skip.has(k)) assert.equal(w.read(...k.split(",").map(Number)).id, id, `restored at ${k}`);
+});
+
+test("structureLocal turns a structure's columns the way build() places it (corner at the spot)", () => {
+  const size = { x: 3, z: 2 };
+  // Facing south: as saved. West (Rotate90, clockwise): local +z (forward) points west, the box is 2 wide and 3 deep.
+  assert.deepEqual(designs.structureLocal({ x: 10, y: 0, z: 20, f: 0 }, size, 12, 21), { x: 2, z: 1 });
+  assert.deepEqual(designs.structureLocal({ x: 10, y: 0, z: 20, f: 1 }, size, 11, 20), { x: 0, z: 0 });
+  assert.deepEqual(designs.structureLocal({ x: 10, y: 0, z: 20, f: 1 }, size, 10, 22), { x: 2, z: 1 });
+  assert.deepEqual(designs.structureLocal({ x: 10, y: 0, z: 20, f: 2 }, size, 12, 21), { x: 0, z: 0 });
+  assert.deepEqual(designs.structureLocal({ x: 10, y: 0, z: 20, f: 3 }, size, 10, 22), { x: 0, z: 0 });
+  assert.equal(designs.structureLocal({ x: 10, y: 0, z: 20, f: 1 }, size, 12, 20), undefined);
+  // Every turn covers the footprint's columns exactly once.
+  for (let f = 0; f < 4; f++) {
+    const seen = new Set();
+    const [sx, sz] = f % 2 ? [size.z, size.x] : [size.x, size.z];
+    for (let x = 10; x < 10 + sx; x++)
+      for (let z = 20; z < 20 + sz; z++) {
+        const l = designs.structureLocal({ x: 10, y: 0, z: 20, f }, size, x, z);
+        assert.ok(l, `f ${f}: ${x},${z} inside`);
+        seen.add(`${l.x},${l.z}`);
+      }
+    assert.equal(seen.size, 6);
+  }
 });
