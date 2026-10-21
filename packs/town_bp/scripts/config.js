@@ -58,11 +58,11 @@ export const CONFIG = {
 
   /**
    * Residents: vanilla villagers move into a town as it grows (2 at the well, then a family per house), named from
-   * `residentNames` and tagged `realm:resident`. They never claim a bed, job site or bell (town_bp's villager_v2 file)
-   * and stay near home. Disabled until a Bedrock Dedicated Server run proves that on 1.26 (decision D2); Enabled in
-   * /realm:config when it has.
+   * `residentNames` and tagged `realm:resident`. They never claim a bed, job site or bell and never work (town_bp's
+   * villager_v2 file), and a census brings home one that strays. Enabled since Bedrock Dedicated Server 1.26.52 runs
+   * proved it (town-resident-poi.js, town-resident-farm.js; decision D2).
    */
-  residents: false,
+  residents: true,
 
   /** Most residents in the whole world, 0 to 40 (each is a mob the server runs). Lowering it never removes anyone. */
   residentCapWorld: 20,
