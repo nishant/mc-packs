@@ -37,14 +37,15 @@ export default async function (t) {
   t.check(b1.nick_bp.total >= b1.nick_bp.bytes + b1.probe_bp.bytes, `the total (${b1.nick_bp.total}) covers every pack's bytes`);
   t.check(b1.nick_bp.unownedProps === 0, `no entry is left without an owner (${b1.nick_bp.unownedProps})`);
 
-  send("realm:diag_ping", { id: "b2", ticks: 60 });
-  const b2 = await answers("b2", 3, 140);
+  // Nicknames' sweep runs every 5 seconds (100 ticks): a 220-tick window holds two of them.
+  send("realm:diag_ping", { id: "b2", ticks: 220 });
+  const b2 = await answers("b2", 3, 300);
   const keys = (/** @type {string} */ p) => (b2[p].top ?? []).map((/** @type {any} */ x) => x.k).join(" | ");
   t.log(`admin: ${keys("admin_bp")}`);
   t.log(`nick: ${keys("nick_bp")}`);
   t.log(`probe: ${keys("probe_bp")}`);
-  t.check(/runInterval\(10\) refreshAll/.test(keys("nick_bp")), "Nicknames' interval is counted as Nicknames'");
-  t.check(!/refreshAll/.test(keys("admin_bp")) && !/refreshAll/.test(keys("probe_bp")), "and not as anyone else's");
+  t.check(/runInterval\(100\)[^|]*nick_bp\/spread\.js/.test(keys("nick_bp")), "Nicknames' interval is counted as Nicknames'");
+  t.check(!/nick_bp\//.test(keys("admin_bp")) && !/nick_bp\//.test(keys("probe_bp")), "and not as anyone else's");
 
   // Commands are registered in startup, after every pack's modules ran: still each pack's own, not the last one's.
   send("realm:diag_ping", { id: "c1", ticks: 30 });

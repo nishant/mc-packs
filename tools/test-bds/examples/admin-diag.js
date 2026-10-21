@@ -38,15 +38,16 @@ export default async function (t) {
   t.check(nick.ticks === undefined, "no profiling numbers without ticks");
 
   // 2. A profiling window: script time per pack.
-  send("realm:diag_ping", { id: "p2", ticks: 40 });
+  // Nicknames' sweep runs every 5 seconds (100 ticks): a window of 320 ticks holds at least 3 of them.
+  send("realm:diag_ping", { id: "p2", ticks: 320 });
   await t.wait(20);
   t.check(!got.some((g) => g.id === "p2"), "nobody answers before the window ends");
-  const p2 = await answers("p2", 2, 80);
+  const p2 = await answers("p2", 2, 360);
   const nick2 = p2.find((g) => g.pack === "nick_bp");
   t.log(`profiled nick_bp: ${JSON.stringify(nick2)}`);
-  t.check(nick2.ticks >= 40 && typeof nick2.mpt === "number", `the pong has the window (${nick2.ticks} ticks) and ms/tick`);
-  t.check(nick2.calls >= 3, `Nicknames' twice-a-second refresh was counted (${nick2.calls} calls)`);
-  t.check(Array.isArray(nick2.top) && nick2.top.length > 0 && /runInterval\(10\)/.test(nick2.top.map((x) => x.k).join(" ")), `its top callbacks name the interval (${JSON.stringify(nick2.top)})`);
+  t.check(nick2.ticks >= 320 && typeof nick2.mpt === "number", `the pong has the window (${nick2.ticks} ticks) and ms/tick`);
+  t.check(nick2.calls >= 3, `Nicknames' 5-second sweep was counted (${nick2.calls} calls)`);
+  t.check(Array.isArray(nick2.top) && nick2.top.length > 0 && /runInterval\(100\)/.test(nick2.top.map((x) => x.k).join(" ")), `its top callbacks name the interval (${JSON.stringify(nick2.top)})`);
 
   // 2b. Two operators at once: a shorter request made while a longer one runs is answered when its own time is up,
   // and a longer one made later doesn't hold back the first.
