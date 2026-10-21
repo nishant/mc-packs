@@ -227,7 +227,7 @@
     },
     "stats_bp": {
       "version": "1.4.13",
-      "notes": "The stats ticker redraws only when your line changes and costs the server less with many players online; tied players share the same place in My stats and the leaderboards."
+      "notes": "The stats ticker redraws when its stat changes and otherwise every 2 seconds, so it costs the server less with many players online; tied players share the same place in My stats and the leaderboards."
     },
     "storm_bp": {
       "version": "1.1.12",

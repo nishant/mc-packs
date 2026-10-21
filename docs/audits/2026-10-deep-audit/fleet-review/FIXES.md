@@ -270,7 +270,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - rel2: F45's newsLine is the verification branch's (one pass a second), not the workstream's "every 2 seconds", which a4ed2e55 reverted.
 - rel2: F67 was not done: the task lists no extras.
 - rel2: help-catalog and admin-catalog were already current after the merges (mediums-misc 78af3535 rebuilt help_bp 1.1.79); every sync-* tool was current.
-- rel2: All 67 behavior packs are above origin/master (the diag.js F23 fix touches every one); release/notes.json has an entry for each (help_bp and news_bp name themselves) and six Realm Bundle lines. No resource pack changed.
+- rel2: All 67 behavior packs are above origin/master (the diag.js F23 fix touches every one); release/notes.json has an entry for each (help_bp and news_bp name themselves) and seven Realm Bundle lines. No resource pack changed.
 - rel2: O19 (Expeditions stash cart window, F70) moved to group 3 with expedition_bp; no change here.
 
 ## Blockers and highs
@@ -481,7 +481,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
   Five of the 28 new scenarios fail. Fix their wiring so the suite runs them, then make them pass for the right
   reason.
-- [ ] PARTLY DONE (5c6e6a5, c68498d, 5db308b7, a4ed2e55; rel2): one pass a second, redraw only on change; stats_bp at 40 players 0.189/0.184 -> 0.150/0.169 ms/tick, 10 players unchanged (about 0.065). Remaining: still at or over 0.15 at 40, mostly setActionBar (about 1.09 a tick, the scrolling ticker changes every second); going lower changes the ticker the owner chose (owner decision). **F45 (medium, perf) The stats ticker now writes the action bar for every player every second.**
+- [ ] PARTLY DONE (5c6e6a5, c68498d, 5db308b7, a4ed2e55; rel2): one pass a second, redraw on change or every 2 seconds; stats_bp at 40 players 0.189/0.184 -> 0.150/0.169 ms/tick, 10 players unchanged (about 0.065). Remaining: still at or over 0.15 at 40, mostly setActionBar (about 1.09 a tick, the scrolling ticker changes every second); going lower changes the ticker the owner chose (owner decision). **F45 (medium, perf) The stats ticker now writes the action bar for every player every second.**
   - `stats_bp` `runInterval(20)` at `main.js` :362. setActionBar went from about 0 to 1.1-1.2 per tick at 40
     players (0.3 at 10), and stats_bp from 0.068 to 0.17 ms/tick. It is the only pack newly over the 0.15 ms budget.
   - It comes from O71: the ticker defaults on. Keep the behavior the owner chose (on by default, personal off
