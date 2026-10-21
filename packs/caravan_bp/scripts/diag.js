@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "caravan_bp";
-const VERSION = "1.2.10";
+const VERSION = "1.2.11";
 const NAME = "Merchant Caravan";
 /** @type {string[]} */
 const PREFIXES = ["caravan"];

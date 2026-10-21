@@ -528,3 +528,57 @@ test("with syncTicks the resend after a new near viewer comes 1 s and 3 s later 
   // Syncs every 10 ticks: the look-alike form after 2 syncs (1 s), back after 6 more (3 s).
   assert.deepEqual(seen.map((n) => n.endsWith("§r")), [false, true, true, true, true, true, true, false, false, false]);
 });
+
+test("a label sync with players in two dimensions reads no player's dimension and no target's name between sweeps", () => {
+  const reads = { dimension: 0, id: 0, location: 0, targetName: 0, getPlayers: 0 };
+  let nextId = 0;
+  const dims = ["minecraft:overworld", "minecraft:nether"].map((id) => {
+    const dim = {
+      id,
+      entities: [],
+      players: [],
+      getEntities({ type }) { return this.entities.filter((e) => e.isValid && e.typeId === type); },
+      getPlayers() { reads.getPlayers++; return [...this.players]; },
+      spawnEntity(typeId, location) {
+        const e = { id: `h${nextId++}`, typeId, location: { ...location }, dimension: dim, nameTag: "", isValid: true, tags: [],
+          addTag(t) { this.tags.push(t); }, teleport(at) { this.location = { ...at }; }, remove() { this.isValid = false; } };
+        this.entities.push(e);
+        return e;
+      },
+    };
+    return dim;
+  });
+  const [over, nether] = dims;
+  const targets = [];
+  for (let i = 0; i < 12; i++) {
+    let name = "Folk";
+    targets.push({ id: `folk${i}`, typeId: "minecraft:npc", isValid: true, dimension: over, location: { x: i * 2, y: 4, z: 0 },
+      get nameTag() { reads.targetName++; return name; }, set nameTag(v) { name = v; },
+      getHeadLocation() { return { x: this.location.x, y: 5.8, z: 0 }; } });
+  }
+  const player = (n, dim, x) => {
+    const p = { name: n };
+    Object.defineProperty(p, "id", { get: () => (reads.id++, n) });
+    Object.defineProperty(p, "dimension", { get: () => (reads.dimension++, dim) });
+    Object.defineProperty(p, "location", { get: () => (reads.location++, { x, y: 4, z: 3 }) });
+    dim.players.push(p);
+    return p;
+  };
+  for (let i = 0; i < 20; i++) player(`o${i}`, over, i * 3 - 10);
+  for (let i = 0; i < 20; i++) player(`n${i}`, nether, i);
+  const labels = createNameLabels({ labelType: "realm:npc_label", spectatorsExcluded: true, syncTicks: 10, observersPerDimension: true });
+  const list = () => targets.map((t, i) => ({ id: `folk${i}`, entity: t, name: `Folk ${i}` }));
+  labels.sync(list(), (dim) => dim.getPlayers(), dims); // a sweep sync: reads everything back
+  for (const k of Object.keys(reads)) reads[k] = 0;
+  for (let s = 0; s < 9; s++) labels.sync(list(), (dim) => dim.getPlayers(), dims);
+  assert.equal(over.getEntities({ type: "realm:npc_label" }).length, 12, "every townsfolk has its label");
+  assert.equal(nether.getEntities({ type: "realm:npc_label" }).length, 0, "no label in the other dimension");
+  assert.equal(reads.dimension, 0, "no player's dimension is read: each dimension lists its own players");
+  assert.equal(reads.getPlayers, 9, "one player list a sync, only for the dimension with townsfolk");
+  assert.equal(reads.location, 9 * 20, "each overworld player's place once a sync");
+  assert.equal(reads.targetName, 0, "the targets' names are trusted between sweeps");
+  // Renamed by something else (a name tag): put right on the next sweep sync.
+  targets[0].nameTag = "Bob";
+  labels.sync(list(), (dim) => dim.getPlayers(), dims);
+  assert.equal(targets[0].nameTag, SUPPRESSED_NAME);
+});

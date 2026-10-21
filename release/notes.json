@@ -1,6 +1,6 @@
 {
   "notes": [
-    "Silly Enchants costs less on a busy server: its every-tick checks run only while someone wears Hyper Jump boots."
+    "Townsfolk, caravan and story character name labels cost less with many players around."
   ],
   "resourceNotes": [
     "Easy Building's resources: line endings tidied (no change for players)."
@@ -11,8 +11,8 @@
       "notes": "A mayor per town, building spots the town picks and levels gently (at most 3 blocks, never your blocks), houses, paths, lantern posts, a garden pen whose animals come back if they wander off, and villagers who move in (Enabled), never take beds or harvest crops, and come home when they stray."
     },
     "npc_bp": {
-      "version": "1.9.0",
-      "notes": "Town mayors: each town can have its own mayor who takes deliveries for that town; mayors share town news."
+      "version": "1.9.1",
+      "notes": "Town mayors: each town can have its own mayor who takes deliveries for that town; mayors share town news. Townsfolk name labels cost less with many players near."
     },
     "welcome_bp": {
       "version": "1.5.13",
@@ -25,6 +25,18 @@
     "silly_bp": {
       "version": "1.2.13",
       "notes": "Cheaper on busy servers: nothing runs every tick unless someone wears Hyper Jump boots or is mid-flight."
+    },
+    "caravan_bp": {
+      "version": "1.2.11",
+      "notes": "Internal: the name label sync reads less (shared name-labels module)."
+    },
+    "saga_bp": {
+      "version": "1.16.16",
+      "notes": "Internal: the story characters' name label sync reads less (shared name-labels module)."
+    },
+    "wander_bp": {
+      "version": "1.2.21",
+      "notes": "Internal: shared name-labels module update (no change for wanderers)."
     }
   }
 }

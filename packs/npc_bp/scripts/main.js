@@ -64,6 +64,7 @@ const nameLabels = createNameLabels({
   labelIdTag: LABEL_ID_TAG,
   spectatorsExcluded: true,
   syncTicks: 10, // LABEL_TICKS
+  observersPerDimension: true,
 });
 
 const LOOP_TICKS = 10; // facing, idle lines and keeping them on their spot
@@ -492,7 +493,7 @@ function updateLabels() {
     if (!t || !entity) continue;
     targets.push({ id: rec.id, entity, name: labelTextFor(t) });
   }
-  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
+  nameLabels.sync(targets, (dim) => dim.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 
