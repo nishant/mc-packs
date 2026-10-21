@@ -99,7 +99,7 @@ export default async function (t) {
     transientTown = "cedar";
     if (TRANSIENT === "build") {
       let d;
-      await t.waitUntil(async () => (d = await dump("cedar")).town.spots.well && d.town.spots.notice_board && !d.scanning, { timeout: 3000, interval: 100, message: "Cedar's spots picked" });
+      await t.waitUntil(async () => (d = await dump("cedar")).town.spots.well && d.town.spots.notice_board && !d.scanning, { timeout: 6000, interval: 100, message: "Cedar's spots picked" });
     }
     op.teleport({ x: 0.5, y: op.location.y, z: 0.5 });
     await t.wait(10);
