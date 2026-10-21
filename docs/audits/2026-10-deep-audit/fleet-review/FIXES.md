@@ -1,6 +1,6 @@
 # Fix list after reviewing msftMyt's plan branch (for a Claude session, after that release ships)
 
-**Campaign status (October 21):** shipped in releases #107, #115, #117, #118, #119, #121, #124, #125, #127 and the final records PR (O81); still open, each per the owner's F56 answer ("it is what it is, if we can improve it go for it"): O1 (map_bp 2.1 ms/tick at 40 players against its 1 ms goal), O3 (npc label loop and elite night, changes within noise), O10 (the build preview), F70 (partly done through those), F71 and O11-O16 (waiting on the owner's devices) and O46 (the Easy Building license credit, a `docs/RELEASE_TODO.md` item per the owner's answer, for before a public release).
+**Campaign status (October 21):** shipped in releases #107, #115, #117, #118, #119, #121, #124, #125, #127 the final records PR (O81) and the final check (F76: no stash_bp regression, the `--flat` soak pool fixed); still open, each per the owner's F56 answer ("it is what it is, if we can improve it go for it"): O1 (map_bp 2.1 ms/tick at 40 players against its 1 ms goal), O3 (npc label loop and elite night, changes within noise), O10 (the build preview), F70 (partly done through those), F71 and O11-O16 (waiting on the owner's devices) and O46 (the Easy Building license credit, a `docs/RELEASE_TODO.md` item per the owner's answer, for before a public release).
 
 The branch `msftmyt-deep-audit-fleet-integration` (reviewed at commit `aef10dc`, 207 commits ahead of master
 `7eb5f72`) implements `../PLAN.md`. Two independent read-only reviews of it are in this folder. This file lists every
@@ -207,6 +207,8 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - Flaky on master: expedition-restart, saga-escort and saga-perf-quests (atlas was fixed by F69).
   - Root-cause each one; fix the pack or the scenario without weakening what it checks.
 
+- [x] DONE, no stash_bp regression; harness fixed (final check, October 21): the final soaks' stash_bp 0.143 -> 0.188 ms/tick at 10 players and 0.445 -> 0.745 at 40 (5422aac against a82a018) compared whole-run averages of different runs: the before soaks ran 900 s, the final ones 300 s, and both include the spawn ramp, where F73's waves spawn up to 20 players in the same tick, so their first looks (the layout commit: one structure save and readback each, about 25 ms a player) land in one 2-tick interval call (max 455 ms at 10, 1046 at 40; 31-41 before, when players spawned one by one). After the ramp the rate is the same: 0.104 -> 0.092 ms/tick at 10 and 0.353-0.363 -> 0.372 at 40 (cumulative profile lines of the same soaks). Confirmed with `perf-soak --profile --only stash_bp,afk_bp`, 120 s at 40, alternating 5422aac and a82a018 twice each: steady window (both packs summed) 0.464 and 0.502 against 0.487 and 0.478 ms/tick; stash_bp whole run 0.571 and 0.602 against 0.553 and 0.539; the largest call 22 and 24 against 218 and 168 ms, and 5422aac's stash_bp and afk_bp under a82a018's harness give 0.529 whole run, 0.472 steady and a 182 ms largest call, so the spike is the spawn waves, not the pack. No pack change; F3/F13/F49 stay as shipped. The two INVALID Realm Bundle soaks (8/10 and 38/40) were a harness bug in `--flat` runs, the only kind the bundle soaks use: the pool was dug from y - 4 = -65, below a flat world, so its stone floor failed, its water replaced the bedrock, and since F73 `t.player(..., { area: false })` waited for solid ground under a column of water down to the void, so both water players failed all three tries (`chunk at 213,180 did not load`), deterministically. Fix: the floor stays in the world and an explicit `y` with `area: false` waits only for that block to read (unit test in perf-area-settle.test.mjs, failing before). Realm Bundle 300 s on a82a018's bundle after the fix: 10/10 VALID, steady 2.596 ms/tick (5422aac: 4.618); 40/40 VALID, steady 5.317 ms/tick, p95 21 / p99 39 ms (5422aac: 7.487), still over the 5 ms scalability check at 40 (the Realm has at most 10). **F76 (medium, perf/tests) stash_bp looked slower in the final soaks, and the `--flat` Realm Bundle soaks spawned 8 of 10 and 38 of 40.**
+
 ## Decisions made in the fix campaign (October 20)
 
 - perf-tail: silly_bp's per-tick work runs only when it is needed (a Hyper Jump wearer or a flight) instead of an always-on 1-tick interval that returns early: the measured cost was the callbacks themselves, about 0.04 ms a tick each at 40 players even when they did nothing. The 4-tick gear sweep and its cadence (each player at most every 20 ticks) are unchanged (0c6e1e84).
@@ -341,6 +343,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - towns-followups: residents not breeding is kept by design (D83, 0 born in a 20-minute soak with bread and free beds).
 - towns-followups: O80's flakes were the scenarios (slimes on the flat world killed the survival Ann; a 16-block home check stricter than the 32-block leash) and the pack (a build walled in a resident). Builds now move mobs and dropped items off the region before blocks go in (D81). Every flat town scenario turns mob spawning off.
 - towns-followups: the scan keeps `SCAN.workTick` 100 and gets cheaper per spot without changing any pick (D82); the per-tick cost was measured on BDS before and after, not assumed. A larger cut (cheaper lookups on QuickJS) is left open.
+- final check (F76): the stash_bp slowdown is recorded as a measurement artifact, not changed: same-harness A/B at 40 shows no difference in steady cost, and a pack change to spread first looks over several ticks would only hide the harness's simultaneous spawns; the `--flat` pool and the `area: false` wait are fixed in the harness instead, and the bundle soaks are rerun on the same bundle.
 
 ## Blockers and highs
 
@@ -871,6 +874,7 @@ So nothing is omitted, this maps each source to its items:
 | ../OPEN.md | plan items still open or wrongly closed | F58, F70 |
 | ../OPEN.md (W2), owner reports O68-O75 | real-client checks | F71 |
 | release state | #96 merged but not published | F72 |
+| final check (October 21) | stash_bp slower in the final soaks; INVALID `--flat` bundle soaks | F76 |
 
 Tracked elsewhere: the plan's own items O1-O75 (`../OPEN.md`, `../PLAN.md`), including the W2 real-client checks
 (O11-O16), which need the owner on a phone and a PC. The owner's decisions are in `../OPEN.md`. The one still open

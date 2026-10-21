@@ -122,3 +122,45 @@ test("perf population removes only whole-loaded areas, spawns each group under o
   assert.ok(serial <= 22, `one loader per group, the pool and the pocket (${serial})`);
   assert.equal(live.size, 0, "every loader is released before the soak");
 });
+
+// F76: in a --flat world (grass at -61) the pool was dug from y - 4 = -65, below the world: its stone floor failed,
+// the water replaced the bedrock, and the harness's ground search under the water found nothing, so the two water
+// players never spawned and every --flat Realm Bundle soak was INVALID (8 of 10, 38 of 40).
+test("perf pool stays inside a flat world and its swimmers spawn in the water", async () => {
+  let tick = 0;
+  const reports = [];
+  const commands = [];
+  const spawns = [];
+  const dimension = (id) => ({ id: `minecraft:${id}`, heightRange: { min: -64, max: 320 }, runCommand() { return { successCount: 1 }; } });
+  const dimensions = new Map(["overworld", "nether"].map((id) => [id, dimension(id)]));
+  const t = {
+    args: { players: "3", seconds: "10", water: "2", nether: "0", commands: "0", refill: "0" },
+    packs: [],
+    get tick() { return tick; },
+    world: {
+      getDimension: (id) => dimensions.get(id.replace("minecraft:", "")),
+      getDefaultSpawnLocation: () => ({ x: 163, y: -60, z: 170 }),
+      getDynamicProperty: () => "[]",
+    },
+    server(cmd) { commands.push(cmd); },
+    log() {},
+    report(name, data) { reports.push({ name, data }); },
+    assert(ok, message) { assert.ok(ok, message); },
+    check(ok, message) { assert.ok(ok, message); },
+    async wait(ticks) { tick += ticks; },
+    async loadArea(x, z) { return { name: "a", top: { location: { x, y: -61, z } } }; },
+    async player(name, at) {
+      spawns.push({ name, ...at });
+      return { location: { x: at.x, y: at.y ?? -60, z: at.z }, isValid: true, moveToLocation() {}, lookAtLocation() {}, jump() {}, stopMoving() {} };
+    },
+  };
+  await soak(t);
+  const ys = (cmd) => cmd.split(" ").slice(1, 7).map(Number).filter((_, i) => i === 1 || i === 4);
+  for (const cmd of commands.filter((c) => c.startsWith("/fill"))) for (const y of ys(cmd)) assert.ok(y >= -64, `${cmd} reaches below the world`);
+  const floor = commands.find((c) => c.endsWith(" stone"));
+  assert.equal(ys(floor)[0], -64, "the pool's floor is the bottom layer of the world");
+  const swimmers = spawns.filter((s) => s.name === "Soak02" || s.name === "Soak03");
+  assert.equal(swimmers.length, 2);
+  for (const s of swimmers) assert.ok(s.y >= -63 && s.y <= -61, `${s.name} spawns in the water (y ${s.y})`);
+  assert.equal(reports.at(-1).data.spawned, 3);
+});
