@@ -458,16 +458,12 @@ function partyTag(player) {
 const npcCache = new Map();
 
 /**
- * The last searches for townsfolk and for mobs, any player's: a player near where one was made a moment ago uses its
- * result instead of searching again (players often go about together). At most SHARED_KEPT of each are kept.
+ * The last townsfolk searches, any player's: a player near where one was made a moment ago uses its result instead of
+ * searching again (players often go about together). At most SHARED_KEPT are kept.
  * @type {{ tick: number, dim: string, x: number, z: number, list: { kind: string, x: number, y: number, z: number, id?: string }[] }[]}
  */
 const npcShared = [];
-/** @type {{ tick: number, dim: string, x: number, z: number, r: number, mobs: { x: number, z: number }[] }[]} */
-const mobShared = [];
 const SHARED_KEPT = 24;
-/** A shared mob search reaches this much farther than the player's own radius, so the players near them can use it. */
-const MOB_SHARE = 8;
 
 /** @param {Player} player */
 function npcsNear(player) {
@@ -509,46 +505,6 @@ function npcsNear(player) {
 }
 
 /**
- * The nearest `max` monsters within `radius` of the player: from a search made for a player near them in the last
- * INTERVAL ticks, else from a new one. A search reaches MOB_SHARE farther (for others to use) only when another player
- * was that near at the last look (`seen`, plus what they may have walked since): a wider search costs more, about the
- * area (24 to 32 blocks: a pass 0.6 ms instead of 0.5 in map.js), so a player on their own searches only their range.
- * @param {Player} player @param {number} radius @param {number} max @param {Seen[]} seen @returns {{ x: number, z: number }[]}
- */
-function mobsNear(player, radius, max, seen) {
-  const at = player.location;
-  const dim = player.dimension;
-  const now = system.currentTick;
-  let found = mobShared.find((sh) => sh.dim === dim.id && now - sh.tick < INTERVAL && Math.hypot(sh.x - at.x, sh.z - at.z) + radius <= sh.r);
-  if (!found) {
-    /** @type {{ x: number, z: number }[]} */
-    const mobs = [];
-    const company = seen.some((q) => q.id !== player.id && q.dim === dim.id && Math.hypot(q.x - at.x, q.z - at.z) <= MOB_SHARE + 4);
-    const r = company ? radius + MOB_SHARE : radius;
-    for (const e of dim.getEntities({ location: at, maxDistance: r, families: ["monster"], excludeTags: [NPC_TAG], closest: company ? max * 4 : max })) {
-      try {
-        const l = e.location;
-        mobs.push({ x: l.x, z: l.z });
-      } catch {
-        // gone meanwhile
-      }
-    }
-    found = { tick: now, dim: dim.id, x: at.x, z: at.z, r, mobs };
-    mobShared.unshift(found);
-    if (mobShared.length > SHARED_KEPT) mobShared.pop();
-  }
-  const r2 = radius * radius;
-  /** @type {{ x: number, z: number, d: number }[]} */
-  const near = [];
-  for (const m of found.mobs) {
-    const d = (m.x - at.x) ** 2 + (m.z - at.z) ** 2;
-    if (d <= r2) near.push({ x: m.x, z: m.z, d });
-  }
-  near.sort((a, b) => a.d - b.d);
-  return near.slice(0, max);
-}
-
-/**
  * Markers around the player: two entity searches (townsfolk and wanderers; mobs), the rest from broadcasts.
  * @param {Player} player @param {Seen[]} seen @param {{ mobs: boolean, radius: number, town: boolean, home: boolean }} pr
  */
@@ -569,7 +525,16 @@ function gather(player, seen, pr) {
   }
   if (pr.mobs) {
     const max = Math.max(1, Number(get("maxMobs")) || 8);
-    for (const m of mobsNear(player, pr.radius, max, seen)) add("mob", m.x, m.z, true);
+    // Each player's own search: one reaching farther for others to share made every pass about 20% dearer and saved
+    // nothing measurable with players in groups (October 2026).
+    for (const e of dim.getEntities({ location: at, maxDistance: pr.radius, families: ["monster"], excludeTags: [NPC_TAG], closest: max })) {
+      try {
+        const l = e.location;
+        add("mob", l.x, l.z, true);
+      } catch {
+        // gone meanwhile
+      }
+    }
   }
   const tag = seen.find((s) => s.id === player.id)?.party;
   const others = get("showOthers") === true;
