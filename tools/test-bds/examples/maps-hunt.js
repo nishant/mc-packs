@@ -139,29 +139,41 @@ export default async function (t) {
     const ack = await t.waitUntil(() => acks.find((x) => x.id === "mh-showat"), { timeout: 40, message: "ack showAt" });
     t.assert(ack.ok, "map line moved above the hotbar (showAt=hotbar)");
   }
+  /** @type {{ name: string, x: number, z: number }[]} */
   let areas = [];
   let areaN = 0;
-  const clearAreas = () => { for (const a of areas) t.server(`/tickingarea remove ${a}`); areas = []; };
+  // F73/F75: BDS never loads the chunks of an area removed while they were still loading, not even under a new area,
+  // so every chunk the land a scan or a move left behind would stay unloaded for the rest of the run ("land at 226,
+  // 956 did not load" after an area there was removed and added again, and the hunt timed out). An area goes only
+  // once all its 9x9 chunks can be read (or after 30 s of waiting), and a slow area is waited for, never replaced.
+  const chunkRead = (cx, cz) => { try { return !!dim.getBlock({ x: cx * 16 + 8, y: -64, z: cz * 16 + 8 }); } catch { return false; } };
+  const unread = (a) => {
+    const out = [];
+    const cx = Math.floor(a.x / 16), cz = Math.floor(a.z / 16);
+    for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) if (!chunkRead(cx + dx, cz + dz)) out.push(`${cx + dx},${cz + dz}`);
+    return out;
+  };
+  async function release(list) {
+    if (!list.length) return;
+    try {
+      await t.waitUntil(() => list.every((a) => unread(a).length === 0), { timeout: 600, interval: 5, message: "" });
+    } catch {
+      t.log(`  removing areas still loading: ${list.map((a) => `${a.name} (${unread(a).length} chunks)`).join(", ")}`);
+    }
+    for (const a of list) t.server(`/tickingarea remove ${a.name}`);
+  }
+  const clearAreas = async () => { const old = areas; areas = []; await release(old); };
   /** Loads land (water too, unlike t.loadArea) and returns its top block. */
   async function load(x, z) {
     const name = `maps_${++areaN}`;
-    const add = (n) => {
-      t.server(`/tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} 4 ${n} true`);
-      areas.push(n);
-    };
-    add(name);
+    t.server(`/tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} 4 ${name} true`);
+    areas.push({ name, x: Math.floor(x), z: Math.floor(z) });
     const loaded = () => {
       const top = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
       return top && top.typeId && top.location.y < 319 ? top : undefined;
     };
-    try {
-      return await t.waitUntil(loaded, { timeout: 600, message: "" });
-    } catch {
-      // A busy server (several test servers on few cores) sometimes leaves new land unloaded for minutes: ask again.
-      t.server(`/tickingarea remove ${name}`);
-      add(`${name}b`);
-      return t.waitUntil(loaded, { timeout: 600, message: `land at ${Math.round(x)}, ${Math.round(z)} did not load` });
-    }
+    // A busy server (several test servers on few cores) sometimes leaves new land unloaded for a minute.
+    return t.waitUntil(loaded, { timeout: 1200, message: `land at ${Math.round(x)}, ${Math.round(z)} did not load` });
   }
   /**
    * Like a player traveling: the land where the player stands stays loaded until they have arrived somewhere else
@@ -170,10 +182,10 @@ export default async function (t) {
   async function goTo(x, z) {
     const old = areas;
     areas = [];
-    if (old.length > 2) for (const a of old) t.server(`/tickingarea remove ${a}`); // after a scan: at most 10 areas
+    if (old.length > 2) await release(old); // after a scan: at most 10 areas
     const top = await load(x, z);
     p.teleport({ x: Math.floor(x) + 0.5, y: top.location.y + 1, z: Math.floor(z) + 0.5 });
-    if (old.length <= 2) for (const a of old) t.server(`/tickingarea remove ${a}`);
+    if (old.length <= 2) await release(old);
     await t.wait(20);
   }
   /** Where the player stood at each tick (the pack counts a clue from where the player was when it changed). */
@@ -189,7 +201,7 @@ export default async function (t) {
   const posAt = (tick) => trail.get(tick) ?? trail.get(tick - 1) ?? { x: Math.round(p.location.x), z: Math.round(p.location.z) };
   /** Top blocks around (cx, cz), loading the land first: the hit nearest (cx, cz). */
   async function scan(cx, cz, r, fn) {
-    clearAreas();
+    await clearAreas();
     for (const ox of [-96, 0, 96]) for (const oz of [-96, 0, 96]) {
       try { await load(cx + ox, cz + oz); } catch (e) { t.log(`  part of the scan did not load: ${e.message ?? e}`); }
     }
@@ -291,7 +303,7 @@ export default async function (t) {
     if (/washed up/i.test(near.plain)) {
       t.log("  no spot for the chest after 4 tries: the treasure was handed over");
       t.check(leg >= 2, "the hunt had at least 2 legs");
-      clearAreas();
+      await clearAreas();
       return;
     }
     if (/ink shifts/i.test(near.plain)) {
@@ -324,11 +336,16 @@ export default async function (t) {
       p.teleport({ x: chest.x + 0.5, y: dim.getTopmostBlock({ x: chest.x, z: chest.z }).location.y + 1, z: chest.z + 0.5 });
       await t.wait(10);
       const hot = t.messages(p, { kind: "actionbar", since: since2 }).map((m) => m.plain);
-      await t.waitMessage(p, /You found the treasure/i, { since: since2, timeout: 100 });
+      // A clue that names the spot exactly (coordinates) can put the player within reach of the chest already, and the
+      // pack then finds it while the scan above still runs: count that find too, but only where the chest is.
+      const early = t.messages(p, { since }).find((m) => m.tick < since2 && /You found the treasure/i.test(m.plain));
+      const foundMsg = early ?? await t.waitMessage(p, /You found the treasure/i, { since: since2, timeout: 100 });
+      const at = early ? posAt(early.tick) : { x: chest.x, z: chest.z };
+      t.check(Math.hypot(at.x - chest.x, at.z - chest.z) <= 4, `the treasure was found at the chest (${at.x}, ${at.z}; ${foundMsg === early ? "before" : "after"} standing on it)`);
       await t.seconds(3);
       t.log(`  near the chest the map said: ${hot.slice(-2).join(" | ")}; ${count} stacks of loot`);
       t.check(leg >= 2, "the hunt had at least 2 legs");
-      clearAreas();
+      await clearAreas();
       return;
     }
     let mark;

@@ -2,15 +2,16 @@
 // Runs every scenario in examples/ with the command from its own header comment, a few at a time,
 // and prints a table: scenario | result | seconds | first failure line.
 //   node tools/test-bds/suite.mjs [--jobs 2] [--filter <regex>] [--retry] [--json <out>] [--list] [--prepare-only]
-//   node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp] [--json <out>]
+//   node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp | --perf-bundle <mcpack>] [--json <out>]
+//   (--perf default = 10,40: 10 is the real Realm, 40 shows how the packs scale; 120 s for development, 300 s for release)
 // Results: pass, fail, flaky (failed, then passed when rerun alone with --retry), timeout, skipped.
 // --prepare-only (offline, starts no BDS): stages every header recipe and checks the folder its run command points at.
 // --perf runs only the perf-soak scenario once per player count (with run.mjs --profile, one after another) and
-// prints ms/tick per pack side by side with the budget (whole bundle < 5 ms/tick at 40 players, a typical pack
-// <= 0.15, the Minimap and HUD <= 1; steady soak window only, verdicts at 40 players only); --perf-only installs just
-// those packs. The run exits 1 over budget (OVER BUDGET), and also when a count is INVALID: its soak did not spawn and
-// keep every declared player for the whole window (profile "acceptance"), its scenario did not pass, or a steady-window
-// figure is missing or not a number. An INVALID count is never reported as over budget (lib/perf-acceptance.mjs).
+// prints ms/tick per pack side by side with the budget (whole bundle < 5 ms/tick at 40 players, a typical pack <= 0.15,
+// the Minimap and HUD <= 1; steady soak window only, verdicts at 40 players only); --perf-only installs just those
+// packs, --perf-bundle runs a built Realm Bundle as one script context. The run exits 1 over budget (OVER BUDGET), and
+// also when a count is INVALID: its soak did not spawn and keep every declared player for the whole window (profile
+// "acceptance"), its scenario did not pass, or a steady-window figure is missing or not a number (lib/perf-acceptance.mjs).
 // Logs: tools/test-bds/logs/suite-<time>/<scenario>.out (run.mjs output) and .log (full BDS log).
 // Exit code: 0 when nothing failed or timed out (flaky and skipped count as ok), 1 otherwise.
 // Header recipes run in bash (Git for Windows' bash.exe on Windows, or BDS_HARNESS_BASH); see lib/recipe.mjs.
@@ -43,6 +44,7 @@ try {
       jobs: { type: "string", default: "2" }, filter: { type: "string" }, retry: { type: "boolean", default: false },
       json: { type: "string" }, list: { type: "boolean", default: false }, help: { type: "boolean", short: "h", default: false },
       perf: { type: "string" }, "perf-seconds": { type: "string", default: "120" }, "perf-only": { type: "string" },
+      "perf-bundle": { type: "string" },
       "prepare-only": { type: "boolean", default: false },
     },
   }).values;
@@ -51,7 +53,7 @@ try {
   process.exit(64);
 }
 if (args.help) {
-  console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 14).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+  console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 15).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(0);
 }
 const JOBS = Math.max(1, Number(args.jobs) || 2);
@@ -254,7 +256,9 @@ function runOne(p, logDir, tag = "") {
 
 /** --perf: perf-soak once per player count, one at a time, then ms/tick per pack side by side against the budget. */
 async function perf() {
-  const counts = String(args.perf).split(",").map((x) => Math.max(1, Math.floor(Number(x)))).filter(Number.isFinite);
+  // `--perf default` (or no usable count) runs the two counts the owner asked for: 10 (the Realm) and 40 (scaling).
+  const parsed = String(args.perf).split(",").map((x) => Math.max(1, Math.floor(Number(x)))).filter(Number.isFinite);
+  const counts = parsed.length ? parsed : [10, 40];
   const seconds = Math.max(10, Number(args["perf-seconds"]) || 120);
   fs.mkdirSync(logDir, { recursive: true });
   const soak = path.join(EXAMPLES, "perf-soak.js");
@@ -264,8 +268,8 @@ async function perf() {
     const json = path.join(logDir, `perf-${n}.json`);
     // Spawning takes about a second per player on top of the soak itself; ticks run slow under load.
     const timeout = Math.round(120 + n * 2 + seconds * 6);
-    const p = { name: `perf-${n}`, args: ["--quiet", "--no-relay", "--profile", "--profile-every", "0", "--profile-json", json, ...(args["perf-only"] ? ["--only", args["perf-only"]] : []), "--arg", `players=${n}`, "--arg", `seconds=${seconds}`, "--timeout", String(timeout), "--scenario", soak], notes: [] };
-    console.log(`[suite] perf: ${n} players, ${seconds} s of game time${args["perf-only"] ? `, packs ${args["perf-only"]}` : ""}`);
+    const p = { name: `perf-${n}`, args: ["--quiet", "--no-relay", "--profile", "--profile-every", "0", "--profile-json", json, ...(args["perf-bundle"] ? ["--bundle", path.resolve(args["perf-bundle"])] : args["perf-only"] ? ["--only", args["perf-only"]] : []), "--arg", `players=${n}`, "--arg", `seconds=${seconds}`, "--timeout", String(timeout), "--scenario", soak], notes: [] };
+    console.log(`[suite] perf: ${n} players, ${seconds} s of game time${args["perf-bundle"] ? `, bundle ${args["perf-bundle"]}` : args["perf-only"] ? `, packs ${args["perf-only"]}` : ""}`);
     const r = await runOne(p, logDir);
     console.log(`[suite] perf ${n}: ${r.result} (${r.seconds.toFixed(0)} s)${r.failure ? ` - ${r.failure.slice(0, 160)}` : ""}`);
     try {

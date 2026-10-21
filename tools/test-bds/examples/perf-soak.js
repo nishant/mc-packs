@@ -5,8 +5,9 @@
 // players were placed, and the full steady window ran: the scenario fails otherwise and reports
 // {declared, spawned, retention, soak window} as `perf-workload`, which run.mjs puts into the profile JSON
 // next to its acceptance verdict (lib/perf-acceptance.mjs).
-//   node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 900
-// Arguments (--arg key=value): players (default 10), seconds (default 300), group (players per
+//   node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 900
+// Development comparisons use 10 and 40 players with 120 s windows; release validation uses 300 s (--arg seconds=300).
+// Arguments (--arg key=value): players (default 10), seconds (default 120), group (players per
 // group, default 5), spread (blocks between far groups, default 240), commands (seconds between one
 // player's commands, default 45; 0 = none), water (players put in a pool, default 2), nether
 // (players in the Nether, default 2), hud (1: the Coordinates HUD on for everyone, for the native realm:hud_state
@@ -21,7 +22,7 @@
 export default async function (t) {
   const a = t.args;
   const N = Math.max(1, Number(a.players ?? 10));
-  const SECONDS = Math.max(10, Number(a.seconds ?? 300));
+  const SECONDS = Math.max(10, Number(a.seconds ?? 120));
   const GROUP = Math.max(1, Number(a.group ?? 5));
   const SPREAD = Math.max(50, Number(a.spread ?? 240));
   const CMD_EVERY = Math.max(0, Number(a.commands ?? 45));
@@ -93,26 +94,30 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   const players = [];
   const t0 = t.tick;
 
+  // F73: a ticking area removed while its chunks are still loading can leave them unloadable for the rest of the run
+  // (a later area over them never loads them: "chunk at -74,412 did not load in 400 ticks"). So every loader here waits
+  // until its whole circle can be read and stays until the players it serves have settled. One loader per group: its
+  // players spawn together under it (area: false), WAVE groups at a time (the first wave also keeps the pool's and the
+  // Nether pocket's loaders), within Bedrock's 10 ticking areas next to the production packs' own.
+  const WAVE = 4, SETTLE = 10;
+  const loadWhole = (x, z, opts = {}) => t.loadArea(x, z, { radius: 2, timeout: 1200, whole: true, ...opts });
   // Water pool at group 1 (dug where the ground is, so it stays put).
   let pool = null;
   if (WATER) {
     const c = groupSpot(1);
-    const { top } = await t.loadArea(c.x + 20, c.z, { radius: 2 });
+    const { top } = await loadWhole(c.x + 20, c.z);
     const y = top.location.y;
     const x = Math.floor(c.x + 20), z = Math.floor(c.z);
     t.server(`/fill ${x - 3} ${y - 3} ${z - 4} ${x + 3} ${y + 3} ${z + 3} air`);
     t.server(`/fill ${x - 4} ${y - 4} ${z - 4} ${x + 4} ${y - 4} ${z + 4} stone`);
     t.server(`/fill ${x - 3} ${y - 3} ${z - 3} ${x + 3} ${y} ${z + 3} water`);
     pool = { x, y: y - 2, z };
-    clearAreas();
-    await t.wait(1);
   }
   // Nether pocket.
   let pocket = null;
   if (NETHER) {
     const x = Math.floor(SX / 8), z = Math.floor(SZ / 8);
-    try { nether.runCommand(`tickingarea add circle ${x} 0 ${z} 2 soak_nether true`); } catch (e) { t.log(`nether ticking area: ${e}`); }
-    const ok = await t.waitUntil(() => nether.getBlock({ x, y: 64, z }), { timeout: 600, message: "nether chunk did not load" }).catch(() => false);
+    const ok = await loadWhole(x, z, { dimension: nether }).catch((e) => { t.log(`nether pocket: ${e}`); return false; });
     if (ok) {
       nether.runCommand(`fill ${x - 4} 64 ${z - 4} ${x + 4} 69 ${z + 4} air`);
       nether.runCommand(`fill ${x - 4} 63 ${z - 4} ${x + 4} 63 ${z + 4} netherrack`);
@@ -122,33 +127,47 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
 
   let made = 0;
   const name = (i) => `Soak${String(i + 1).padStart(2, "0")}`;
+  const plan = [];
   for (let i = 0; i < N; i++) {
-    let kind = "land", dim = over, spot;
+    let kind = "land", dim = over, spot, g = -1;
     if (i >= 1 && i <= WATER && pool) { kind = "water"; spot = { x: pool.x - 1 + i, y: pool.y, z: pool.z }; }
     else if (i > WATER && i <= WATER + NETHER && pocket) { kind = "nether"; dim = nether; spot = { x: pocket.x - 2 + (i - WATER), y: pocket.y, z: pocket.z }; }
     else {
-      const g = Math.floor(i / GROUP);
+      g = Math.floor(i / GROUP);
       const c = groupSpot(g);
       spot = { x: c.x + rnd(9) - 4, z: c.z + rnd(9) - 4 };
     }
-    // A busy server sometimes misses the harness's chunk wait: try again a little further on.
+    plan.push({ i, kind, dim, spot, g });
+  }
+  const spawned = new Array(N);
+  const spawnOne = async ({ i, kind, dim, spot }) => {
+    // A spot that still cannot be read under its group's loader: try again a little further on, under a loader of its own.
     for (let attempt = 0; attempt < 3; attempt++) {
-      clearAreas();
-      await t.wait(1);
       const at = attempt && kind === "land" ? { ...spot, x: spot.x + attempt * 7, z: spot.z - attempt * 5 } : spot;
       try {
-        const p = await t.player(name(i), { ...at, dimension: kind === "nether" ? "nether" : "overworld", op: i === 0, settle: 2 });
+        if (attempt) await loadWhole(at.x, at.z, { dimension: dim });
+        const p = await t.player(name(i), { ...at, dimension: kind === "nether" ? "nether" : "overworld", op: i === 0, settle: 1, area: false, timeout: attempt ? 400 : 100 });
         const l = p.location;
-        players.push({ p, name: name(i), home: { x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z) }, dim, kind });
+        spawned[i] = { p, name: name(i), home: { x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z) }, dim, kind };
         made++;
-        break;
+        return;
       } catch (e) {
         t.log(`could not spawn ${name(i)} (${kind}, try ${attempt + 1}): ${e}`);
       }
     }
+  };
+  const groups = [...new Set(plan.filter((s) => s.kind === "land").map((s) => s.g))];
+  for (let w = 0; w === 0 || w < groups.length; w += WAVE) {
+    const wave = groups.slice(w, w + WAVE);
+    await Promise.all(wave.map((g) => { const c = groupSpot(g); return loadWhole(c.x, c.z).catch((e) => t.log(`group ${g} loader: ${e}`)); }));
+    await Promise.all(plan.filter((s) => wave.includes(s.g) || (w === 0 && s.kind !== "land")).map(spawnOne));
+    // A simulated player holds the chunks around it from its first tick; the loaders go once the wave has settled.
+    await t.wait(SETTLE);
     clearAreas();
     await t.wait(1);
   }
+  t.log(`spawn waves: ${Math.max(1, Math.ceil(groups.length / WAVE))} of up to ${WAVE} groups, ${SETTLE} ticks to settle`);
+  for (const s of spawned) if (s) players.push(s);
   t.log(`spawned ${made}/${N} players in ${((t.tick - t0) / 20).toFixed(0)} s (${players.filter((x) => x.kind === "water").length} in water, ${players.filter((x) => x.kind === "nether").length} in the Nether, ${Math.ceil(N / GROUP)} groups)`);
   const kinds = { land: players.filter((x) => x.kind === "land").length, water: players.filter((x) => x.kind === "water").length, nether: players.filter((x) => x.kind === "nether").length, groups: Math.ceil(N / GROUP) };
   const declared = { players: N, seconds: SECONDS, group: GROUP, spread: SPREAD, commands: CMD_EVERY, refill: REFILL_EVERY, water: WATER, nether: NETHER };
