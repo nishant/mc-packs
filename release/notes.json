@@ -1,4 +1,26 @@
 {
-  "notes": [],
-  "packNotes": {}
+  "notes": [
+    "Every town now has a mayor of its own, waiting at the town center to take deliveries for that town. Mayor Bram keeps his town; every other town gets its own mayor the next time someone visits it.",
+    "Towns pick their own building spots on natural ground and level it gently (never more than 3 blocks), and never touch anything you built, placed or planted.",
+    "As towns grow they build houses, lay grass paths to the center, light them with lantern posts and keep a garden pen with sheep and chickens.",
+    "Villagers now move into growing towns: 2 by the well, then a family for each house. They never take your bed, never harvest your crops and wander home when they stray."
+  ],
+  "packNotes": {
+    "town_bp": {
+      "version": "1.7.2",
+      "notes": "A mayor per town, building spots the town picks and levels gently (at most 3 blocks, never your blocks), houses, paths, lantern posts, a garden pen whose animals come back if they wander off, and villagers who move in (Enabled), never take beds or harvest crops, and come home when they stray."
+    },
+    "npc_bp": {
+      "version": "1.9.0",
+      "notes": "Town mayors: each town can have its own mayor who takes deliveries for that town; mayors share town news."
+    },
+    "welcome_bp": {
+      "version": "1.5.12",
+      "notes": "The welcome page lists Town Projects: towns that grow as you help, each with its mayor."
+    },
+    "admin_bp": {
+      "version": "1.6.8",
+      "notes": "The setup checklist says towns pick their own project spots, so setting one is optional, and a spot an operator sets is never leveled."
+    }
+  }
 }
