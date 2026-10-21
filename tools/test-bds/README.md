@@ -103,6 +103,9 @@ node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-b
 `examples/perf-soak.js` spreads `players` simulated players around spawn in groups (two near spawn,
 the others 240+ blocks apart, two in a pool, two in the Nether), makes them walk, look around, sneak
 and jump, and run a few common commands for `seconds` (see its header for the other arguments).
+For a memory soak (no `--profile`), `--arg probe=300` logs every 300 s what the world holds that could grow: entities
+by type, scoreboard participants, structures and every pack's saved world data (from `realm:diag_ping`), and ends
+with the change from the first probe to the last (`probe change ...`, also reported as `perf-probe`).
 
 ## Running every example (`suite.mjs`)
 
@@ -237,6 +240,20 @@ perf soak and saga-perf-quests, which remove each spawn's area before the next s
 to `chunk at 193,170 did not load in 400 ticks` (F73: a whole column of chunks next to an earlier spawn), and
 maps-hunt timed out once its stuck legs had used up the 10 areas. `lib/harness-lifecycle.test.mjs`'s fake game models
 the stuck chunks.
+
+## Memory soaks (`rss-soak.mjs`)
+
+`node tools/test-bds/rss-soak.mjs --every 5 --out <file.json> -- <run.mjs arguments>` runs one `run.mjs` command and
+samples the resident memory (VmRSS, and the peak VmHWM) of the `bedrock_server` it starts every 5 seconds, from
+`/proc` (Linux only), without the profiler. The JSON keeps every sample (with its pid) and a summary of one process:
+when `run.mjs` starts more than one server (a template server first, a restart), only the one sampled longest is
+judged, its warm-up counted from its own first sample, and every pid is listed in `summary.pids`. The summary has
+10-minute medians after a 5-minute warm-up, the slope in MiB per minute over the first and second half, and a verdict: `growing` (the second
+half still rises more than 0.5 MiB/min and ends at its highest), `leveled`, `falling or noisy`, or `too short` (under
+30 minutes after the warm-up). For O4: `-- --quiet --no-relay --flat --scenario tools/test-bds/examples/perf-soak.js
+--arg players=40 --arg seconds=3600 --timeout 4500`, then the same with `--only` halves of the pack list to find a
+growing pack. The file is rewritten every 60 samplings while it runs, so a run that dies keeps its samples.
+`rss-soak.test.mjs` checks the verdicts.
 
 ## Inventory persistence regression
 
