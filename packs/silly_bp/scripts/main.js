@@ -456,15 +456,13 @@ system.runInterval(() => {
   if (get("enabled") !== true) return;
   beat++;
   for (const p of [...wearers.values()]) {
+    // No isValid first (on a kept handle it makes the reads after it several times dearer): a player who left
+    // throws on the first read and is dropped then.
     try {
-      if (!p.isValid) {
-        dropGear(p.id);
-        continue;
-      }
       if (!playing(p)) continue;
       ambient(p);
     } catch {
-      // the player left mid-tick
+      if (!p.isValid) dropGear(p.id); // else the player left mid-tick
     }
   }
 }, 4);
@@ -552,8 +550,7 @@ system.runInterval(() => {
     const g = gear.get(p.id);
     if (!g || !g.feet.has("hyper_jump")) continue;
     try {
-      if (!p.isValid) continue;
-      const jumping = p.isJumping;
+      const jumping = p.isJumping; // no isValid first (see the ambient loop): one who left throws here
       const rising = jumping && !wasJumping.get(p.id);
       wasJumping.set(p.id, jumping);
       if (!rising || !p.isSneaking || !has(p, "hyper_jump") || !playing(p)) continue;
