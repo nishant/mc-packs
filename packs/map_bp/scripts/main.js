@@ -510,9 +510,7 @@ function npcsNear(player) {
 
 /**
  * The nearest `max` monsters within `radius` of the player: from a search made for a player near them in the last
- * INTERVAL ticks, else from a new one. A search reaches MOB_SHARE farther but asks only for the nearest `max` (each one
- * found is a read): when it found fewer it holds every monster in its reach, else every one up to its farthest, and it
- * is shared only within that.
+ * INTERVAL ticks (it reaches MOB_SHARE farther), else from a new one.
  * @param {Player} player @param {number} radius @param {number} max @returns {{ x: number, z: number }[]}
  */
 function mobsNear(player, radius, max) {
@@ -523,20 +521,15 @@ function mobsNear(player, radius, max) {
   if (!found) {
     /** @type {{ x: number, z: number }[]} */
     const mobs = [];
-    let r = radius + MOB_SHARE;
-    let far = 0;
-    let got = 0;
-    for (const e of dim.getEntities({ location: at, maxDistance: r, families: ["monster"], excludeTags: [NPC_TAG], closest: max })) {
-      got++;
+    const r = radius + MOB_SHARE;
+    for (const e of dim.getEntities({ location: at, maxDistance: r, families: ["monster"], excludeTags: [NPC_TAG], closest: max * 4 })) {
       try {
         const l = e.location;
         mobs.push({ x: l.x, z: l.z });
-        far = Math.max(far, Math.hypot(l.x - at.x, l.z - at.z));
       } catch {
-        // gone meanwhile: its place is unknown, so the search holds no more than what is nearer than the others
+        // gone meanwhile
       }
     }
-    if (got >= max) r = Math.min(r, far);
     found = { tick: now, dim: dim.id, x: at.x, z: at.z, r, mobs };
     mobShared.unshift(found);
     if (mobShared.length > SHARED_KEPT) mobShared.pop();
