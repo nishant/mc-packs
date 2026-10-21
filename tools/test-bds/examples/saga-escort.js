@@ -82,7 +82,10 @@ export default async function (t) {
   await t.wait(5);
   t.cmd(p, "/realm:saga_place old_chapel");
   await t.wait(20);
-  p.teleport({ x: X + 0.5, y: gy, z: Z + 0.5 }, { rotation: { x: 0, y: -90 } });
+  // Facing west, away from the chapel: wander puts Pell (and so his camp) 24 to 40 blocks ahead along the view, so
+  // the escort walks 72 to 88 blocks. Facing the chapel it was 8 to 24, and on a 40-block roll too short to sample
+  // (F75: "samples 9, moving 2").
+  p.teleport({ x: X + 0.5, y: gy, z: Z + 0.5 }, { rotation: { x: 0, y: 90 } });
   sdebug({ player: p.id, action: "finish", story: "drowned_bell" });
   sdebug({ player: p.id, action: "jump", story: "w_pell_road", chapter: "chapel", flags: { way: "walk" } });
   await t.waitUntil(() => of("realm:wander_state", (m) => m.player === p.id && m.ch.pell === "o").length > 0, { timeout: 300, message: "Pell's next chapter waits" });

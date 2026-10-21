@@ -6680,11 +6680,11 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 
 ### Performance
 
-How much server time the packs take, measured on a test server with simulated players walking, looking around and running commands ("ms a tick" is script time; a server has 50 ms a tick for everything at 20 ticks a second). The goal: the whole bundle under 5 ms a tick at 40 players, a typical pack 0.15 ms or less, the heaviest (Minimap, HUDs) 1 ms or less.
+How much server time the packs take, measured on a test server with simulated players walking, looking around and running commands ("ms a tick" is script time; a server has 50 ms a tick for everything at 20 ticks a second). The goal: the whole bundle under 5 ms a tick at 40 players (a scalability check; this Realm itself has at most 10), a typical pack 0.15 ms or less, the heaviest (Minimap, HUDs) 1 ms or less. Measurements cover 10 and 40 players only.
 
 - **10 players** (this Realm's size; usually 1-4 are online): the Realm Bundle running as one pack took about 4.8 ms a tick, under the goal (a short run on a Linux test machine, an earlier build of the October 2026 fixes).
 - **40 players** (a separate, longer run on a Windows server, with every pack running on its own): the packs together took about 8 ms a tick (down from 9.4 before the October 2026 fixes), still **over the 5 ms goal**. The Minimap is the largest part, about 3.7 ms against its 1 ms goal. Easy Building, Quick Stack & Sort, Silly Enchants, Elytra HUD, Story Questlines, Stats, Realm Configuration and Realm Calendar are each over 0.15 ms.
-- **Not measured yet:** 100 players, and the Realm Bundle running as one pack at 40 players.
+- **Not measured yet:** the Realm Bundle running as one pack at 40 players. Larger player counts are not measured: on a bigger server, measure with `/realm:diag`.
 
 The 5 ms goal stays, and the packs keep getting cheaper wherever a measurement shows a gain. Real players cost the server more than simulated ones, and results depend on the server's hardware and how people play. This Realm keeps the Small Realm defaults; bigger servers can pick **Large server** in Operator Tools > **Server size**.
 
