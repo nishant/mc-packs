@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "cooking_bp";
-const VERSION = "1.1.14";
+const VERSION = "1.1.16";
 const NAME = "Kitchen";
 /** @type {string[]} */
 const PREFIXES = ["cooking"];

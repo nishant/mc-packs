@@ -16,6 +16,8 @@ function run(args, faults = {}) {
   const names = new Map();
   const lastKey = new Map();
   const areas = new Set(faults.ownedAreas ? ["farm_production", "harness_1_1"] : []);
+  /** What the population setup did, in order: loads, spawns and removals. */
+  const steps = [];
   const emit = (player, text) => listener({ id: "realm:side", message: JSON.stringify({ player, from: "saga", slot: "quest", text }) });
   const t = {
     args,
@@ -45,7 +47,7 @@ function run(args, faults = {}) {
           if (command === "tickingarea remove_all") areas.clear();
           else {
             const name = /^tickingarea remove "([^"]+)"$/.exec(command)?.[1];
-            if (name) return { successCount: Number(areas.delete(name)) };
+            if (name) { steps.push({ remove: name }); return { successCount: Number(areas.delete(name)) }; }
           }
           return { successCount: 1 };
         },
@@ -63,7 +65,12 @@ function run(args, faults = {}) {
         pending.set(p.id, resolve);
       });
     },
-    async player(name) {
+    async loadArea(x, z, opts) {
+      steps.push({ load: { x, z, ...opts } });
+      return { top: {}, name: "harness_1_1" };
+    },
+    async player(name, opts) {
+      steps.push({ spawn: name, opts });
       const n = Number(name.slice(4));
       if (faults.spawnFail?.includes(n)) throw new Error("no spawn");
       const p = {
@@ -74,7 +81,7 @@ function run(args, faults = {}) {
       return p;
     },
   };
-  const done = scenario(t).then(() => ({ reports, failed, areas: [...areas], thrown: null }), (e) => ({ reports, failed, areas: [...areas], thrown: e }));
+  const done = scenario(t).then(() => ({ reports, failed, areas: [...areas], steps, thrown: null }), (e) => ({ reports, failed, areas: [...areas], steps, thrown: e }));
   return done;
 }
 
@@ -129,4 +136,23 @@ test("population preparation preserves production loaders and removes only owned
   assert.equal(r.thrown, null);
   assert.deepEqual(r.failed, []);
   assert.deepEqual(r.areas, ["farm_production"]);
+});
+
+// F73/F75: removing each player's own area 2 ticks after it spawned left outer chunks unloadable ("spawned 5 of 10").
+test("the grid is loaded whole before anyone spawns, the players add no areas, and the loaders go after the last spawn", async () => {
+  const r = await run({ players: "100", seconds: "10" }, { ownedAreas: true });
+  assert.equal(r.thrown, null);
+  const loads = r.steps.filter((s) => s.load), spawns = r.steps.filter((s) => s.spawn);
+  assert.equal(spawns.length, 100);
+  assert.ok(loads.length >= 1 && loads.length <= 4, `${loads.length} loaders`);
+  for (const l of loads) assert.equal(l.load.whole, true);
+  for (const s of spawns) assert.equal(s.opts.area, false);
+  const firstSpawn = r.steps.findIndex((s) => s.spawn), lastSpawn = r.steps.findLastIndex((s) => s.spawn);
+  assert.ok(r.steps.findLastIndex((s) => s.load) < firstSpawn, "every loader before the first spawn");
+  assert.ok(r.steps.findIndex((s) => s.remove) > lastSpawn, "no area removed before the last spawn");
+  // every player stands inside a loader's 5x5 chunks
+  for (const s of spawns) {
+    const ok = loads.some(({ load: l }) => Math.abs(Math.floor(s.opts.x / 16) - Math.floor(l.x / 16)) <= 2 && Math.abs(Math.floor(s.opts.z / 16) - Math.floor(l.z / 16)) <= 2);
+    assert.ok(ok, `${s.spawn} at ${s.opts.x},${s.opts.z} is under a loader`);
+  }
 });

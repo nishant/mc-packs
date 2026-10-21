@@ -2,6 +2,7 @@
 // Runs behavior packs on a throwaway Bedrock Dedicated Server with simulated players.
 // See README.md. Exit codes: 0 pass, 1 scenario failed, 2 script errors, 3 timeout,
 // 4 server or harness problem, 64 bad arguments.
+import { isCaughtErrorWarning } from "./lib/caught.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -261,7 +262,7 @@ function onLine(raw) {
       lastRecord = { phase, text };
       contentErrors.push(lastRecord);
     }
-  } else if (text.startsWith("[Scripting]") && /\b(error|exception)\b/i.test(text) && level === "WARN") {
+  } else if (level === "WARN" && isCaughtErrorWarning(text)) {
     lastRecord = { phase, pack: attribute(text), text };
     warnErrors.push(lastRecord);
     show = true;
