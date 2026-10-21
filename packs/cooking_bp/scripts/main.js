@@ -6,7 +6,7 @@ import { DISHES, FIXED_EFFECTS, INGREDIENTS, ROLLS, TRAIT_INGREDIENT } from "./r
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 import { applyParts, createOwedStore } from "./owed.js";
-import { settleOwed } from "./settle.js";
+import { keepInPot, oweMore, settleOwed } from "./settle.js";
 
 const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
@@ -516,7 +516,9 @@ function cook(player, d, times, pot) {
   const pid = player.id;
   // The ingredients are gone now: the dish is owed until it is handed over, so a restart or a script
   // reload mid-cook hands it over on the next join instead of losing it.
-  const owed = owe(pid, d, n);
+  // A save that reports failure can still have landed (value written, index not): what is in the store is owed,
+  // and only a batch that is not there is due straight from the pot (else the next join would pay it again).
+  const owed = oweMore(owedStore, pid, d.id, n) > 0;
   cooking.add(pid);
   if (owed) inPot.set(pid, { d, n });
   const ticks = Math.max(1, Math.round(CONFIG.cookSeconds * 20));
@@ -599,9 +601,9 @@ function applyOwed(player, pid = player.id, failIds) {
   // A batch still in the pot stays owed until the pot is done (finish settles it): it is saved so a restart can't lose
   // it, but it isn't cooked yet. Handing it over here made a cook in a player's first 5 s (or the world's) instant.
   // If it can't be saved again, it is handed over now rather than lost.
+  // A save that fails after writing the value still keeps it, so only what the store does not hold is handed over.
   const pot = inPot.get(pid);
-  const keep = pot ? Math.min(pot.n, Math.floor(Number(mine[pot.d.id]) || 0)) : 0;
-  if (pot && keep > 0 && owe(pid, pot.d, keep)) mine[pot.d.id] = Math.floor(Number(mine[pot.d.id])) - keep;
+  keepInPot(owedStore, pid, mine, pot && { id: pot.d.id, n: pot.n });
   const parts = Object.entries(mine)
     .map(([id, n]) => /** @type {[string, number]} */ ([id, Math.floor(Number(n))]))
     .filter(([id, n]) => dishById.has(id) && n > 0);

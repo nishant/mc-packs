@@ -10,8 +10,8 @@
   ],
   "packNotes": {
     "cooking_bp": {
-      "version": "1.1.15",
-      "notes": "A batch still in the pot is no longer handed over early by the join handover (a cook in a player's first 5 seconds online, or the world's, was instant), and a finished dish is never handed over twice when the world fails to save at that moment."
+      "version": "1.1.16",
+      "notes": "A batch still in the pot is no longer handed over early by the join handover (a cook in a player's first 5 seconds online, or the world's, was instant), and a dish is never handed over twice when the world fails to save at that moment (when the pot finishes, when it starts, or when you join while it cooks)."
     },
     "admin_bp": {
       "version": "1.6.8",
