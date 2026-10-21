@@ -152,3 +152,11 @@ test("the forget jobs read the live settings, which operators can change", () =>
     assert.match(readFileSync(`packs/${pack}/scripts/settings.js`, "utf8"), new RegExp(`key: "${key}"`), pack);
   }
 });
+
+test("the three prune.js copies are tools/prune-shared.js exactly (F26: no hand-copied drift)", () => {
+  const shared = readFileSync(resolve("tools/prune-shared.js"), "utf8");
+  for (const pack of ["nick_bp", "titles_bp", "party_bp"]) {
+    const copy = readFileSync(resolve(`packs/${pack}/scripts/prune.js`), "utf8");
+    assert.equal(copy, `// Generated from tools/prune-shared.js by node tools/sync-prune.mjs: edit that file, not this copy.\n${shared}`, pack);
+  }
+});

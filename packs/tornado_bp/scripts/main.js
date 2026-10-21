@@ -1,4 +1,6 @@
 import "./diag.js";
+import { planNow } from "./weather-plan.js";
+import { createGossip } from "./gossip.js";
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -108,21 +110,9 @@ function groundAt(dim, x, z) {
 
 // Town news: riding a tornado out the top is Townsfolk gossip, one rider per tornado and at most one piece per
 // in-game hour from this pack.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => system.sendScriptEvent("realm:gossip", JSON.stringify(msg)), () => system.currentTick);
 
 /** @param {Player} player */
 function sendJournal(player) {
@@ -151,19 +141,6 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather, previousWeat
   pending = undefined;
   if (tornado?.natural) tornado.endsAt = Math.min(tornado.endsAt, system.currentTick + CLEAR_FADE_TICKS);
 });
-
-/** The overworld weather a realm:weather_plan names right now, or undefined (the Almanac is off, another dimension, garbage). @param {string} message */
-function planNow(message) {
-  try {
-    const m = JSON.parse(message);
-    if (!m || m.off === true) return undefined;
-    const dim = m.dim ?? m.dimension;
-    if (typeof dim === "string" && dim.replace(/^minecraft:/, "") !== "overworld") return undefined;
-    return m.now === WeatherType.Clear || m.now === WeatherType.Rain || m.now === WeatherType.Thunder ? /** @type {WeatherType} */ (m.now) : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 // The Weather Almanac (if it's installed) knows the weather now: it sends its plan when it changes and answers
 // realm:weather_ask. Until a real weatherChange has come in, a pack added in the middle of a storm takes it from there
@@ -363,6 +340,8 @@ function everySecond(t, dim) {
   const rumble = t.rumbleIn <= 0;
   /** @type {(Record<string, number> | undefined)[]} volumes per distance band, worked out once this second */
   const bandVolumes = [];
+  /** @type {{ player: Player, dist: number, volume: number }[]} who hears the wind this second */
+  const windTo = [];
   for (const player of dim.getPlayers()) {
     try {
       if (!player.isValid) continue;
@@ -388,13 +367,28 @@ function everySecond(t, dim) {
         player.sendMessage(`§cTornado! ${m}m to the ${compass(t.x - l.x, t.z - l.z)}, moving ${heading}.`);
       }
       if (horn) soundToward(player, t, dist, CONFIG.sounds.horn, volumes.horn, 1);
-      if (wind && dist <= WIND_RANGE) {
-        player.runCommand(`stopsound @s ${CONFIG.sounds.wind}`); // the clips overlap otherwise
-        soundToward(player, t, dist, CONFIG.sounds.wind, volumes.wind, 0.7);
-      }
+      if (wind && dist <= WIND_RANGE) windTo.push({ player, dist, volume: volumes.wind });
       if (rumble && dist <= RUMBLE_RANGE) soundToward(player, t, dist, CONFIG.sounds.rumble, volumes.rumble, 0.5);
     } catch (e) {
       console.warn(`[tornado] ${e}`);
+    }
+  }
+  if (windTo.length) {
+    // One command stops the last wind clip for everyone who hears the next one (the clips overlap otherwise): every
+    // player whose column is within WIND_RANGE, plus a few in the box's corners, who are out of the wind's range
+    // anyway. Once per wind instead of once per listener; then each listener gets the new clip from their direction.
+    try {
+      const r = WIND_RANGE;
+      dim.runCommand(`stopsound @a[x=${Math.floor(t.x - r)},y=-64,z=${Math.floor(t.z - r)},dx=${2 * r + 1},dy=384,dz=${2 * r + 1}] ${CONFIG.sounds.wind}`);
+    } catch (e) {
+      console.warn(`[tornado] ${e}`);
+    }
+    for (const { player, dist, volume } of windTo) {
+      try {
+        soundToward(player, t, dist, CONFIG.sounds.wind, volume, 0.7);
+      } catch (e) {
+        console.warn(`[tornado] ${e}`);
+      }
     }
   }
   if (horn) t.hornIn = CONFIG.hornEvery;
@@ -415,7 +409,8 @@ function bandVolume(volume, band, range) {
 /**
  * Plays a sound to one player from the tornado's direction, a few blocks away. Player.playSound is the only call that
  * reaches just that player (World.playSound would reach everyone, in every dimension) and its spot differs per
- * player, so each listener still costs one call; the bands only share the volume.
+ * player, so each listener costs one call per sound; the bands share the volume and the wind's stopsound is one
+ * command for everyone (everySecond).
  * @param {Player} player @param {Tornado} t @param {number} dist @param {string} id @param {number} volume @param {number} pitch
  */
 function soundToward(player, t, dist, id, volume, pitch) {

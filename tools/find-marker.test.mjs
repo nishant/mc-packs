@@ -44,6 +44,7 @@ const mc = {
 const events = () => ({
   playerLeave: signal(),
   playerBreakBlock: signal(),
+  playerPlaceBlock: signal(),
   playerInteractWithBlock: signal(),
   playerDimensionChange: signal(),
   entityDie: signal(),

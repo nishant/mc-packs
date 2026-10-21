@@ -122,3 +122,28 @@ test("a reset after the world's generation was forgotten still reaches players s
   assert.equal(nextGeneration(g2, now), g2 + 1, "same second: still strictly increasing");
   assert.equal(nextGeneration(7, now), Math.floor(now / 1000), "old small generations are passed");
 });
+// F16: after any reset, a brand-new player (nothing saved) is stamped with the generation silently; only a player
+// whose destination or marked spots were really cleared is told.
+test("a reset tells only players whose data it cleared; new players are stamped silently", async () => {
+  const { createSim } = await import(pathToFileURL(resolve("tools/lib/pack-sim.mjs")).href);
+  const sim = createSim();
+  sim.props.set("map:reset", 1760000000);
+  await sim.load("map_bp");
+  sim.boot();
+  const spawn = (name, props = {}) => {
+    const p = sim.join(name);
+    for (const [k, v] of Object.entries(props)) p.setDynamicProperty(k, v);
+    sim.game.emit("world.after.playerSpawn", { player: p, initialSpawn: true });
+    return p;
+  };
+  const told = (p) => p.messages.filter((m) => /reset everyone's destination/.test(m)).length;
+  const fresh = spawn("New");
+  assert.equal(told(fresh), 0, "a brand-new player is not told about an old reset");
+  assert.equal(fresh.getDynamicProperty("map:gen"), 1760000000, "but is stamped with the current generation");
+  const old = spawn("Old", { "map:marks": '[{"n":"Cave"}]', "map:gen": 5 });
+  assert.equal(told(old), 1, "a player whose spots were cleared is told once");
+  assert.equal(old.getDynamicProperty("map:marks"), undefined);
+  const seen = spawn("Seen", { "map:marks": '[{"n":"Home"}]', "map:gen": 1760000000 });
+  assert.equal(told(seen), 0);
+  assert.equal(seen.getDynamicProperty("map:marks"), '[{"n":"Home"}]');
+});

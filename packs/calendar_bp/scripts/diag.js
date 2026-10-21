@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "calendar_bp";
-const VERSION = "1.0.18";
+const VERSION = "1.0.19";
 const NAME = "Realm Calendar";
 /** @type {string[]} */
 const PREFIXES = ["cal"];

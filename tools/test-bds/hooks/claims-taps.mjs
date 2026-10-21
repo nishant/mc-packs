@@ -1,5 +1,5 @@
-// Test hook for tools/test-bds/examples/claims-animals.js: copies claims_bp and adds a harness-only probe that hands
-// claims_bp's own tap handlers a tap the way a real player's would arrive. A simulated player's interactWithEntity never
+// Test hook for tools/test-bds/examples/claims-animals.js and claims-own-pet.js: copies claims_bp and adds a
+// harness-only probe that hands claims_bp's own tap handlers a tap the way a real player's would arrive. A simulated player's interactWithEntity never
 // fires world.beforeEvents.playerInteractWithEntity (only the after event and the game's own handling: the wheat is
 // eaten, the sheep sheared), and its useItemInSlotOnBlock fires playerInteractWithBlock with isFirstEvent false, so
 // the pack never says "This land is claimed by ..." to it. Neither can be tested natively without this.

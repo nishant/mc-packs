@@ -1,0 +1,8 @@
+# Shipped files and the shared sources copied into packs stay LF in every checkout (F67, tools/check-eol.mjs).
+packs/**/*.js text eol=lf
+packs/**/*.json text eol=lf
+packs/**/*.lang text eol=lf
+packs/**/*.mcfunction text eol=lf
+packs/**/*.material text eol=lf
+packs/**/*.txt text eol=lf
+tools/*-shared.js text eol=lf

@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "expedition_bp";
-const VERSION = "2.4.14";
+const VERSION = "2.4.15";
 const NAME = "Expeditions";
 /** @type {string[]} */
 const PREFIXES = ["expedition"];

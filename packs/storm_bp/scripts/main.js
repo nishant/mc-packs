@@ -1,4 +1,6 @@
 import "./diag.js";
+import { planNow } from "./weather-plan.js";
+import { createGossip } from "./gossip.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, ScriptEventSource, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -81,19 +83,6 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
     console.warn(`[storm] ${e}`);
   }
 });
-
-/** The overworld weather a realm:weather_plan names right now, or undefined (the Almanac is off, another dimension, garbage). @param {string} message */
-function planNow(message) {
-  try {
-    const m = JSON.parse(message);
-    if (!m || m.off === true) return undefined;
-    const dim = m.dim ?? m.dimension;
-    if (typeof dim === "string" && dim.replace(/^minecraft:/, "") !== "overworld") return undefined;
-    return m.now === WeatherType.Clear || m.now === WeatherType.Rain || m.now === WeatherType.Thunder ? /** @type {WeatherType} */ (m.now) : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 // The Weather Almanac (if it's installed) knows the weather now: it sends its plan when it changes and answers
 // realm:weather_ask. Until a real weatherChange has come in, a pack added in the middle of a storm takes it from there.
@@ -447,22 +436,10 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
 
 // Town news: Storm Glass collected from a lightning rod is Townsfolk gossip, each player once per storm cell and at
 // most one piece per in-game hour from this pack.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
 let cellNo = 0; // counts the cells formed this session
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => system.sendScriptEvent("realm:gossip", JSON.stringify(msg)), () => system.currentTick);
 
 /** A stack of the shared Storm Glass item. @param {number} n */
 function stormGlass(n) {

@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "guilds_bp";
-const VERSION = "1.1.13";
+const VERSION = "1.1.14";
 const NAME = "Guilds & Reputation";
 /** @type {string[]} */
 const PREFIXES = ["guilds"];

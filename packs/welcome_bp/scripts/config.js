@@ -45,8 +45,13 @@ export const GENERIC = {
   /** With Story Questlines: the story's first day (docs/STORY_BIBLE.md, section 1). */
   story:
     "A sleepy harbor town keeps an old secret. The harbor bell sank into the sea forty winters ago, yet lately it has been heard ringing again, and the stars look wrong.",
-  /** With Story Questlines and Townsfolk: who starts it (the two prologue stories). */
-  storyStart: "Tap §bOld Tobin§r or §bMara§r in town to begin §eThe Lantern and the Hollow§r.",
+  /**
+   * With Story Questlines and Townsfolk, once one of the two prologue givers is placed (/realm:npc_add): who starts
+   * it. {who} becomes the placed ones' names from `starters`, joined with " or ".
+   */
+  storyStart: "Tap {who} in town to begin §eThe Lantern and the Hollow§r.",
+  /** @type {Record<string, string>} the prologue givers: Townsfolk id -> the name the welcome uses */
+  starters: { tobin: "§bOld Tobin§r", mara: "§bMara§r" },
   /** Without Story Questlines. */
   noStory: "A world to explore, build and play in together.",
   /** @type {Record<string, string>} */

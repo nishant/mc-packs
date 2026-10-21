@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "death_bp";
-const VERSION = "1.3.8";
+const VERSION = "1.3.9";
 const NAME = "Death Point";
 /** @type {string[]} */
 const PREFIXES = ["death"];

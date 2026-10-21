@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "farm_bp";
-const VERSION = "1.4.8";
+const VERSION = "1.4.9";
 const NAME = "Farm Loader";
 /** @type {string[]} */
 const PREFIXES = ["farm"];

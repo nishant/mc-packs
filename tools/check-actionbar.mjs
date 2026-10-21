@@ -16,7 +16,8 @@
 // is not protection. Referring to `setActionBar` without calling it (an alias, a `.bind`) is reported too.
 // Known exceptions waiting for a fix are listed per file and function in tools/check-actionbar.allow.json: the bottom
 // lines of the protocol (the Coordinates HUD, the stats ticker and their empty-string clears) and one default hook.
-// Never add a function there to hide a new write: send the request.
+// Never add a function there to hide a new write: send the request. An entry is a named function: "(anonymous)" is
+// refused, since it would cover every unnamed callback in the file.
 //
 //   node tools/check-actionbar.mjs           check
 //   node tools/check-actionbar.mjs --list    print every call site without the protocol, ignoring the allowlist
@@ -295,9 +296,12 @@ export function problemsOf(found, allow, listAll) {
   /** @type {string[]} */
   const problems = [];
   let allowed = 0;
+  for (const [file, names] of Object.entries(allow))
+    if (names.includes(ANON)) problems.push(`  - ${file}: the allowlist entry "${ANON}" would exempt every unnamed callback in the file: name the function instead`);
   for (const [file, names] of [...found].sort())
     for (const name of [...names].sort()) {
-      if (!listAll && allow[file]?.includes(name)) {
+      // "(anonymous)" would exempt every unnamed callback in the file, including the next new one: never accepted.
+      if (!listAll && name !== ANON && allow[file]?.includes(name)) {
         allowed++;
         continue;
       }

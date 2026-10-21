@@ -13,9 +13,11 @@ export const isSystem = (l) => l.f === "";
 /**
  * What delivering one pack letter to `to` changes. A pack letter is not delivered once the realm holds
  * `maxLetters - systemReserve` letters, so players can always write. A letter with no usable sent time is never
- * counted as old. The recipient's whole inbox (`inboxLimit`) is kept too, but only by dropping their oldest read pack\n * letters: a letter from a player is never dropped here, and the pack letter isn't delivered when that isn't enough.
+ * counted as old. The recipient's whole inbox (`inboxLimit`) is kept too, but only by dropping their oldest read pack
+ * letters: a letter from a player is never dropped here, and the pack letter isn't delivered when that isn't enough.
  * @param {Iterable<Mail>} letters @param {string} to @param {number} now @param {Policy} policy
- * @returns {{ ok: boolean, drop: number[], reason?: string }} `drop`: ids to delete first (expired, and the recipient's oldest over the limit)
+ * @returns {{ ok: boolean, drop: number[], reason?: string }} `drop`: ids to delete first (expired, and the recipient's oldest over the limit;
+ *   only the expired ones when the letter is refused)
  */
 export function planSystemLetter(letters, to, now, policy) {
   const all = [...letters];
@@ -45,6 +47,8 @@ export function planSystemLetter(letters, to, now, policy) {
       gone.add(l.id);
     }
   }
-  if (live.length - gone.size + expired.length >= ceiling) return { ok: false, drop, reason: "the realm's mail is full" };
+  // Refused for a full realm: delete only the expired letters, never the recipient's own (unread ones included)
+  // for a letter that isn't delivered anyway.
+  if (live.length - gone.size + expired.length >= ceiling) return { ok: false, drop: expired, reason: "the realm's mail is full" };
   return { ok: true, drop };
 }

@@ -134,9 +134,10 @@ tree as their last argument (`git archive <commit> packs | tar -x -C <dir>`), so
 before a fix: `hooks/owed-probe.mjs` (seeds and reads a pack's own world or player properties and replays its
 playerSpawn listeners; owed-legacy-restart, owed-legacy-consumers, party-moderation, crowns-limit),
 `hooks/milestones-rejoin.mjs` (the same player joining again after a restart; w10-milestones-flag),
+`hooks/expedition-queue-rejoin.mjs` (reads the saved expedition line and hands a restored place to the leader's new id; expedition-queue-restart),
 `hooks/stash-loads.mjs` (counts the saved pages Quick Stack & Sort loads; refill-pages), `hooks/elite-remove.mjs` (removes chosen spawns in elite_bp's own flush, after its spawn handler; elite-invalid) and `hooks/claims-taps.mjs` (hands claims_bp's own tap handlers a real player's tap: a simulated player's
 `interactWithEntity` never fires `beforeEvents.playerInteractWithEntity`, and its block taps arrive with `isFirstEvent`
-false; claims-animals). `probe-hooks.test.mjs` checks them offline. The suite builds each header recipe's copy in a
+false; claims-animals, claims-own-pet). `probe-hooks.test.mjs` checks them offline. The suite builds each header recipe's copy in a
 fresh folder, retries included. A header whose
 command runs another scenario file fails (and `npm run check` catches it too). A few have no plain command and are listed in
 `SPECIAL` in `suite.mjs` (smoke and restart with every pack, forms, domt-champion, the

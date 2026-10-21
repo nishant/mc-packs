@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "phantom_bp";
-const VERSION = "1.2.8";
+const VERSION = "1.2.9";
 const NAME = "Phantom Opt-out";
 /** @type {string[]} */
 const PREFIXES = ["phantom"];

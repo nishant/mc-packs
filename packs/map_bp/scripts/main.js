@@ -303,13 +303,14 @@ function applyReset(player) {
   try {
     const gen = currentGen();
     if (!needsReset(gen, player.getDynamicProperty(PLAYER_GEN))) return;
-    resetPlayer(player, gen);
+    const cleared = resetPlayer(player, gen);
     wpCache.set(player.id, null);
     marksCache.set(player.id, []);
     lastSent.delete(player.id);
     views.delete(player.id);
     passAt.delete(player.id);
-    player.sendMessage("§7[Map] An operator reset everyone's destination and marked spots.");
+    // Only someone who lost a destination or spots is told; a brand-new player is just stamped with the generation.
+    if (cleared) player.sendMessage("§7[Map] An operator reset everyone's destination and marked spots.");
   } catch (e) {
     console.warn(`[map] reset: ${e}`);
   }

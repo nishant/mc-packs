@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "find_bp";
-const VERSION = "1.4.8";
+const VERSION = "1.4.9";
 const NAME = "Chest Finder";
 /** @type {string[]} */
 const PREFIXES = ["find"];

@@ -241,14 +241,15 @@ for (const { folder, prop } of PACKS) {
   });
 }
 
-test("the six packs read a plan with the same code", () => {
+test("the six packs read a plan with the same code (one tools/weather-plan-shared.js, F52)", () => {
+  const shared = readFileSync(new URL("../tools/weather-plan-shared.js", import.meta.url), "utf8");
   const texts = PACKS.map(({ folder }) => {
     const src = readFileSync(new URL(`${folder}/scripts/main.js`, packsDir), "utf8");
-    const at = src.indexOf("function planNow(message) {");
-    assert.ok(at > 0, `${folder} has planNow`);
-    return src.slice(at, src.indexOf("\n}\n", at) + 3);
+    assert.match(src, /^import \{ planNow \} from "\.\/weather-plan\.js";$/m, `${folder} reads the plan with its weather-plan.js`);
+    assert.doesNotMatch(src, /function planNow\(/, `${folder} keeps no copy of its own`);
+    return readFileSync(new URL(`${folder}/scripts/weather-plan.js`, packsDir), "utf8");
   });
-  for (const t of texts) assert.equal(t, texts[0]);
+  for (const t of texts) assert.equal(t, `// Generated from tools/weather-plan-shared.js by node tools/sync-weather.mjs: edit that file, not this copy.\n${shared}`);
   assert.match(texts[0], /m\.off === true/);
   assert.match(texts[0], /replace\(\/\^minecraft:\/, ""\)/);
 });

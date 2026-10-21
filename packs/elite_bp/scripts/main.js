@@ -1,4 +1,5 @@
 import "./diag.js";
+import { createGossip } from "./gossip.js";
 import {
   CommandPermissionLevel,
   CustomCommandParamType,
@@ -1176,21 +1177,9 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 
 // Town news: at most one piece per in-game hour from this pack, each event once. Dropped, not queued.
 // The seen list is process memory (cleared on script restart). Rewards stay outside this gate.
-const NEWS_GAP = 1000; // ticks, an in-game hour
-let newsAt = -NEWS_GAP;
-/** @type {Set<string>} */
-const newsSeen = new Set();
 
-/** @param {string} key @param {object} msg @returns {boolean} */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
-  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => system.sendScriptEvent("realm:gossip", JSON.stringify(msg)), () => system.currentTick);
 
 /**
  * @param {Info} info
@@ -1467,6 +1456,7 @@ const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel
 
 /** `/realm:champions`: the menu. @param {Player} player */
 async function menu(player) {
+  if (!player.isValid) return; // also reached from a page's Back, after its form
   const op = isOp(player);
   const kills = Number(player.getDynamicProperty(PROP_KILLS) ?? 0);
   const form = new ActionFormData()
@@ -1495,7 +1485,7 @@ const NOT_OP = "§cOnly operators can do that.";
 /** A page with a Back button to the menu. @param {Player} player @param {string} title @param {string} body */
 async function page(player, title, body) {
   const res = await show(player, new ActionFormData().title(title).body(body).button("Back"));
-  if (res && !res.canceled && res.selection === 0) await menu(player);
+  if (res && !res.canceled && res.selection === 0 && player.isValid) await menu(player);
 }
 
 /** @param {Player} player */
@@ -1542,6 +1532,7 @@ async function spawnForm(player) {
 
 /** @param {Player} player */
 async function removeForm(player) {
+  if (!player.isValid) return;
   const list = player.dimension.getEntities({ tags: [CHAMP], location: player.location, maxDistance: 64 });
   if (!list.length) return page(player, "Remove champions", "No champions within 64 blocks.");
   const res = await show(
@@ -1604,6 +1595,7 @@ function forPlayer(origin, fn) {
   if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
   system.run(async () => {
     try {
+      if (!player.isValid) return; // left before the next tick
       await fn(player);
     } catch (e) {
       console.warn(`[elite] ${e}`);

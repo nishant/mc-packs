@@ -92,17 +92,29 @@ const utf8Length = (s) => {
   return n;
 };
 
-/** The realm:hud_state messages for a full list. @param {string[]} players @param {number} seq */
+/**
+ * The realm:hud_state messages for a full list. Each part's size is counted as it grows (the envelope with the widest
+ * part numbers, plus each id's JSON form and a comma), so every id is encoded once instead of the whole chunk again.
+ * @param {string[]} players @param {number} seq
+ */
 function statePartMessages(players, seq) {
   const envelope = (/** @type {string[]} */ list, /** @type {number} */ part, /** @type {number} */ parts) =>
     JSON.stringify({ part, parts, seq, players: list });
+  const base = utf8Length(envelope([], 9999, 9999));
   /** @type {string[][]} */
   const chunks = [[]];
+  let size = base;
   for (const id of players) {
     const last = /** @type {string[]} */ (chunks.at(-1));
-    if (utf8Length(envelope([id], 9999, 9999)) > STATE_MESSAGE_LIMIT) continue; // can't fit alone: never happens with real ids
-    if (last.length && utf8Length(envelope([...last, id], 9999, 9999)) > STATE_MESSAGE_LIMIT) chunks.push([id]);
-    else last.push(id);
+    const add = utf8Length(JSON.stringify(id));
+    if (base + add > STATE_MESSAGE_LIMIT) continue; // can't fit alone: never happens with real ids
+    if (last.length && size + 1 + add > STATE_MESSAGE_LIMIT) {
+      chunks.push([id]);
+      size = base + add;
+    } else {
+      size += (last.length ? 1 : 0) + add;
+      last.push(id);
+    }
   }
   return chunks.map((list, i) => envelope(list, i + 1, chunks.length));
 }
@@ -121,7 +133,8 @@ function sendState(players, now = false) {
   for (const message of statePartMessages(players, ++stateSeq)) system.sendScriptEvent("realm:hud_state", message);
 }
 
-system.runInterval(() => {
+/** Draws the Coordinates HUD for every player who has it on: the lowest steady line, it only listens and waits. */
+function hudLoop() {
   const now = system.currentTick;
   /** @type {string[]} */
   const seeing = [];
@@ -146,7 +159,8 @@ system.runInterval(() => {
     }
   }
   sendState(seeing);
-}, Math.max(MIN_INTERVAL, CONFIG.intervalTicks));
+}
+system.runInterval(hudLoop, Math.max(MIN_INTERVAL, CONFIG.intervalTicks));
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   shown.delete(playerId);
@@ -157,7 +171,8 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 const seeingNow = () => world.getAllPlayers().filter(hudFor).map((p) => p.id);
 
 // Turning the HUD off (here, in /realm:prefs, or for the whole realm) clears it right away.
-onChange((key, player) => {
+/** @param {string} key @param {import("@minecraft/server").Player | undefined} player */
+function clearOnChange(key, player) {
   const players = player ? [player] : world.getAllPlayers();
   for (const p of players) {
     const had = shown.get(p.id);
@@ -168,7 +183,8 @@ onChange((key, player) => {
     else if (had && !hudFor(p) && (pausedUntil.get(p.id) ?? 0) <= system.currentTick) p.onScreenDisplay.setActionBar("");
   }
   sendState(seeingNow());
-});
+}
+onChange(clearOnChange);
 
 onScriptEvent(
   ["realm:actionbar", "realm:hud_line", "realm:hud_ping"],

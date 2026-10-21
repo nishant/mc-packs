@@ -1,4 +1,4 @@
-// The harness-only probe hooks (tools/test-bds/hooks/owed-probe.mjs, milestones-rejoin.mjs, stash-loads.mjs, elite-remove.mjs, claims-taps.mjs) build
+// The harness-only probe hooks (tools/test-bds/hooks/owed-probe.mjs, milestones-rejoin.mjs, expedition-queue-rejoin.mjs, stash-loads.mjs, elite-remove.mjs, claims-taps.mjs) build
 // test copies whose scripts parse, put the probe where it runs (right after diag.js, so it sees what the pack
 // subscribes), leave the shipped packs alone, and work on a source tree given as their last argument (how a scenario
 // is run on the code from before a fix).
@@ -66,6 +66,26 @@ test("milestones-rejoin: the probe is appended in the pack's module scope and us
     assert.ok(text.startsWith(shipped), "the shipped code is kept as it is");
     for (const name of [/^let cache\b/m, /^const dirty = /m, /^const backfilled = /m, /^function check\(/m, /^function flush\(/m, /^const RECORD_PREFIX = /m])
       assert.match(shipped, name, `the pack still defines ${name} (the probe resets it as a fresh start would)`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("expedition-queue-rejoin: the probe is appended in the pack's module scope and uses names the pack defines", () => {
+  const dir = tmp();
+  try {
+    run([path.join(HOOKS, "expedition-queue-rejoin.mjs"), path.join(dir, "packs")]);
+    const file = path.join(dir, "packs", "expedition_bp", "scripts", "main.js");
+    parses(file);
+    const text = fs.readFileSync(file, "utf8");
+    const shipped = fs.readFileSync(path.join(ROOT, "packs", "expedition_bp", "scripts", "main.js"), "utf8");
+    assert.ok(text.startsWith(shipped), "the shipped code is kept as it is");
+    assert.match(text.slice(shipped.length), /ExpQueueProbeSource\.Server/, "console only");
+    assert.match(text.slice(shipped.length), /namespaces: \["harness"\]/);
+    // The line lives in queue.js; main.js brings queue and queueRejoined into its module scope from createQueue.
+    assert.match(shipped, /^const \{ queue,[^}]*\bqueueRejoined\b[^}]*\} = createQueue\(\{/m, "main.js still names queue and queueRejoined (the probe reads them)");
+    const queueJs = fs.readFileSync(path.join(ROOT, "packs", "expedition_bp", "scripts", "queue.js"), "utf8");
+    assert.match(queueJs, /^export const PROP_QUEUE = "expedition:queue";/m, "the line is still saved where the probe reads it");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

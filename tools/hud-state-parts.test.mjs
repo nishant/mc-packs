@@ -90,6 +90,56 @@ test("producer: a long variable player id still keeps every part under the bound
   assert.equal(stateMsgs(sim).slice(-raw.length).flatMap((m) => m.players).length, 120);
 });
 
+// F15: the old split re-encoded the whole growing part for every id (O(n^2) characters); the parts must be the same
+// as that greedy split, while encoding each id about once.
+function referenceSplit(players, seq) {
+  const envelope = (list, part, parts) => JSON.stringify({ part, parts, seq, players: list });
+  const chunks = [[]];
+  for (const id of players) {
+    const last = chunks.at(-1);
+    if (bytes(envelope([id], 9999, 9999)) > 1900) continue;
+    if (last.length && bytes(envelope([...last, id], 9999, 9999)) > 1900) chunks.push([id]);
+    else last.push(id);
+  }
+  return chunks.map((list, i) => envelope(list, i + 1, chunks.length));
+}
+
+test("producer: parts match the greedy split for mixed ids and encode each id about once (F15)", async () => {
+  const sim = createSim();
+  await sim.load("hud_bp");
+  sim.server.world.getDay = () => 0;
+  sim.boot();
+  const odd = ["\u00e9", "\u4e2d", "\ud83d\ude00", '"', "\\", "\u0001"];
+  const joined = [];
+  for (let i = 0; i < 300; i++) {
+    const id = `${"y".repeat(i % 37)}${odd[i % odd.length]}${i}`;
+    joined.push(id);
+    const p = sim.join(`P${i}`, { id });
+    p.getRotation = () => ({ x: 0, y: 0 });
+    p.setDynamicProperty("hud:pref", JSON.stringify({ on: true }));
+  }
+  sim.step(25);
+  sim.game.sent.length = 0;
+  const real = JSON.stringify;
+  let encoded = 0;
+  JSON.stringify = function (...args) {
+    const out = real.apply(this, args);
+    if (typeof out === "string") encoded += out.length;
+    return out;
+  };
+  try {
+    sim.game.deliver("realm:hud_ping", "{}");
+  } finally {
+    JSON.stringify = real;
+  }
+  const raw = sim.game.sent.filter((m) => m.id === STATE).map((m) => m.message);
+  assert.ok(raw.length > 2, `${raw.length} parts`);
+  const seq = JSON.parse(raw[0]).seq;
+  assert.deepEqual(raw, referenceSplit(joined, seq));
+  const total = raw.reduce((n, m) => n + m.length, 0);
+  assert.ok(encoded < total * 4, `encoded ${encoded} characters for ${total} sent`);
+});
+
 test("producer: nobody viewing sends one empty part", async () => {
   const sim = await producer(0);
   sim.game.deliver("realm:hud_ping", "{}");

@@ -245,8 +245,14 @@ onScriptEvent(
       const req = JSON.parse(message);
       if (!req || typeof req !== "object" || typeof req.player !== "string" || !req.player) return;
       const name = online(req.player)?.name;
-      if (id === "realm:title_unlock") unlockTitle(req.player, req.title, name);
-      else unlockTrail(req.player, req.trail, name);
+      if (id === "realm:title_unlock") {
+        unlockTitle(req.player, req.title, name);
+        // A sender that asks (`ack`, its folder) hears that the title was handled, new or already owned, so it can
+        // stop sending it again (Milestones' backfill).
+        if (typeof req.ack === "string" && req.ack && req.ack.length <= 40 && typeof req.title === "string" && req.title.length <= 200) {
+          system.sendScriptEvent("realm:title_ack", JSON.stringify({ player: req.player.slice(0, 40), title: req.title, ack: req.ack }));
+        }
+      } else unlockTrail(req.player, req.trail, name);
     } catch {
       // not JSON: ignore
     }
@@ -343,7 +349,8 @@ function* forgetOld() {
     },
     warn: (e) => console.warn(`[titles] ${e}`),
   });
-}system.runTimeout(() => system.runJob(forgetOld()), 1400);
+}
+system.runTimeout(() => system.runJob(forgetOld()), 1400);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {

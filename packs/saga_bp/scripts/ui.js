@@ -1,5 +1,6 @@
 // What players see: offers at the townsfolk, chapter dialogues, hints, rewards, the tracker, the
 // story log menu (current, available, finished, codex, daily favors) and the operators' tools.
+import { createGossip } from "./gossip.js";
 import { Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -63,23 +64,9 @@ import { PACK, across, alive, busy, clock, compass, coords, dialog, dimName, exc
 /** @typedef {import("./places.js").Loc} Loc */
 
 const HINT_MS = 600000; // operator notes about unset places: at most every 10 minutes per place
-const NEWS_GAP = 1000; // town gossip: at most one line per 1000 game ticks
-let newsAt = -NEWS_GAP;
-const newsSeen = new Set(); // keys of the last 64 gossip lines (memory only)
 
-/**
- * Town gossip. A line that comes too soon is dropped, not queued. Each key is told once.
- * @param {string} key @param {Record<string, unknown>} msg
- */
-function gossip(key, msg) {
-  const now = system.currentTick;
-  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
-  newsAt = now;
-  newsSeen.add(key);
-  if (newsSeen.size > 64) newsSeen.delete(newsSeen.values().next().value);
-  send("realm:gossip", msg);
-  return true;
-}
+/** Townsfolk gossip through the shared town-news gate (gossip.js): one piece per in-game hour, each key once. */
+const gossip = createGossip((msg) => send("realm:gossip", msg), () => system.currentTick);
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -1454,6 +1441,21 @@ function fitRows(line, rows) {
 }
 
 /**
+ * A label and its tail (where it is, what it waits for) in `rows` rows: the label is cut at a word to make room, so
+ * the tail always shows (unless it doesn't fit on its own). @param {string} label @param {string} tail @param {number} rows
+ */
+function fitTail(label, tail, rows) {
+  if (!tail || rowsOf(label + tail) <= rows) return fitRows(label + tail, rows);
+  const words = label.split(" ");
+  while (words.length > 1) {
+    words.pop();
+    const cut = `${words.join(" ").replace(/[\s,:;(-]+$/, "")}...${tail}`;
+    if (rowsOf(cut) <= rows) return cut;
+  }
+  return fitRows(label + tail, rows);
+}
+
+/**
  * Where one open objective is, for its row in the quest box: " §eNE 240m", " §eMara NE 40m", " §c1:20 left",
  * " §7(hint available)", or "" when it has no place.
  * @param {Player} player @param {Entry} e @param {number} i @param {Saga} saga
@@ -1517,7 +1519,8 @@ function partyLine(player, e) {
 function questBox(player, e, saga, first, at, others = []) {
   /** @type {BoxLine[]} */
   const items = [];
-  const add = (/** @type {string} */ text, prio = 5, kind = /** @type {BoxLine["kind"]} */ ("other")) => items.push({ text, prio, kind });
+  const add = (/** @type {string} */ text, prio = 5, kind = /** @type {BoxLine["kind"]} */ ("other"), tail = "") =>
+    items.push({ text: text + tail, prio, kind, tail });
   add(`§b${e.story.short}§7: ${e.chapter.title}`, 10);
   const done = chapterDone(e, saga);
   if (done) add(`§6> ${plain(first)}`, 9);
@@ -1532,10 +1535,10 @@ function questBox(player, e, saga, first, at, others = []) {
   for (const { i } of order) {
     if (reached(e, i) || objDone(e, i, saga)) continue;
     if (!active(e, i, saga)) add(`§8[ ] Then: ${labelOf(e, i, saga)}`, 4, "step");
-    else add(`${i === at ? "§e[>] §f" : "§f[ ] "}${labelOf(e, i, saga)}${whereOf(player, e, i, saga)}`, i === at ? KEEP_PRIO : 8, "step");
+    else add(`${i === at ? "§e[>] §f" : "§f[ ] "}${labelOf(e, i, saga)}`, i === at ? KEEP_PRIO : 8, "step", whereOf(player, e, i, saga));
   }
   e.chapter.objectives.forEach((obj, i) => {
-    if (obj.optional && objApplies(e, obj, saga) && active(e, i, saga)) add(`§7[ ] ${labelOf(e, i, saga)}${whereOf(player, e, i, saga)}`, 3, "step");
+    if (obj.optional && objApplies(e, obj, saga) && active(e, i, saga)) add(`§7[ ] ${labelOf(e, i, saga)}`, 3, "step", whereOf(player, e, i, saga));
   });
   for (const { obj, i } of steps) if (reached(e, i)) add(`§a[x] §7${obj.label}`, 2, "step");
   const party = partyLine(player, e);
@@ -1544,14 +1547,19 @@ function questBox(player, e, saga, first, at, others = []) {
   return layoutBox(items);
 }
 
-/** One line of the quest box: its text (color codes included), how much it matters (the least go first) and what it is. @typedef {{ text: string, prio: number, kind: "step" | "quest" | "other" }} BoxLine */
+/**
+ * One line of the quest box: its text (color codes included), how much it matters (the least go first), what it is,
+ * and the end of the text that says where a step is or what it waits for (kept when the label has to be cut).
+ * @typedef {{ text: string, prio: number, kind: "step" | "quest" | "other", tail?: string }} BoxLine
+ */
 /** The quest and chapter line, the step the tracker points at and the report line (this priority and up) never go. */
 const KEEP_PRIO = 9;
 
 /**
  * Fits the lines in the box's rows and bytes. Each shows whole (the client wraps it at about BOX_COLS characters);
  * when they don't all fit, whole lines go, the least useful first (the last of equals), and a last row says how many.
- * Only when the lines that stay are too long on their own (a very long name) is the longest cut at a word.
+ * Only when the lines that stay are too long on their own (a very long name) is the longest cut at a word, in its
+ * label, so a step keeps its direction and distance (" NE 240m", "1:20 left").
  * @param {BoxLine[]} items
  */
 function layoutBox(items) {
@@ -1577,7 +1585,9 @@ function layoutBox(items) {
     let big = 0;
     for (let k = 1; k < shown.length; k++) if (shown[k].rows > shown[big].rows) big = k;
     if (shown[big].rows <= 1) break;
-    const cut = fitRows(shown[big].text, shown[big].rows - 1);
+    const line = shown[big];
+    const tail = line.tail && line.text.endsWith(line.tail) ? line.tail : "";
+    const cut = fitTail(line.text.slice(0, line.text.length - tail.length), tail, line.rows - 1);
     if (rowsOf(cut) >= shown[big].rows) break;
     shown[big].text = cut;
     shown[big].rows = rowsOf(cut);
@@ -1712,7 +1722,7 @@ export async function currentPage(player) {
       const e = list.find((x) => x.story.id === story.id);
       const cur = currentChapter(saga, story);
       const needs = packsNeeded(story, saga);
-      const step = needs.length ? `Needs ${needs.join(" and ")} to go on` : e ? stepLine(player, e, saga) : cur && onHold(player.id, story, cur.chapter.id) ? "Waiting for your party" : needs.length ? `Needs ${needs.join(" and ")} to go on` : `Talk to ${npcName(cur?.chapter.npc ?? story.giver)} to go on`;
+      const step = needs.length ? `Needs ${needs.join(" and ")} to go on` : e ? stepLine(player, e, saga) : cur && onHold(player.id, story, cur.chapter.id) ? "Waiting for your party" : `Talk to ${npcName(cur?.chapter.npc ?? story.giver)} to go on`;
       form.button(`${mark(story.id)}${story.kind === "main" ? "§l" : ""}${e?.pq ? "Party: " : ""}${story.title}§r\n§8${plain(step).slice(0, 60)}`);
       acts.push(() => chapterInfo(player, story));
     }
