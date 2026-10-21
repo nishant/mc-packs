@@ -507,7 +507,7 @@ function updateLabels() {
       targets.push({ id: String(i), entity, name: traderTag(/** @type {Visit} */ (visit), i) });
     });
   }
-  nameLabels.sync(targets, (dim) => dim.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
+  nameLabels.sync(targets, (/** @type {import("@minecraft/server").Dimension} */ dim) => dim.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /** @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */

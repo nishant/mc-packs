@@ -235,7 +235,7 @@ export function createNameLabels(opts) {
    * Observers and dimensions may be given as functions, called only when they are needed (not on a sync with
    * nothing to label).
    * @param {LabelTarget[]} targets
-   * @param {Player[] | (() => Player[])} observerList
+   * @param {Player[] | (() => Player[]) | ((dimension: Dimension) => Player[])} observerList with `observersPerDimension`, a function of the dimension
    * @param {Dimension[] | (() => Dimension[])} [dimensionList]
    */
   const sync = (targets, observerList, dimensionList = []) => {
@@ -269,7 +269,7 @@ export function createNameLabels(opts) {
     /** @type {Observer[]} */
     const activeObservers = [];
     if (targets.length && !observersPerDimension) {
-      const observers = typeof observerList === "function" ? observerList() : observerList;
+      const observers = typeof observerList === "function" ? /** @type {() => Player[]} */ (observerList)() : observerList;
       for (const p of observers) observe(p, undefined, activeObservers);
     }
     /** @param {Dimension} dim @param {string} dimId @returns {Observer[]} */

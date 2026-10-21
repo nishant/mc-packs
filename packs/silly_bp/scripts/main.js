@@ -272,8 +272,8 @@ function setHand(p, item) {
 
 /** Players whose gear is read in full on the next tick. @type {Map<string, Player>} */
 const queued = new Map();
-/** @param {Player | undefined} p */
 let flushing = false;
+/** @param {Player | undefined} p */
 const queue = (p) => {
   if (!p) return;
   queued.set(p.id, p);

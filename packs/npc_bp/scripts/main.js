@@ -493,7 +493,7 @@ function updateLabels() {
     if (!t || !entity) continue;
     targets.push({ id: rec.id, entity, name: labelTextFor(t) });
   }
-  nameLabels.sync(targets, (dim) => dim.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
+  nameLabels.sync(targets, (/** @type {import("@minecraft/server").Dimension} */ dim) => dim.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 

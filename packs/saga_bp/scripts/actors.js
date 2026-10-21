@@ -175,7 +175,7 @@ export function updateActorLabels() {
       return [];
     }
   });
-  nameLabels.sync(targets, (dim) => dim.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
+  nameLabels.sync(targets, (/** @type {import("@minecraft/server").Dimension} */ dim) => dim.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /** Removes every actor matching. @param {{ owner?: string, key?: string, role?: Actor["role"] }} f @param {boolean} [effect] */
