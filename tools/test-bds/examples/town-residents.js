@@ -3,7 +3,8 @@
 // (town_bp's villager_v2 file) and a farmer's and a fisherman's look, standing by the well, and players in the town read
 // "A new family moved into Elm". One is killed: its record waits for replaceMinutes of in-game time (5 here), then a
 // new family comes with the message. One removed without a death (as a zombie conversion would) is missing for 2
-// censuses, then replaced too. A villager given a resident's tags by hand loses them and stays alive.
+// censuses, then replaced too. A villager given a resident's tags by hand loses them and stays alive. The town removed,
+// its residents lose the tags and stay alive.
 //   node tools/test-bds/run.mjs --quiet --flat --only town_bp --scenario tools/test-bds/examples/town-residents.js --timeout 4000
 export default async function (t) {
   const dim = t.dimension;
@@ -105,4 +106,15 @@ export default async function (t) {
   await census();
   t.check(stray.isValid && !stray.hasTag("town:r:elm") && !stray.hasTag("realm:resident"), "a stray loses the tags and stays");
   t.check(residents().length === 2, "still 2");
+
+  // The town removed: its residents lose our tags and stay, ordinary villagers (never killed), and its record goes.
+  const ids = residents().map((e) => e.id);
+  since = t.tick;
+  town("remove_town", { town: "elm" });
+  await t.waitMessage(p, /town elm removed/, { since, timeout: 60 });
+  await t.wait(5);
+  const left = dim.getEntities({ type: "minecraft:villager_v2" }).filter((e) => ids.includes(e.id));
+  t.check(left.length === 2, `both residents still live (${left.length})`);
+  t.check(left.every((e) => !e.getTags().some((x) => x === "realm:resident" || x.startsWith("town:"))), "and carry none of our tags");
+  t.check(t.world.getDynamicProperty("town:r:elm") === undefined, "the town's residents record is gone");
 }
