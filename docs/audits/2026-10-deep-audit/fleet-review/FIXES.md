@@ -1,5 +1,7 @@
 # Fix list after reviewing msftMyt's plan branch (for a Claude session, after that release ships)
 
+**Campaign status (October 21):** shipped in releases #107, #115, #117, #118, #119, #121, #124, #125, #127 and the final records PR (O81); still open, each per the owner's F56 answer ("it is what it is, if we can improve it go for it"): O1 (map_bp 2.1 ms/tick at 40 players against its 1 ms goal), O3 (npc label loop and elite night, changes within noise), O10 (the build preview), F70 (partly done through those), F71 and O11-O16 (waiting on the owner's devices) and O46 (the Easy Building license credit, a `docs/RELEASE_TODO.md` item per the owner's answer, for before a public release).
+
 The branch `msftmyt-deep-audit-fleet-integration` (reviewed at commit `aef10dc`, 207 commits ahead of master
 `7eb5f72`) implements `../PLAN.md`. Two independent read-only reviews of it are in this folder. This file lists every
 fix they found. Each fix has an id (F1...), so PRs and `../OPEN.md` can refer to it.
@@ -165,7 +167,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - the build gate measurement: O48
     - anything else not DONE with a sha
   - An item becomes WON'T FIX only with an owner answer recorded in OPEN.md.
-- [ ] OPEN, waiting on the owner's devices (checklist current at fbbce801; leftovers): [REAL_CLIENT_CHECKLIST.md](../REAL_CLIENT_CHECKLIST.md) now also has F1 (towns and residents, D72-D77 and O76-O79) and a second A4 run after the Minimap redesign (O1), with the version gates (Town Projects 1.7.2, Realm Bundle 2026.1021.1319 or later); pets in claims stay E5. Nothing else in the campaign needs a real client that it doesn't cover. **F71 (high, owner on devices) The real-client checklist (W2, O11-O16) and checks of the owner's reports.**
+- [ ] OPEN, waiting on the owner's devices (checklist current at fbbce801; leftovers): [REAL_CLIENT_CHECKLIST.md](../REAL_CLIENT_CHECKLIST.md) now also has F1 (towns and residents, D72-D77 and O76-O79) and a second A4 run after the Minimap redesign (O1), with the version gates (Town Projects 1.7.2, Realm Bundle 2026.1021.1319 or later); pets in claims stay E5. Nothing else in the campaign needs a real client that it doesn't cover. The checklist is also published as a page the owner can follow, with saved per-device results: https://claude.ai/artifact/RRrC9it2vANruZ4K1t9xxt (results land in its database; the owner's reports get fixed and recorded in `../OPEN.md`). It stays open until the owner runs it. **F71 (high, owner on devices) The real-client checklist (W2, O11-O16) and checks of the owner's reports.**
   - Prepare one checklist the owner runs on a phone and a PC in a private test world (never the live Realm), with
     exact steps and what to look for. Cover:
     - name label resend timing
@@ -520,7 +522,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - Test: a BDS scenario that places a camp wanderer on open flat ground for 5 minutes and counts snap-backs:
     before, many; after, zero or nearly zero. The wanderer must still stay within the camp area.
 
-- [ ] **F43 (high) Scenarios that pass on master and fail twice on the branch** (`perf-report.md`; branch suite: 249
+- [x] DONE (8aa5cf06, 9c36e128; F69: atlas 86a28e4, d074d47, 6c96787, bd653ab; wander-walk 8a56f9e, 58b4851, b6f227c, b50c8ba): 7 of the 9 regressions were fixture corrections at 8aa5cf06 (admin-diag-bundle, admin-size-profile, expedition-slot-spawn, find-index, stash-pages, stats-new-name, stats-ticker) plus a real pack fix for expedition-pending (9c36e128); atlas and wander-walk were root-caused and fixed in F69, no assertion weakened. **F43 (high) Scenarios that pass on master and fail twice on the branch** (`perf-report.md`; branch suite: 249
   scenarios, 230 pass, 17 fail, 2 flaky):
   - admin-diag-bundle
   - admin-size-profile
@@ -672,7 +674,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - In the re-review (step 1), check that #97's code in `saga_bp/scripts/objectives.js` and its story edits
     (`act2_choir.js`, `act4_seals.js`) are on master after #96. Its scenario must pass. Versions must be above
     saga 1.16.4 and news 1.7.70.
-- [ ] **F55 (process) Comparable measurements.** Every number in `perf-report.md` comes from Claude's cloud
+- [x] DONE (calibrated October 20): master 7dac598 at 10 players with the aef10dc harness gave 7.04 ms/tick steady against perf-report's 6.39, so every before/after comparison in the campaign stayed within one machine; later comparisons run on the same CI runner (pr-tests perf, validate.yml A/B). **F55 (process) Comparable measurements.** Every number in `perf-report.md` comes from Claude's cloud
   container, so any later "before" or "after" has to be measured the same way to compare:
   - Ubuntu 24.04, 4 vCPUs Xeon 2.8 GHz, 15 GiB
   - Node 22.22, Linux BDS 1.26.52.3
