@@ -24,7 +24,7 @@ are independent; do them in any order and skip what you can't do today (write "n
 3. Start the world on the PC. Open it to LAN / friends.
 4. On the phone, sign in with **a second account** (a family or alt account; the phone can't join as the same
    account) and join the PC's world over the same Wi-Fi. Without a second account, do every check on each device in
-   turn and mark the two-player checks (B3, C2) "not run".
+   turn and mark the two-player checks (B3, C2, E5) "not run".
 5. On the PC: pause menu → the phone player → give **Operator** permission, so both can run operator commands.
 6. Phone: set the GUI scale to the phone's default. PC: note the GUI scale (Settings → Video) and the window size;
    do the HUD checks once in a normal window and once at full screen.
@@ -226,6 +226,18 @@ Useful commands (operator):
   a preference the operators locked shows as locked; closing with unsaved changes warns first.
 - FAIL: huge headings, text cut off, a switch that can't be reached.
 
+### E5. Your own pet in someone else's claim (F29, two players)
+BDS can't check this: a simulated player's tap on an animal fires no `playerInteractWithEntity` event, so the claim
+never sees it. Needs the second account (PC = owner, phone = visitor); otherwise mark it "not run".
+1. On the PC, `/realm:claim` and claim the land where you stand.
+2. On the phone, outside the claim, tame a wolf with bones (or ride a horse until hearts show), then walk it into the
+   PC's claim.
+3. On the phone, hold a lead and tap your own wolf in the claim; make it sit and stand.
+4. On the PC, hold a lead and tap the phone's wolf. Then, on the phone, tap a cow in the claim with wheat.
+- PASS: the phone leashes and sits its own wolf in the claim with no message; on the cow, the phone sees
+  `This land is claimed by <owner>` on the action bar and keeps its wheat. (The PC is the owner, so its tap on the wolf goes through.)
+- FAIL: the phone's own wolf is refused in the claim, or the phone can feed the cow in the claim.
+
 ## Results
 
 Fill in one line per check (copy the table into a reply, or edit this file). Device: Phone or PC, with the GUI
@@ -251,7 +263,8 @@ scale and screen size.
 | E2 tornado funnel | | | |
 | E3 Easy Building | | | |
 | E4 settings menus | | | |
+| E5 own pet in a claim | | | |
 
 Which F- and O-items each check closes: A1 O12/O68/F17, A2 side box compositor, A3 O13, A4 O15/O69, A5 O43/F64,
 B1 O11/O16, B2 F42, B3 tether (floor gone), C1 O75, C2 F47, D1 O72, D2 O73, D3 O17/O20/F3/F13, D4 O70, E1 O71/F45,
-E2 O14, E3 F7/F8/F9/O47/O48, E4 the prefs lock and header rules.
+E2 O14, E3 F7/F8/F9/O47/O48, E4 the prefs lock and header rules, E5 F29 (and the O27 animal protection BDS can't drive).
