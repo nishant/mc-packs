@@ -1,6 +1,7 @@
 {
   "notes": [
-    "Townsfolk, caravan and story character name labels cost less with many players around."
+    "Townsfolk, caravan and story character name labels cost less with many players around.",
+    "Expedition dungeons build in shorter steps, so a busy server no longer hitches while one is built."
   ],
   "resourceNotes": [
     "Easy Building's resources: line endings tidied (no change for players)."
@@ -37,6 +38,10 @@
     "wander_bp": {
       "version": "1.2.21",
       "notes": "Internal: shared name-labels module update (no change for wanderers)."
+    },
+    "expedition_bp": {
+      "version": "2.4.16",
+      "notes": "Dungeon builds and resets spread their work over more, shorter steps: no build step holds a server tick for long."
     }
   }
 }

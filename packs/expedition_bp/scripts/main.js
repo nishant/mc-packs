@@ -53,6 +53,7 @@ import {
   wrap,
 } from "./layout.js";
 import { onScriptEvent } from "./script-events.js";
+import { STEP_MS, slabs } from "./slabs.js";
 
 // An expedition is a dungeon generated from a seed and a level (Easy, Normal, Hard or Nightmare tiers
 // 1 to 20), deep underground under the site an operator picked, inside a sealed box of deepslate: a
@@ -540,8 +541,9 @@ function sign(dim, at, facing, text) {
 
 /**
  * Runs the steps as a job, a few per tick, so a big fill never stalls the server. Resolves with how many failed.
- * Stops early once `live` says no.
- * @param {(() => void)[]} steps @param {() => boolean} [live] @returns {Promise<number>}
+ * Stops early once `live` says no. A step that returns an iterator (a room's parts) is run a slice at a time: it
+ * yields when it has worked STEP_MS, and the job goes on with it on a later turn.
+ * @param {(() => void | Iterator<unknown>)[]} steps @param {() => boolean} [live] @returns {Promise<number>}
  */
 function runSteps(steps, live = () => true) {
   return new Promise((resolve) => {
@@ -551,7 +553,13 @@ function runSteps(steps, live = () => true) {
         for (const s of steps) {
           if (!live()) break; // the run was ended meanwhile: its reset takes over
           try {
-            s();
+            const more = s();
+            if (more && typeof more.next === "function") {
+              while (!more.next().done) {
+                yield;
+                if (!live()) break;
+              }
+            }
           } catch (e) {
             failed++;
             console.warn(`[expedition] build step: ${e}`);
@@ -562,6 +570,15 @@ function runSteps(steps, live = () => true) {
       })(),
     );
   });
+}
+
+/**
+ * One step per slab of the box (at most STEP_BLOCKS blocks each), so no single fill holds a tick for long.
+ * @param {Dimension} dim @param {Vector3} from @param {Vector3} to @param {string | BlockPermutation} block @param {boolean} [whole] see fill
+ * @returns {(() => void)[]}
+ */
+function fillSteps(dim, from, to, block, whole = false) {
+  return slabs(from, to).map((s) => () => fill(dim, s.from, s.to, block, whole));
 }
 
 /**
@@ -577,11 +594,8 @@ function fillBoxSteps(dim, o, size, top, block, whole = false) {
     for (let z = 0; z < size; z += step) {
       const x2 = Math.min(size - 1, x + step - 1);
       const z2 = Math.min(size - 1, z + step - 1);
-      // Tall boxes in two layers, so no single fill is over 32768 blocks.
-      for (let y = -1; y <= top; y += 20) {
-        const y2 = Math.min(top, y + 19);
-        steps.push(() => fill(dim, { x: o.x + x, y: o.y + y, z: o.z + z }, { x: o.x + x2, y: o.y + y2, z: o.z + z2 }, block, whole));
-      }
+      // In slabs of at most STEP_BLOCKS blocks (a 16 x 16 column in 8-block layers), so no step holds a tick for long.
+      steps.push(...fillSteps(dim, { x: o.x + x, y: o.y - 1, z: o.z + z }, { x: o.x + x2, y: o.y + top, z: o.z + z2 }, block, whole));
     }
   return steps;
 }
@@ -666,11 +680,9 @@ function buildSteps(run) {
   lay.rooms.forEach((rm) => {
     const c = roomCenter(run, rm);
     const w = rm.r + 1;
-    steps.push(() => fill(dim, { x: c.x - w, y: F, z: c.z - w }, { x: c.x + w, y: F + rm.h + 1, z: c.z + w }, d.wall));
-    steps.push(() => {
-      fill(dim, { x: c.x - rm.r, y: F, z: c.z - rm.r }, { x: c.x + rm.r, y: F, z: c.z + rm.r }, d.floor);
-      fill(dim, { x: c.x - rm.r, y: F + 1, z: c.z - rm.r }, { x: c.x + rm.r, y: F + rm.h, z: c.z + rm.r }, "minecraft:air");
-    });
+    steps.push(...fillSteps(dim, { x: c.x - w, y: F, z: c.z - w }, { x: c.x + w, y: F + rm.h + 1, z: c.z + w }, d.wall));
+    steps.push(() => fill(dim, { x: c.x - rm.r, y: F, z: c.z - rm.r }, { x: c.x + rm.r, y: F, z: c.z + rm.r }, d.floor));
+    steps.push(...fillSteps(dim, { x: c.x - rm.r, y: F + 1, z: c.z - rm.r }, { x: c.x + rm.r, y: F + rm.h, z: c.z + rm.r }, "minecraft:air"));
   });
   // Corridors: along the path, then to side rooms.
   for (let i = 0; i < n - 1; i++) {
@@ -699,10 +711,16 @@ function buildSteps(run) {
  * Places one room's parts: puzzle pieces, balconies, ladders, ledges, signs, decor. Registers the pieces players press.
  * @param {Run} run @param {Dimension} dim @param {Room} rm @param {number} i
  */
-function buildParts(run, dim, rm, i) {
+function* buildParts(run, dim, rm, i) {
   const d = run.dungeon;
   const trim = d.trim ?? d.accent;
+  let since = Date.now();
   for (const p of rm.parts) {
+    // A turn of STEP_MS at most (runSteps goes on with the rest on a later turn).
+    if (Date.now() - since >= STEP_MS) {
+      yield;
+      since = Date.now();
+    }
     const at = wpos(run, rm, p.u, p.v, p.y);
     const to = wpos(run, rm, p.u2 ?? p.u, p.v2 ?? p.v, p.y2 ?? p.y);
     /** @param {string} k */
@@ -792,7 +810,13 @@ function buildParts(run, dim, rm, i) {
         spots.push({ u, v });
       }
     const block = perm(d.decor.block);
-    for (const s of shuffle(spots, r).slice(0, d.decor.count)) place(dim, wpos(run, rm, s.u, s.v, d.decor.floor ? 0 : 1), block);
+    for (const s of shuffle(spots, r).slice(0, d.decor.count)) {
+      if (Date.now() - since >= STEP_MS) {
+        yield;
+        since = Date.now();
+      }
+      place(dim, wpos(run, rm, s.u, s.v, d.decor.floor ? 0 : 1), block);
+    }
   }
 }
 
