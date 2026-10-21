@@ -43,6 +43,9 @@ function strip(sub) {
 }
 
 export default async function (t) {
+  // These checks describe the Minimap with the time it had before its 1 ms budget (October 2026): budgetLevel high
+  // gives it exactly those budgets, the same code with more time a tick. Its cost at normal is perf-soak's to measure.
+  await mapBudgetHigh(t);
   const sys = t.system;
   const Y = -60;
   const ev = [];
@@ -120,7 +123,8 @@ export default async function (t) {
     if (!at.length) worstGap = Infinity;
   }
   t.log(`longest wait for a new strip while all 10 turn: ${worstGap} ticks`);
-  t.check(worstGap <= 36, `every turning player gets a new strip before it fades (HOLD 40): at least every 36 ticks (${worstGap})`);
+  // HOLD is 100 ticks (the Minimap's main.js): a strip comes again before it fades, with 4 ticks to spare.
+  t.check(worstGap <= 96, `every turning player gets a new strip before it fades (HOLD 100): at least every 96 ticks (${worstGap})`);
   // Measured 2.2 to 2.6 ms per sent strip (17 to 21 ms a tick at 8 sends) on the shared dev machine (October 2026);
   // a send is a title command, which dominates the cost, so the bound is per send and the per-tick total follows the budget.
   const perSend = c.turnMs / Math.max(1, c.turnSends);
@@ -164,4 +168,23 @@ export default async function (t) {
   for (let i = 0; i < N; i++) sink += clean(JSON.parse(msg).text).length;
   const each = (Date.now() - t0) / N;
   t.log(`one realm:side message in one other pack: ${(each * 1000).toFixed(1)} us (x6 other side packs = ${(each * 6 * 1000).toFixed(0)} us a send) [${sink > 0}]`);
+}
+
+// The Minimap at budgetLevel high (scenarios can't import: pasted where needed).
+async function mapBudgetHigh(t) {
+  let ack;
+  const sub = t.system.afterEvents.scriptEventReceive.subscribe(
+    ({ id, message }) => {
+      if (id !== "realm:cfg_ack") return;
+      try {
+        const m = JSON.parse(message);
+        if (m.id === "mapbudget") ack = m;
+      } catch {}
+    },
+    { namespaces: ["realm"] },
+  );
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "mapbudget", pack: "map_bp", key: "budgetLevel", value: "high" }));
+  await t.waitUntil(() => ack, { timeout: 60, message: "budgetLevel high was set" });
+  t.system.afterEvents.scriptEventReceive.unsubscribe(sub);
+  t.assert(ack.ok, `budgetLevel high: ${ack.error ?? "ok"}`);
 }

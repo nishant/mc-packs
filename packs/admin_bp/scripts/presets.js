@@ -426,7 +426,7 @@ export const SETUP = [
  * @type {{ pack: string, key: string, large: boolean | number | string, why: string }[]}
  */
 export const SIZE_OPTIONS = [
-  { pack: "map_bp", key: "budgetLevel", large: "low", why: "the heaviest pack: its budgets are for everyone together, about 2.0 ms a tick instead of 2.9" },
+  { pack: "map_bp", key: "budgetLevel", large: "low", why: "the heaviest pack: its budgets are for everyone together, budgets of about 0.7 ms a tick instead of 1 (about 1.2 ms against 1.5 measured with 10 players)" },
   { pack: "map_bp", key: "mobRadiusMax", large: 24, why: "each mob search covers less ground, so the budgeted searches come round sooner" },
   { pack: "stats_bp", key: "tickerEnabled", large: true, why: "the ticker is each player's own; a Large server still allows it" },
   { pack: "stats_bp", key: "tickerDefaultOn", large: true, why: "players who never chose start with it on; a saved choice still wins" },

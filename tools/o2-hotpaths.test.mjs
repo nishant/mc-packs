@@ -401,6 +401,66 @@ test("silly: the sweep reads at most one player every 4 ticks, so 40 players cos
   assert.ok(calls.equip - before >= 400, `the sweep still runs: ${calls.equip - before} reads`);
 });
 
+test("silly: no callback runs every tick unless someone wears Hyper Jump boots, and the boots still launch at once", async () => {
+  const sim = createSim();
+  const calls = { equip: 0 };
+  const fx = [];
+  const gearOf = {};
+  const players = [];
+  for (let i = 0; i < 40; i++) players.push(sillyPlayer(sim, `p${i}`, (gearOf[i] = {}), calls, fx));
+  class MolangVariableMap {
+    setFloat() {}
+    setColorRGBA() {}
+  }
+  // Count silly's scheduled callbacks (interval and one-off runs) as the game calls them; loadReal also loads
+  // help_bp (from a data URL), whose callbacks don't count: silly's copy is a file in an "o2-" folder.
+  let runs = 0;
+  const sys = sim.server.system ?? sim.game.system;
+  for (const k of ["runInterval", "runTimeout", "run"]) {
+    const orig = sys[k].bind(sys);
+    sys[k] = (fn, ...rest) => {
+      const mine = /[\\/]o2-[^\\/]*[\\/]/.test(String(new Error().stack));
+      return orig(mine ? (...a) => (runs++, fn(...a)) : fn, ...rest);
+    };
+  }
+  await loadReal(sim, "silly_bp", { MolangVariableMap, PlayerInventoryType: { Hotbar: "Hotbar", Inventory: "Inventory" } });
+  sim.boot();
+  sim.step(40);
+  runs = 0;
+  sim.step(400);
+  // Every tick was two callbacks (800 in 400 ticks) plus the 4-tick ones: now the sweep and the ambient beat every 4
+  // ticks (200) and the Hat Trick rabbits every 40 (10).
+  assert.ok(runs <= 260, `${runs} callbacks in 400 ticks with nobody in Hyper Jump boots`);
+
+  // Hyper Jump boots put on with no event: the sweep finds them, and a sneak jump launches the wearer the same tick.
+  const a = players[0];
+  sim.server.world.getEntity ??= (id) => players.find((q) => q.id === id);
+  let launched = 0;
+  a.applyKnockback = () => launched++;
+  a.getVelocity = () => ({ x: 0, y: 0, z: 0 });
+  a.isJumping = false;
+  gearOf[0].Feet = sillyItem("minecraft:iron_boots", "Hyper Jump");
+  sim.step(200);
+  a.isSneaking = true;
+  a.isJumping = true;
+  const random = Math.random;
+  Math.random = () => 0.99; // a plain bounce (the Space Program launches only after its countdown)
+  try {
+    sim.step(1);
+  } finally {
+    Math.random = random;
+  }
+  assert.equal(launched, 1, "the per-tick check launched the wearer");
+  // Boots taken off (the inventory event reads the armor again): the per-tick check stops.
+  delete gearOf[0].Feet;
+  a.isJumping = false;
+  sim.game.emit("world.after.playerInventoryItemChange", { player: a, inventoryType: "Inventory", slot: 9, itemStack: sillyItem("minecraft:iron_boots", "Hyper Jump") });
+  sim.step(300); // the launch's flight watch ends at the latest 12 s after it (the sim never lands)
+  runs = 0;
+  sim.step(400);
+  assert.ok(runs <= 260, `${runs} callbacks in 400 ticks after the boots came off`);
+});
+
 test("silly: swapping the held stack for a plain stack of the same item, but another size, drops its hand enchants at once", async () => {
   const sim = createSim();
   const calls = { equip: 0 };

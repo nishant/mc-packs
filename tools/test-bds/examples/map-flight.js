@@ -1,7 +1,7 @@
 // Minimap terrain while flying: a player teleported 3 blocks a tick over ground that changes (a sand band built
 // ahead of them) sees the sand on the radar within a few ticks of arriving and few unknown cells while moving, and
 // a second player standing under a roof (cave terrain) never changes what the first one sees of the same dimension.
-//   node tools/test-bds/run.mjs --quiet --flat --only map_bp,hud_rp --scenario tools/test-bds/examples/map-flight.js --timeout 600
+//   node tools/test-bds/run.mjs --quiet --flat --only map_bp,hud_rp --scenario tools/test-bds/examples/map-flight.js --timeout 900
 const g = (n) => String.fromCodePoint(0xf300 + n);
 const SAND = g(0xaa);
 const EMPTY = g(0x38);
@@ -10,6 +10,9 @@ const SANDS = [SAND, g(0xb7), g(0xb8)];
 const count = (s, glyph) => [...(s ?? "")].filter((c) => (glyph === SAND ? SANDS.includes(c) : c === glyph)).length;
 
 export default async function (t) {
+  // These checks describe the Minimap with the time it had before its 1 ms budget (October 2026): budgetLevel high
+  // gives it exactly those budgets, the same code with more time a tick. Its cost at normal is perf-soak's to measure.
+  await mapBudgetHigh(t);
   const sys = t.system;
   let last = {};
   sys.afterEvents.scriptEventReceive.subscribe(
@@ -69,9 +72,15 @@ export default async function (t) {
   const rb2 = await radarOf(b);
   t.check(!rb2.includes(SAND), "the flier's sand is not drawn for the player far away under the roof");
 
-  // Reach the real cache cap through native flight, then stop beneath a roof: detail must not churn forever.
+  // Reach the real cache cap through native flight, then stop beneath a roof: detail must not churn forever. How long
+  // that takes depends on the scanner's reading budget and the machine (about 2200 ticks at budgetLevel high), so the
+  // flight goes on until the store is full, looked at every 200 ticks, for at most 6600 ticks.
   let area;
-  for (let i = 0; i < 2200; i++) {
+  for (let i = 0; i < 6600; i++) {
+    if (i >= 2000 && i % 200 === 0) {
+      await radarOf(a);
+      if (last[a.id].terrain.surface.columns >= 6000) break;
+    }
     const x = 0.1 + (i + 1) * 3.2;
     if (i % 10 === 0) {
       const next = await t.loadArea(x, 300, { radius: 4 });
@@ -128,4 +137,23 @@ export default async function (t) {
   t.log(`saturated stop: ${cost.scanReads} real reads/${cost.scanTicks} ticks, scanner ${cost.scanMs}ms (${(cost.scanMs / Math.max(1, cost.scanTicks)).toFixed(3)}ms/tick), redraw ${cost.turnMs}ms/${cost.turnTicks}ticks, periodic ${cost.ms}ms; peaks ${cost.scanPeak}/${cost.scanEachPeak}`);
   t.check(cost.scanReads <= 4, "saturated stationary native viewers do not keep rereading their fine detail");
   t.check(cost.scanPeak <= 96 && cost.scanEachPeak <= 48, "saturated native flight and cave retain unchanged96/48 operation limits");
+}
+
+// The Minimap at budgetLevel high (scenarios can't import: pasted where needed).
+async function mapBudgetHigh(t) {
+  let ack;
+  const sub = t.system.afterEvents.scriptEventReceive.subscribe(
+    ({ id, message }) => {
+      if (id !== "realm:cfg_ack") return;
+      try {
+        const m = JSON.parse(message);
+        if (m.id === "mapbudget") ack = m;
+      } catch {}
+    },
+    { namespaces: ["realm"] },
+  );
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "mapbudget", pack: "map_bp", key: "budgetLevel", value: "high" }));
+  await t.waitUntil(() => ack, { timeout: 60, message: "budgetLevel high was set" });
+  t.system.afterEvents.scriptEventReceive.unsubscribe(sub);
+  t.assert(ack.ok, `budgetLevel high: ${ack.error ?? "ok"}`);
 }

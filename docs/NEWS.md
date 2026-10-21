@@ -14,6 +14,20 @@ entries below as a changelog.
 - A town's new build no longer walls in a villager, pet or animal standing where it goes up: they are moved just outside first.
 - A garden pen never ends up with extra animals: a sheep or chicken that wandered off still counts, and one that comes back after a new one took its place becomes an ordinary animal.
 
+## A lighter Minimap
+
+- The Minimap uses about half the server time it did. With many players moving at once, the land under your radar and the mob dots can take a few seconds longer to catch up; standing still, everything catches up.
+- Operators who want the earlier, faster Minimap can pick High in /realm:config -> Minimap -> Minimap script time a tick.
+
+## A quieter server log
+
+- Champions: leaving the game while the Champions menu is open no longer leaves an error behind on the server.
+
+## Smoother busy servers
+
+- Expedition dungeons now build in shorter steps, so the server no longer hitches while one is being built.
+- Silly Enchants and Champions at night cost the server less with many players on. Nothing changes in how they look or play.
+
 ## Living towns: a mayor for every town, and villagers move in
 
 - Every town now has a mayor of its own, waiting at the town center to take deliveries for that town's projects. Mayor Bram is still the realm's main mayor and keeps his town; every other town gets its own mayor the next time someone visits it.

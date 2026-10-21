@@ -1,9 +1,10 @@
 {
   "notes": [
-    "Every town now has a mayor of its own, waiting at the town center to take deliveries for that town. Mayor Bram keeps his town; every other town gets its own mayor the next time someone visits it.",
-    "Towns pick their own building spots on natural ground and level it gently (never more than 3 blocks), and never touch anything you built, placed or planted.",
-    "As towns grow they build houses, lay grass paths to the center, light them with lantern posts and keep a garden pen with sheep and chickens.",
-    "Villagers now move into growing towns: 2 by the well, then a family for each house. They never take your bed, never harvest your crops and wander home when they stray.",
+    "Minimap: uses about half the server time it did; with many players moving the radar's land and mob dots catch up a few seconds later. Operators can pick High in /realm:config -> Minimap for the earlier behavior.",
+    "Silly Enchants costs less on a busy server: its every-tick checks run only while someone wears Hyper Jump boots.",
+    "Expedition dungeons build in shorter steps, so a busy server no longer hitches while one is built.",
+    "Champions cost less at night: their aura and approach read less from the game.",
+    "Champions: a player who leaves the game with the Champions menu open no longer leaves an error in the server log.",
     "Town Projects: removing a build puts back only the town's own blocks, so your blocks there stay even when they are the same kind (cobblestone by a well, dirt on its ground).",
     "Town Projects: a removed town's villagers move away instead of staying behind, and a garden pen never ends up with extra animals.",
     "Town Projects: a new town build no longer walls in a villager, pet or animal standing on its spot; they are moved aside first."
@@ -12,6 +13,10 @@
     "Easy Building's resources: line endings tidied (no change for players)."
   ],
   "packNotes": {
+    "map_bp": {
+      "version": "1.3.11",
+      "notes": "About half the server time: budgetLevel normal now has 1 ms of budgets a tick (measured 1.5 ms with 10 players moving, 2.1 with 40; it was 2.8 and 4.4). High has the earlier normal budgets. Titles held longer, shared townsfolk searches, fewer wasted redraws and re-plans."
+    },
     "town_bp": {
       "version": "1.7.3",
       "notes": "Remove spot never touches your blocks, even of a kind the build uses; builds move mobs and dropped items aside instead of walling them in; a removed town's residents move away (what they carry drops); the garden pen keeps exactly its 2 sheep and 2 chickens; spot picking does less work per spot."
@@ -25,8 +30,20 @@
       "notes": "The welcome page lists Town Projects: towns that grow as you help, each with its mayor."
     },
     "admin_bp": {
-      "version": "1.6.11",
-      "notes": "The setup checklist says towns pick their own project spots, so setting one is optional, and a spot an operator sets is never leveled."
+      "version": "1.6.12",
+      "notes": "Server size's Large server note gives the Minimap's new budgets: about 0.7 ms a tick instead of 1."
+    },
+    "silly_bp": {
+      "version": "1.2.13",
+      "notes": "Cheaper on busy servers: nothing runs every tick unless someone wears Hyper Jump boots or is mid-flight."
+    },
+    "expedition_bp": {
+      "version": "2.4.16",
+      "notes": "Dungeon builds and resets spread their work over more, shorter steps: no build step holds a server tick for long."
+    },
+    "elite_bp": {
+      "version": "1.3.17",
+      "notes": "A player who leaves with the Champions menu open no longer leaves an error in the server log."
     }
   }
 }

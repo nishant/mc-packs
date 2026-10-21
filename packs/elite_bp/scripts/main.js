@@ -12,7 +12,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, FormRejectReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { isProtected } from "./zones.js";
@@ -319,10 +319,11 @@ function purgeGear(dimId, at, helmet, radius) {
 function puff(e, particle, n) {
   const at = e.location;
   const height = Math.max(0.5, e.getHeadLocation().y - at.y);
+  const dim = e.dimension; // read once, not once a particle
   for (let i = 0; i < n; i++) {
     const angle = Math.random() * Math.PI * 2;
     const r = rand(0.35, 0.7);
-    e.dimension.spawnParticle(particle, { x: at.x + Math.cos(angle) * r, y: at.y + rand(0.2, height + 0.2), z: at.z + Math.sin(angle) * r });
+    dim.spawnParticle(particle, { x: at.x + Math.cos(angle) * r, y: at.y + rand(0.2, height + 0.2), z: at.z + Math.sin(angle) * r });
   }
 }
 
@@ -379,17 +380,19 @@ function aura() {
   for (const id of turn.batch) {
     const e = live.get(id);
     if (!e) continue;
+    // No isValid first: on a handle kept for seconds it makes the reads after it several times dearer. One that is
+    // gone throws on its first read, and is dropped then.
     try {
-      if (!e.isValid) {
-        live.delete(id);
-        continue;
-      }
       const trait = known.get(id)?.trait ?? traitOf(e);
       if (!trait) continue;
       puff(e, trait === "shielded" && !shieldUp(e) ? BROKEN.particle : LOOKS[trait].particle, 2);
       n++;
     } catch {
-      // unloaded this tick: skip it
+      try {
+        if (!e.isValid) live.delete(id); // else unloaded this tick: skip it
+      } catch {
+        live.delete(id);
+      }
     }
   }
   auraCost[0] += Date.now() - started;
@@ -742,6 +745,7 @@ const NO_STEP_ON = /fence|wall|_gate|magma|campfire|fire|cactus|sweet_berry|powd
 let runBlocks;
 /**
  * A block's air, liquid and type, read once per approach run (`runBlocks`), or straight from the game outside a run.
+ * Only the type is read from the game: air and liquid follow from it (one native read a block instead of three).
  * Undefined where `getBlock` gives nothing; an unloaded chunk throws, as `getBlock` does.
  * @param {Dimension} dim @param {Vector3} at @returns {BlockLook | undefined}
  */
@@ -749,7 +753,9 @@ function lookAt(dim, at) {
   const key = runBlocks && `${dim.id}|${at.x}|${at.y}|${at.z}`;
   if (key && runBlocks?.has(key)) return runBlocks.get(key);
   const b = dim.getBlock(at);
-  const look = b ? { isAir: b.isAir, isLiquid: b.isLiquid, typeId: b.typeId } : undefined;
+  const typeId = b?.typeId;
+  // Liquids as `Block.isLiquid` has them: water and lava (flowing too), not a waterlogged block.
+  const look = b ? { isAir: typeId === "minecraft:air", isLiquid: /^minecraft:(flowing_)?(water|lava)$/.test(String(typeId)), typeId: String(typeId) } : undefined;
   if (key) runBlocks?.set(key, look);
   return look;
 }
@@ -885,7 +891,7 @@ function feet(e) {
  * seldom a crowd's turn comes. @param {Entity} e @param {number} step @param {number} [units]
  */
 function approachStep(e, step, units = 1) {
-  if (!e.isValid || ownedElsewhere(e)) return;
+  if (ownedElsewhere(e)) return; // its caller drops a champion that is gone (it throws on the first read)
   if (e.isInWater) return;
   const dim = e.dimension;
   const at = feet(e);
@@ -975,6 +981,15 @@ function approachStep(e, step, units = 1) {
   }
 }
 
+/** After a read threw: is the entity still there (unloaded for a moment), or gone for good? @param {Entity} e */
+function stillValid(e) {
+  try {
+    return e.isValid;
+  } catch {
+    return false;
+  }
+}
+
 /** @param {Vector3} a @param {Vector3} b */
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
@@ -1033,12 +1048,7 @@ function sortNear() {
     if (!e) continue;
     let best = Infinity;
     try {
-      if (!e.isValid) {
-        live.delete(id);
-        approachSeen.delete(id);
-        nearState.delete(id);
-        continue;
-      }
+      // No isValid first (see aura): a champion that is gone throws here.
       const at = e.location;
       const dim = e.dimension.id;
       for (const p of playersAt.list) {
@@ -1047,7 +1057,12 @@ function sortNear() {
         if (d2 < best) best = d2;
       }
     } catch {
-      continue; // unloaded this tick: sorted next time
+      if (!stillValid(e)) {
+        live.delete(id);
+        approachSeen.delete(id);
+        nearState.delete(id);
+      }
+      continue; // else unloaded this tick: sorted next time
     }
     const state = { aura: best < AURA_RANGE_SQ, approach: best <= reachSq };
     nearState.set(id, state);
@@ -1084,16 +1099,17 @@ function approachTurns(batch, speed, now) {
   for (const id of batch) {
     const e = live.get(id);
     if (!e) continue;
-    if (!e.isValid) {
-      live.delete(id);
-      approachSeen.delete(id);
-      continue;
-    }
     const elapsed = Math.max(STEP_TICKS, now - (approachSeen.get(id) ?? now - STEP_TICKS));
     approachSeen.set(id, now);
+    // No isValid first (see aura): a champion that is gone throws on its first read in the step.
     try {
       approachStep(e, stepFor(speed, elapsed), elapsed / STEP_TICKS);
     } catch (err) {
+      if (!stillValid(e)) {
+        live.delete(id);
+        approachSeen.delete(id);
+        continue;
+      }
       // an unloaded column or a champion that just died: try again next step
       if (!String(err).includes("LocationInUnloadedChunk") && !String(err).includes("InvalidEntity")) console.warn(`[elite] approach: ${err}`);
     }
@@ -1441,7 +1457,16 @@ function guideText() {
 async function show(player, form) {
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid) return undefined;
-    const res = await form.show(player);
+    let res;
+    try {
+      res = await form.show(player);
+    } catch (e) {
+      // The player left (or the server is stopping) while the form was open: the game rejects the form, and there
+      // is nobody to answer. Anything else is a real error for the caller's log.
+      const reason = /** @type {{ reason?: unknown }} */ (e)?.reason;
+      if (!player.isValid || reason === FormRejectReason.PlayerQuit || reason === FormRejectReason.ServerShutdown) return undefined;
+      throw e;
+    }
     if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
       await new Promise((r) => system.runTimeout(() => r(undefined), 20));
       continue;

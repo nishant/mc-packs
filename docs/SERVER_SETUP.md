@@ -126,7 +126,7 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 
 | Pack | Setting | Small Realm | Large server | Why |
 |---|---|---|---|---|
-| Minimap | `budgetLevel` | normal | low | The heaviest pack. Its time budgets are for everyone together: low caps it at about 2.0 ms a tick instead of 2.9, whatever the player count. Strips and radars keep their drawing budget; terrain and mob dots lag a little more |
+| Minimap | `budgetLevel` | normal | low | The heaviest pack. Its time budgets are for everyone together: low caps its budgets at about 0.7 ms a tick instead of 1, whatever the player count (measured about 1.2 ms a tick against 1.5 with 10 players, 1.65 against 1.9 with 40). Strips, radars, terrain and mob dots come a little later |
 | Minimap | `mobRadiusMax` | 32 | 24 | Each mob search covers about half the ground, so the budgeted searches come round sooner for many players |
 | Stats & Leaderboards | `tickerEnabled` | true | true | Both profiles allow each player's own ticker; disallowing it hides everybody without erasing choices |
 | Stats & Leaderboards | `tickerDefaultOn` | true | true | Players who never chose start on. A saved personal on/off choice wins even after later default changes |
