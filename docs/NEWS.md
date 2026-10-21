@@ -7,6 +7,15 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Living towns: a mayor for every town, and villagers move in
+
+- Every town now has a mayor of its own, waiting at the town center to take deliveries for that town's projects. Mayor Bram is still the realm's main mayor and keeps his town; every other town gets its own mayor the next time someone visits it.
+- Talk to your town's mayor to hear the town's story so far, what the next project is for and what this level still needs.
+- Towns now pick their own building spots on natural ground and level it gently (never more than 3 blocks up or down). They never touch anything you built, placed or planted.
+- Towns grow: from Village on they build houses by themselves, lay grass paths to the center, light them with lantern posts and keep a garden pen with sheep and chickens.
+- Villagers move into growing towns: 2 by the well, then a family for each house. They never take your bed, never harvest your crops and wander home when they stray.
+- Operators: /realm:town -> Mayor moves a town's mayor to where you stand or renames them.
+
 ## Pets in claims, a saved Expedition line and small fixes
 
 - Land Claims: your own pets now work in other people's claims too. A wolf, cat or parrot you feed tame, or a horse you ride tame, can be leashed, ridden or told to sit by you anywhere. Pets tamed before this update stay locked in others' claims.

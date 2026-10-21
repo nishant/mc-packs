@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "welcome_bp";
-const VERSION = "1.5.12";
+const VERSION = "1.5.13";
 const NAME = "Welcome Message";
 /** @type {string[]} */
 const PREFIXES = ["welcome"];

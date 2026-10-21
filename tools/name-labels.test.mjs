@@ -460,6 +460,7 @@ test("the townsfolk idle loop skips entity and block work beyond its active rang
     world: { getAllPlayers: () => [{ dimension: { id: "minecraft:overworld" }, location: { x: 0, y: 0, z: 0 } }] },
     list: [{ id: "ida", dim: "minecraft:overworld", x: 1000, y: 0, z: 0 }],
     folk: new Map([["ida", {}]]),
+    folkOf: (/** @type {string} */ id) => (id === "ida" ? {} : undefined),
     states: new Map([["ida", state]]),
     dist: (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z),
     entityOf: () => {

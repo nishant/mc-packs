@@ -59,7 +59,7 @@ for (const id of EXTRA_ENTITIES) {
 /** Vanilla particles named without a _particle or _emitter suffix (vanilla-data has no particle list). */
 const PARTICLES = new Set(["villager_happy", "villager_angry", "endrod", "dragon_breath_trail", "large_explosion", "mobspell_emitter", "critical_hit_emitter", "huge_explosion_emitter"].map((n) => `minecraft:${n}`));
 /** Entity events that vanilla entity files define (triggerEvent, JSON "event"). */
-const EVENTS = /^minecraft:(become_[a-z_]+|entity_born|entity_spawned|entity_transformed|ageable_grow_up|spawn_from_village|as_baby|as_adult|[a-z_]*raid[a-z_]*|on_[a-z_]+|start_[a-z_]+|stop_[a-z_]+)$/;
+const EVENTS = /^minecraft:(become_[a-z_]+|entity_born|entity_spawned|entity_transformed|ageable_grow_up|spawn_from_village|as_baby|as_adult|[a-z_]*raid[a-z_]*|on_[a-z_]+|schedule_[a-z_]+|resupply_trades|celebrate|start_[a-z_]+|stop_[a-z_]+)$/;
 const isParticle = (/** @type {string} */ id) => PARTICLES.has(id) || /_(particle|emitter|particle_manual)$/.test(id);
 /** Block states with the minecraft: namespace (permutation.getState("minecraft:cardinal_direction")); vanilla-data lists none. */
 const STATES = new Set(["cardinal_direction", "facing_direction", "block_face", "vertical_half", "corner", "connection_north", "connection_south", "connection_east", "connection_west"].map((n) => `minecraft:${n}`));

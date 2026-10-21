@@ -1,282 +1,29 @@
 {
   "notes": [
-    "Minimap: new players are no longer told an operator reset their map; only players whose destination or marked spots were actually cleared get that message.",
-    "Story: when a quest step is too long for the quest box, its name is shortened and the direction, distance or time left always stays visible.",
-    "Land Claims: your own pets now work in other people's claims too. Pets tamed before this update stay locked in others' claims.",
-    "Kitchen: old dishes from before the Dish: line now stack with new servings once they are in your inventory or when you join.",
-    "Expeditions: the line for a dungeon now survives a reload or a restart, and after a restart you have 5 minutes to come back and keep your place.",
-    "Milestones: top-tier titles you missed while Titles & Trails was off are now sent again until Titles confirms them.",
-    "Realm Mail: a pack letter refused because the realm's mail is full no longer deletes your oldest letters.",
-    "Welcome Message: operators can restore or delete an old welcome the new default replaced (/realm:welcome -> Old welcome), and the welcome names Old Tobin or Mara only once they stand in town.",
-    "Every pack's files now use the same line endings (no change for players)."
+    "Every town now has a mayor of its own, waiting at the town center to take deliveries for that town. Mayor Bram keeps his town; every other town gets its own mayor the next time someone visits it.",
+    "Towns pick their own building spots on natural ground and level it gently (never more than 3 blocks), and never touch anything you built, placed or planted.",
+    "As towns grow they build houses, lay grass paths to the center, light them with lantern posts and keep a garden pen with sheep and chickens.",
+    "Villagers now move into growing towns: 2 by the well, then a family for each house. They never take your bed, never harvest your crops and wander home when they stray."
   ],
   "resourceNotes": [
     "Easy Building's resources: line endings tidied (no change for players)."
   ],
   "packNotes": {
-    "admin_bp": {
-      "version": "1.6.10",
-      "notes": "The crowns audit entry in the Realm Configuration menu says it lists the newest 50 pays and gives. Line endings tidied (no change for players)."
-    },
-    "afk_bp": {
-      "version": "1.3.13",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "atlas_bp": {
-      "version": "1.1.12",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "bounty_bp": {
-      "version": "1.3.10",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "build_bp": {
-      "version": "3.0.11",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "build_rp": {
-      "version": "2.1.14",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "calendar_bp": {
-      "version": "1.0.19",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "caravan_bp": {
-      "version": "1.2.10",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "chairs_bp": {
-      "version": "1.3.13",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "claims_bp": {
-      "version": "1.5.9",
-      "notes": "Your own pets work in other people's claims: a wolf, cat or parrot you feed tame, or a horse you ride tame, can be leashed, ridden or told to sit by you anywhere. Pets tamed before this update stay locked in others' claims. Line endings tidied (no change for players)."
-    },
-    "cleanup_bp": {
-      "version": "1.2.9",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "climate_bp": {
-      "version": "1.0.11",
-      "notes": "Shared weather plan reader (no change for players). Line endings tidied (no change for players)."
-    },
-    "cooking_bp": {
-      "version": "1.1.17",
-      "notes": "Old dishes from before the Dish: line stack with new servings once they are in your inventory or when you join. Line endings tidied (no change for players)."
-    },
-    "crowns_bp": {
-      "version": "1.1.12",
-      "notes": "Code tidy-up (no change for players). Line endings tidied (no change for players)."
-    },
-    "death_bp": {
-      "version": "1.3.9",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "dolphin_bp": {
-      "version": "1.2.10",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "domt_bp": {
-      "version": "1.1.15",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "durability_bp": {
-      "version": "1.2.13",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "elite_bp": {
-      "version": "1.3.15",
-      "notes": "Champions menus and commands no longer error when a player leaves mid-command. Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "elytra_bp": {
-      "version": "1.3.21",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "expedition_bp": {
-      "version": "2.4.15",
-      "notes": "The line for a dungeon survives a reload or a restart: leaders are told they're still number N of M and have 5 minutes to come back after a restart. Line endings tidied (no change for players)."
-    },
-    "farm_bp": {
-      "version": "1.4.9",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "find_bp": {
-      "version": "1.4.9",
-      "notes": "Code tidy-up (no change for players). Line endings tidied (no change for players)."
-    },
-    "fishing_bp": {
-      "version": "1.1.15",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "goals_bp": {
-      "version": "1.1.12",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "guard_bp": {
-      "version": "1.4.11",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "guilds_bp": {
-      "version": "1.1.14",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "harvest_bp": {
-      "version": "1.3.10",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "hud_bp": {
-      "version": "1.3.10",
-      "notes": "The Coordinates HUD's player list is built about 60% faster at 40 players. Line endings tidied (no change for players)."
-    },
-    "journal_bp": {
-      "version": "1.1.12",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "leaves_bp": {
-      "version": "1.0.9",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "mail_bp": {
-      "version": "1.2.9",
-      "notes": "A pack letter refused because the realm's mail is full no longer deletes your oldest letters. Line endings tidied (no change for players)."
-    },
-    "map_bp": {
-      "version": "1.3.10",
-      "notes": "Only players whose destination or marked spots were cleared are told about a map reset. Line endings tidied (no change for players)."
-    },
-    "maps_bp": {
-      "version": "1.8.14",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "meteor_bp": {
-      "version": "1.2.12",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "milestones_bp": {
-      "version": "1.0.9",
-      "notes": "Top-tier titles you missed while Titles & Trails was off are sent again until Titles confirms them. Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "mobhp_bp": {
-      "version": "1.2.18",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "moon_bp": {
-      "version": "1.2.15",
-      "notes": "Shared weather plan reader (no change for players). Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "nick_bp": {
-      "version": "1.1.11",
-      "notes": "Shared inactive-player cleanup (no change for players). Line endings tidied (no change for players)."
-    },
-    "night_bp": {
-      "version": "1.1.9",
-      "notes": "Shared weather plan reader (no change for players). Line endings tidied (no change for players)."
+    "town_bp": {
+      "version": "1.7.2",
+      "notes": "A mayor per town, building spots the town picks and levels gently (at most 3 blocks, never your blocks), houses, paths, lantern posts, a garden pen whose animals come back if they wander off, and villagers who move in (Enabled), never take beds or harvest crops, and come home when they stray."
     },
     "npc_bp": {
-      "version": "1.7.18",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "party_bp": {
-      "version": "1.2.10",
-      "notes": "Shared inactive-player cleanup (no change for players). Line endings tidied (no change for players)."
-    },
-    "phantom_bp": {
-      "version": "1.2.9",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "platypus_bp": {
-      "version": "1.1.8",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "quests_bp": {
-      "version": "1.3.9",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "rain_bp": {
-      "version": "1.5.17",
-      "notes": "Shared weather plan reader (no change for players). Line endings tidied (no change for players)."
-    },
-    "rainbow_bp": {
-      "version": "1.4.9",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "refill_bp": {
-      "version": "1.1.7",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "relics_bp": {
-      "version": "1.2.18",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "saga_bp": {
-      "version": "1.16.15",
-      "notes": "When a quest step is too long for the quest box, its name is shortened and the direction, distance or time left stays visible. Line endings tidied (no change for players)."
-    },
-    "settings_bp": {
-      "version": "1.4.6",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "silly_bp": {
-      "version": "1.2.12",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "skills_bp": {
-      "version": "1.1.11",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "slots_bp": {
-      "version": "1.0.14",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "stash_bp": {
-      "version": "1.8.10",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "stats_bp": {
-      "version": "1.4.14",
-      "notes": "Code tidy-up (no change for players). Line endings tidied (no change for players)."
-    },
-    "storm_bp": {
-      "version": "1.1.13",
-      "notes": "Shared weather plan reader (no change for players). Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "titles_bp": {
-      "version": "1.2.14",
-      "notes": "Titles confirms top-tier titles to Milestones. Shared inactive-player cleanup (no change for players). Line endings tidied (no change for players)."
-    },
-    "tornado_bp": {
-      "version": "1.2.12",
-      "notes": "A tornado's wind clip is stopped with one command for everyone near it. Shared weather plan reader (no change for players). Line endings tidied (no change for players)."
-    },
-    "town_bp": {
-      "version": "1.2.11",
-      "notes": "Town news goes through the shared gossip gate (no change for players). Line endings tidied (no change for players)."
-    },
-    "translucent_bp": {
-      "version": "1.0.8",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "wander_bp": {
-      "version": "1.2.20",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "waystone_bp": {
-      "version": "1.3.9",
-      "notes": "Line endings tidied (no change for players)."
-    },
-    "weather_bp": {
-      "version": "1.3.12",
-      "notes": "Line endings tidied (no change for players)."
+      "version": "1.9.0",
+      "notes": "Town mayors: each town can have its own mayor who takes deliveries for that town; mayors share town news."
     },
     "welcome_bp": {
-      "version": "1.5.12",
-      "notes": "If the new default welcome replaced your old one, operators can restore or delete it from /realm:welcome -> Old welcome; the start line names Old Tobin or Mara only once they are placed in town. Line endings tidied (no change for players)."
+      "version": "1.5.13",
+      "notes": "The welcome page lists Town Projects: towns that grow as you help, each with its mayor."
     },
-    "zones_bp": {
-      "version": "1.0.12",
-      "notes": "Line endings tidied (no change for players)."
+    "admin_bp": {
+      "version": "1.6.11",
+      "notes": "The setup checklist says towns pick their own project spots, so setting one is optional, and a spot an operator sets is never leveled."
     }
   }
 }

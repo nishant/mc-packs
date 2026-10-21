@@ -53,7 +53,7 @@ const labels = (form) => form.parts.filter((p) => p.kind === "label").map((p) =>
 const text = (form) => labels(form).join("\n");
 const headings = (form) => labels(form).filter((t) => t.startsWith(`${S}l${S}6`));
 
-const ALL = ["saga_bp", "npc_bp", "help_bp", "settings_bp", "quests_bp", "expedition_bp", "bounty_bp", "skills_bp", "crowns_bp", "claims_bp", "calendar_bp", "party_bp", "mail_bp", "map_bp", "stats_bp", "journal_bp"];
+const ALL = ["saga_bp", "npc_bp", "help_bp", "settings_bp", "quests_bp", "expedition_bp", "bounty_bp", "town_bp", "skills_bp", "crowns_bp", "claims_bp", "calendar_bp", "party_bp", "mail_bp", "map_bp", "stats_bp", "journal_bp"];
 
 test("O43: a new player gets the popup: a title, section labels, one Close button, no header", async () => {
   const sim = await world();
@@ -125,6 +125,7 @@ test("O43: no spoilers, plain ASCII, short enough to read in a minute and to fit
   const words = t.replace(/\u00a7./g, "").split(/\s+/).filter(Boolean).length;
   assert.ok(words <= 200, `${words} words read in under a minute`);
   assert.ok(t.length <= 1800, `${t.length} characters`);
+  assert.match(t, /Towns that grow as you help, each with its mayor \(\u00a7b\/realm:town\u00a7r\)/, "Town Projects is in the feature list");
   for (const part of labels(form)) assert.ok(part.length <= 700, "short paragraphs");
 });
 

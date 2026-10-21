@@ -89,6 +89,23 @@ export const CONFIG = {
   gossipMax: 24,
 
   /**
+   * Town mayors (one per town, asked for by Town Projects): the title shown after a mayor's name and its lines.
+   * `{town}` is the town's name and `{player}` the player's. Mayors have the `mayor` role only.
+   */
+  mayorTemplate: {
+    title: "of {town}",
+    greetings: {
+      morning: ["Good morning, {player}! {town} is up early today.", "Morning, {player}. Plenty to do in {town}."],
+      day: ["{player}! {town} grows thanks to folk like you.", "Busy day in {town}, {player}. What can I do for you?"],
+      evening: ["Evening, {player}. Another good day for {town}.", "The lamps of {town} come on soon, {player}."],
+      night: ["Out late, {player}? {town} sleeps, but I don't.", "A quiet night in {town}, {player}."],
+      rain: ["Rain's good for {town}'s gardens, {player}.", "Come in out of the wet, {player}."],
+      thunder: ["Storms! Is everyone in {town} safe, {player}?", "Stay under a roof, {player}. That's an order from the mayor."],
+    },
+    idle: ["{town} needs a bigger square.", "*checks a ledger*", "One project at a time.", "Good folk in {town}. Good folk."],
+  },
+
+  /**
    * The townsfolk operators can place with `/realm:npc_add <id>`. Keep the ids: other packs and saved data use them.
    * @type {Townsfolk[]}
    */

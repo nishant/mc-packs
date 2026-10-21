@@ -1212,7 +1212,7 @@ export const PACKS = [
     "folder": "npc_bp",
     "topic": "npc",
     "name": "Townsfolk",
-    "summary": "Twelve named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith, Sol the Sky-reader, Brother Hollis the Chapel Keeper, Moss the Gravedigger, Wren the Stable Girl and Bea the Cook. Each one lives in a house of its own and stays inside it, day and night, so you always know where to find them. They turn to face you as you walk in, mutter to themselves now and then, and greet you depending on the time of day and the weather. They also remember you (Hearth & Hearsay): talk to them, bring gifts and help them, and each one warms up from Stranger to Confidant, with more to say, friend prices, a heart story, a title and keepsakes. They pass on gossip about what players did, and react to the choices you made in the stories. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from Crowns, the stories of Story Questlines or Sol's forecast from the Weather Almanac. The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.",
+    "summary": "Twelve named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith, Sol the Sky-reader, Brother Hollis the Chapel Keeper, Moss the Gravedigger, Wren the Stable Girl and Bea the Cook. Each one lives in a house of its own and stays inside it, day and night, so you always know where to find them. They turn to face you as you walk in, mutter to themselves now and then, and greet you depending on the time of day and the weather. They also remember you (Hearth & Hearsay): talk to them, bring gifts and help them, and each one warms up from Stranger to Confidant, with more to say, friend prices, a heart story, a title and keepsakes. They pass on gossip about what players did, and react to the choices you made in the stories. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from Crowns, the stories of Story Questlines or Sol's forecast from the Weather Almanac. The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins. With Town Projects, every town also gets a mayor of its own (§eMayor Alda of Riverside§r), a townsfolk made for that town.",
     "steps": [
       {
         "text": "Run §e/realm:npc§r and pick §lWho lives here?§r (or run §e/realm:npc_who§r for the list in chat) to see who lives on the realm and where: each townsfolk with the distance and direction from you, like §eMara the Cartographer - 240m NE (cartographer)§r.",
@@ -1243,6 +1243,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lTown mayors:§r each town of Town Projects has its own mayor (§eMayor Alda of Riverside§r), standing in the town. Tap them for §lTown projects (Riverside)§r. Mayors greet you and chat like the others, but they have no affinity, gifts or stories: those stay with the twelve. A town's news (a new family, a new house, a new level) is told only by its own mayor (§eRiverside keeps growing. New roofs, new faces.§r), or by Mayor Bram for his town.",
+        "ops": false
+      },
+      {
         "text": "§lOperators:§r §e/realm:npc§r has every tool as a button: §lAdd or move a townsfolk here§r, §lMove them into the houses around me§r, §lUndo the last move§r, §lRemove the nearest townsfolk§r and §lList with coordinates§r. Or stand inside the townsfolk's house where it should live, face the way it should look (at the door, so it greets whoever comes in), and run §e/realm:npc_add <id>§r (§emara§r, §etobin§r, §ereyes§r, §eelsie§r, §ebram§r, §equill§r, §eida§r, §esol§r, §ehollis§r, §emoss§r, §ewren§r, §ebea§r): that spot is where it lives from now on. To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). List everyone with §e/realm:npc_list§r, and remove the nearest NPC with §e/realm:npc_remove§r. To give everyone a house at once, stand in the middle of the town and run §e/realm:npc_houses§r (or §lMove them into the houses around me§r in §e/realm:npc§r): it finds the houses by their doors, gives each townsfolk one of its own, shows who would live where, then moves them; §e/realm:npc_undo§r puts them back. §e/realm:config§r -> §lTownsfolk§r switches the turning and idle lines, Hearth & Hearsay, gossip and letters.",
         "ops": true
       }
@@ -1270,7 +1274,7 @@ export const PACKS = [
         "usage": "/realm:npc_remove",
         "ops": false,
         "who": "Operators",
-        "text": "Removes the nearest townsfolk within 5 blocks (default 5, §eremoveRange§r) and forgets its spot, after a §lRemove§r / §lCancel§r confirmation (the skin picked for it is lost)"
+        "text": "Removes the nearest townsfolk within 5 blocks (default 5, §eremoveRange§r) and forgets its spot, after a §lRemove§r / §lCancel§r confirmation (the skin picked for it is lost). A town mayor comes back when a player comes near its town, unless Town Projects' §lTown mayors§r (§etownMayors§r) is Disabled"
       },
       {
         "usage": "/realm:npc_houses [radius]",
@@ -2704,10 +2708,10 @@ export const PACKS = [
     "folder": "town_bp",
     "topic": "town",
     "name": "Town Projects",
-    "summary": "Grow the realm's towns together. Operators add a town; its mayor (Mayor Bram from Townsfolk, or any NPC with the §emayor§r role) takes deliveries of materials for the town's projects: a well and a notice board, then lamp posts and a garden plot, a market stall and a dock, and finally a bell tower. When a project has everything it needs, it is built on the spot the operators chose, fireworks go up and the top contributors are paid in Crowns. Finishing every project of a level raises the town: Settlement, Village, Town, City and Capital. This is separate from Community Goals, which collect one item into a chest: town projects take several items, are delivered through the mayor, and build something.",
+    "summary": "Grow the realm's towns together. Operators add a town and it gets a mayor of its own from Townsfolk (Mayor Bram for the realm's first town, a new mayor such as Mayor Alda for every other), who takes deliveries of materials for the town's projects: a well and a notice board, then lamp posts and a garden plot, a market stall and a dock, and finally a bell tower. When a project has everything it needs, it is built on a spot the town picked by itself (on natural ground near the center, never touching anything players built, leveling the ground gently where the build needs it) or one an operator set, fireworks go up and the top contributors are paid in Crowns. Finishing every project of a level raises the town: Settlement, Village, Town, City and Capital, and from Village on the town builds houses by itself, one for each family the level brings. Paths lead from its builds to the center, lantern posts light them, and a garden pen with sheep and chickens sits by the garden. This is separate from Community Goals, which collect one item into a chest: town projects take several items, are delivered through the mayor, and build something.",
     "steps": [
       {
-        "text": "Find your town's mayor, tap them and pick §lTown projects (Riverside)§r. You see the town's level and this level's projects with progress bars.",
+        "text": "Find your town's mayor (they stand in the town; Mayor Bram is the first town's), tap them and pick §lTown projects (Riverside)§r. You see the town's story so far (§eDay 12: The Well was finished, thanks to Ann§r), its level, this level's projects with why the town wants each (§eWell - Fresh water, so families can move in§r) and their progress bars, and what the next level brings.",
         "ops": false
       },
       {
@@ -2715,11 +2719,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "When the last item is in, everyone hears §eRiverside finished its Dock! Top contributors: Ann 64, Bob 32. Thank you, everyone!§r, the dock is built where the operators chose and fireworks rise over it. The top three contributors get 60, 35 and 20 Crowns, and everyone who helped gets reputation in Guilds & Reputation (if you're offline, it's waiting when you join).",
+        "text": "When the last item is in, everyone hears §eRiverside finished its Dock! Top contributors: Ann 64, Bob 32. Thank you, everyone!§r. Players near its spot see its outline in green for a few seconds (§eRiverside's Dock goes up here in 5 seconds.§r), then it goes up and fireworks rise over it. The top three contributors get 60, 35 and 20 Crowns, and everyone who helped gets reputation in Guilds & Reputation (if you're offline, it's waiting when you join).",
         "ops": false
       },
       {
-        "text": "When every project of a level is finished, the town levels up: §eRiverside is now a Town (level 3)§r on everyone's screen, with the new projects.",
+        "text": "When every project of a level is finished, the town levels up: §eRiverside is now a Town (level 3)§r on everyone's screen, with the new projects. From level 2 the town also builds its houses by itself, nothing to deliver (§eRiverside has a new house (House 3) at 130, 64, -12.§r). With residents Enabled (§eresidents§r, default Enabled), villagers move in: 2 beside the well once it's built, then a family for each house (§eA new family moved into Riverside: Tilly.§r). As it grows the town lays grass paths from its builds toward the center, puts up lantern posts beside them and, once the garden is built, a pen next to it with 2 sheep and 2 chickens (§etownLife§r, default Enabled). The notice board shows the projects done, the resident count and the newest families, and the mayor tells the town's news.",
         "ops": false
       },
       {
@@ -2727,11 +2731,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r stand in the middle of a town, open §e/realm:town§r and pick §lAdd a town here§r (or run §e/realm:town_add Riverside§r, quotes for a name with spaces). Then, for each project, stand where it should be built, facing the way it should face, and pick §lSet a project spot§r and the project (or run §e/realm:town_spot <project>§r: §ewell§r, §enotice_board§r, §elamps§r, §egarden§r, §estall§r, §edock§r, §ebell_tower§r). Its outline appears in green particles, with a blue arrow for its front: pick §lSet spot here§r, §lRotate 90§r, §lLook around§r (10 seconds to walk around it) or §lCancel§r. A project finished before it has a spot waits, and operators are reminded when they join.",
+        "text": "§lOperators:§r stand in the middle of a town, open §e/realm:town§r and pick §lAdd a town here§r (or run §e/realm:town_add Riverside§r, quotes for a name with spaces). Its mayor appears where you stand (with Townsfolk; the realm's first town has Mayor Bram instead, wherever he lives). That's all: the town picks a spot for each project by itself, a little at a time while a player is in the town (a minute or two for a level, up to about ten on a steep hillside). To choose one yourself instead, stand where it should be built, facing the way it should face, and pick §lSet a project spot§r and the project (or run §e/realm:town_spot <project>§r: §ewell§r, §enotice_board§r, §elamps§r, §egarden§r, §estall§r, §edock§r, §ebell_tower§r). Its outline appears in green particles, with a blue arrow for its front: pick §lSet spot here§r, §lRotate 90§r, §lLook around§r (10 seconds to walk around it) or §lCancel§r. A spot you set is kept and its ground is never leveled. When the town finds no good spot for a project (a dock with no water nearby), the town menu says so and you set it by hand; a project finished without a spot waits, and operators are reminded when they join.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lManage spots§r in §e/realm:town§r removes a spot (a built project is taken away and the ground put back), rebuilds a damaged build, or relocates it (preview at the new place, then it's taken away from the old one and built at the new one). §lProtect from world events§r (Enabled for new towns) keeps meteors, tornadoes and storms from breaking blocks in the town. §lRemove town§r (or §e/realm:town_remove§r) removes the town you're in. §e/realm:config§r -> §lTown Projects§r sets the town radius, announcements and more.",
+        "text": "§lOperators:§r §lManage spots§r in §e/realm:town§r removes a spot (a built project is taken away and the ground put back, leveled ground included), rebuilds a damaged build, or relocates it (preview at the new place, then it's taken away from the old one and built at the new one). §lFind spots again§r looks again for every project up to the town's level that has no spot (after you cleared room, or for those without a good spot). §lMayor§r moves the town's mayor to where you stand (facing your way) or renames them; Mayor Bram can only be moved (his name belongs to the stories). §lProtect from world events§r (Enabled for new towns) keeps meteors, tornadoes and storms from breaking blocks in the town. §lRemove town§r (or §e/realm:town_remove§r) removes the town you're in. §e/realm:config§r -> §lTown Projects§r sets the town radius, announcements and more.",
         "ops": true
       }
     ],
@@ -2740,7 +2744,7 @@ export const PACKS = [
         "usage": "/realm:town",
         "ops": false,
         "who": "Everyone",
-        "text": "The town menu: town info, projects, other towns, and for operators, add a town, set a project spot with a preview, manage spots (remove, rebuild, relocate), protect from world events (default Enabled) and remove the town"
+        "text": "The town menu: town info, projects, other towns, and for operators, add a town, set a project spot with a preview, manage spots (remove, rebuild, relocate), find spots again (default Enabled, §eautoSpots§r), the town's mayor (move here, rename), protect from world events (default Enabled) and remove the town"
       },
       {
         "usage": "/realm:town_stats",
@@ -2764,7 +2768,7 @@ export const PACKS = [
         "usage": "/realm:town_remove",
         "ops": false,
         "who": "Operators",
-        "text": "Removes the town you're in and its project progress, after asking. What's built stays standing"
+        "text": "Removes the town you're in and its project progress, after asking, and its own mayor (not Mayor Bram). What's built stays standing"
       }
     ]
   },
