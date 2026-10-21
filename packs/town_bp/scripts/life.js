@@ -233,3 +233,21 @@ export function boardTexts(o) {
     newest.length ? `New families\n${newest.join("\n")}` : o.top.length ? `Thank you\n${o.top.slice(0, 3).join("\n")}` : "Bring materials\nto the mayor!",
   ];
 }
+
+/**
+ * The garden pen's animals to spawn again: the ones that vanished (passive animals a script spawns despawn once no
+ * player is near), never one that was killed (`killed`, their types: a kill is never made good, no free food), and
+ * never more than `animals`. `alive` is the type of every pen animal found. In the order of `animals`.
+ * @param {string[]} alive @param {string[]} killed @param {string[]} animals @returns {string[]}
+ */
+export function penMissing(alive, killed, animals) {
+  const left = [...alive, ...killed];
+  /** @type {string[]} */
+  const out = [];
+  for (const type of animals) {
+    const i = left.indexOf(type);
+    if (i >= 0) left.splice(i, 1);
+    else out.push(type);
+  }
+  return out;
+}

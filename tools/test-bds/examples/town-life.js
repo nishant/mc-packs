@@ -2,7 +2,8 @@
 // mayor is mayor:elm. Each build at an automatic spot gets a 1-wide grass_path toward the center, made only of the grass
 // that was there (each block 4-connected to the next, steps of at most 1, at most 48), saved in town:w; at level 2,
 // once the level's builds are up, lantern posts (an oak fence with a lantern) stand beside the paths, at most 12. The
-// garden, once built, gets a pen next to it (a fence ring with a gate) with 2 sheep and 2 chickens tagged town:a:elm,
+// garden, once built, gets a pen next to it (a fence ring with a gate) with 2 sheep and 2 chickens tagged town:a:elm
+// (those that vanish come back while a player is by the pen, a killed one doesn't),
 // spawned once. The notice board shows projects done and the resident count, and the newest residents. The town's
 // news goes to Townsfolk as gossip kind town_life with from: mayor:elm, which Townsfolk keeps. Remove spot turns the
 // well's path back to grass.
@@ -121,6 +122,23 @@ export default async function (t) {
   const kinds = animals.map((e) => e.typeId).sort();
   t.check(JSON.stringify(kinds) === JSON.stringify(["minecraft:chicken", "minecraft:chicken", "minecraft:sheep", "minecraft:sheep"]), `2 sheep and 2 chickens (${kinds})`);
   t.check(prog(d, "pen").an === 1, "spawned once (an: 1)");
+
+  // Pen animals are ordinary animals that despawn once players are away: those that vanish come back while a player
+  // is by the pen, the ones killed don't (no free food). One sheep killed, the other three removed (as a despawn does).
+  const back = { ...p.location };
+  animals.find((e) => e.typeId === "minecraft:sheep").kill();
+  await t.wait(5);
+  for (const e of dim.getEntities({ tags: ["town:a:elm"] })) e.remove();
+  p.teleport({ x: pen.x + 0.5, y: pen.y, z: pen.z - 4.5 });
+  let again = [];
+  await t.waitUntil(() => (again = dim.getEntities({ tags: ["town:a:elm"] })).length >= 3, { timeout: 1600, interval: 20, message: "the vanished animals come back" });
+  await t.wait(700); // one more check: nothing more comes
+  again = dim.getEntities({ tags: ["town:a:elm"] });
+  t.check(JSON.stringify(again.map((e) => e.typeId).sort()) === JSON.stringify(["minecraft:chicken", "minecraft:chicken", "minecraft:sheep"]), `the 3 that vanished are back, not the killed sheep (${again.map((e) => e.typeId)})`);
+  d = await dump("elm");
+  t.check(JSON.stringify(prog(d, "pen").k) === JSON.stringify(["minecraft:sheep"]), `the kill is counted (k: ${JSON.stringify(prog(d, "pen").k)})`);
+  p.teleport(back);
+  await t.wait(20);
 
   // Lantern posts at level 2, once its builds are up (the houses too).
   await t.waitUntil(async () => {

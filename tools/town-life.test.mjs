@@ -275,3 +275,27 @@ test("main.js takes a build's path away before it puts the ground back (Remove s
     assert.match(body, /delete (s|old)\.pt/, `${name}: a failed removal lays the path again`);
   }
 });
+
+test("the pen's animals: what vanished (despawned) comes back, what was killed doesn't", () => {
+  const S = "minecraft:sheep";
+  const C = "minecraft:chicken";
+  const A = [S, S, C, C];
+  const { penMissing } = life;
+  assert.equal(typeof penMissing, "function");
+  assert.deepEqual(penMissing([], [], A), A, "all gone (players were away): all 4 back");
+  assert.deepEqual(penMissing([S, C], [], A), [S, C]);
+  assert.deepEqual(penMissing(A, [], A), [], "all there");
+  assert.deepEqual(penMissing([], A, A), [], "all 4 eaten: none comes back (no free food)");
+  assert.deepEqual(penMissing([], [S], A), [S, C, C], "a sheep killed, the rest vanished: the other sheep and both chickens");
+  assert.deepEqual(penMissing([C], [S, S], A), [C], "both sheep killed, a chicken vanished: that chicken");
+  assert.deepEqual(penMissing([...A, S], [], A), [], "more than 4: none, and none removed");
+  assert.deepEqual(penMissing([], [S, S, S, S, C, C], A), [], "more kills than animals: none");
+});
+
+test("main.js: pen deaths are counted and the top-up runs only with a player near the pen for two checks", () => {
+  const main = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "..", "packs", "town_bp", "scripts", "main.js"), "utf8");
+  assert.match(main, /function penTick\(/);
+  assert.match(main, /penTick\(players\)/, "called on the build check");
+  assert.match(main, /penMissing\(/);
+  assert.match(main, /k: pr\.k/, "the killed animals are saved with the pen's progress");
+});

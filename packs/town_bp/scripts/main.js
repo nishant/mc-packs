@@ -23,7 +23,7 @@ import { BUILDS, FORWARD, design, designFootprint, isOptionalPlace, placeStates,
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
 import { PEN_ID, addLog, cleanText, houseCount, isWorkId, logLine, makePen, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
-import { CLEARABLE, POSTS_MAX, boardTexts, packCells, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
+import { CLEARABLE, POSTS_MAX, boardTexts, packCells, penMissing, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
 import { HOME_LEASH, TICKS_PER_MINUTE, addNew, allocate, homeAt, homesFor, livingOf, lookEvent, lookFor, pickName, plan, readResidents, reconcile, ridOf, ridTag, slotCount } from "./residents.js";
 import { spawnFresh } from "./spawn.js";
@@ -66,7 +66,7 @@ const NEAR_SPOT = 64; // a waiting build goes up when a player is this close to 
  * @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number, v?: number, m?: string, mn?: string, plf?: number, scan?: string[], nos?: string[], rt?: string[], as?: number, log?: import("./growth.js").LogEntry[], lp?: number }} Town
  */
 /** @typedef {{ min: Vector3, max: Vector3 }} Box inclusive block corners */
-/** an: 1 once the garden pen's animals were spawned (only ever once). @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number, an?: number }} Progress */
+/** an: 1 once the garden pen's animals were spawned; k: the types of those that died (never spawned again). @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number, an?: number, k?: string[] }} Progress */
 /** @typedef {{ cr: number, q: [string, string, string][] }} Owed crowns, and [quest id, label, guild] per finished project */
 
 /** Projects from config.js that make sense; the rest are skipped with a warning. */
@@ -200,6 +200,7 @@ function progressOf(t, p) {
   const raw = readJson(key);
   pr = raw && typeof raw === "object" ? { got: raw.got ?? {}, c: raw.c ?? {}, done: raw.done ? 1 : 0, built: raw.built ? 1 : 0 } : { got: {}, c: {}, done: 0, built: 0 };
   if (raw?.an) pr.an = 1;
+  if (Array.isArray(raw?.k)) pr.k = raw.k.filter((/** @type {unknown} */ x) => x === "minecraft:sheep" || x === "minecraft:chicken").slice(0, 4);
   progCache.set(key, pr);
   return pr;
 }
@@ -207,7 +208,7 @@ function progressOf(t, p) {
 /** @param {Town} t @param {Project} p @param {Progress} pr */
 function saveProgress(t, p, pr) {
   const key = `${PROG_PREFIX}${t.id}:${p.id}`;
-  let json = JSON.stringify(isWork(p) ? { done: pr.done, built: pr.built, ...(pr.an ? { an: 1 } : {}) } : pr);
+  let json = JSON.stringify(isWork(p) ? { done: pr.done, built: pr.built, ...(pr.an ? { an: 1 } : {}), ...(pr.k?.length ? { k: pr.k } : {}) } : pr);
   // Hundreds of contributors: keep the biggest ones so the property stays under the limit.
   while (json.length > PROP_LIMIT && Object.keys(pr.c).length > 10) {
     const smallest = Object.entries(pr.c).sort((a, b) => a[1][1] - b[1][1])[0][0];
@@ -1064,6 +1065,7 @@ system.runInterval(() => {
     mayorCheck(players);
     autoTick(players);
     residentTick(players);
+    penTick(players);
     for (const t of allTowns().values()) {
       for (const p of ALL) {
         const s = t.spots[p.id];
@@ -2670,22 +2672,81 @@ function lifeNews(t, key) {
   gossip(`${t.id}:life:${key}`, { kind: "town_life", place: t.n, ...(t.m ? { from: t.m } : {}) });
 }
 
-/** The garden pen's animals: 2 sheep and 2 chickens inside it, once (they are ordinary animals, never replaced). @param {Town} t @param {Spot} s @param {Dimension} dim */
+/** A pen animal at place i (0 .. 3) inside the pen, tagged town:a:<town>. @param {Town} t @param {Spot} s @param {Dimension} dim @param {string} type @param {number} i */
+function spawnPenAnimal(t, s, dim, type, i) {
+  const at = toWorld(s, (i % 2) * 2 - 1, 0, 2 + Math.floor(i / 2) * 2);
+  try {
+    const e = spawnFresh(dim, type, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, { fresh: true });
+    e.addTag(`town:a:${t.id}`);
+  } catch (e) {
+    console.warn(`[town] ${t.n}'s pen: ${type}: ${e}`);
+  }
+}
+
+/** The garden pen's animals: 2 sheep and 2 chickens inside it, once (penTick brings back those that vanish). @param {Town} t @param {Spot} s @param {Dimension} dim */
 function penAnimals(t, s, dim) {
   const pr = progressOf(t, PEN);
   if (pr.an) return;
-  ANIMALS.forEach((type, i) => {
-    const at = toWorld(s, (i % 2) * 2 - 1, 0, 2 + Math.floor(i / 2) * 2);
-    try {
-      const e = spawnFresh(dim, type, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, { fresh: true });
-      e.addTag(`town:a:${t.id}`);
-    } catch (e) {
-      console.warn(`[town] ${t.n}'s pen: ${type}: ${e}`);
-    }
-  });
+  ANIMALS.forEach((type, i) => spawnPenAnimal(t, s, dim, type, i));
   pr.an = 1;
   saveProgress(t, PEN, pr);
 }
+
+const PEN_NEAR = 24; // a player this close to the pen (its chunk ticking, its animals loaded) for two checks in a row
+const PEN_CHECK = 600; // ticks between a town's pen checks
+/** Tick a player was first seen near each town's pen (deleted when nobody is), and of its last check. @type {Map<string, number>} */
+const penSeen = new Map();
+const penAt = new Map();
+
+/**
+ * On the build check (every 100 ticks): the vanilla sheep and chickens a script spawns despawn once no player is near
+ * (instantly past 128 blocks), so a pen whose animals vanished gets them back (life.js penMissing: never the ones that
+ * died). Only for a pen a player has been within PEN_NEAR of since the last check, so its animals are loaded and a
+ * missing one is really gone; one town's pen at most every PEN_CHECK ticks.
+ * @param {Player[]} players
+ */
+function penTick(players) {
+  if (get("townLife") !== true) return;
+  const now = system.currentTick;
+  for (const t of allTowns().values()) {
+    const s = t.spots[PEN_ID];
+    const pr = s ? progressOf(t, PEN) : undefined;
+    if (!s || !pr?.built || !pr.an) continue;
+    const near = players.some((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - s.x, pl.location.z - s.z) <= PEN_NEAR);
+    if (!near) {
+      penSeen.delete(t.id);
+      continue;
+    }
+    if (!penSeen.has(t.id)) penSeen.set(t.id, now);
+    if (now - /** @type {number} */ (penSeen.get(t.id)) < PEN_CHECK || now - (penAt.get(t.id) ?? -PEN_CHECK) < PEN_CHECK) continue;
+    penAt.set(t.id, now);
+    try {
+      const dim = world.getDimension(t.dim);
+      const alive = dim.getEntities({ tags: [`town:a:${t.id}`] }).map((e) => e.typeId);
+      penMissing(alive, pr.k ?? [], ANIMALS).forEach((type, i) => spawnPenAnimal(t, s, dim, type, i));
+    } catch (e) {
+      console.warn(`[town] ${t.n}'s pen: ${e}`);
+    }
+    return; // one town a check
+  }
+}
+
+// A pen animal died (eaten, a fox, lava): it isn't spawned again.
+world.afterEvents.entityDie.subscribe(
+  ({ deadEntity }) => {
+    try {
+      const town = deadEntity.getTags().find((tag) => tag.startsWith("town:a:"))?.slice(7);
+      const t = town ? allTowns().get(town) : undefined;
+      if (!t) return;
+      const pr = progressOf(t, PEN);
+      if ((pr.k ?? []).length < ANIMALS.length) pr.k = [...(pr.k ?? []), deadEntity.typeId];
+      saveProgress(t, PEN, pr);
+    } catch (e) {
+      console.warn(`[town] pen animal died: ${e}`);
+    }
+  },
+  { entityTypes: [...new Set(ANIMALS)] },
+);
 
 /**
  * Turns paths back to grass and takes lantern posts away, only where they are still what the town put there. Returns
