@@ -1369,6 +1369,8 @@ function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
   const mayors = get("townMayors") === true;
   if (mayors) Object.assign(t, { v: 2 }, newTownMayor([...allTowns().values()], t.id, t.n, CONFIG.mayorNames));
   saveTown(t);
+  const gone = goneTowns();
+  if (gone.includes(t.id)) saveGone(gone.filter((x) => x !== t.id)); // a new town of that name: no more an old one's
   zonesChanged();
   if (mayors && isTownMayorId(t.m)) mayorSet(t, { x: t.x, y: t.y, z: t.z }, player.getRotation().y);
   levelUp(t); // only if the config has no projects for level 1
@@ -1783,7 +1785,7 @@ async function removeTown(player) {
     player,
     new MessageFormData()
       .title("§lRemove town?")
-      .body(`Remove ${t.n} (${levelName(t.lvl)}, level ${t.lvl}) and all its project progress? What's built stays standing.`)
+      .body(`Remove ${t.n} (${levelName(t.lvl)}, level ${t.lvl}) and all its project progress? What's built stays standing; its residents move away (what they carry drops).`)
       .button1("§cRemove it")
       .button2("Keep it"),
   );
@@ -3713,17 +3715,61 @@ function residentTick(players) {
   }
 }
 
-/** Forgets a removed town's residents: those loaded lose our tags (never killed). @param {Town} t */
+const GONE_KEY = "town:gone";
+const GONE_MAX = 64;
+/** Ids of removed towns whose residents may still be out in unloaded ground (O77), newest last. @returns {string[]} */
+function goneTowns() {
+  const v = readJson(GONE_KEY);
+  return Array.isArray(v) ? v.filter((x) => typeof x === "string").slice(-GONE_MAX) : [];
+}
+/** @param {string[]} ids */
+function saveGone(ids) {
+  world.setDynamicProperty(GONE_KEY, ids.length ? JSON.stringify(ids.slice(-GONE_MAX)) : undefined);
+}
+
+/**
+ * A removed town's resident moves away (O77, D78): what it carries drops where it stands, then it is removed, so no
+ * villager, tag or override group of a town that is gone stays behind, and none can claim a player's bed later.
+ * @param {import("@minecraft/server").Entity} e
+ */
+function moveAway(e) {
+  try {
+    dropCarried(e);
+    e.remove();
+  } catch (err) {
+    console.warn(`[town] a resident of a removed town: ${err}`);
+  }
+}
+
+/** A removed town's residents move away: those loaded now, the rest when their ground loads (town:gone). @param {Town} t */
 function dropResidents(t) {
   resCache.delete(t.id);
   censusAt.delete(t.id);
   world.setDynamicProperty(RES_PREFIX + t.id, undefined);
+  saveGone([...goneTowns().filter((x) => x !== t.id), t.id]);
   try {
-    for (const e of world.getDimension(t.dim).getEntities({ type: VILLAGER, tags: [townTag(t.id)] })) untagResident(e, t.id);
+    for (const e of world.getDimension(t.dim).getEntities({ type: VILLAGER, tags: [townTag(t.id)] })) moveAway(e);
   } catch {
-    // fine: an unloaded one is untagged when tapped (its town is gone)
+    // fine: an unloaded one moves away when its ground loads (or when tapped)
   }
 }
+
+/** The town a resident belongs to, from its tags. @param {import("@minecraft/server").Entity} e */
+const residentTown = (e) => e.getTags().find((tag) => tag.startsWith("town:r:"))?.slice(7);
+
+/** Is `town` a removed town (listed in town:gone, and not added again)? @param {string | undefined} town */
+const isGone = (town) => !!town && !allTowns().has(town) && goneTowns().includes(town);
+
+// A removed town's resident that was in unloaded ground: it moves away as soon as its ground loads.
+world.afterEvents.entityLoad.subscribe(({ entity }) => {
+  try {
+    if (entity.typeId !== VILLAGER || !entity.hasTag(RESIDENT_TAG)) return;
+    const town = residentTown(entity);
+    if (isGone(town)) system.run(() => entity.isValid && moveAway(entity));
+  } catch {
+    // unloaded again meanwhile
+  }
+});
 
 // A resident died: a new family replaces it after replaceMinutes (in-game time).
 world.afterEvents.entityDie.subscribe(
@@ -3752,11 +3798,14 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
   if (ev.cancel) return;
   const e = ev.target;
   if (e.typeId !== VILLAGER || get("residentsTrade") === true || !e.hasTag(RESIDENT_TAG)) return;
-  const town = e.getTags().find((tag) => tag.startsWith("town:r:"))?.slice(7);
+  const town = residentTown(e);
   const t = town ? allTowns().get(town) : undefined;
   if (!t) {
-    // Its town was removed while it was far away: an ordinary villager from now on.
-    system.run(() => town && untagResident(e, town));
+    // Its town was removed while it was far away: it moves away now (an unknown town: an ordinary villager from now on).
+    if (isGone(town)) {
+      ev.cancel = true;
+      system.run(() => e.isValid && moveAway(e));
+    } else system.run(() => town && untagResident(e, town));
     return;
   }
   ev.cancel = true;
