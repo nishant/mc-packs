@@ -44,7 +44,7 @@ Releases go out on check, build and the PR's own tests; the long measurements co
 | every PR | `check.yml` | `npm run check`, `npm run build`, the one-context Realm Bundle smoke | unchanged |
 | every PR | `pr-tests.yml` `scenarios` | only the scenarios the PR touches (`tools/test-bds/affected.mjs`: its packs, scenario files, hooks; any pack change adds the 6 every-pack scenarios; a harness change runs all of them), split over up to 4 runners by the last run's seconds, `--jobs 2 --retry` | about 5-10 min for a one-pack change (a `stash_bp` change: 37 of 261 scenarios), nothing for docs only |
 | every PR that changes `packs/` or the harness | `pr-tests.yml` `perf` | a 10-player 60 s soak of the PR's base and of the PR back to back on one runner (`tools/test-bds/perf-compare.mjs`): red only when the steady bundle is 15% and 0.5 ms/tick slower, or one pack 50% and 0.1 ms/tick slower; a pair that isn't clean is run again in the other order and each side keeps its lowest figures | about 6-9 min, alongside the scenarios |
-| every merge to `master` | `validate.yml` | the A/B soaks (previous master vs this one, one runner each): 15 min at 10 and 40, 5 min at 100; the Realm Bundle at 40 for 5 min; a 60-minute unprofiled memory soak at 40 (RSS every 10 s); the whole suite in 4 shards. 4 runners at a time (repository variable `VALIDATE_PARALLEL` or the `parallel` input, 1-8); `quick` runs 60 s soaks to try the workflow | about 2.5 h, bounded by the memory pair |
+| every merge to `master` | `validate.yml` | the A/B soaks (previous master vs this one, one runner each): 15 min at 10 and 40 (10 and 40 players only, owner answer October 20); the Realm Bundle at 10 and 40 for 5 min each; a 60-minute unprofiled memory soak at 40 (RSS every 10 s); the whole suite in 4 shards. 4 runners at a time (repository variable `VALIDATE_PARALLEL` or the `parallel` input, 1-8); `quick` runs 60 s soaks to try the workflow | about 2.5 h, bounded by the memory pair |
 
 - **The report** is an issue labeled `perf-report` ("Post-release validation <sha>"), plus the run's summary and 30-day artifacts (every profile JSON, RSS series and suite report). Read the issue, not the logs: it has every table. Budget lines (OVER BUDGET at 40 players) are listed for the head but don't turn the run red; a failed scenario, a same-runner regression or a soak with no valid measurement does.
 - **Runners** are GitHub-hosted (the repo is public: 4 vCPU, 16 GB, minutes free, up to 20 jobs at once). One soak per runner, never two: the BDS script thread uses a whole core, and a second soak changes the timings. Compare figures only within a same-runner pair; machines differ by 10-40% (perf-after-2026-10-20.md).
@@ -155,8 +155,8 @@ Lessons:
 Testing is slow, so keep it to what a change needs (owner answer, October 20, 2026: 10 and 40 players only, keep it fast).
 
 - **During development:** run only the scenarios of the packs you touched (`node tools/test-bds/suite.mjs --filter '<regex>' --retry`, or `run.mjs` with one scenario). For anything that can cost per tick, profile at 10 and 40 players with 120 s windows (`suite.mjs --perf 10,40`, the default `--perf-seconds 120`), alternating before and after twice (before, after, before, after) and comparing per-pack lines.
-- **Release validation only:** the full suite (`suite.mjs --jobs 2 --retry`) and 300 s soaks (`--perf 10,40 --perf-seconds 300`).
-- **Before a final release only:** the 60-minute memory soak at 40 players.
+- **Release validation only:** the full suite (`suite.mjs --jobs 2 --retry`) and the long soaks at 10 and 40 (300 s or more, `--perf 10,40 --perf-seconds 300`); `validate.yml` runs these after every merge (Testing in CI), so don't run them locally.
+- **Before a final release only:** the 60-minute memory soak at 40 players (`validate.yml`'s `memory-40`).
 - Never 100 or 5 players: 10 is this Realm's maximum and 40 shows how the packs scale.
 
 ## Keeping a session cheap
