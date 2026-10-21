@@ -68,7 +68,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # mc-packs' build and bundle tools need no packages. hosting/minecraft has no lockfile: marked and Playwright.
+          cache: npm
+          cache-dependency-path: mc-packs/package-lock.json
+      # publish-packs runs mc-packs' catalog checks (admin-catalog.mjs reads @minecraft/server's typings), so mc-packs
+      # needs its packages; without them the first release run failed with "Cannot find module '@minecraft/server/...'".
+      - name: Install the mc-packs tools
+        working-directory: mc-packs
+        run: npm ci
+      # hosting/minecraft has no lockfile: marked and Playwright.
       - name: Install the hosting tools
         working-directory: hosting/minecraft
         run: |
