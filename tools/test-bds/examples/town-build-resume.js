@@ -11,9 +11,9 @@ export default async function (t) {
   const slope = (ox) => {
     for (let x = -45; x <= 45; x += 3) {
       const h = Math.max(-2, Math.floor((x + 45) / 3) - 15); // flat 2 below the plain on the west side (bedrock is at -64)
-      if (h > 0) fill(`/fill ${ox + x} ${G + 1} -32 ${ox + x + 2} ${G + h} 31 dirt`);
+      if (h > 0) fill(`/fill ${ox + x} ${G} -32 ${ox + x + 2} ${G + h} 31 dirt`); // from G: grass left under the hill would turn to dirt meanwhile
       else if (h < 0) fill(`/fill ${ox + x} ${G + h + 1} -32 ${ox + x + 2} ${G} 31 air`);
-      fill(`/fill ${ox + x} ${G + h} -32 ${ox + x + 2} ${G + h} 31 grass_block`);
+      if (h !== 0) fill(`/fill ${ox + x} ${G + h} -32 ${ox + x + 2} ${G + h} 31 grass_block`); // h 0: the plain's own grass (a /fill that changes nothing fails)
     }
   };
   const p = await t.player("Ann", { op: true, x: 0, z: 0, gameMode: "creative" });
@@ -28,7 +28,7 @@ export default async function (t) {
   };
   const shape = (s) => {
     const out = [];
-    for (let dx = -8; dx <= 8; dx++) for (let dz = -8; dz <= 8; dz++) for (let dy = -8; dy <= 10; dy++) out.push(dim.getBlock({ x: s.x + dx, y: s.y + dy, z: s.z + dz })?.typeId);
+    for (let dx = -8; dx <= 8; dx++) for (let dz = -8; dz <= 8; dz++) for (let dy = -8; dy <= 10; dy++) out.push(s.y + dy < -64 ? "below" : dim.getBlock({ x: s.x + dx, y: s.y + dy, z: s.z + dz })?.typeId);
     return out;
   };
   const built = async (id) => (await dump(id)).progress.find(([x]) => x === "well")[1].built === 1;
@@ -56,7 +56,10 @@ export default async function (t) {
     p.teleport({ x: 0.5, y: G + 2, z: 0.5 });
     town("finish", { project: "well", town: "riverside" });
     await t.waitUntil(() => built("riverside"), { timeout: 1200, interval: 40, message: "Riverside's well" });
-    t.world.setDynamicProperty("harness:shape", JSON.stringify(shape(a)));
+    // Saved across the restart as a palette and one character per block (the list itself is over the 32 KB a property holds).
+    const ids = shape(a);
+    const palette = [...new Set(ids.map(String))];
+    t.world.setDynamicProperty("harness:shape", JSON.stringify({ p: palette, s: ids.map((v) => String.fromCharCode(48 + palette.indexOf(String(v)))).join("") }));
     // Oakfield stops half way.
     p.teleport({ x: 400.5, y: G + 2, z: 0.5 });
     town("build_pause", { after: 30, town: "oakfield" });
@@ -70,8 +73,9 @@ export default async function (t) {
   await t.waitUntil(() => built("oakfield"), { timeout: 1200, interval: 40, message: "Oakfield's well resumed and finished" });
   const s = (await dump("oakfield")).town.spots.well;
   t.check(!s.bs && s.snap === 1, "bs cleared, the snapshot kept");
-  const want = JSON.parse(String(t.world.getDynamicProperty("harness:shape")));
-  const got = shape(s);
+  const saved = JSON.parse(String(t.world.getDynamicProperty("harness:shape")));
+  const want = [...saved.s].map((c) => saved.p[c.charCodeAt(0) - 48]);
+  const got = shape(s).map(String);
   const differ = want.reduce((n, v, i) => n + (v !== got[i] ? 1 : 0), 0);
   t.check(differ === 0, `the resumed build equals the uninterrupted one (${differ} blocks differ)`);
 }

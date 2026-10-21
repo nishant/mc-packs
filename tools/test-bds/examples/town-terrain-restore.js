@@ -12,9 +12,9 @@ export default async function (t) {
   const fill = (cmd) => t.server(cmd).ok || failed.push(cmd);
   for (let x = -45; x <= 45; x += 3) {
     const h = Math.max(-2, Math.floor((x + 45) / 3) - 15);
-    if (h > 0) fill(`/fill ${x} ${G + 1} -32 ${x + 2} ${G + h} 31 dirt`);
+    if (h > 0) fill(`/fill ${x} ${G} -32 ${x + 2} ${G + h} 31 dirt`); // from G: grass left under the hill would turn to dirt meanwhile
     else if (h < 0) fill(`/fill ${x} ${G + h + 1} -32 ${x + 2} ${G} 31 air`);
-    fill(`/fill ${x} ${G + h} -32 ${x + 2} ${G + h} 31 grass_block`);
+    if (h !== 0) fill(`/fill ${x} ${G + h} -32 ${x + 2} ${G + h} 31 grass_block`); // h 0: the plain's own grass (a /fill that changes nothing fails)
   }
   t.assert(!failed.length, `the slope is built (${failed.length} fills failed: ${failed[0]})`);
   await t.wait(20);
