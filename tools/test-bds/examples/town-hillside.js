@@ -26,7 +26,12 @@ export default async function (t) {
     return undefined;
   };
   const before = new Map();
-  for (let x = -R; x <= R; x++) for (let z = -R; z <= R; z++) before.set(`${x},${z}`, top(x, z)?.y);
+  const beforeId = new Map();
+  for (let x = -R; x <= R; x++) for (let z = -R; z <= R; z++) {
+    const b = top(x, z);
+    before.set(`${x},${z}`, b?.y);
+    beforeId.set(`${x},${z}`, b?.id);
+  }
   const center = top(0, 0).y + 1;
   p.teleport({ x: 0.5, y: center, z: 0.5 });
   await t.wait(10);
@@ -77,7 +82,10 @@ export default async function (t) {
   let changed = 0;
   for (const [k, y] of before) {
     const [x, z] = k.split(",").map(Number);
-    if (!inRegion(x, z) && !posts.has(k) && top(x, z)?.y !== y) changed++;
+    if (!inRegion(x, z) && !posts.has(k) && top(x, z)?.y !== y) {
+      if (changed < 5) t.log(`changed outside: ${k}: ${beforeId.get(k)} at ${y} -> ${top(x, z)?.id} at ${top(x, z)?.y}`);
+      changed++;
+    }
   }
   t.check(changed === 0, `nothing outside the regions changed (${changed} columns did; ${posts.size} lantern posts left out)`);
   // Each apron (region minus footprint) joins the ground with steps of at most 1, and no column moved more than 3.
