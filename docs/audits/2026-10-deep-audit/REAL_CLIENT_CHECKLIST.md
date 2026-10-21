@@ -1,4 +1,4 @@
-# Real-client checklist (F71: W2, O11-O16, O68-O75 and the fix campaign)
+# Real-client checklist (F71: W2, O11-O16, O68-O75, O76-O79 and the fix campaign)
 
 A dedicated server draws nothing, so these checks need a real game. Run them on **a phone and a PC** in a
 **private test world**, never on the live Realm: some steps spawn tornadoes, skip story chapters or dig out a
@@ -8,9 +8,11 @@ Write the result in the table at the end, one line per check, with a screenshot 
 **Run it only after the fix campaign's release is live.** The last release before it is Realm Bundle and Realm
 Resources `2026.1020.532` (Welcome Message `1.5.10`). On https://mc.nish.software/realm/ both bundles must show a
 version later than `2026.1020.532` and Welcome Message `1.5.11` or later; with an older build the fixed items still
-fail and get reported as broken.
+fail and get reported as broken. F1 (towns and residents) needs Town Projects `1.7.2` or later (Realm Bundle
+`2026.1021.1319` or later): towns before it had no residents. A4 is run twice: now, and again after the Minimap
+redesign (O1) ships, because the redesign changes what the low, normal and high levels draw each tick.
 
-Time: about 90 minutes for everything. Do **A5 first**, in the fresh world before anyone places a townsfolk
+Time: about 110 minutes for everything (F1 alone about 20). Do **A5 first**, in the fresh world before anyone places a townsfolk
 (`/realm:npc_add`) or accepts a story: it checks who the welcome names before and after placing. The other checks
 are independent; do them in any order and skip what you can't do today (write "not run").
 
@@ -83,6 +85,9 @@ players moving, 2.1 with 40) and **high** has the earlier normal's (about 2.9 ms
   or dark square, no empty frame, even while another box (quest box, Coordinates HUD) is showing.
 - FAIL: a black square after turning the radar off; a strip or radar that stops updating; a stutter you only see at
   one level (say which).
+- After the Minimap redesign (O1) is live: run A4 again with its new version (`/realm:help` or the realm page names
+  it) and judge **normal** and **high** above all (the levels most players use); write the Minimap version in the
+  result line.
 
 ### A5. Welcome popup and Realm News on a phone (do this one first)
 0. Run it before any other check: nobody may be placed with `/realm:npc_add` yet (if Old Tobin or Mara already
@@ -240,6 +245,31 @@ never sees it. Needs the second account (PC = owner, phone = visitor); otherwise
   `This land is claimed by <owner>` on the action bar and keeps its wheat. (The PC is the owner, so its tap on the wolf goes through.)
 - FAIL: the phone's own wolf is refused in the claim, or the phone can feed the cow in the claim.
 
+## F. Towns and residents (group 5)
+
+### F1. A town that grows: houses, residents, paths and the pen (D72-D77, O76-O79)
+BDS checks the rules (no beds, no work, the census leash), not how it looks or feels with a real player walking
+through. One device is enough; do it on the phone if you can (the busiest scene).
+1. In creative, on open, fairly flat ground away from spawn: `/realm:town`, **Add a town here**, name it `Testville`.
+   Stand in it for a minute or two: the town picks its project spots by itself (`/realm:town` → Projects shows them).
+2. Deliver the Settlement's projects at the mayor (creative: take the items from the creative inventory) until the
+   Well is built, then the rest until `Testville is now a Village (level 2)`. Stay within 30 blocks and watch.
+3. Put your own bed in the town and a few planted wheat crops next to a house. Skip a night (`/time set 14000`, wait,
+   then sleep in your bed) and a day.
+4. Walk 40 blocks away from a resident with a lead on it, unleash it, and walk 20 more blocks away. Wait a minute.
+5. Once the garden is built, look at its pen. Then `/realm:town` → remove the town (what's built stays) and look
+   at the residents afterwards.
+- PASS: each build appears as an outline first, then goes up a few blocks at a time without the game stuttering;
+  houses are whole 7 by 7 cottages (door facing the center, roof closed, lantern, a bed) on gently leveled ground (at
+  most 3 blocks, none of your blocks taken); 2 villagers come beside the well, then a family a house, with the chat
+  line `A new family moved into Testville: <name>.` and a job look that matches the house's job block; residents
+  never take your bed (you can still sleep in it), never harvest your wheat, and the one you led away is back near
+  home after a minute; paths and lantern posts look tidy and don't cut through your builds; the pen has 2 sheep and
+  2 chickens. After removing the town, its residents stay as ordinary villagers (count them: say how many).
+- FAIL: a half-built house, leveling that eats a player's blocks, a resident in your bed or harvesting, a resident
+  that stays far away, a villager baby (breeding, O76), more animals in the pen than it started with (O78), a stutter
+  while a build goes up, a trade window when you tap a resident (they don't trade).
+
 ## Results
 
 Fill in one line per check (copy the table into a reply, or edit this file). Device: Phone or PC, with the GUI
@@ -266,7 +296,10 @@ scale and screen size.
 | E3 Easy Building | | | |
 | E4 settings menus | | | |
 | E5 own pet in a claim | | | |
+| F1 towns and residents | | | |
+| A4 again after the Minimap redesign (O1) | | | |
 
 Which F- and O-items each check closes: A1 O12/O68/F17, A2 side box compositor, A3 O13, A4 O15/O69, A5 O43/F64,
 B1 O11/O16, B2 F42, B3 tether (floor gone), C1 O75, C2 F47, D1 O72, D2 O73, D3 O17/O20/F3/F13, D4 O70, E1 O71/F45,
-E2 O14, E3 F7/F8/F9/O47/O48, E4 the prefs lock and header rules, E5 F29 (and the O27 animal protection BDS can't drive).
+E2 O14, E3 F7/F8/F9/O47/O48, E4 the prefs lock and header rules, E5 F29 (and the O27 animal protection BDS can't drive),
+F1 D72-D77 and O76-O79 (the look and feel; O76 and O78 are judged over a longer test), A4 again O1/O15 after the redesign.

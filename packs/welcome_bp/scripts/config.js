@@ -59,6 +59,7 @@ export const GENERIC = {
     quests_bp: "Daily quests (§b/realm:quests§r)",
     expedition_bp: "Expeditions (§b/realm:expedition§r)",
     bounty_bp: "A bounty board (§b/realm:bounty§r)",
+    town_bp: "Towns that grow as you help, each with its mayor (§b/realm:town§r)",
     skills_bp: "Skills that grow as you play (§b/realm:skills§r)",
     crowns_bp: "Crowns to earn and spend (§b/realm:crowns§r)",
     claims_bp: "Land claims to keep your builds safe (§b/realm:claim§r)",

@@ -165,7 +165,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - the build gate measurement: O48
     - anything else not DONE with a sha
   - An item becomes WON'T FIX only with an owner answer recorded in OPEN.md.
-- [ ] **F71 (high, owner on devices) The real-client checklist (W2, O11-O16) and checks of the owner's reports.**
+- [ ] OPEN, waiting on the owner's devices (checklist current at fbbce801; leftovers): [REAL_CLIENT_CHECKLIST.md](../REAL_CLIENT_CHECKLIST.md) now also has F1 (towns and residents, D72-D77 and O76-O79) and a second A4 run after the Minimap redesign (O1), with the version gates (Town Projects 1.7.2, Realm Bundle 2026.1021.1319 or later); pets in claims stay E5. Nothing else in the campaign needs a real client that it doesn't cover. **F71 (high, owner on devices) The real-client checklist (W2, O11-O16) and checks of the owner's reports.**
   - Prepare one checklist the owner runs on a phone and a PC in a private test world (never the live Realm), with
     exact steps and what to look for. Cover:
     - name label resend timing
@@ -188,11 +188,11 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     loaded" warning, on both trees (master 5422aac and release 1). It invalidated 4 soaks on October 20
     ([perf-after-2026-10-20.md](perf-after-2026-10-20.md)).
   - Root-cause it (ticking areas, chunk loading order, the stash staging chunk) and fix the harness or the pack.
-- [ ] PARTLY DONE (30049a3d, 85624976, 8caf5577, d80f0828; rel2): no pack leak found; the Realm Bundle at 40 players grows 2.58 MiB/min on 5422aac and 2.69-3.32 on 7aa0cce over 18 min, and the 60-minute curves level off. Remaining: validate.yml's 60-minute memory A/B in CI must show head within about 15% of base and a second-half slope of 0.5 MiB/min or less. **F74 (medium, perf) Memory growth in the 60-minute soak at 40 players.**
+- [x] DONE, no leak (leftovers, October 21: validate.yml's 60-minute memory A/B after releases 2-5, issues #113, #114, #116, #120, #122; RSS series from the runs' artifacts): bedrock_server RSS growth from minute 10 to 60 at 40 players, head vs base on the same run: +40 vs +70, +89 vs +150, +44 vs +119, +80 vs +37, +87 vs +79 MB (head mean 68, base mean 91); the same tree measured twice differs by up to 79 MB (444f785: +40 as head of #113, +119 as base of #116), so no difference is beyond noise. Head end RSS within 4.4% of base every time (1599-1646 vs 1597-1681 MB, criterion about 15%); head second-half slope (minutes 35-60) 0.20, 0.28, 0.43, 0.24, 0.37 MiB/min (criterion 0.5 or less); every curve levels off (minutes 10-35: 1.1-2.6 MiB/min). No bisect: nothing to bisect. Was: PARTLY DONE (30049a3d, 85624976, 8caf5577, d80f0828; rel2): no pack leak found; the Realm Bundle at 40 players grows 2.58 MiB/min on 5422aac and 2.69-3.32 on 7aa0cce over 18 min, and the 60-minute curves level off. Remaining: validate.yml's 60-minute memory A/B in CI must show head within about 15% of base and a second-half slope of 0.5 MiB/min or less. **F74 (medium, perf) Memory growth in the 60-minute soak at 40 players.**
   - bedrock_server RSS from minute 10 to 60: +100 MB before (master 5422aac), +145 MB with release 1, one run each
     ([perf-after-2026-10-20.md](perf-after-2026-10-20.md)).
   - Find whether any pack leaks: bisect by pack with `tools/test-bds/rss-soak.mjs`.
-- [ ] PARTLY DONE (346df1f as 5ac44b06 on rel2, 3e5d099, aedf57f; rel2 also e0943f17 cooking-restart 3/6 -> 6/6 (not proof of the pack fix: the scenario now cooks after the 100-tick window; the proof is cooking-early, 119d9561), ab727687 expedition-restart and saga-escort 4/4 and the phase-start wait listed under Remaining, bd26627a map-flight; expedition-climb keeps the rel2 check (fall damage 0 and every other loss explained by a recorded hurt) but was never reproduced in 11 runs, so it stays open; October 21, BDS 1.26.52.3, 4 vCPU, suite.mjs --jobs 2 rounds): seven of the eight are root-caused and passed every rerun. expedition-climb is left to the lead (fixed on PR #108: the check counted the Spider Nest's mob hits, and now counts only `fall` damage). **F75 (medium, tests) Root-cause the flaky scenarios of the October 20 suites.**
+- [x] DONE (leftovers, October 21): expedition-climb closed as not reproducible with the strengthened check (rel2's: fall damage 0 and every other loss explained by a recorded hurt): 20 of 20 local runs passed (`run.mjs --quiet --flat --only expedition_bp --timeout 900`, 42-60 s each, one at a time on the shared 4-vCPU machine, master 1fd52517 plus this branch's elite and docs changes, which don't touch expedition_bp), on top of the 11 earlier; in 4 of the 20 the tester lost health in the shaft run (20 -> 19, 13, 13, 12.1), none of it from the fall: the Spider Nest's mobs, the case the old check counted as a fall and failed on, and it passed in all five of validate.yml's post-merge suites after releases 2-5 (runs 39528938001, 39524727975, 39548555936, 39573127785, 39579159985: 40-55 s, never flaky). Was: PARTLY DONE (346df1f as 5ac44b06 on rel2, 3e5d099, aedf57f; rel2 also e0943f17 cooking-restart 3/6 -> 6/6 (not proof of the pack fix: the scenario now cooks after the 100-tick window; the proof is cooking-early, 119d9561), ab727687 expedition-restart and saga-escort 4/4 and the phase-start wait listed under Remaining, bd26627a map-flight; expedition-climb keeps the rel2 check (fall damage 0 and every other loss explained by a recorded hurt) but was never reproduced in 11 runs, so it stays open; October 21, BDS 1.26.52.3, 4 vCPU, suite.mjs --jobs 2 rounds): seven of the eight are root-caused and passed every rerun. expedition-climb is left to the lead (fixed on PR #108: the check counted the Spider Nest's mob hits, and now counts only `fall` damage). **F75 (medium, tests) Root-cause the flaky scenarios of the October 20 suites.**
   - atlas, expedition-restart, saga-escort ("chunk at ... did not load in 400 ticks"): the "before" suite ran 5422aac, which predates F69's harness fix (86a28e4: a phase removes its own ticking areas when it asks for the restart, not at the start of the next phase, while the chunks are still loading from the save). r1 (88cc198) has the fix, and on 8763272 they passed 5/5 each under --jobs 2. No further change.
   - saga-perf-quests ("spawned 5 of 10"): the same F73 pattern as the old perf soak. Each player's own area was removed 2 ticks after the next player's center column loaded. Now there is one radius-2 loader per 64-block tile of the grid, loaded whole (`whole: true`); the players spawn under it (`area: false`) and the loaders go after everyone has settled. A unit test was added (saga-perf-quests.test.mjs). 5/5 before (it was rare at 10 players), 5/5 after.
   - saga-escort (a new flake, 1 of 5 before): "Pell walked (many small steps)" with "samples 9, moving 2". wander spawns Pell 24 to 40 blocks ahead along the player's view, and the scenario faced the chapel 48 blocks east, so a 40-block roll left a 7-block walk. Pell's spawn x was 924 in a 52-sample run and 940 in the failing run. The player now faces west: 172-202 samples, 5/5.
@@ -206,6 +206,12 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
   - Root-cause each one; fix the pack or the scenario without weakening what it checks.
 
 ## Decisions made in the fix campaign (October 20)
+
+- perf-tail: silly_bp's per-tick work runs only when it is needed (a Hyper Jump wearer or a flight) instead of an always-on 1-tick interval that returns early: the measured cost was the callbacks themselves, about 0.04 ms a tick each at 40 players even when they did nothing. The 4-tick gear sweep and its cadence (each player at most every 20 ticks) are unchanged (0c6e1e84).
+- perf-tail: elite night cost: the per-player and nearby caps count right (instrumented night soaks on both trees); the extra champions in group 3's night soak were run-to-run deaths, not a cap bug. Owner answer F10 (0.8 a player) is kept. The read cuts (4d870867) are kept although their gain is within noise, because the unit tests show fewer native reads and the BDS elite scenarios pass.
+- perf-tail: the night soak's far champions despawn at once (more than 128 blocks from every player): the far-champion path it was meant to measure is not exercised. Recorded, not changed here (scenario work, not a pack fix).
+- perf-tail: the name-label changes (per-dimension observers, cached target names, helper lookups by id) were reverted (1ecf250c) because two A/B rounds showed no gain; a change that measures worse is not shipped. The label loop stays open (O3, O10).
+- perf-tail: Expedition fills split by volume (2,048 blocks a step) rather than by a fixed layer count, so every room size and the reset get the same bound; a room's parts yield on time (8 ms), since a part's cost depends on what it places.
 
 - tether: The tether steers with the stable minecraft:movement attribute, applyImpulse and setRotation, not with camp fences: no blocks are placed and every camp prefab works.
 - tether: Camp soft radius 3, road 6, hard limit 12: the documented limit and wander-walk's 20-block snap check still hold.
@@ -305,6 +311,23 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - ship4: because F67 touches every behavior pack and build_rp, all 68 changed packs went up one patch above master (help_bp 1.1.80 by hand: help-catalog was current and only bumps on a catalog change; news_bp 1.7.85 by gen-news); release/notes.json was rebuilt from master's: group 4's 8 player lines plus one for the line endings, a `resourceNotes` line for build_rp, and 66 packNotes describing only what this release changes (group 4's stale entries for int23 work master already shipped were dropped).
 - ship4: claims-own-pet (F29) could never pass on BDS (a simulated tap fires no before event, so no tamer is recorded and no tap is refused); it now uses master's claims-taps probe like claims-animals: each bone is tapped through the probe and fed for real, and both leash taps in the claim go through the probe. Its first probe run also showed the tamed wolf teleporting back to its owner 24 blocks away, so the tamer now comes into the claim with it, and the scenario asserts the wolf is in the claim. Fails before F29 (5f88e080^: the tamer's tap is canceled), passes after 3 of 3. Nothing is checked less: the stranger's refusal is now observable at all.
 - ship4: F22 stays PARTLY DONE (the guards ship; BDS can't reproduce the leave race). F19 ships as a correctness change without a perf claim.
+
+- group 5: D72, a resident claiming a bed is detected by `isSleeping` on the bed, since villagers never set `occupied_bit` (town-resident-poi has a working control now).
+- group 5: D73, residents default to Enabled: no resident slept in 5 runs while an ordinary villager did in the same bed, residents never work (0 of 48 crops), strays come home, a removed town's residents live on untagged, the world cap held at 20 and no villager was born in any run.
+- group 5: D74, residents get the vanilla jobless schedule and lose the work groups, work goals and love group (`realm:become_resident`); they keep their profession look.
+- group 5: D75, the census leash is 32 blocks from home (`HOME_LEASH`), skipped while a player is within 16 blocks.
+- group 5: D76, garden pen animals that vanish come back while a player stands by the pen for 30 s; killed ones (`k`) never do, so the pen is no free food.
+- group 5: D77, the spot scan is paced for QuickJS (workTick 100, grading per row): performance before UX. Flat ground takes about a minute a level, a steep hillside up to about ten (town-hillside: 81 / 510 / 0 / 308 s).
+- group 5: the shareables override (stopping residents picking up food) was tried and dropped: the bread probe showed no pickup without it, and an empty `items` array is invalid content.
+- ship5: merged origin/master (release 4, 174a0486) into group 5 with a merge commit (5d01c897). Conflicts: the six manifests and diag.js (master's versions, then bumped; town_bp keeps group 5's manifest for its new data module and description), stash's page-store.js (master's, a superset of the int23 typedef port) and release/notes.json (rebuilt). town_bp's spawn.js had mixed endings from before F67 and went to LF (check-eol).
+- ship5: versions above master: town_bp 1.7.2, npc_bp 1.9.0, welcome_bp 1.5.13 (both sides were at 1.5.12), admin_bp 1.6.11, help_bp 1.1.81 by hand (help-catalog was current), news_bp 1.7.86 by gen-news. caravan_bp and stash_bp take master's (group 5's int23 ports were already there). release/notes.json holds only this release's 4 bundle lines and 4 packNotes.
+- ship5: CLAUDE.md's "Vanilla entity overrides" now names `town_bp/entities/villager_v2.json` and its three additions (WORKING.md already did).
+- ship5: the g5 risks that stay open are recorded as O76-O79 in OPEN.md (breeding without a long soak, a removed town's villagers, pen top-up, Remove spot and slow hillside picking).
+- ship5: PR #119's CI had 90 scenarios: 88 passed and 2 were flaky (town-auto-spots, town-houses), both in this release's code. No cause was found from the logs. The scenarios got failure diagnostics instead of longer waits, and the flakes are recorded as O80.
+- leftovers: F74 is closed without a bisect: five 60-minute same-run A/B pairs show no head-over-base growth beyond what one tree shows measured twice (79 MB), and every head curve levels off under 0.5 MiB/min.
+- leftovers: F45 is closed without changing the ticker: validate.yml's same-runner soaks have stats_bp at 40 at 0.058-0.080 ms/tick, the local over-0.15 figure belongs to a shared machine about twice as slow (both trees over, master the cheaper), and the one further cut measured no gain and was reverted. Fewer action bar writes would make the ticker fade between redraws, which is the owner's call.
+- leftovers: F22's fix treats every form rejection once the player is gone, and the PlayerQuit and ServerShutdown reasons, as a canceled form; any other rejection still reaches the log.
+- leftovers: F75's expedition-climb is closed as not reproducible: never failed locally in 11 + 20 runs or in validate.yml's suite after releases 2-5 (5 of 5), with the rel2 check (fall damage 0, every other loss explained by a recorded hurt) kept as is.
 
 ## Blockers and highs
 
@@ -417,7 +440,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - [x] (FIXED before the merge (70db7f4d); see also N5: the entry was never shown in game) **F21 stats_bp (owner awareness):** players whose "off" choice for the ticker was erased by the old rule
   (choices equal to the old default weren't saved) will see the ticker again now that it defaults on. Mention it in
   the release news.
-- [ ] PARTLY DONE (036f23da, 59c24ef1; group 4): Champions menus, commands and the shield break check isValid across the tick. Open: the leave race does not reproduce on BDS (elite-invalid-leave passes before and after, also with --strict), so the guards are unit-verified only. **F22 elite_bp:** O58 added `isValid` in only two places, and no soak shows the recurring
+- [x] DONE (4e448a93; leftovers): the audit of every elite_bp entity read after an await or a tick boundary is finished: the one-tick conversion, the health fill, the gear sweeps, the aura, sort and approach handles (each read in a try with a validity check in the catch), the storm loop, the death and load handlers, the menus and the commands were all guarded already; the one gap was a form the game rejects because the player left (FormRejectError PlayerQuit) while a Champions menu was open, which reached the command's catch and logged `[elite] FormRejectError`. `show()` now treats that (and ServerShutdown, or any rejection once the player is gone) as canceled. Unit tests in tools/invalid-entity-guards.test.mjs run the tick boundary by hand with an invalidated player and mob: the leave-with-menu test fails before (`[elite] FormRejectError: The player left the game`) and passes after; the next-tick command and the one-tick conversion of a mob that is gone are locked in (pass before and after). Was: PARTLY DONE (036f23da, 59c24ef1; group 4): Champions menus, commands and the shield break check isValid across the tick. Open: the leave race does not reproduce on BDS (elite-invalid-leave passes before and after, also with --strict), so the guards are unit-verified only. **F22 elite_bp:** O58 added `isValid` in only two places, and no soak shows the recurring
   `[elite] InvalidEntityError ... dimension` is gone. Soak and grep the log, then add the guards that are still
   missing.
 - [x] DONE (1f7dfe1, 5f826b90; rel2): diag-owned-reload fails on 5422aac and passes on rel2; sync-diag current in all 67 packs, each bumped. **F23 tools/diag-shared.js:** in `claim` (around :354), `??` treats `null` (a prefix two packs declare) as
@@ -514,7 +537,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
   Five of the 28 new scenarios fail. Fix their wiring so the suite runs them, then make them pass for the right
   reason.
-- [ ] PARTLY DONE (5c6e6a5, c68498d, 5db308b7, a4ed2e55; rel2): one pass a second, redraw on change or every 2 seconds; stats_bp at 40 players 0.189/0.184 -> 0.150/0.169 ms/tick, 10 players unchanged (about 0.065). Remaining: still at or over 0.15 at 40, mostly setActionBar (about 1.09 a tick, the scrolling ticker changes every second); going lower changes the ticker the owner chose (owner decision). **F45 (medium, perf) The stats ticker now writes the action bar for every player every second.**
+- [x] DONE, measured (leftovers, October 21; no further change): stats_bp steady ms/tick, perf-soak 120 s, master 1fd52517 against the pre-ticker 5422aac stats_bp (the same harness and other packs), alternating before/after twice on the shared 4-vCPU machine: 10 players 0.064/0.059 before -> 0.057/0.050 after; 40 players 0.195/0.184 before -> 0.174/0.172 after (all four soaks valid). The ticker on master costs less than the pack did before it. Both trees read over 0.15 at 40 here because the machine is about twice as slow as a CI runner with another BDS job on it (whole bundle 8.0-8.7 ms vs 4.2-4.6 on CI); on validate.yml's same-runner 15-minute soaks stats_bp at 40 is 0.073, 0.080, 0.070, 0.058 (#113, #116, #120, #122), never over budget. A further cut was tried and measured (the distance pass on the ticker's roster instead of a fresh player list, and no isValid first on the kept handles): 0.177 at 40 vs 0.174 on master in the same alternation, tickerLoop 286 vs 273 ms and the distance pass 155 vs 149 ms over the window, so no gain, reverted. What is left is the action bar write itself (about 1.03 a tick at 40, one per player every 2 seconds so the bar doesn't fade), which is the ticker the owner chose. Was: PARTLY DONE (5c6e6a5, c68498d, 5db308b7, a4ed2e55; rel2): one pass a second, redraw on change or every 2 seconds; stats_bp at 40 players 0.189/0.184 -> 0.150/0.169 ms/tick, 10 players unchanged (about 0.065). Remaining: still at or over 0.15 at 40, mostly setActionBar (about 1.09 a tick, the scrolling ticker changes every second); going lower changes the ticker the owner chose (owner decision). **F45 (medium, perf) The stats ticker now writes the action bar for every player every second.**
   - `stats_bp` `runInterval(20)` at `main.js` :362. setActionBar went from about 0 to 1.1-1.2 per tick at 40
     players (0.3 at 10), and stats_bp from 0.068 to 0.17 ms/tick. It is the only pack newly over the 0.15 ms budget.
   - It comes from O71: the ticker defaults on. Keep the behavior the owner chose (on by default, personal off
@@ -523,7 +546,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - spread players over the second
     - skip players whose bar is held by another pack (the actionbar protocol)
   - Re-measure at 10 and 40 players.
-- [ ] PARTLY DONE (group 3: 6a439ead, a250925b, d2530c33, 9ba983c, ec6fa11, 01e59ad and the workstream commits in `campaign-reports/g3.md`; shipped in the ship3 PR): at 40 players, steady window, before 7aa0cce vs after: elytra 0.280 -> 0.157, saga 0.209 -> 0.179, silly 0.382 -> 0.192, admin 0.131 -> 0.130, wander and the WS3 set 0.215 -> 0.205; the one-context Realm Bundle 8.004 -> 7.108 ms (10 players: 4.941 -> 3.981). Remaining: map_bp 4.185 against 1 (O1; owner F56: improve where measured, a perf/map-redesign workstream follows) and silly_bp 0.192; build_bp, stash_bp and stats_bp are group 2's. **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
+- [ ] PARTLY DONE (perf-tail, PR #121: silly_bp 0c6e1e84 0.165 / 0.161 -> 0.110 / 0.101 ms/tick at 40, done; elite night 4d870867 within noise, see OPEN O3; Expedition build steps f96e23c4 22-30 -> 9-17 ms, see OPEN O10; npc labels measured, no gain, reverted 1ecf250c; map_bp O1 still open). Earlier: (group 3: 6a439ead, a250925b, d2530c33, 9ba983c, ec6fa11, 01e59ad and the workstream commits in `campaign-reports/g3.md`; shipped in the ship3 PR): at 40 players, steady window, before 7aa0cce vs after: elytra 0.280 -> 0.157, saga 0.209 -> 0.179, silly 0.382 -> 0.192, admin 0.131 -> 0.130, wander and the WS3 set 0.215 -> 0.205; the one-context Realm Bundle 8.004 -> 7.108 ms (10 players: 4.941 -> 3.981). Remaining: map_bp 4.185 against 1 (O1; owner F56: improve where measured, a perf/map-redesign workstream follows) and silly_bp 0.192; build_bp, stash_bp and stats_bp are group 2's. **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
   - map_bp 3.6-3.8 ms against its 1 ms budget
   - build_bp 0.73-0.78
   - stash_bp 0.53-0.57
@@ -666,7 +689,7 @@ alive. This is a feature across town_bp, npc_bp and wander_bp. Build it after F1
 Packs: town_bp (owner), npc_bp (the mayor townsfolk, the resident labels), wander_bp (reuse its villager spawning
 and the identity checks from the shared spawn module).
 
-- [ ] **F36 A mayor per town.**
+- [x] DONE (2bf082d9, 51bd025b, dd54767a, dad21197, edba2e2d; BDS town-mayor-add, town-two-towns, town-bram-migrate): every town gets a `mayor:<town>` townsfolk, Bram keeps his town, others get theirs on the next visit, operators move or rename them. **F36 A mayor per town.**
   - Every town gets its own mayor NPC: a named townsfolk generated for that town, with a name from a list, a
     skin and the `mayor` role, created when the town is added and standing at the town's center or town hall.
   - Mayor Bram stays the realm's main mayor (the story and the cast use `bram`) and the mayor of the first town.
@@ -683,7 +706,7 @@ and the identity checks from the shared spawn module).
   - Until this ships, the owner's workaround for a second town: turn on `deliverWithCommand` (Town Projects in
     Realm Configuration), so `/realm:town` takes deliveries inside any town's radius, and set its level 1 spots
     (`well`, `notice_board`) by hand.
-- [ ] **F37 Project spots chosen automatically.**
+- [x] DONE (1a7524c6, 336160a8, 71fc5c82, c8028632, a5df65d4, a8068c8e, 2a09f958, 475dd5f0, d122b6a3; BDS town-auto-spots, town-hillside, town-claims-spots, town-placed-marks, town-unloaded, town-terrain-restore, town-build-resume, town-resume-guards): automatic spots on natural ground, leveling at most 3 blocks with steps of 1, never a placed block, claim, path or house; the scan is paced for QuickJS (D77: 2.86 -> 1.32 ms a scanning tick at 10 players). **F37 Project spots chosen automatically.**
   - When a town is added (and when it reaches a new level), town_bp picks a spot for each project of that level
     within the town radius, so operators no longer have to set them.
   - **Never touch a man-made block.** A build may only replace air, natural terrain (grass, dirt, sand, gravel,
@@ -714,13 +737,13 @@ and the identity checks from the shared spawn module).
     still move any spot (Manage spots) and preview it before the build.
   - Before a project is built, show its outline to players who are near it for a few seconds, so nobody is
     surprised.
-- [ ] **F38 The town grows as players progress.**
+- [x] DONE (d8734dfb, 11638f97; BDS town-two-towns, town-hillside, town-news): the mayor tells the town's story, why each project matters and the next level. **F38 The town grows as players progress.**
   - The mayor drives it. Talking to the mayor shows the town's story so far, what the next project is for ("a
     well so the families can move in"), and the projects of the current level.
   - Finishing a level unlocks the next, as now. Each finished project and level adds visible life (F39).
   - Keep the existing projects, rewards and saved data. New towns pick spots per F37. Existing towns keep spots
     already set and get automatic spots for the rest.
-- [ ] **F39 Residents move in.**
+- [x] DONE (9ed193c1, 13943910, b8c14d14, f7e90dac; BDS town-residents, town-resident-poi, town-resident-farm): residents through a `villager_v2` override that claims no bed or job site, never work (0 of 48 crops taken), are brought home past 32 blocks; default Enabled (D73), world cap 20. **F39 Residents move in.**
   - Ordinary villagers (vanilla `minecraft:villager_v2` with professions, spawned the way wander_bp spawns its
     villagers, checked with spawnFresh) move into a town as it grows. For example:
     - 2 at Settlement with a well
@@ -740,7 +763,7 @@ and the identity checks from the shared spawn module).
   - **Cost budget:** residents are vanilla mobs, so their AI cost is the game's. The script side must be event
     driven (no per-tick loops over residents). Measure 2 towns at Capital at 10 players. Mob count is a known
     Realm limit, so keep the per-world cap small (default 20) and document it in SERVER_SETUP.md.
-- [ ] **F40 Houses and small life.**
+- [x] DONE (1694313a, 11638f97, ae0980ce, 6ca3b27d, 8280bea1, 41e2c7f9, 3c8ec8ab, 7cf55eb2; BDS town-houses, town-life): houses from Village on, grass paths, lantern posts, a garden pen whose despawned animals come back (killed ones never), town news from the town's mayor. **F40 Houses and small life.**
   - Add a project kind "house": a small built-in cottage with a bed and a job-site block. A town builds one per
     resident slot at levels 2+, at automatic spots (F37), so residents have homes.
   - Add small touches when projects finish:
@@ -749,7 +772,7 @@ and the identity checks from the shared spawn module).
     - the notice board listing new residents
     - gossip from the town's mayor through `realm:gossip`
   - Keep each touch cheap: blocks placed once, no per-tick work.
-- [ ] **F41 Docs and tests.**
+- [x] DONE (a986f325, 39d8f95c, 470e95db, f7e623b3; 15 town scenarios plus town-capital-perf, 9 unit test files): PACKS.md, README, SERVER_SETUP (resident cap), the welcome feature list, CLAUDE.md's vanilla entity overrides; 2 towns at Capital cost Town Projects 0.013 ms/tick at 10 players and 0.025 at 40. **F41 Docs and tests.**
   - PACKS.md: Town Projects (How to use without the operator spot step, mayors, residents, houses, options,
     saved data, cost) and Townsfolk (town mayors). Add Town Projects' new behavior to "How the packs work
     together".

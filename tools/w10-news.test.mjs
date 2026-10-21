@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import vm from "node:vm";
 import ts from "typescript";
 import { GOSSIP, HEARTH } from "../packs/npc_bp/scripts/hearth.js";
+import { gossipFrom, tellsGossip } from "../packs/npc_bp/scripts/mayors.js";
 import { CONFIG as GUILD_CONFIG } from "../packs/guilds_bp/scripts/config.js";
 
 const root = path.join(import.meta.dirname, "..");
@@ -579,6 +580,8 @@ function npcApi(random = 0) {
     get: (k) => (k === "gossipChance" ? 100 : k === "affinity" ? true : undefined),
     HEARTH,
     GOSSIP,
+    gossipFrom,
+    tellsGossip,
     console,
   }, [
     "let gossip = [];",

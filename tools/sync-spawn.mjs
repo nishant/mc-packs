@@ -21,6 +21,7 @@ const CONSUMERS = {
   calendar_bp: ["main.js"],
   moon_bp: ["main.js"],
   expedition_bp: ["gauntlet.js"],
+  town_bp: ["main.js"],
 };
 
 const problems = [];

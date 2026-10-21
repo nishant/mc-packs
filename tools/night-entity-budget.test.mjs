@@ -49,7 +49,9 @@ function eliteContext({ champions, players, config = {}, tick = 1000, at = (i) =
     live.set(id, {
       id,
       isValid: true,
+      // Like the game: a read on an entity that is gone throws.
       get location() {
+        if (!this.isValid) throw new Error("InvalidEntity");
         touched.set(id, (touched.get(id) ?? 0) + 1);
         return at(i);
       },
@@ -75,11 +77,18 @@ function eliteContext({ champions, players, config = {}, tick = 1000, at = (i) =
     system: { currentTick: tick, runInterval: (f) => callbacks.push(f) },
     get: (k) => ({ "approach.enabled": true, "approach.speed": 3, nightOnly: false, maxAlive: 80, maxAlivePerPlayer: 0.8, maxAliveNearby: 0, ...ctx.config })[k],
     traitOf: () => "fast",
-    puff: (e) => puffs.push(e),
+    // Like the real puff and step: an entity that is gone throws on their first read.
+    puff: (e) => {
+      if (!e.isValid) throw new Error("InvalidEntity");
+      puffs.push(e);
+    },
     shieldUp: () => true,
     BROKEN: { particle: "x" },
     LOOKS: { fast: { particle: "p" } },
-    approachStep: (e, step, units) => steps.push({ e, step, units }),
+    approachStep: (e, step, units) => {
+      if (!e.isValid) throw new Error("InvalidEntity");
+      steps.push({ e, step, units });
+    },
     night: () => {
       calls.night++;
       return true;
@@ -111,6 +120,7 @@ function eliteContext({ champions, players, config = {}, tick = 1000, at = (i) =
     /^const playersAt = /m.test(elite) ? line(elite, "playersAt") : "",
     /^const nearState = /m.test(elite) ? line(elite, "nearState") : "",
     /^let sortCursor;/m.test(elite) ? "let sortCursor;" : "",
+    optFn(elite, "stillValid"),
     optFn(elite, "sortNear"),
     /^const nearIds = /m.test(elite) ? line(elite, "nearIds") : "",
     fn(elite, "aura"),
@@ -422,6 +432,41 @@ test("approach: one run reads each block once, however many angles its steps try
   const result = ctx.run(dim, at, angles);
   assert.ok(result.some((r) => r === undefined) && result.some((r) => r !== undefined), "the wall blocks some angles and not others");
   assert.ok(reads <= 60, `7 angles of one step read ${reads} blocks`);
+});
+
+test("approach: a block look reads only the block's type from the game, and still tells air, liquid and ground apart", () => {
+  const code = [
+    stmt(elite, "WALK_THROUGH"),
+    line(elite, "NO_STEP_ON"),
+    "let runBlocks;",
+    fn(elite, "lookAt"),
+    line(elite, "open"),
+    line(elite, "ground"),
+    "globalThis.look = (dim, at) => { const b = lookAt(dim, at); return { open: open(b), ground: ground(b) }; };",
+  ].join("\n");
+  const props = { isAir: 0, isLiquid: 0, typeId: 0 };
+  const block = (typeId, isAir, isLiquid) => ({
+    get typeId() { props.typeId++; return typeId; },
+    get isAir() { props.isAir++; return isAir; },
+    get isLiquid() { props.isLiquid++; return isLiquid; },
+  });
+  const blocks = [
+    block("minecraft:air", true, false),
+    block("minecraft:stone", false, false),
+    block("minecraft:water", false, true),
+    block("minecraft:flowing_lava", false, true),
+    block("minecraft:short_grass", false, false),
+    block("minecraft:oak_fence", false, false),
+  ];
+  const ctx = { Math, String, Set };
+  vm.createContext(ctx);
+  vm.runInContext(code, ctx);
+  const dim = { id: OVER, getBlock: ({ x }) => blocks[x] };
+  const got = blocks.map((_, x) => ctx.look(dim, { x, y: 64, z: 0 }));
+  assert.deepEqual(got.map((g) => g.open), [true, false, false, false, true, false], "air and walk-through plants are open");
+  assert.deepEqual(got.map((g) => g.ground), [false, true, false, false, false, false], "stone is ground; liquids, air, plants and fences are not");
+  assert.equal(props.isAir + props.isLiquid, 0, "no isAir or isLiquid read: they follow from the type");
+  assert.equal(props.typeId, blocks.length, "one type read a block");
 });
 
 test("approach: a step reads each nearby player's place once and a champion's tags once per refresh", () => {

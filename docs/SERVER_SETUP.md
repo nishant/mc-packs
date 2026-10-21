@@ -40,7 +40,7 @@ You install them one of two ways. **Pick one and keep it**:
 | Experiments, Beta APIs | **Not needed.** Leave every experimental toggle off; nothing uses beta modules |
 | Cheats | **Not needed** for any `/realm:` command. Operators' quick actions (weather, time, give...) work without cheats too |
 | Achievements | Any behavior pack that isn't from the Marketplace turns achievements off for the world (that's Bedrock) |
-| Other add-ons | Translucent Tools Switch overrides the vanilla player entity and Dolphin Friends the vanilla dolphin: another add-on that also overrides one of them breaks one or the other. All commands use the `realm:` namespace |
+| Other add-ons | Translucent Tools Switch overrides the vanilla player entity, Dolphin Friends the vanilla dolphin and Town Projects the vanilla villager (`minecraft:villager_v2`): another add-on that also overrides one of them breaks one or the other. With another villager add-on, Town Projects' residents can't move in (operators are told; leave `residents` Disabled). All commands use the `realm:` namespace |
 | World | Any world, new or old. Nothing assumes a spawn, a town or coordinates: operators place the townsfolk, towns and boards (see Operator setup), and the story builds the places it needs when nobody set them |
 
 World settings that matter:
@@ -109,7 +109,7 @@ the step's own command:
 3. **Safe Zone at Spawn**: meteors, tornadoes, storms and Blood Moon creepers break no blocks inside a safe zone.
 4. **Caravan Arrival Spot**, **Bounty Board** (a lectern), **First Waystone at Spawn**, **Expedition Site** (far
    from spawn and from anyone's builds; dungeons are built deep underground).
-5. **Server Size** (below), then the rest: relicsmith, story places, town project spots, Creeper Guard zones, farms
+5. **Server Size** (below), then the rest: relicsmith, story places, town project spots (towns pick their own; set one only where you want it), Creeper Guard zones, farms
    kept loaded, a community goal, the **welcome message** and **news** (the defaults talk about our Realm: rewrite
    them for yours) and every pack's settings (`/realm:config`). On a public server, also look at Land Claims (off
    by default) and Creeper Guard.
@@ -244,7 +244,8 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 - **At 40 players the packs are over their 5 ms goal:** about 8 ms a tick, the Minimap 3.7 ms of it against 1. That is open, not accepted: it leaves less room for other server work. See Performance above.
 - **Ticking areas:** Bedrock allows 10 per world. Farm Loader's farms, Expeditions' dungeon resets (up to `slots`),
   Death Point's `/realm:death_back` and some story and town builds share them, as do any you add with `/tickingarea`.
-- **One cast:** there is one set of twelve townsfolk for the whole world; several towns share them.
+- **One cast:** there is one set of twelve townsfolk for the whole world; several towns share them. Each town also has its own mayor (Town Projects with Townsfolk, `townMayors`), one NPC per town.
+- **Town residents are mobs:** with `residents` Enabled (Town Projects, default Enabled), each town gets up to 10 vanilla villagers (2 at a Settlement with a well, 4 at a Village, 6, 8, then 10 at a Capital; `residentCapTown`), and the whole world at most `residentCapWorld` (default 20, 0 to 40). Their AI is the game's, like any villager's, so on a busy or small server keep the world cap low; two towns at Capital with the default cap are 20 villagers, 2 mayors and their name labels, plus each town's garden pen with 2 sheep and 2 chickens (`townLife`; one that despawned comes back while a player is by the pen, one that died never does). Lowering the cap removes nobody: it only stops new families until the count is under it.
 - **Stories:** operators can set the town anchor with `/realm:saga_place town`. Stopped daylight cycles no longer block the night/time windows, and wait steps use the documented real-time fallback. Targeted native cases do not certify every story path or real client interaction.
 - **Moderation is basic:** Realm Mail has a send cooldown, block lists and unread-sender caps; party mute covers the pack's own command and form, not vanilla chat. Land Claims (off until enabled in `/realm:config`) protects blocks, containers and supported animal interactions, not animal damage, fire, external fluid flow, pistons or endermen. Chest Finder's private index uses opened, owned or shared containers; older worlds retain their previous world-wide choice until changed.
 - Bedrock limits apply: achievements are off with add-ons, and an operator's plain `/title` gets drawn over by the

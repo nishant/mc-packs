@@ -26,6 +26,9 @@ function importedNames(scriptsDir, moduleName) {
   return [...names];
 }
 
+/** Form classes the stub builds as chainable forms whose show() a test controls. */
+const FORMS = ["ActionFormData", "ModalFormData", "MessageFormData"];
+
 /** A module whose every export is a recording proxy; subscribe(fn) stores fn under the export's path. */
 function stubSource(names) {
   return `
@@ -45,7 +48,25 @@ const make = (path) => new Proxy(function () {}, {
   apply() { return make(path + "()"); },
   construct() { return make("new " + path); },
 });
-${names.filter((n) => !["InvalidEntityError", "Player", "Entity", "EntityInitializationCause"].includes(n))
+// system.run / runTimeout / runInterval record their callbacks in __timers, so a test can run a tick boundary by hand.
+export const __timers = [];
+${names.includes("system") ? `const sysBase = make("system");
+export const system = new Proxy(sysBase, {
+  get(t, prop) {
+    if (prop === "run" || prop === "runTimeout" || prop === "runInterval") return (fn, ticks = 0) => __timers.push({ kind: prop, fn, ticks });
+    return t[prop];
+  },
+});` : ""}
+// Forms: every builder method chains; show(player) answers through __forms.show, which a test replaces.
+export const __forms = { show: () => Promise.resolve({ canceled: true }) };
+const formClass = () => class {
+  constructor() {
+    const self = new Proxy({}, { get(_, prop) { if (prop === "show") return (player) => __forms.show(player); if (prop === "then") return undefined; return () => self; } });
+    return self;
+  }
+};
+${FORMS.filter((n) => names.includes(n)).map((n) => `export const ${n} = formClass();`).join("\n")}
+${names.filter((n) => !["InvalidEntityError", "Player", "Entity", "EntityInitializationCause", "system", ...FORMS].includes(n))
     .map((n) => `export const ${n} = make(${JSON.stringify(n)});`).join("\n")}
 `;
 }
@@ -65,9 +86,10 @@ async function loadPack(pack) {
   writeFileSync(join(server, "index.js"), stubSource(importedNames(scripts, "@minecraft/server")));
   writeFileSync(join(ui, "index.js"), stubSource(importedNames(scripts, "@minecraft/server-ui")));
   const stub = await import(pathToFileURL(join(server, "index.js")).href);
+  const uiStub = await import(pathToFileURL(join(ui, "index.js")).href);
   await import(pathToFileURL(join(scripts, "main.js")).href);
   const config = await import(pathToFileURL(join(scripts, "config.js")).href);
-  return { root, stub, config };
+  return { root, stub, ui: uiStub, config };
 }
 
 /** Entity reads throw InvalidEntityError once the entity is invalid, as the game does. */
@@ -161,4 +183,93 @@ test("elite: a spawn event for an entity that is already gone is skipped without
   const mob = fakeMob(elite.stub, { id: "e1", valid: false });
   const warns = collectWarns(() => handler({ entity: mob, cause: elite.stub.EntityInitializationCause.Spawned }));
   assert.deepEqual(warns, []);
+});
+
+/** Runs async fn and returns the console.warn lines it produced. */
+async function collectWarnsAsync(fn) {
+  const warns = [];
+  const original = console.warn;
+  console.warn = (...args) => warns.push(args.join(" "));
+  try {
+    await fn();
+  } finally {
+    console.warn = original;
+  }
+  return warns;
+}
+
+/** The elite commands' callbacks, by name, from the pack's startup registration. */
+function eliteCommands() {
+  const cmds = {};
+  const startup = elite.stub.__handlers["system.beforeEvents.startup"].at(-1);
+  startup({ customCommandRegistry: { registerEnum() {}, registerCommand(def, cb) { cmds[def.name] = cb; } } });
+  return cmds;
+}
+
+/** Runs every timer the pack added since `from` (one tick boundary), awaiting async callbacks. */
+async function runTimersFrom(from) {
+  for (const t of elite.stub.__timers.slice(from)) await t.fn();
+}
+
+test("elite: a player who leaves while the Champions menu is open logs no warning (F22: the game rejects the form)", async () => {
+  const cmds = eliteCommands();
+  const player = fakePlayer(elite.stub, { id: "p-leaves" });
+  const before = elite.ui.__forms.show;
+  elite.ui.__forms.show = (p) => {
+    p._s.valid = false; // the player quits with the menu open
+    return Promise.reject(Object.assign(new Error("The player left the game"), { name: "FormRejectError", reason: "PlayerQuit" }));
+  };
+  try {
+    const from = elite.stub.__timers.length;
+    cmds["realm:champions"]({ sourceEntity: player });
+    assert.ok(elite.stub.__timers.length > from, "the command runs its menu on the next tick");
+    const warns = await collectWarnsAsync(() => runTimersFrom(from));
+    assert.deepEqual(warns, []);
+  } finally {
+    elite.ui.__forms.show = before;
+  }
+});
+
+test("elite: a command whose player left before the next tick does nothing and logs no warning", async () => {
+  const cmds = eliteCommands();
+  const player = fakePlayer(elite.stub, { id: "p-gone" });
+  let shown = 0;
+  const before = elite.ui.__forms.show;
+  elite.ui.__forms.show = () => {
+    shown++;
+    return Promise.resolve({ canceled: true });
+  };
+  try {
+    for (const name of ["realm:champions", "realm:champions_near"]) {
+      player._s.valid = true;
+      const from = elite.stub.__timers.length;
+      cmds[name]({ sourceEntity: player });
+      player._s.valid = false; // left across the tick boundary
+      const warns = await collectWarnsAsync(() => runTimersFrom(from));
+      assert.deepEqual(warns, [], name);
+    }
+    assert.equal(shown, 0);
+  } finally {
+    elite.ui.__forms.show = before;
+  }
+});
+
+test("elite: a natural spawn that is gone by its conversion a tick later is skipped without a warning", async () => {
+  const handler = elite.stub.__handlers["world.afterEvents.entitySpawn"].at(-1);
+  const mob = fakeMob(elite.stub, { id: "e-tick", typeId: elite.config.CONFIG.mobs[0] });
+  const random = Math.random;
+  Math.random = () => 0; // always picked for a champion
+  try {
+    const from = elite.stub.__timers.length;
+    const warns = collectWarns(() => handler({ entity: mob, cause: elite.stub.EntityInitializationCause.Spawned }));
+    assert.deepEqual(warns, []);
+    const timers = elite.stub.__timers.slice(from);
+    assert.equal(timers.length, 1, "the conversion waits a tick");
+    mob._s.valid = false; // despawned (or killed) before the conversion
+    assert.deepEqual(await collectWarnsAsync(() => runTimersFrom(from)), []);
+    mob._s.valid = true;
+    assert.equal(mob.hasTag("realm:champion"), false);
+  } finally {
+    Math.random = random;
+  }
 });

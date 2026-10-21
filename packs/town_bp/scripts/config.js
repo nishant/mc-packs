@@ -17,7 +17,75 @@ export const CONFIG = {
    */
   townRadius: 96,
 
-  /** The NPC role whose townsfolk offer "Town projects" (Townsfolk pack). The nearest town within `townRadius` of the player answers. */
+  /**
+   * A mayor for each town (Townsfolk pack): adding a town makes its own mayor at the town's center, who offers
+   * "Town projects" for that town wherever the player stands. The realm's first town has Mayor Bram. Disabled:
+   * no new mayors, and every NPC with `npcRole` offers the nearest town within `townRadius` of the player.
+   */
+  townMayors: true,
+
+  /**
+   * Towns pick a spot for each project themselves (while a player is in the town), on natural ground near the center,
+   * never touching a man-made block, and level it gently where a build needs it. Spots operators set are kept and
+   * never leveled. Disabled: operators set every spot, as before.
+   */
+  autoSpots: true,
+
+  /** Most blocks an automatically picked spot's natural ground is cut down or filled up (0 to 3; 0 never levels). */
+  levelDepth: 3,
+
+  /** Seconds the outline of a build at an automatically picked spot is shown to players within 32 blocks before it goes up (0 to 15). */
+  outlineSeconds: 5,
+
+  /**
+   * Towns build houses from level 2, at automatically picked spots, as town works (no deliveries, no rewards): one per
+   * family the level brings (`residentsPerLevel`), each a 7 x 7 cottage with a bed and a job-site block.
+   */
+  houses: true,
+
+  /**
+   * Small life in the towns: a path from each build the town places toward the center (grass turned to path, nothing
+   * else touched), lantern posts beside the paths at each new level (at most 12 a town) and a garden pen with 2 sheep and
+   * 2 chickens next to the garden once it is built. Disabled: none of these are added; those already there stay.
+   */
+  townLife: true,
+
+  /** Families a town has room for at each level, 1 to 5. From level 2 the town builds a house for each (at most `residentCapTown`). */
+  residentsPerLevel: [2, 4, 6, 8, 10],
+
+  /** Most families (residents, and houses) one town has, 0 to 10. */
+  residentCapTown: 10,
+
+  /**
+   * Residents: vanilla villagers move into a town as it grows (2 at the well, then a family per house), named from
+   * `residentNames` and tagged `realm:resident`. They never claim a bed, job site or bell and never work (town_bp's
+   * villager_v2 file), and a census brings home one that strays. Enabled since Bedrock Dedicated Server 1.26.52 runs
+   * proved it (town-resident-poi.js, town-resident-farm.js; decision D2).
+   */
+  residents: true,
+
+  /** Most residents in the whole world, 0 to 40 (each is a mob the server runs). Lowering it never removes anyone. */
+  residentCapWorld: 20,
+
+  /** Residents trade like vanilla villagers. Disabled: a tap on one does nothing, since trading would bypass the Crowns economy. */
+  residentsTrade: false,
+
+  /** In-game minutes (20 is one in-game day) before a new family moves in for one that died, 5 to 120. */
+  replaceMinutes: 20,
+
+  /** First names for residents (plain ASCII letters, at most 16 characters), each used once in the world while there are free ones. */
+  residentNames: ["Abel", "Agnes", "Arlo", "Basil", "Bertie", "Bonnie", "Cecil", "Clem", "Cyril", "Dale", "Della", "Dora", "Edie", "Elmer", "Etta", "Ezra", "Faye", "Floyd", "Gus", "Herb", "Hugo", "Jasper", "Lottie", "Lyle", "Mabel", "Milo", "Minnie", "Nora", "Opal", "Otto", "Percy", "Posy", "Rosa", "Rufus", "Tilly", "Toby", "Trudy", "Una", "Walt", "Zeke"],
+
+  /** The job-site block of each house, in turn (house 1 the first, house 11 the first again), so residents get different jobs. */
+  houseJobs: ["minecraft:composter", "minecraft:lectern", "minecraft:barrel", "minecraft:smoker", "minecraft:cartography_table", "minecraft:brewing_stand", "minecraft:fletching_table", "minecraft:loom", "minecraft:stonecutter_block", "minecraft:grindstone"],
+
+  /** First names for new towns' mayors ("Mayor Alda"), each used once; when all are taken, "Mayor <Town>". */
+  mayorNames: ["Alda", "Corwin", "Fenna", "Garrick", "Halden", "Imogen", "Joss", "Kestrel", "Linnea", "Marten", "Nessa", "Oswin", "Perrin", "Rowena", "Sorrel", "Thea", "Ulla", "Verity", "Wendell", "Ysolde"],
+
+  /**
+   * The NPC role whose townsfolk offer "Town projects" (Townsfolk pack): a town's own mayor offers its town; any NPC
+   * with this role also offers the town the player stands in (within `townRadius`) when that town's mayor isn't placed.
+   */
   npcRole: "mayor",
 
   /** Guild reputation for each contributor when a project is finished (Guilds pack): growers for wood and crops, miners for stone and metal. */
@@ -34,18 +102,19 @@ export const CONFIG = {
    * lowercase letters, digits and `_`), a `name`, the town `level` it belongs to (finishing every
    * project of a level raises the town to the next; level 5 is the top, so projects are for levels 1
    * to 4), the items it `needs` (item id: amount), what gets `build`t (`well`, `lamps`, `stall`,
-   * `bell_tower`, `dock`, `garden` or `notice_board`), and optionally a `structure`: the id of a
-   * structure an operator saved (with a structure block or `/structure save`) to place instead.
+   * `bell_tower`, `dock`, `garden`, `notice_board` or `house`), `why` the town wants it (the mayor says so,
+   * at most 60 characters), and optionally a `structure`: the id of a structure an operator saved (with a
+   * structure block or `/structure save`) to place instead. Ids `house_1` to `house_10` are the town's own houses.
    * @type {{ id: string, name: string, level: number, needs: Record<string, number>,
-   *   build: "well" | "lamps" | "stall" | "bell_tower" | "dock" | "garden" | "notice_board", structure?: string }[]}
+   *   build: "well" | "lamps" | "stall" | "bell_tower" | "dock" | "garden" | "notice_board" | "house", why?: string, structure?: string }[]}
    */
   projects: [
-    { id: "well", name: "Well", level: 1, needs: { "minecraft:cobblestone": 64, "minecraft:oak_log": 8, "minecraft:bucket": 1 }, build: "well" },
-    { id: "notice_board", name: "Notice Board", level: 1, needs: { "minecraft:oak_planks": 32, "minecraft:oak_sign": 3 }, build: "notice_board" },
-    { id: "lamps", name: "Lamp Posts", level: 2, needs: { "minecraft:oak_fence": 16, "minecraft:lantern": 4 }, build: "lamps" },
-    { id: "garden", name: "Garden Plot", level: 2, needs: { "minecraft:oak_log": 16, "minecraft:wheat_seeds": 16, "minecraft:bone_meal": 16 }, build: "garden" },
-    { id: "stall", name: "Market Stall", level: 3, needs: { "minecraft:oak_planks": 32, "minecraft:white_wool": 8, "minecraft:red_wool": 8, "minecraft:barrel": 2 }, build: "stall" },
-    { id: "dock", name: "Dock", level: 3, needs: { "minecraft:oak_planks": 64, "minecraft:oak_log": 32, "minecraft:iron_ingot": 16 }, build: "dock" },
-    { id: "bell_tower", name: "Bell Tower", level: 4, needs: { "minecraft:stone_bricks": 128, "minecraft:gold_ingot": 16, "minecraft:iron_ingot": 16 }, build: "bell_tower" },
+    { id: "well", name: "Well", level: 1, needs: { "minecraft:cobblestone": 64, "minecraft:oak_log": 8, "minecraft:bucket": 1 }, build: "well", why: "Fresh water, so families can move in" },
+    { id: "notice_board", name: "Notice Board", level: 1, needs: { "minecraft:oak_planks": 32, "minecraft:oak_sign": 3 }, build: "notice_board", why: "News, and thanks for everyone who helps" },
+    { id: "lamps", name: "Lamp Posts", level: 2, needs: { "minecraft:oak_fence": 16, "minecraft:lantern": 4 }, build: "lamps", why: "Light on the roads after dark" },
+    { id: "garden", name: "Garden Plot", level: 2, needs: { "minecraft:oak_log": 16, "minecraft:wheat_seeds": 16, "minecraft:bone_meal": 16 }, build: "garden", why: "Food for the families who live here" },
+    { id: "stall", name: "Market Stall", level: 3, needs: { "minecraft:oak_planks": 32, "minecraft:white_wool": 8, "minecraft:red_wool": 8, "minecraft:barrel": 2 }, build: "stall", why: "A place to trade what the town makes" },
+    { id: "dock", name: "Dock", level: 3, needs: { "minecraft:oak_planks": 64, "minecraft:oak_log": 32, "minecraft:iron_ingot": 16 }, build: "dock", why: "Boats and fishing for the town" },
+    { id: "bell_tower", name: "Bell Tower", level: 4, needs: { "minecraft:stone_bricks": 128, "minecraft:gold_ingot": 16, "minecraft:iron_ingot": 16 }, build: "bell_tower", why: "A bell to call the whole town together" },
   ],
 };

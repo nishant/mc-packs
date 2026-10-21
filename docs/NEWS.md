@@ -12,6 +12,23 @@ entries below as a changelog.
 - The Minimap uses about half the server time it did. With many players moving at once, the land under your radar and the mob dots can take a few seconds longer to catch up; standing still, everything catches up.
 - Operators who want the earlier, faster Minimap can pick High in /realm:config -> Minimap -> Minimap script time a tick.
 
+## A quieter server log
+
+- Champions: leaving the game while the Champions menu is open no longer leaves an error behind on the server.
+
+## Smoother busy servers
+
+- Expedition dungeons now build in shorter steps, so the server no longer hitches while one is being built.
+- Silly Enchants and Champions at night cost the server less with many players on. Nothing changes in how they look or play.
+
+## Living towns: a mayor for every town, and villagers move in
+
+- Every town now has a mayor of its own, waiting at the town center to take deliveries for that town's projects. Mayor Bram is still the realm's main mayor and keeps his town; every other town gets its own mayor the next time someone visits it.
+- Talk to your town's mayor to hear the town's story so far, what the next project is for and what this level still needs.
+- Towns now pick their own building spots on natural ground and level it gently (never more than 3 blocks up or down). They never touch anything you built, placed or planted.
+- Towns grow: from Village on they build houses by themselves, lay grass paths to the center, light them with lantern posts and keep a garden pen with sheep and chickens.
+- Villagers move into growing towns: 2 by the well, then a family for each house. They never take your bed, never harvest your crops and wander home when they stray.
+- Operators: /realm:town -> Mayor moves a town's mayor to where you stand or renames them.
 
 ## Pets in claims, a saved Expedition line and small fixes
 
