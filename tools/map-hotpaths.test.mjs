@@ -118,7 +118,7 @@ test("the real redraw callback reads the facing only when its checks need it, an
   const views = new Map([["dirty", mkView("dirty", { dirty: true })], ["still", mkView("still", {})], ["turned", mkView("turned", {})]]);
   const facingOf = { dirty: 90, still: 0, turned: 30 };
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent: new Map(), planNow: new Set(), terrainVerOf: () => "v",
     wrap: (a) => a, headingOf: (p) => (facing.push(p.id), facingOf[p.id]),
     render: (p, v, now, refresh, heading, at) => (renders.push({ id: p.id, heading, at }), false),
@@ -141,7 +141,7 @@ test("the real redraw callback refreshes a still player's title without building
   // Every part was sent 40 ticks ago: all three are due a refresh.
   const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: 10, rtext: "r", rat: 10, compass: true, radar: true }]));
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
     wrap: (a) => a, headingOf: (p) => facingOf[p.id],
     render: (p) => (renders.push(p.id), true),
@@ -167,7 +167,7 @@ test("out of draw budget, a moving player's title about to fade is drawn again a
   ]);
   const spent = { ...okBudget(), ok: false, left: -1, room: 0 };
   const sandbox = {
-    drawBudget: spent, rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: spent, rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
     wrap: (a) => a, headingOf: () => 0,
     render: (p) => (renders.push(p.id), true),
@@ -189,7 +189,7 @@ test("titles about to fade are drawn before players who waited longer for a redr
     ["fading", { ctext: "c", cat: 19, rtext: "", rat: 19, compass: true, radar: false }],
   ]);
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
     wrap: (a) => a, headingOf: () => 0,
     render: (p) => (order.push(p.id), true),
@@ -207,7 +207,7 @@ test("a still player's refresh builds the radar when their 200-tick stale rebuil
   const views = new Map([["due", mkView("due")], ["fresh", mkView("fresh")]]);
   const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: 10, rtext: "r", rat: 10, compass: true, radar: true }]));
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => "v",
     wrap: (a) => a, headingOf: () => 0, staleDue: (id) => id === "due",
     render: (p) => (renders.push(p.id), true),
@@ -348,7 +348,7 @@ test("a title about to fade is refreshed on time even when it isn't the player's
   // Everyone was sent a moment ago but p90, whose parts are 30 ticks old.
   const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: id === "p90" ? 20 : 49, rtext: "r", rat: id === "p90" ? 20 : 49, compass: true, radar: true }]));
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
     wrap: (a) => a, headingOf: () => 0, render: () => true, keepAlive: (p) => (kept.push(p.id), true),
   };
