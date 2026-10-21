@@ -1,9 +1,8 @@
 {
   "notes": [
-    "Every town now has a mayor of its own, waiting at the town center to take deliveries for that town. Mayor Bram keeps his town; every other town gets its own mayor the next time someone visits it.",
-    "Towns pick their own building spots on natural ground and level it gently (never more than 3 blocks), and never touch anything you built, placed or planted.",
-    "As towns grow they build houses, lay grass paths to the center, light them with lantern posts and keep a garden pen with sheep and chickens.",
-    "Villagers now move into growing towns: 2 by the well, then a family for each house. They never take your bed, never harvest your crops and wander home when they stray."
+    "Silly Enchants costs less on a busy server: its every-tick checks run only while someone wears Hyper Jump boots.",
+    "Expedition dungeons build in shorter steps, so a busy server no longer hitches while one is built.",
+    "Champions cost less at night: their aura and approach read less from the game."
   ],
   "resourceNotes": [
     "Easy Building's resources: line endings tidied (no change for players)."
@@ -24,6 +23,18 @@
     "admin_bp": {
       "version": "1.6.11",
       "notes": "The setup checklist says towns pick their own project spots, so setting one is optional, and a spot an operator sets is never leveled."
+    },
+    "silly_bp": {
+      "version": "1.2.13",
+      "notes": "Cheaper on busy servers: nothing runs every tick unless someone wears Hyper Jump boots or is mid-flight."
+    },
+    "expedition_bp": {
+      "version": "2.4.16",
+      "notes": "Dungeon builds and resets spread their work over more, shorter steps: no build step holds a server tick for long."
+    },
+    "elite_bp": {
+      "version": "1.3.16",
+      "notes": "Cheaper at night: champions' aura and approach steps read less from the game."
     }
   }
 }
