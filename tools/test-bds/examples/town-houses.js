@@ -110,11 +110,18 @@ export default async function (t) {
   t.server("/tp Ann 90 -60 0"); // still in the town (96), more than 24 blocks from every house
   await t.wait(20);
   const LOOK = ["farmer", "librarian", "fisherman", "butcher"];
-  await t.waitUntil(async () => {
-    await census();
-    d = await dump("elm");
-    return houses.every((h, k) => d.residents.r.find((r) => r.s === k)?.h === h && d.residents.r.find((r) => r.s === k)?.d === undefined);
-  }, { timeout: 2400, interval: 100, message: "every family lives in its house" });
+  try {
+    await t.waitUntil(async () => {
+      await census();
+      d = await dump("elm");
+      return houses.every((h, k) => d.residents.r.find((r) => r.s === k)?.h === h && d.residents.r.find((r) => r.s === k)?.d === undefined);
+    }, { timeout: 2400, interval: 100, message: "every family lives in its house" });
+  } catch (e) {
+    // A family moves only while no player is within 24 blocks of its old or new home: say where everyone stood.
+    const where = (v) => `${Math.round(v.x)} ${Math.round(v.y)} ${Math.round(v.z)}`;
+    t.log("Ann at", where(p.location), "residents:", residents().map((r) => `${r.id} at ${where(r.location)}`).join(", "));
+    throw e;
+  }
   await t.wait(10); // a family moved in this census's tick: its look (a profession event) applies on a later tick
   const rs = residents();
   t.check(rs.length === 4, `4 residents (${rs.length}), the well's 2 moved, not doubled`);

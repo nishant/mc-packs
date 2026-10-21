@@ -321,6 +321,10 @@ F36-F41 are done (FIXES.md). What the verification left open:
 - O77 **OPEN (F39).** A removed town's residents stay as ordinary villagers that keep the resident group (no POI claims), so each add-and-remove cycle of a town can leave up to 10 villagers.
 - O78 **OPEN (F40, low).** Pen top-up: the g5 report flags that animals that wandered more than about 40 blocks from the pen while still loaded could be duplicated (the count uses every loaded animal with the pen's tag). Not reproduced; in practice the fence keeps them in.
 - O79 **OPEN (F37, unchanged from before group 5).** Remove spot can still overwrite a player's block of a kind the build uses inside the build's box (containers spill, nothing is lost). Spot picking on steep ground takes up to about 8.5 minutes for a Village's 6 projects (D77, performance first).
+- O80 **OPEN (F37/F39, CI flakes in PR #119).** Two of this release's scenarios failed once on a CI runner and passed on retry. Locally, both passed again (61 s and 223 s).
+  - town-auto-spots: the well build waited with "Step off the spot" for 100 s while Ann, spawned at 0, 0, should have been outside its region (x -11..-3).
+  - town-houses: the well's two families never moved house in 25 censuses. A move waits while a player is within 24 blocks of the old or new home.
+  - Both scenarios now log where Ann and the residents stood when they time out, so the next failure shows the cause.
 
 ## Owner decisions (no task; for nishant)
 

@@ -56,7 +56,14 @@ export default async function (t) {
   // The well: outline, then built.
   since = t.tick;
   town("finish", { project: "well", town: "oak" });
-  await t.waitUntil(async () => (await dump("oak")).progress.find(([id]) => id === "well")[1].built === 1, { timeout: 1200, interval: 40, message: "the well is built" });
+  try {
+    await t.waitUntil(async () => (await dump("oak")).progress.find(([id]) => id === "well")[1].built === 1, { timeout: 1200, interval: 40, message: "the well is built" });
+  } catch (e) {
+    // The build waits while a player stands in its region: say where Ann stood (she was spawned at 0, 0).
+    const v = p.location;
+    t.log("Ann at", v.x.toFixed(2), v.y.toFixed(2), v.z.toFixed(2), "well region:", JSON.stringify(d.regions.well));
+    throw e;
+  }
   const told = t.messages(p, { since }).map((m) => m.plain);
   t.check(told.some((m) => /goes up here in \d+ seconds?/.test(m)), "players nearby were told it goes up");
   const s = (await dump("oak")).town.spots.well;

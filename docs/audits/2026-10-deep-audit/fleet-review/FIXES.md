@@ -317,6 +317,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - ship5: versions above master: town_bp 1.7.2, npc_bp 1.9.0, welcome_bp 1.5.13 (both sides were at 1.5.12), admin_bp 1.6.11, help_bp 1.1.81 by hand (help-catalog was current), news_bp 1.7.86 by gen-news. caravan_bp and stash_bp take master's (group 5's int23 ports were already there). release/notes.json holds only this release's 4 bundle lines and 4 packNotes.
 - ship5: CLAUDE.md's "Vanilla entity overrides" now names `town_bp/entities/villager_v2.json` and its three additions (WORKING.md already did).
 - ship5: the g5 risks that stay open are recorded as O76-O79 in OPEN.md (breeding without a long soak, a removed town's villagers, pen top-up, Remove spot and slow hillside picking).
+- ship5: PR #119's CI had 90 scenarios: 88 passed and 2 were flaky (town-auto-spots, town-houses), both in this release's code. No cause was found from the logs. The scenarios got failure diagnostics instead of longer waits, and the flakes are recorded as O80.
 
 ## Blockers and highs
 
