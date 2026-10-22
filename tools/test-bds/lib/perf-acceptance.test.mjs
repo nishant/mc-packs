@@ -232,3 +232,9 @@ test("end to end: a pack whose per-tick data is incomplete gets no steady figure
   assert.match(v.invalid.join("\n"), /no steady-window figure for map_bp/);
   assert.equal(verdictFor(w, "fail").ok, false);
 });
+
+test("perf budgets: the Realm Bundle profiled as one context is judged by the whole-bundle budget, not a pack's 0.15", () => {
+  const v = run([[40, report({ bundle: 2.772, packs: { realm_bundle: 2.772 } })]]);
+  assert.equal(v.ok, true, [...v.invalid, ...v.over].join("\n"));
+  assert.match(run([[40, report({ bundle: 5.2, packs: { realm_bundle: 5.2 } })]]).over.join("\n"), /whole bundle @40/);
+});
