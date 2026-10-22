@@ -39,7 +39,7 @@ export function createStatePacketizer(start = 1) {
     const frame = (/** @type {number} */ id, /** @type {number} */ index, /** @type {number} */ total, /** @type {string} */ text) =>
       JSON.stringify({ player, channel: "state", v: CHUNK_VERSION, chunk: { id, index, total, text } });
     const id = next++;
-    const room = Math.min(MAX_TEXT_BYTES, MAX_EVENT_BYTES - utf8Length(frame(id, MAX_PACKETS, MAX_PACKETS, "")));
+    const room = MAX_EVENT_BYTES - utf8Length(frame(id, MAX_PACKETS, MAX_PACKETS, ""));
     /** @type {string[]} */
     const texts = [];
     let text = "", raw = 0, escaped = 0;

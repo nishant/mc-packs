@@ -1531,7 +1531,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
   const bucket = Math.floor((now + memo.slot) / STALE_EVERY);
   // Fractional position affects coverage and markers, not the rounded terrain raster itself.
   const key = !store ? "empty|"+dimId : `${terrainVersion ?? terrainVerOf(playerId, dimId, at, radius)}|${tx}|${tz}|${th}|${radius}|${bucket}|${north ? 1 : 0}|${experimentNative() ? "native" : "material"}` + "|profile=" + EXP.id + "|estimate=" + (EXP.estimateRadiusBlocks??0);
-  radarStale = memo.key !== key && !rebuild && key !== "empty";
+  radarStale = !!store && memo.key !== key && !rebuild;
   if (memo.key !== key && !radarStale) {
     if (!store) {
       for(let i=0;i<RADAR_PIECES;i++)base[i]=EMPTY_ROWS[i];
