@@ -47,6 +47,7 @@ const PROP_BOARD = "cal:board"; // world: JSON { k, top: [[pid, name, ms]], best
 const PROP_RESTORE = "cal:restore"; // world: JSON [[structure id, dim, x, y, z]] circles still to put back
 const PROP_PLAYER = "cal:p"; // player: JSON Pdata
 const SIEGE_TAG = "realm:siege";
+const SINGER_TAG = "realm:siege_singer"; // a circle's Choir Singer: the Minimap draws it like a champion
 const FX_TAG = "realm:cal_fx";
 const RIBBON = "§dFestival Ribbon";
 const RIBBON_MARK = "§8Spend at a Festival Ribbon stall.";
@@ -1538,9 +1539,12 @@ function spawnChoir(dim, c, i, type, singer) {
     e.addTag(`realm:siege_${siege.id}`);
     e.addTag(`realm:siege_c${i}`);
     // Named, so they don't despawn while the players are 32+ blocks away (the end of the siege removes them).
+    // A Singer looks like a champion (a red name; the Minimap's champion marker reads realm:siege_singer), so players
+    // can find one that wandered off or spawned away from its circle.
     if (singer) {
       e.addTag(`realm:siege_s${i}`);
-      e.nameTag = "§7Choir Singer";
+      e.addTag(SINGER_TAG);
+      e.nameTag = "§cChoir Singer";
     } else e.nameTag = "§7Choir Chanter";
     noBanner(e);
   } catch (e) {

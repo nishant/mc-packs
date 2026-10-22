@@ -87,6 +87,13 @@ export function summaryMarkdown(r) {
   return out.join("\n");
 }
 
+/**
+ * An argument as the job log shows it: single-quoted like a shell would take it, so a multi-line commit message or PR
+ * body prints on its own lines instead of as one JSON string with literal "\n"s.
+ * @param {string} x
+ */
+export const shellQuote = (x) => (/[\s'"$`\\]/.test(x) ? `'${x.replaceAll("'", "'\\''")}'` : x);
+
 // ---------- CLI ----------
 if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const { values: opt } = parseArgs({ options: { hosting: { type: "string" }, from: { type: "string" }, "no-merge": { type: "boolean", default: false }, "no-live": { type: "boolean", default: false }, "live-wait": { type: "string", default: "900" } } });
@@ -99,7 +106,7 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const mc = join(hosting, "minecraft");
   /** @param {string} cmd @param {string[]} a @param {string} cwd */
   const run = (cmd, a, cwd) => {
-    console.log(`$ ${cmd} ${a.map((x) => (/\s/.test(x) ? JSON.stringify(x) : x)).join(" ")}`);
+    console.log(`$ ${cmd} ${a.map(shellQuote).join(" ")}`);
     const r = spawnSync(cmd, a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 28 });
     const out = `${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? String(r.error) : ""}`;
     process.stdout.write(out);

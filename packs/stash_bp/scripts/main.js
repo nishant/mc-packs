@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { buttonSlots, initPages, openInvMenu, recoverInventory, refillFromPages, revisionOf, setOpPages, storedCount } from "./pages.js";
+import { buttonSlots, initPages, openInvMenu, recoverInventory, refillFromPages, revisionOf, setOpPages, sortAllPages, storedCount, totalPages } from "./pages.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -173,8 +173,21 @@ function sortBlock(player, block) {
   player.playSound("random.click", { pitch: 1.4, volume: 0.5 });
 }
 
-/** @param {Player} player */
+/**
+ * Sorts the whole inventory: with Expansive Inventory pages, every page together (sortAllPages), so the sorted stacks
+ * fill page 1 first and run onto later pages.
+ * @param {Player} player
+ */
 function sortInventory(player) {
+  if (totalPages(player) <= 1) return sortPage(player);
+  const r = sortAllPages(player, getFor(player, "sortHotbar") === true);
+  if (!r.ok) return bar(player, `§c${r.message}`);
+  bar(player, `§aSorted ${r.stacks} stack${r.stacks === 1 ? "" : "s"} across your pages (${r.pages} in use)`);
+  player.playSound("random.click", { pitch: 1.4, volume: 0.5 });
+}
+
+/** Sorts the page in view (slots 9-35, the hotbar too if that's on), leaving the page buttons alone. @param {Player} player */
+function sortPage(player) {
   const container = player.getComponent("minecraft:inventory")?.container;
   if (!container) return;
   const stacks = sortRange(container, getFor(player, "sortHotbar") ? 0 : MAIN_FIRST, MAIN_END, buttonSlots(container));
@@ -787,7 +800,7 @@ async function showMenu(player, dimension, at) {
     run: (p) => void stash(p),
   });
   actions.push({
-    text: `Sort my inventory\n§8${getFor(player, "sortHotbar") ? "Hotbar included" : "The hotbar stays as it is"}`,
+    text: `Sort my inventory\n§8${totalPages(player) > 1 ? "Every page, " : ""}${getFor(player, "sortHotbar") ? "hotbar included" : "the hotbar stays as it is"}`,
     run: sortInventory,
   });
 
@@ -930,7 +943,9 @@ async function showHelp(player) {
   form.label(
     [
       "§7Usage:§r §e/realm:sort",
-      `Sorts your main inventory${sortHotbar ? " and your hotbar" : " (slots 9 to 35)"}: partial stacks merge, then everything is ordered by item, the biggest stack first, empty slots last.`,
+      totalPages(player) > 1
+        ? `Sorts your main inventory across every page${sortHotbar ? ", and your hotbar" : ""}: like stacks on any page merge, then everything is ordered by item, the biggest stack first, filling ${sortHotbar ? "the hotbar, then " : ""}page 1, then page 2 and on; the last pages end up empty. The menu's §eSort this page§r sorts only the page you see.`
+        : `Sorts your main inventory${sortHotbar ? " and your hotbar" : " (slots 9 to 35)"}: partial stacks merge, then everything is ordered by item, the biggest stack first, empty slots last.`,
       sortHotbar ? "§7Your hotbar is sorted too." : "§7Your hotbar stays exactly as it is. To sort it too, turn that on in /realm:prefs.",
     ].join("\n")
   );
@@ -941,7 +956,7 @@ async function showHelp(player) {
     pages > 1
       ? [
           `Your main inventory (slots 9 to 35) has §e${pages} pages§r of 24 slots; the hotbar is the same on every page. The top row's last three slots hold §e<§r (previous page), the current page/menu, and §e>§r (next page). Click one in your open inventory to switch.`,
-          "§e/realm:inv§r opens the menu: every page and how full it is, a scan that finds the page holding an item, sort this page, quick stack, and your settings.",
+          "§e/realm:inv§r opens the menu: every page and how full it is, a scan that finds the page holding an item, sort all pages or this page, quick stack, and your settings.",
           "When a page is full, new stacks are stored on another page by themselves. Shulker boxes, bundles, potions, maps, banners and the like stay with you on every page.",
           "§7Turn the buttons or auto-store off in /realm:prefs or the menu's settings. Operators: §e/realm:inv_pages <count>§r sets your own number of pages.",
         ].join("\n")
@@ -992,10 +1007,11 @@ function playerCommand(origin, run) {
   return { status: CustomCommandStatus.Success };
 }
 
-// The inventory menu's two sort buttons share the cooldown of the commands.
+// The inventory menu's sort buttons share the cooldown of the commands.
 initPages({
   bar,
-  sort: (p) => (ready(p) ? sortInventory(p) : bar(p, "§7Too fast. Try again in a moment.")),
+  sort: (p) => (ready(p) ? sortPage(p) : bar(p, "§7Too fast. Try again in a moment.")),
+  sortAll: (p) => (ready(p) ? sortInventory(p) : bar(p, "§7Too fast. Try again in a moment.")),
   stash: (p) => (ready(p) ? void stash(p) : bar(p, "§7Too fast. Try again in a moment.")),
 });
 
@@ -1014,7 +1030,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:sort",
-      description: "Sorts your inventory: merges stacks, then orders by item. The hotbar too if that's on in /realm:prefs. More: /realm:stash_help",
+      description: "Sorts your inventory, every page together: merges stacks, then orders by item from page 1 on. The hotbar too if that's on in /realm:prefs. More: /realm:stash_help",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },

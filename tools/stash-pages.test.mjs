@@ -372,7 +372,7 @@ Object.assign(mc.defaults, Object.fromEntries(["sneakTap", "sortHotbar", "locks"
 const mainServerUrl = dataUrl(`const m = globalThis.__mc.server; export const { Block, BlockTypes, BlockVolume, CommandPermissionLevel, Container, CustomCommandParamType, CustomCommandStatus, Dimension, Direction, ItemStack, Player, system, world } = m;`);
 // The router keeps its handlers in module state: each copy of main.js gets its own copy of script-events.js (a pack loads once in the game).
 const eventsSource = readFileSync(new URL("../packs/stash_bp/scripts/script-events.js", import.meta.url), "utf8").replace('"@minecraft/server"', JSON.stringify(mainServerUrl));
-const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const recoverInventory = async () => ""; export const refillFromPages = () => undefined; export const storedCount = (...a) => (globalThis.__mc.storedCount ? globalThis.__mc.storedCount(...a) : []); export const revisionOf = () => "r"; export const setOpPages = () => ({ ok: true, message: "" });`);
+const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const recoverInventory = async () => ""; export const refillFromPages = () => undefined; export const storedCount = (...a) => (globalThis.__mc.storedCount ? globalThis.__mc.storedCount(...a) : []); export const revisionOf = () => "r"; export const setOpPages = () => ({ ok: true, message: "" }); export const sortAllPages = () => ({ ok: true, stacks: 0, pages: 1 }); export const totalPages = () => 1;`);
 const mainSource = readFileSync(new URL("../packs/stash_bp/scripts/main.js", import.meta.url), "utf8")
   .replace('import "./diag.js";', "")
   .replace('"@minecraft/server-ui"', JSON.stringify(uiUrl))
@@ -600,7 +600,7 @@ test("UserBusy retry actions stay aligned with a rebuilt page-count-dependent bu
   const all = mc.players;
   mc.players = [p];
   let sorted = 0;
-  pages.initPages({ bar: (player, text) => player.bar.push(text), sort: () => sorted++, stash() {} });
+  pages.initPages({ bar: (player, text) => player.bar.push(text), sort: () => sorted++, sortAll() {}, stash() {} });
   try {
     mc.formResponses.set(p.id, [{ canceled: true, cancelationReason: "UserBusy" }, { canceled: false, selection: 6 }]);
     const opening = pages.openInvMenu(p);
@@ -615,7 +615,7 @@ test("UserBusy retry actions stay aligned with a rebuilt page-count-dependent bu
   } finally {
     mc.pages = 5;
     mc.players = all;
-    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
+    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, sortAll() {}, stash() {} });
   }
 });
 
@@ -2216,7 +2216,8 @@ test("the inventory menu offers Move to page next to the scan, and keeps its oth
   const all = mc.players;
   mc.players = [p];
   let sorted = 0;
-  pages.initPages({ bar: (player, text) => player.bar.push(text), sort: () => sorted++, stash() {} });
+  let sortedAll = 0;
+  pages.initPages({ bar: (player, text) => player.bar.push(text), sort: () => sorted++, sortAll: () => sortedAll++, stash() {} });
 
   // ---------------------------------------------------------------------------
   // O72: sneak-tapping a container (main.js's playerInteractWithBlock handler, driven with real event objects)
@@ -2229,11 +2230,14 @@ test("the inventory menu offers Move to page next to the scan, and keeps its oth
     await pages.openInvMenu(p);
     await settle();
     const menu = mc.forms.find((e) => e.player === p && /Expansive Inventory/.test(e.form.heading)).form;
-    assert.deepEqual(menu.buttons.map((b) => b.split("\n")[0]).slice(-6), ["Scan all items across pages", "Fill earlier pages", "Move to page", "Sort this page", "Quick stack to nearby chests", "Inventory settings"]);
+    assert.deepEqual(menu.buttons.map((b) => b.split("\n")[0]).slice(-7), ["Scan all items across pages", "Fill earlier pages", "Move to page", "Sort this page", "Sort all pages", "Quick stack to nearby chests", "Inventory settings"]);
     assert.equal(savedPage(p, 2).get(9).typeId, "minecraft:diamond");
     mc.formResponses.set(p.id, [pick("Sort this page")]);
     await pages.openInvMenu(p);
     assert.equal(sorted, 1);
+    mc.formResponses.set(p.id, [pick("Sort all pages")]);
+    await pages.openInvMenu(p);
+    assert.equal(sortedAll, 1, "Sort all pages runs the whole-inventory sort");
     mc.pages = 1;
     mc.forms.length = 0;
     await pages.openInvMenu(p);
@@ -2241,7 +2245,7 @@ test("the inventory menu offers Move to page next to the scan, and keeps its oth
   } finally {
     mc.pages = 5;
     mc.players = all;
-    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
+    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, sortAll() {}, stash() {} });
   }
 });
 
@@ -2485,7 +2489,7 @@ const nearlyFull = (/** @type {any} */ p, /** @type {number[]} */ keep) => {
 test("auto-store: a pickup with room on the open page stays there (master's rule: route only when it is full or down to one free slot)", () => {
   const p = joined();
   mc.players = [p];
-  pages.initPages({ bar: (player, text) => player.bar.push(text), sort() {}, stash() {} });
+  pages.initPages({ bar: (player, text) => player.bar.push(text), sort() {}, sortAll() {}, stash() {} });
   try {
     arrange(p, { 1: full([9]), 2: { 9: stack("minecraft:emerald", 3) } });
     switchPage(p, 3);
@@ -2496,7 +2500,7 @@ test("auto-store: a pickup with room on the open page stays there (master's rule
     assert.equal(savedPage(p, 1).get(9), undefined);
     assert.equal(p.bar.length, bars, "no action bar message");
   } finally {
-    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
+    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, sortAll() {}, stash() {} });
   }
 });
 
@@ -2666,6 +2670,101 @@ test("F1 fill: from page 1 it pulls later pages into the live page's free slots"
   assertIndexExact(p, "page 1 fill");
 });
 
+test("sortAllPages: merges like stacks across every page, orders by item, refills page 1 first, nothing lost", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, {
+    1: { 9: stack("minecraft:stone", 30), 10: stack("minecraft:emerald", 5) },
+    2: { 12: stack("minecraft:diamond", 2) },
+    4: { 9: stack("minecraft:stone", 50), 33: stack("minecraft:emerald", 10) },
+    5: { 20: stack("minecraft:apple", 3) },
+  });
+  switchPage(p, 3);
+  p.container.setItem(25, stack("minecraft:diamond", 7));
+  p.container.setItem(2, stack("minecraft:redstone", 3));
+  p.cursor.item = stack("minecraft:redstone", 9);
+  const before = census(p);
+  const r = pages.sortAllPages(p, false);
+  assert.equal(r.ok, true);
+  assert.deepEqual(census(p), before, "nothing lost or duplicated");
+  assert.equal(r.stacks, 5, "apple, diamond 9, emerald 15, stone 64 + 16");
+  assert.equal(r.pages, 1);
+  const p1 = savedPage(p, 1);
+  assert.deepEqual(STORAGE_SLOTS.slice(0, 5).map((s) => [p1.get(s)?.typeId, p1.get(s)?.amount]), [
+    ["minecraft:apple", 3],
+    ["minecraft:diamond", 9],
+    ["minecraft:emerald", 15],
+    ["minecraft:stone", 64],
+    ["minecraft:stone", 16],
+  ]);
+  for (const page of [2, 4, 5]) assert.equal(savedPage(p, page).size, 0, `page ${page} ends empty`);
+  assert.equal(STORAGE_SLOTS.filter((s) => p.container.getItem(s)).length, 0, "the live page (3) ends empty too");
+  assert.equal(curPage(p), 3, "the page in view stays the same");
+  assert.equal(p.container.getItem(2)?.amount, 3, "hotbar untouched");
+  assert.equal(p.cursor.item?.amount, 9, "cursor untouched");
+  assertIndexExact(p, "after sort all");
+});
+
+test("sortAllPages: a sorted inventory spans pages in order, slot-locked stacks stay, the hotbar joins when asked", () => {
+  const p = joined();
+  mc.players = [p];
+  const many = Object.fromEntries(STORAGE_SLOTS.map((s, i) => [s, stack(i % 2 ? "minecraft:stone" : "minecraft:dirt", 1)]));
+  arrange(p, { 1: many, 2: { 9: Object.assign(stack("minecraft:gold_ingot", 4), { lockMode: "slot" }) }, 3: { ...many } });
+  switchPage(p, 2);
+  p.container.setItem(10, Object.assign(stack("minecraft:emerald", 2), { nameTag: "Mine" }));
+  p.container.setItem(11, stack("minecraft:emerald", 3));
+  p.container.setItem(0, stack("minecraft:bread", 5));
+  const before = census(p);
+  const r = pages.sortAllPages(p, true);
+  assert.equal(r.ok, true);
+  assert.deepEqual(census(p), before);
+  assert.equal(p.container.getItem(0)?.typeId, "minecraft:bread", "the hotbar is filled first");
+  assert.equal(p.container.getItem(1)?.typeId, "minecraft:dirt");
+  assert.equal(p.container.getItem(1)?.amount, 24, "48 single dirt from two pages merged");
+  assert.equal(p.container.getItem(2)?.typeId, "minecraft:emerald");
+  assert.notEqual(p.container.getItem(2)?.nameTag === "Mine", p.container.getItem(3)?.nameTag === "Mine", "a named stack never merges with a plain one");
+  assert.equal(p.container.getItem(4)?.amount, 24, "stone");
+  const locked = p.container.getItem(9);
+  assert.equal(locked?.typeId, "minecraft:gold_ingot", "the slot-locked stack on the live page keeps its slot");
+  assert.equal(locked?.lockMode, "slot");
+  for (const page of [1, 3]) assert.equal(savedPage(p, page).size, 0, `page ${page} ends empty: everything fit on the hotbar`);
+  assertIndexExact(p, "after sort all with hotbar");
+});
+
+test("sortAllPages: more stacks than a page holds run onto the next pages in order, and the last pages end empty", () => {
+  const p = joined();
+  mc.players = [p];
+  const fullOf = (/** @type {string} */ id, /** @type {number[]} */ slots) => Object.fromEntries(slots.map((s) => [s, stack(id, 64)]));
+  arrange(p, { 3: fullOf("minecraft:stone", STORAGE_SLOTS.slice(0, 20)), 5: fullOf("minecraft:dirt", STORAGE_SLOTS.slice(0, 10)) });
+  switchPage(p, 1);
+  const before = census(p);
+  const r = pages.sortAllPages(p, false);
+  assert.equal(r.ok, true);
+  assert.equal(r.stacks, 30);
+  assert.equal(r.pages, 2);
+  assert.deepEqual(census(p), before);
+  assert.deepEqual(STORAGE_SLOTS.map((s) => p.container.getItem(s)?.typeId), [...Array(10).fill("minecraft:dirt"), ...Array(14).fill("minecraft:stone")], "page 1 (live): dirt, then stone");
+  assert.equal(savedPage(p, 2).size, 6, "the other 6 stone stacks on page 2");
+  assert.equal(savedPage(p, 3).size + savedPage(p, 4).size + savedPage(p, 5).size, 0);
+  assertIndexExact(p, "sort spans pages");
+});
+
+test("sortAllPages: an unreadable page leaves every page as it was", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 2: { 9: stack("minecraft:stone", 3) } });
+  switchPage(p, 1);
+  p.container.setItem(9, stack("minecraft:stone", 5));
+  p.setDynamicProperty("stash:page:4", "not json");
+  const before = census(p);
+  const r = pages.sortAllPages(p, false);
+  assert.equal(r.ok, false);
+  assert.match(r.message, /Page 4 can't be read/);
+  assert.deepEqual(census(p), before);
+  assert.equal(p.container.getItem(9)?.amount, 5);
+  p.setDynamicProperty("stash:page:4", undefined);
+});
+
 test("F4 index: long names, | in names and custom ids stay distinct kinds; a name over the cap leaves the page unknown (read, never empty)", () => {
   const p = joined();
   const a = `${"x".repeat(45)}A`;
@@ -2720,7 +2819,7 @@ test("F4 index: a legacy page with no snapshot yet is empty and is not restored;
 test("F5 auto-store: a failed save leaves the pickup where it is and is not retried as new; later overflow needs the active page at 1 free slot or less", () => {
   const p = joined();
   mc.players = [p];
-  pages.initPages({ bar: (player, text) => player.bar.push(text), sort() {}, stash() {} });
+  pages.initPages({ bar: (player, text) => player.bar.push(text), sort() {}, sortAll() {}, stash() {} });
   try {
   const fixed = (/** @type {number[]} */ free) => Object.fromEntries(STORAGE_SLOTS.filter((s) => !free.includes(s)).map((s) => [s, Object.assign(stack("minecraft:stone", 64), { lockMode: "slot" })]));
   arrange(p, { 1: fixed([9]), 2: fixed([]) });
@@ -2745,7 +2844,7 @@ test("F5 auto-store: a failed save leaves the pickup where it is and is not retr
   assert.equal(p.container.getItem(21), undefined, "pages 1 and 2 are full and the open page is down to one free slot, so a later page takes it");
   assert.equal(savedPage(p, 4).get(9)?.typeId, "minecraft:emerald");
   } finally {
-    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
+    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, sortAll() {}, stash() {} });
   }
 });
 
