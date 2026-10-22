@@ -7,6 +7,11 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Backpack pages survive a crash
+
+- Last night the Realm froze and restarted from an older save, so about half an hour of play was rolled back. Sorry about that.
+- Expansive Inventory is now safer when that happens: the pages you switched away from are kept for 2 hours before they are cleaned up, so every page still opens after a rollback, and switching pages keeps working right away.
+
 ## Sort every page at once, and champions stand out on the Minimap
 
 - /realm:sort (and Sort my inventory in the chest menu) now sorts all your inventory pages together. Like items on different pages stack up, and everything is put back in order starting on page 1, so the sorted items can run over several pages and the last pages end up empty.

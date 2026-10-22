@@ -1,5 +1,5 @@
 // ItemStacks travel through native entity inventories and World structures, never through a JSON serializer.
-import { StructureSaveMode, world } from "@minecraft/server";
+import { StructureSaveMode, system, world } from "@minecraft/server";
 
 /** @typedef {import("@minecraft/server").ItemStack} ItemStack */
 /** @typedef {import("@minecraft/server").Player} Player */
@@ -317,16 +317,85 @@ export function discardSnapshot(ref) {
   }
 }
 
+// A crash rolls player and world properties back to the last save, but World-mode structure writes and deletes may
+// already be on disk. A rolled-back index can then name a snapshot that a later commit replaced, so a replaced
+// snapshot is retired first and deleted only once no save older than its replacement can come back (RETIRE_MINUTES).
+// A retirement lost in a crash leaves one unreferenced structure behind: wasted space, never a lost item.
+const RETIRED = "stash:retired";
+/** Longer than any rollback a crashed server could restore: a Realm that stops saving loses up to an hour. */
+const RETIRE_MINUTES = 120;
+/** Entries the queue may hold (about 17 bytes each in the property); past it the oldest are deleted at once. */
+const RETIRE_MAX = 1500;
+/** Deletions per sweep, once a minute. */
+const RETIRE_PER_SWEEP = 32;
+const minutesNow = () => Math.floor(Date.now() / 60000);
+
+/** @returns {[number, number][]} [snapshot number, minute retired] */
+function retiredQueue() {
+  try {
+    const raw = world.getDynamicProperty(RETIRED);
+    const list = typeof raw === "string" ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((e) => Array.isArray(e) && Number.isSafeInteger(e[0]) && Number.isSafeInteger(e[1])) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** @param {[number, number][]} list */
+function writeRetired(list) {
+  world.setDynamicProperty(RETIRED, list.length ? JSON.stringify(list) : undefined);
+}
+
+/**
+ * A committed page's replaced snapshot: deleted RETIRE_MINUTES later by the sweep, so an index restored from an older
+ * save still finds it. Snapshots no saved index ever named (a failed commit's own images) use discardSnapshot.
+ * @param {Ref | undefined} ref
+ */
+export function retireSnapshot(ref) {
+  if (!ref) return;
+  const n = /^stash:page_(\d+)$/.exec(ref.id)?.[1];
+  if (n === undefined) return discardSnapshot(ref);
+  try {
+    const list = retiredQueue();
+    list.push([Number(n), minutesNow()]);
+    while (list.length > RETIRE_MAX) discardSnapshot({ id: `stash:page_${/** @type {[number, number]} */ (list.shift())[0]}`, slots: [] });
+    writeRetired(list);
+  } catch (e) {
+    console.warn(`[stash] snapshot ${ref.id} kept, not retired: ${e}`);
+  }
+}
+
+system.runInterval(() => {
+  const list = retiredQueue();
+  if (!list.length) return;
+  const now = minutesNow();
+  let done = 0;
+  try {
+    while (done < list.length && done < RETIRE_PER_SWEEP && now - list[done][1] >= RETIRE_MINUTES) {
+      const id = `stash:page_${list[done][0]}`;
+      if (world.structureManager.get(id)) discardSnapshot({ id, slots: [] });
+      done++;
+    }
+  } catch (e) {
+    console.warn(`[stash] retired snapshot sweep: ${e}`);
+  }
+  if (done) writeRetired(list.slice(done));
+}, 1200);
+
 /** @param {Player} player @param {Entry[]} entries @returns {Ref} */
 export function saveSnapshot(player, entries) {
   entries = [...entries].sort((a, b) => a.s - b.s);
   const raw = world.getDynamicProperty(NEXT);
-  const next = raw === undefined ? 1 : raw;
+  let next = raw === undefined ? 1 : raw;
   if (typeof next !== "number" || !Number.isSafeInteger(next) || next < 1) throw new Error("invalid snapshot sequence");
+  // After a crash the sequence can be older than the structures on disk: step past the ones that exist.
+  for (let skip = 0; world.structureManager.get(`stash:page_${next}`); skip++) {
+    if (skip >= 10000) throw new Error("snapshot identifier already exists");
+    next++;
+  }
   world.setDynamicProperty(NEXT, next + 1);
   if (world.getDynamicProperty(NEXT) !== next + 1) throw new Error("snapshot sequence readback failed");
   const id = `stash:page_${next}`;
-  if (world.structureManager.get(id)) throw new Error("snapshot identifier already exists");
   const { dim, at } = stageAt(player);
   const entity = dim.spawnEntity(ENTITY, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
   const ref = { id, slots: entries.map((e) => e.s) };
@@ -426,7 +495,7 @@ export function commitInventory(player, old, next, after) {
       discardSnapshot(afterRef);
     }
     if (committed) {
-      for (const ref of Object.values(old.pages)) if (!Object.values(next.pages).some((r) => r.id === ref.id)) discardSnapshot(ref);
+      for (const ref of Object.values(old.pages)) if (!Object.values(next.pages).some((r) => r.id === ref.id)) retireSnapshot(ref);
     }
   }
 
@@ -724,8 +793,8 @@ export function exportPending(operator, target, skip, withChanged = false) {
     console.warn(`[stash] recovery journal not cleared, export is kept and will be recognized: ${e}`);
     return { ok: false, message: "The chests are filled but the journal did not clear. Run it again; nothing will be copied twice." };
   }
-  discardSnapshot(pending.before);
-  discardSnapshot(pending.after);
+  retireSnapshot(pending.before);
+  retireSnapshot(pending.after);
   if (!plan.length) return { ok: true, message: `${target.name} still carries everything from the saved before-image, so nothing was exported. Their journal is cleared.` };
   return { ok: true, message: `Exported ${plan.length} stacks into ${chests} chest(s) next to you: what ${target.name} no longer carried. Their journal is cleared. Nothing they still carry was copied.` };
 }
