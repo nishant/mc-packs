@@ -101,6 +101,8 @@ export const G = {
   Q_SOUTH: "",
   /** U+F33C radar: compass W, on the edge, turning as you turn */
   Q_WEST: "",
+  /** U+F33D radar: a champion or a Choir Singer (red, orange ring) */
+  Q_CHAMP: "",
   /** U+F340 radar: you, facing N */
   Q_YOU_0: "",
   /** U+F341 radar: you, facing NE */
@@ -131,6 +133,12 @@ export const G = {
   L_RAINBOW: "",
   /** U+F371 strip edge, right: the rainbow's pot of gold */
   R_RAINBOW: "",
+  /** U+F372 strip edge, left: a champion or a Choir Singer */
+  L_CHAMP: "",
+  /** U+F373 strip edge, right: a champion or a Choir Singer */
+  R_CHAMP: "",
+  /** U+F374 strip: a champion or a Choir Singer (red, orange ring) */
+  S_CHAMP: "",
   /** U+F380 radar: the nearest town (house) */
   Q_TOWN: "",
   /** U+F381 radar: your bed or respawn point (bed) */

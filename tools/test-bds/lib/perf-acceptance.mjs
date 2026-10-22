@@ -90,6 +90,8 @@ export const BUNDLE_BUDGET_MS = 5; // the whole bundle stays under this: 5.000 f
 export const HEAVY_PACKS = new Set(["map_bp", "hud_bp"]);
 /** ms per tick a pack may use at BUDGET_PLAYERS: 1 for the Minimap and the HUDs, 0.15 for the rest (inclusive). */
 export const packBudget = (pack) => (HEAVY_PACKS.has(pack) ? 1 : 0.15);
+/** The built Realm Bundle profiled as one script context: it is the whole bundle, judged by BUNDLE_BUDGET_MS only. */
+export const BUNDLE_CONTEXT = "realm_bundle";
 
 /**
  * The budget verdict of `suite.mjs --perf`, from the profile JSON of each player count. Fails closed: a count whose
@@ -126,7 +128,7 @@ export function evaluatePerfBudgets(counts, { only } = {}) {
     if (missing.length) invalid.push(`${n} players: no steady-window figure for ${missing.join(", ")}`);
     if (n !== BUDGET_PLAYERS || !finite(bundle) || missing.length) continue;
     if (bundle >= BUNDLE_BUDGET_MS) over.push(`whole bundle @${n}: ${bundle.toFixed(3)} ms/tick, budget under ${BUNDLE_BUDGET_MS}`);
-    for (const [pack, v] of packs) if (v > packBudget(pack)) over.push(`${pack} @${n}: ${v.toFixed(3)} ms/tick, budget ${packBudget(pack)}`);
+    for (const [pack, v] of packs) if (pack !== BUNDLE_CONTEXT && v > packBudget(pack)) over.push(`${pack} @${n}: ${v.toFixed(3)} ms/tick, budget ${packBudget(pack)}`);
   }
   return { ok: !invalid.length && !over.length && counts.size > 0, invalid, over, steady };
 }

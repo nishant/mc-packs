@@ -1,6 +1,9 @@
 {
   "notes": [
     "Expansive Inventory: after a server crash, your pages still open. A page you switched away from is kept 2 hours before it is cleaned up, and page switches no longer fail after a crash.",
+    "Quick Stack & Sort: /realm:sort and Sort my inventory now sort every inventory page together: like stacks merge across pages and the sorted stacks fill page 1 first, then page 2 and on. /realm:inv adds Sort all pages; Sort this page still sorts only the page you see.",
+    "Minimap: champions show as a red dot in a bright orange ring on the compass strip and radar, within 128 blocks and at the edges when out of sight.",
+    "Choir sieges: the Choir Singer has a red name and shows on the Minimap like a champion, so a Singer that wandered off is easy to find.",
     "Minimap: uses about half the server time it did; with many players moving the radar's land and mob dots catch up a few seconds later. Operators can pick High in /realm:config -> Minimap for the earlier behavior.",
     "Silly Enchants costs less on a busy server: its every-tick checks run only while someone wears Hyper Jump boots.",
     "Expedition dungeons build in shorter steps, so a busy server no longer hitches while one is built.",
@@ -11,12 +14,13 @@
     "Town Projects: a new town build no longer walls in a villager, pet or animal standing on its spot; they are moved aside first."
   ],
   "resourceNotes": [
+    "Side HUD: new Minimap icons for champions and Choir Singers (a red dot in a bright orange ring, and its edge arrows).",
     "Easy Building's resources: line endings tidied (no change for players)."
   ],
   "packNotes": {
     "map_bp": {
-      "version": "1.3.11",
-      "notes": "About half the server time: budgetLevel normal now has 1 ms of budgets a tick (measured 1.5 ms with 10 players moving, 2.1 with 40; it was 2.8 and 4.4). High has the earlier normal budgets. Titles held longer, shared townsfolk searches, fewer wasted redraws and re-plans."
+      "version": "1.4.0",
+      "notes": "Champions and Choir Singers show as a red dot in a bright orange ring within 128 blocks (strip, its edges and the radar, at the edge when beyond it). One shared tag search per dimension every 10 ticks; they are left out of the ordinary mob search."
     },
     "town_bp": {
       "version": "1.7.3",
@@ -31,8 +35,8 @@
       "notes": "The welcome page lists Town Projects: towns that grow as you help, each with its mayor."
     },
     "admin_bp": {
-      "version": "1.6.12",
-      "notes": "Server size's Large server note gives the Minimap's new budgets: about 0.7 ms a tick instead of 1."
+      "version": "1.6.13",
+      "notes": "The Realm Configuration menu shows /realm:sort's new description: it sorts every inventory page together."
     },
     "silly_bp": {
       "version": "1.2.13",
@@ -47,8 +51,16 @@
       "notes": "A player who leaves with the Champions menu open no longer leaves an error in the server log."
     },
     "stash_bp": {
-      "version": "1.8.11",
-      "notes": "Crash-safe pages: a replaced page snapshot is retired and deleted 120 minutes later (stash:retired, at most 32 a minute, 1500 waiting), so an index a crash rolled back still finds its pages; a snapshot sequence a crash rolled back steps past the snapshots still on disk instead of failing the switch."
+      "version": "1.9.1",
+      "notes": "Sorting your inventory (/realm:sort, Sort my inventory, and the new Sort all pages in /realm:inv) sorts every page as one: like stacks merge across pages, then stacks are ordered by item and refill page 1, page 2 and on. Slot-locked stacks and the buttons stay; all pages commit together or nothing changes. Crash-safe pages: a replaced page snapshot is retired and deleted 120 minutes later (stash:retired, at most 32 a minute, 1500 waiting), so an index a crash rolled back still finds its pages; a snapshot sequence a crash rolled back steps past the snapshots still on disk instead of failing the switch."
+    },
+    "calendar_bp": {
+      "version": "1.0.20",
+      "notes": "The Choir Singer has a red name and the realm:siege_singer tag, so the Minimap draws it like a champion."
+    },
+    "hud_rp": {
+      "version": "1.5.0",
+      "notes": "Four new Minimap glyphs: the champion's ringed dot on the strip and radar and its left and right edge arrows."
     }
   }
 }

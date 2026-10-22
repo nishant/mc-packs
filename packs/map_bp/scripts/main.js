@@ -57,6 +57,12 @@ const ID_TAG = "realm:npc_id:";
 const WANDER_OWNER = "realm:npc_owner:wander_bp";
 const CAMP_TAG = "wander:c:";
 const PARTY_TAG = "realm_party:";
+const CHAMP_TAG = "realm:champion"; // Champions
+const SINGER_TAG = "realm:siege_singer"; // Realm Calendar: a Choir siege's Singer
+/** Champions and Choir Singers show this far (blocks), at the edge of the strip and the radar when out of sight. */
+const CHAMP_RANGE = 128;
+/** How often (ticks) each dimension's champions are looked up again, for everyone at once. */
+const CHAMP_EVERY = 10;
 const OVERWORLD = "minecraft:overworld";
 const DIM_NAMES = /** @type {Record<string, string>} */ ({ "minecraft:overworld": "the Overworld", "minecraft:nether": "the Nether", "minecraft:the_end": "the End" });
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
@@ -84,6 +90,7 @@ const MENU_MAX = 40;
 const KINDS = /** @type {Record<string, { s: string, l: string, r: string, q: string, p: number }>} */ ({
   star: { s: G.S_STAR, l: G.L_STAR, r: G.R_STAR, q: G.Q_STAR, p: 9 },
   party: { s: G.S_PARTY, l: G.L_PARTY, r: G.R_PARTY, q: G.Q_PARTY, p: 8 },
+  champ: { s: G.S_CHAMP, l: G.L_CHAMP, r: G.R_CHAMP, q: G.Q_CHAMP, p: 8 },
   mob: { s: G.S_MOB, l: G.L_MOB, r: G.R_MOB, q: G.Q_MOB, p: 7 },
   folk: { s: G.S_FOLK, l: G.L_FOLK, r: G.R_FOLK, q: G.Q_FOLK, p: 6 },
   wander: { s: G.S_WANDER, l: G.L_WANDER, r: G.R_WANDER, q: G.Q_WANDER, p: 6 },
@@ -504,6 +511,38 @@ function npcsNear(player) {
   return list;
 }
 
+/** Per dimension: where its champions (and a siege's Choir Singers) were at the last look. @type {Map<string, { tick: number, list: { x: number, z: number }[] }>} */
+const champCache = new Map();
+/**
+ * The champions in a dimension: one tag search for everyone, at most every CHAMP_EVERY ticks (plus one for the Choir
+ * Singers while a siege is on there), so their markers cost the same at 1 player or 40.
+ * @param {import("@minecraft/server").Dimension} dim
+ */
+function champsIn(dim) {
+  const now = system.currentTick;
+  const hit = champCache.get(dim.id);
+  if (hit && now - hit.tick < CHAMP_EVERY) return hit.list;
+  /** @type {{ x: number, z: number }[]} */
+  const list = [];
+  const tags = siege?.town.dim === dim.id ? [CHAMP_TAG, SINGER_TAG] : [CHAMP_TAG];
+  for (const tag of tags) {
+    try {
+      for (const e of dim.getEntities({ tags: [tag] })) {
+        try {
+          const l = e.location;
+          list.push({ x: l.x, z: l.z });
+        } catch {
+          // gone meanwhile
+        }
+      }
+    } catch {
+      // the dimension can't be searched now: none this time
+    }
+  }
+  champCache.set(dim.id, { tick: now, list });
+  return list;
+}
+
 /**
  * Markers around the player: two entity searches (townsfolk and wanderers; mobs), the rest from broadcasts.
  * @param {Player} player @param {Seen[]} seen @param {{ mobs: boolean, radius: number, town: boolean, home: boolean }} pr
@@ -527,7 +566,8 @@ function gather(player, seen, pr) {
     const max = Math.max(1, Number(get("maxMobs")) || 8);
     // Each player's own search: one reaching farther for others to share made every pass about 20% dearer and saved
     // nothing measurable with players in groups (October 2026).
-    for (const e of dim.getEntities({ location: at, maxDistance: pr.radius, families: ["monster"], excludeTags: [NPC_TAG], closest: max })) {
+    // Champions and Choir Singers come from champsIn, farther and with their own marker, so not twice.
+    for (const e of dim.getEntities({ location: at, maxDistance: pr.radius, families: ["monster"], excludeTags: [NPC_TAG, CHAMP_TAG, SINGER_TAG], closest: max })) {
       try {
         const l = e.location;
         add("mob", l.x, l.z, true);
@@ -535,6 +575,7 @@ function gather(player, seen, pr) {
         // gone meanwhile
       }
     }
+    for (const c of champsIn(dim)) if (Math.hypot(c.x - at.x, c.z - at.z) <= CHAMP_RANGE) add("champ", c.x, c.z, true);
   }
   const tag = seen.find((s) => s.id === player.id)?.party;
   const others = get("showOthers") === true;
@@ -1196,7 +1237,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     const dx = m.x - at.x;
     const dz = m.z - at.z;
     const [sx, sy] = screen(dx, dz);
-    place(sx, sy, k.q, 10 + k.p - Math.min(dx * dx + dz * dz, 998001) / 998002, m.kind === "star" || m.kind === "party" || m.kind === "other" || m.kind === "rainbow", m.kind);
+    place(sx, sy, k.q, 10 + k.p - Math.min(dx * dx + dz * dz, 998001) / 998002, m.kind === "star" || m.kind === "party" || m.kind === "other" || m.kind === "rainbow" || m.kind === "champ", m.kind);
   }
   rows[R * ROW + R] = north ? YOU[Math.round(heading / 45) % 8] : YOU[0];
   touched.push(R * ROW + R);

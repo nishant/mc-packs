@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { checkReleaseNotes, cmpVersion, kindOf, shapeProblems, versionOf } from "./release-notes.mjs";
-import { parseReport, publishArgs, summaryMarkdown } from "./ci-release.mjs";
+import { parseReport, publishArgs, shellQuote, summaryMarkdown } from "./ci-release.mjs";
 
 /** @param {Partial<{ folder: string, kind: "behavior" | "resources", before: string, now: string }>} p */
 const pack = (p) => ({ folder: "guard_bp", kind: /** @type {"behavior"} */ ("behavior"), before: "1.0.0", now: "1.0.0", ...p });
@@ -119,4 +119,11 @@ test("the summary names the versions, the PR and the live result", () => {
   const failed = summaryMarkdown({ rows: [], used: [], changed: false, failed: { step: "publish-packs", output: "error: Realm Bundle changed: say what changed" } });
   assert.match(failed, /Failed at publish-packs/);
   assert.doesNotMatch(failed, /are live/);
+});
+
+test("ci-release logs a multi-line argument on real lines, never as a JSON string with literal \\n", () => {
+  assert.equal(shellQuote("plain"), "plain");
+  assert.equal(shellQuote("Title\n\nBody"), "'Title\n\nBody'");
+  assert.equal(shellQuote("it's"), "'it'\\''s'");
+  assert.ok(!shellQuote("a\nb").includes("\\n"));
 });

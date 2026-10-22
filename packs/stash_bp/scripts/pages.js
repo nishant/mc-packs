@@ -40,13 +40,13 @@ const SCAN_ROWS = 100;
  *   ench?: [string, number][], color?: { red: number, green: number, blue: number }, props?: Record<string, any>,
  *   place?: string[], destroy?: string[], item?: ItemStack }} Rec
  */
-/** @typedef {{ bar: (player: Player, text: string) => void, sort: (player: Player) => void, stash: (player: Player) => void }} Hooks */
+/** @typedef {{ bar: (player: Player, text: string) => void, sort: (player: Player) => void, sortAll: (player: Player) => void, stash: (player: Player) => void }} Hooks */
 /** @typedef {"prev" | "menu" | "next"} ButtonKind */
 
 /** @type {Hooks} */
-let hooks = { bar: (p, t) => p.onScreenDisplay.setActionBar(t), sort: () => {}, stash: () => {} };
+let hooks = { bar: (p, t) => p.onScreenDisplay.setActionBar(t), sort: () => {}, sortAll: () => {}, stash: () => {} };
 
-/** Connects this module to main.js: the action bar line, "Sort this page" and "Quick stack". @param {Hooks} h */
+/** Connects this module to main.js: the action bar line, "Sort all pages", "Sort this page" and "Quick stack". @param {Hooks} h */
 export function initPages(h) {
   hooks = h;
 }
@@ -1469,6 +1469,147 @@ export function fillEarlierPages(player) {
     switching.delete(id);
   }
 }
+
+/**
+ * Sorts every page as one inventory: reads all pages, merges like stacks (any stacks the game itself would stack, so
+ * names, lore and enchantments must match), orders them by item id, the biggest stack first, and refills the slots in
+ * order: the hotbar (when `withHotbar`), then page 1, page 2 and so on, so the sorted inventory spans as many pages as
+ * it needs and the last pages end up empty. Slot-locked stacks and the page buttons stay where they are. All changed
+ * pages and the live inventory commit together, or nothing changes.
+ * @param {Player} player @param {boolean} withHotbar
+ * @returns {{ ok: true, stacks: number, pages: number } | { ok: false, message: string }} pages: how many pages hold something now
+ */
+export function sortAllPages(player, withHotbar) {
+  const id = player.id;
+  const inv = invOf(player);
+  if (!inv || !alive(player)) return { ok: false, message: "You can't sort right now" };
+  if (switching.has(id)) return { ok: false, message: "Another inventory change is still running. Try again in a moment" };
+  try {
+    if (stateOf(player).pending) return { ok: false, message: "Inventory recovery is safely saved and needs an operator" };
+    ensureLayout(player);
+  } catch (e) {
+    return { ok: false, message: `Not sorted: ${e}` };
+  }
+  switching.add(id);
+  try {
+    const cur = curPage(player);
+    const total = totalPages(player);
+    if (cur > total) return { ok: false, message: "Your pages are being rearranged. Try again in a moment" };
+    const reserved = buttonsWanted(player) ? new Set(BUTTON_SLOTS) : buttonSlots(inv);
+    /** @type {ItemStack[]} */
+    const pool = [];
+    /** Each page's slots that take sorted stacks, in order (page 0 is the hotbar), and its slot-locked stacks. */
+    /** @type {{ page: number, slots: number[], fixed: Rec[], locked?: number }[]} */
+    const targets = [];
+    /** @type {Set<number>} */
+    const liveSlots = new Set();
+    let lockedLive = 0; // the live page's slot-locked stacks: they stay, and count toward the pages in use
+    /** @param {number[]} slots */
+    const takeLive = (slots) => {
+      /** @type {number[]} */
+      const free = [];
+      for (const s of slots) {
+        liveSlots.add(s);
+        const item = inv.getItem(s);
+        if (item?.lockMode === ItemLockMode.slot) {
+          lockedLive++;
+          continue;
+        }
+        free.push(s);
+        if (item) pool.push(item);
+      }
+      return free;
+    };
+    if (withHotbar) targets.push({ page: 0, slots: takeLive(HOTBAR), fixed: [] });
+    for (let p = 1; p <= total; p++) {
+      if (p === cur) {
+        const slots = [];
+        for (let s = 9; s < 36; s++) if (!reserved.has(s)) slots.push(s);
+        lockedLive = 0;
+        const free = takeLive(slots);
+        targets.push({ page: p, slots: free, fixed: [], locked: lockedLive });
+        continue;
+      }
+      /** @type {Rec[]} */
+      let saved = [];
+      if (stateOf(player).pages[p] || player.getDynamicProperty(PAGE_PROP + p) !== undefined) {
+        const read = readPage(player, p);
+        if (!read) return { ok: false, message: `Page ${p} can't be read. Nothing was sorted` };
+        saved = read;
+      }
+      const fixed = [];
+      for (const rec of saved) {
+        const item = deserializeStack(rec);
+        if (!item) return { ok: false, message: `Page ${p} holds ${pretty(rec.id)} that can't be moved. Nothing was sorted` };
+        if (item.lockMode === ItemLockMode.slot) fixed.push(rec);
+        else pool.push(item);
+      }
+      const held = new Set(fixed.map((r) => r.s));
+      targets.push({ page: p, slots: STORAGE_SLOTS.filter((s) => !held.has(s)), fixed });
+    }
+
+    // 1. Merge: top up each stack from later stacks the game would stack with it. An ItemStack can't hold 0, so the
+    // amounts are counted apart and the emptied stacks dropped.
+    const counts = pool.map((it) => it.amount);
+    for (let i = 0; i < pool.length; i++) {
+      const a = pool[i];
+      if (!counts[i] || !a.isStackable || counts[i] >= a.maxAmount) continue;
+      for (let j = i + 1; j < pool.length && counts[i] < a.maxAmount; j++) {
+        if (!counts[j] || pool[j].typeId !== a.typeId || !a.isStackableWith(pool[j])) continue;
+        const move = Math.min(a.maxAmount - counts[i], counts[j]);
+        counts[i] += move;
+        counts[j] -= move;
+      }
+    }
+    /** @type {ItemStack[]} */
+    const stacks = [];
+    pool.forEach((it, i) => {
+      if (!counts[i]) return;
+      if (it.amount !== counts[i]) it.amount = counts[i];
+      stacks.push(it);
+    });
+    // 2. Order: item id, then the biggest stack first, then the name (a stable order for named stacks).
+    stacks.sort((x, y) => (x.typeId < y.typeId ? -1 : x.typeId > y.typeId ? 1 : y.amount - x.amount || (x.nameTag ?? "").localeCompare(y.nameTag ?? "")));
+
+    // 3. Refill the slots in order.
+    /** @type {Map<number, Rec[]>} */
+    const edits = new Map();
+    /** @type {Map<number, ItemStack>} */
+    const live = new Map();
+    let next = 0;
+    let used = 0;
+    for (const t of targets) {
+      const recs = [...t.fixed];
+      let placed = t.fixed.length + (t.locked ?? 0);
+      for (const s of t.slots) {
+        const item = stacks[next];
+        if (!item) break;
+        next++;
+        placed++;
+        if (t.page === 0 || t.page === cur) live.set(s, item);
+        else recs.push({ s, ...toRecord(item) });
+      }
+      if (t.page > 0 && placed) used++;
+      if (t.page > 0 && t.page !== cur && (recs.length || stateOf(player).pages[t.page] || player.getDynamicProperty(PAGE_PROP + t.page) !== undefined)) edits.set(t.page, recs);
+    }
+    if (next < stacks.length) return { ok: false, message: "Your stacks didn't fit back. Nothing was sorted" };
+    const after = carried(inv).filter((e) => !liveSlots.has(e.s) || e.item.lockMode === ItemLockMode.slot);
+    for (const [s, item] of live) after.push({ s, item });
+    try {
+      commitPages(player, edits, after, cur);
+    } catch (e) {
+      console.warn(`[stash] sorting all pages: ${e}`);
+      return { ok: false, message: `Not sorted: ${e}` };
+    }
+    snapshots.delete(id); // our own move, not a pickup
+    return { ok: true, stacks: stacks.length, pages: used };
+  } catch (e) {
+    console.warn(`[stash] sorting all pages: ${e}`);
+    return { ok: false, message: `Not sorted: ${e}` };
+  } finally {
+    switching.delete(id);
+  }
+}
 /**
  * Hotbar Refill ran out of a stack and found none like it on this page (realm:refill_need): the fullest stack like it on
  * another page goes into the empty hotbar slot. "Like it": the same item, name and lore, as Hotbar Refill matches them.
@@ -1748,6 +1889,10 @@ function inventoryMenu(player) {
     }
     form.button("Sort this page\n§8Merge stacks, order by item");
     actions.push(() => hooks.sort(player));
+    if (total > 1) {
+      form.button("Sort all pages\n§8Merge stacks across pages, order by item from page 1");
+      actions.push(() => hooks.sortAll(player));
+    }
     form.button("Quick stack to nearby chests\n§8Into storage holding the same items");
     actions.push(() => hooks.stash(player));
     form.button("Inventory settings\n§8Page buttons, auto-store" + (isOp(player) ? ", your page count" : ""));
