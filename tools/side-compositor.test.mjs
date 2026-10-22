@@ -118,8 +118,8 @@ const RADAR = "\u{F301}".repeat(400) + "§r";
 /** Slot k's text in a subtitle, the way hud_rp cuts it (UTF-8 bytes), with the filler removed. */
 function cut(sub, k) {
   const b = Buffer.from(sub ?? "", "utf8");
-  const skip = Buffer.byteLength(MARK) + (k <= 10 ? 160 * k : 160 * 10 + 1352) + 1;
-  const len = k === 10 ? 1351 : k === 11 ? 511 : 159;
+  const skip = Buffer.byteLength(MARK) + (k <= 10 ? 160 * k : 160 * 10 + 3304) + 1;
+  const len = k === 10 ? 3303 : k === 11 ? 511 : 159;
   return b.subarray(skip, skip + len).toString("utf8").replace(/~/g, "").replace(/§r/g, "");
 }
 const SLOT = { right1: 0, left1: 4, top: 9, radar: 10 };
@@ -358,3 +358,8 @@ test("kept messages are read in the order they came: the last one into a slot ha
   assert.equal(cut(maps.api.payload(p), SLOT.right1), "§cPig 7/10");
   assert.equal(cut(hud.api.payload(p), SLOT.right1), "§cPig 7/10");
 });
+
+const DENSE33=Array.from({length:33},()=>"\uf4a0".repeat(33)).join("\n")+"\uf3d4"+"1";
+test("dense33 compositor preserves full5425 payload, metadata and quest offset without own fanout",()=>{const s=server(),map=s.pack("map",{compositor:true}),hud=s.pack("hud"),p=s.join("dense");hud.api.show(p,"quest","quest payload",100);s.step(2);map.api.show(p,"top","north",40,"",false);map.api.show(p,"radar",DENSE33,40,"radar",false);map.api.redraw(p);const text=p.titles.at(-1).sub;assert.equal(Buffer.byteLength(DENSE33),3303);assert.equal(Buffer.byteLength(text),5425);assert.equal(text.slice(0,9),"R00000000");assert.equal(cut(text,SLOT.radar),DENSE33);assert.equal(cut(text,11),"quest payload");assert.equal(s.sent.filter(e=>e.from==="map"&&["realm:side","realm:side_part"].includes(e.id)).length,0);assert.equal(p.titles.at(-1).title,MARK);});
+test("dense33 off leaves foreign boxes and all offsets valid with N metadata",()=>{const s=server(),map=s.pack("map",{compositor:true}),hud=s.pack("hud"),p=s.join("off");map.api.show(p,"top","north",40);map.api.show(p,"radar",DENSE33,40,"radar");s.step(2);map.api.clear(p,"",false);map.api.clear(p,"radar",false);map.api.redraw(p);s.step(2);hud.api.show(p,"right1","foreign box",100);const text=p.titles.at(-1).sub;assert.equal(text.slice(0,9),"N00000000");assert.equal(Buffer.byteLength(text),5425);assert.equal(cut(text,SLOT.right1),"foreign box");assert.equal(cut(text,SLOT.radar),"");});
+test("dense33 keep requires both parts and recovery restores full radar",()=>{const s=server(),map=s.pack("map",{compositor:true}),p=s.join("keep");map.api.show(p,"top","north",8,"",false);map.api.show(p,"radar",DENSE33,20,"radar",false);map.api.redraw(p);s.step(9);assert.equal(map.api.keep(p,40,["","radar"]),false);map.api.show(p,"top","north",40,"",false);map.api.show(p,"radar",DENSE33,40,"radar",false);map.api.redraw(p);assert.equal(map.api.keep(p,40,["","radar"]),true);assert.equal(cut(p.titles.at(-1).sub,SLOT.radar),DENSE33);assert.equal(s.sent.filter(e=>e.from==="map"&&e.id==="realm:side").length,0);});

@@ -42,6 +42,31 @@ function strip(sub) {
   return [...fromUtf8(b.slice(9 + 160 * 9 + 1, 9 + 160 * 9 + 160)).split("\n")[0]];
 }
 
+// Bounded realm:map_state packets arrive as {player,channel:'state',v:1,chunk:{id,index,total,text}}; join them inline (test packs cannot import runtime modules).
+const mapStateParts = new Map();
+function reassembleMapState(message, now = 0) {
+  for (const [k, e] of mapStateParts) if (now - e.at > 200) mapStateParts.delete(k);
+  const d = JSON.parse(message),
+    c = d && d.chunk;
+  if (!c) return d;
+  if (d.channel !== "state" || d.v !== 1 || !Number.isInteger(c.total) || c.total < 1 || c.total > 12 || !Number.isInteger(c.index) || c.index < 0 || c.index >= c.total || typeof c.text !== "string") throw Error("bad map state packet");
+  const key = `${d.player ?? ""}:${c.id}`;
+  let e = mapStateParts.get(key);
+  if (!e) {
+    if (mapStateParts.size >= 16) mapStateParts.delete(mapStateParts.keys().next().value);
+    e = { total: c.total, parts: new Array(c.total), got: 0, at: now };
+    mapStateParts.set(key, e);
+  }
+  if (e.total !== c.total || e.parts[c.index] !== undefined) {
+    mapStateParts.delete(key);
+    throw Error("bad map state packet");
+  }
+  e.parts[c.index] = c.text;
+  if (++e.got < e.total) return undefined;
+  mapStateParts.delete(key);
+  return JSON.parse(e.parts.join(""));
+}
+
 export default async function (t) {
   // These checks describe the Minimap with the time it had before its 1 ms budget (October 2026): budgetLevel high
   // gives it exactly those budgets, the same code with more time a tick. Its cost at normal is perf-soak's to measure.
@@ -53,18 +78,41 @@ export default async function (t) {
     ({ id, message }) => {
       if (id !== "realm:map_state") return;
       try {
-        ev.push({ m: JSON.parse(message), tick: sys.currentTick });
+        const m = reassembleMapState(message, sys.currentTick);
+        if (m === undefined) return;
+        ev.push({ m, tick: sys.currentTick });
       } catch {}
     },
     { namespaces: ["realm"] },
   );
   const send = (id, m) => sys.sendScriptEvent(id, JSON.stringify(m));
+  /** The radar defaults OFF (and migrates off once at spawn): opt a viewer in AFTER spawn through realm:cfg_set and wait for each ACK.
+   *  Terrain colors on (the scanner work this test measures); north up OFF so the radar turns with the player as it did when this
+   *  scenario was written (the turning radar is the costly case; north up is the new realm default and needs no turn redraw). */
+  const optIn = async (player) => {
+    for (const [key, value] of [["radar", true], ["terrain", true], ["radarNorthUp", false]]) {
+      const id = `turn_${player.id}_${key}`;
+      let ack;
+      const sub = sys.afterEvents.scriptEventReceive.subscribe(({ id: eid, message }) => {
+        if (eid !== "realm:cfg_ack") return;
+        try {
+          const m = JSON.parse(message);
+          if (m.id === id) ack = m;
+        } catch {}
+      }, { namespaces: ["realm"] });
+      send("realm:cfg_set", { id, pack: "map_bp", key, value, player: player.id });
+      await t.waitUntil(() => ack, { timeout: 100, message: `cfg_ack for ${key}` });
+      sys.afterEvents.scriptEventReceive.unsubscribe(sub);
+      t.check(ack.ok === true, `${player.name} ${key} = ${value} acknowledged`);
+    }
+  };
   const titles = (p, since) => t.messages(p, { kind: "title", since }).filter((m) => m.pack === "map_bp" && m.text === MARK);
 
   await t.server("/gamerule domobspawning false");
   const p = await t.player("Turner", { op: true, x: 0, z: 0, gameMode: "creative" });
   const face = (pl, yaw) => pl.teleport(pl.location, { rotation: { x: 0, y: yaw } });
   face(p, 180); // north
+  await optIn(p);
   await t.wait(60);
 
   // --- Standing still: only the pass's refresh (every REFRESH = 30 ticks at most).
@@ -94,7 +142,11 @@ export default async function (t) {
 
   // --- Cost: 10 players turning every tick.
   const crowd = [p];
-  for (let i = 0; i < 9; i++) crowd.push(await t.player(`Turner${i}`, { x: i * 20, z: 40, settle: 2 }));
+  for (let i = 0; i < 9; i++) {
+    const q = await t.player(`Turner${i}`, { x: i * 20, z: 40, settle: 2 });
+    await optIn(q);
+    crowd.push(q);
+  }
   await t.wait(40);
   send("realm:map_debug", { player: p.id, action: "cost" });
   const turnFrom = t.tick;

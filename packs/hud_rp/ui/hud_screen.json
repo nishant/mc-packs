@@ -127,7 +127,7 @@
                   "variables": [
                     {
                       "requires": "$subtitle_initially_visible",
-                      "$anim_type": 1.0
+                      "$anim_type": 1
                     },
                     {
                       "requires": "(not $subtitle_initially_visible)",
@@ -198,7 +198,7 @@
     "type": "label",
     "text": "#text",
     "$slot_slice|default": "%.159s",
-    "$slot_scale|default": 1.0,
+    "$slot_scale|default": 1,
     "font_scale_factor": "$slot_scale",
     "size": [
       "default",
@@ -213,7 +213,7 @@
       1,
       1
     ],
-    "locked_alpha": 1.0,
+    "locked_alpha": 1,
     "shadow": true,
     "localize": false,
     "layer": 1,
@@ -287,7 +287,10 @@
       "100%",
       "100%c + 4px"
     ],
-    "$slot_max": [200, 26],
+    "$slot_max": [
+      200,
+      26
+    ],
     "controls": [
       {
         "realm_slot_box@hud.realm_slot_box": {
@@ -301,9 +304,12 @@
       "100%",
       "100%c + 4px"
     ],
-    "$skip": "%.2962s",
+    "$skip": "%.4914s",
     "$slot_slice": "%.511s",
-    "$slot_max": [200, 110],
+    "$slot_max": [
+      200,
+      110
+    ],
     "$quest_code|default": "§s§q§1",
     "controls": [
       {
@@ -334,7 +340,7 @@
       "100%",
       108
     ],
-    "$radar_empty|default": "~§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
+    "$radar_empty|default": "§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
     "controls": [
       {
         "radar_widget": {
@@ -349,11 +355,11 @@
             {
               "radar_bg": {
                 "type": "image",
-                "texture": "textures/ui/Black",
-                "alpha": 0.85,
+                "texture": "textures/ui/radar_shade",
+                "alpha": 1,
                 "size": [
-                  98.8,
-                  103.8
+                  118.8,
+                  123.8
                 ],
                 "anchor_from": "center",
                 "anchor_to": "center",
@@ -380,7 +386,7 @@
                         "default"
                       ],
                       "font_size": "small",
-                      "font_scale_factor": 0.5414893617021277,
+                      "font_scale_factor": 0.3439189189189189,
                       "line_padding": 7.7753571428571435,
                       "shadow": false,
                       "localize": false,
@@ -389,11 +395,11 @@
                         1,
                         1
                       ],
-                      "locked_alpha": 1.0,
+                      "locked_alpha": 1,
                       "anchor_from": "top_left",
                       "anchor_to": "top_left",
                       "offset": [
-                        1.0720744680851055,
+                        1.1653716216216239,
                         1
                       ],
                       "layer": 2,
@@ -404,7 +410,7 @@
                         },
                         {
                           "binding_type": "view",
-                          "source_property_name": "((('%.1351s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) - '~~') - '~')",
+                          "source_property_name": "((('%.3299s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) - '~~') - '~')",
                           "target_property_name": "#text"
                         }
                       ]
@@ -419,7 +425,7 @@
                         "default"
                       ],
                       "font_size": "small",
-                      "font_scale_factor": 0.5414893617021277,
+                      "font_scale_factor": 0.3439189189189189,
                       "line_padding": 7.7753571428571435,
                       "shadow": false,
                       "localize": false,
@@ -428,11 +434,11 @@
                         1,
                         1
                       ],
-                      "locked_alpha": 1.0,
+                      "locked_alpha": 1,
                       "anchor_from": "top_left",
                       "anchor_to": "top_left",
                       "offset": [
-                        1.3428191489361694,
+                        1.3373310810810835,
                         1
                       ],
                       "layer": 3,
@@ -443,7 +449,85 @@
                         },
                         {
                           "binding_type": "view",
-                          "source_property_name": "((('%.1351s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) - '~~') - '~')",
+                          "source_property_name": "((('%.3299s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) - '~~') - '~')",
+                          "target_property_name": "#text"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "radar_mesh_2": {
+                      "type": "label",
+                      "text": "#text",
+                      "size": [
+                        "default",
+                        "default"
+                      ],
+                      "font_size": "small",
+                      "font_scale_factor": 0.3439189189189189,
+                      "line_padding": 7.7753571428571435,
+                      "shadow": false,
+                      "localize": false,
+                      "color": [
+                        1,
+                        1,
+                        1
+                      ],
+                      "locked_alpha": 1,
+                      "anchor_from": "top_left",
+                      "anchor_to": "top_left",
+                      "offset": [
+                        1.1653716216216239,
+                        1.343918918918919
+                      ],
+                      "layer": 4,
+                      "bindings": [
+                        {
+                          "binding_name": "#hud_subtitle_text_string",
+                          "binding_type": "global"
+                        },
+                        {
+                          "binding_type": "view",
+                          "source_property_name": "((('%.3299s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) - '~~') - '~')",
+                          "target_property_name": "#text"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "radar_mesh_3": {
+                      "type": "label",
+                      "text": "#text",
+                      "size": [
+                        "default",
+                        "default"
+                      ],
+                      "font_size": "small",
+                      "font_scale_factor": 0.3439189189189189,
+                      "line_padding": 7.7753571428571435,
+                      "shadow": false,
+                      "localize": false,
+                      "color": [
+                        1,
+                        1,
+                        1
+                      ],
+                      "locked_alpha": 1,
+                      "anchor_from": "top_left",
+                      "anchor_to": "top_left",
+                      "offset": [
+                        1.3373310810810835,
+                        1.343918918918919
+                      ],
+                      "layer": 5,
+                      "bindings": [
+                        {
+                          "binding_name": "#hud_subtitle_text_string",
+                          "binding_type": "global"
+                        },
+                        {
+                          "binding_type": "view",
+                          "source_property_name": "((('%.3299s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) - '~~') - '~')",
                           "target_property_name": "#text"
                         }
                       ]
@@ -453,18 +537,216 @@
               }
             },
             {
+              "radar_n": {
+                "type": "panel",
+                "size": [
+                  10,
+                  10
+                ],
+                "anchor_from": "top_middle",
+                "anchor_to": "top_middle",
+                "offset": [
+                  0,
+                  -8
+                ],
+                "layer": 10,
+                "controls": [
+                  {
+                    "radar_n_badge": {
+                      "type": "image",
+                      "texture": "textures/ui/map_cardinal_n",
+                      "size": [
+                        "100%",
+                        "100%"
+                      ],
+                      "layer": 11
+                    }
+                  }
+                ],
+                "bindings": [
+                  {
+                    "binding_name": "#hud_subtitle_text_string",
+                    "binding_type": "global"
+                  },
+                  {
+                    "binding_type": "view",
+                    "source_property_name": "(('%.1s' * (#hud_subtitle_text_string - ('%.4912s' * #hud_subtitle_text_string))) = '1')",
+                    "target_property_name": "#visible"
+                  }
+                ]
+              }
+            },
+            {
+              "radar_e": {
+                "type": "panel",
+                "size": [
+                  10,
+                  10
+                ],
+                "anchor_from": "right_middle",
+                "anchor_to": "right_middle",
+                "offset": [
+                  8,
+                  0
+                ],
+                "layer": 10,
+                "controls": [
+                  {
+                    "radar_e_badge": {
+                      "type": "image",
+                      "texture": "textures/ui/map_cardinal_e",
+                      "size": [
+                        "100%",
+                        "100%"
+                      ],
+                      "layer": 11
+                    }
+                  }
+                ],
+                "bindings": [
+                  {
+                    "binding_name": "#hud_subtitle_text_string",
+                    "binding_type": "global"
+                  },
+                  {
+                    "binding_type": "view",
+                    "source_property_name": "(('%.1s' * (#hud_subtitle_text_string - ('%.4912s' * #hud_subtitle_text_string))) = '1')",
+                    "target_property_name": "#visible"
+                  }
+                ]
+              }
+            },
+            {
+              "radar_s": {
+                "type": "panel",
+                "size": [
+                  10,
+                  10
+                ],
+                "anchor_from": "bottom_middle",
+                "anchor_to": "bottom_middle",
+                "offset": [
+                  0,
+                  8
+                ],
+                "layer": 10,
+                "controls": [
+                  {
+                    "radar_s_badge": {
+                      "type": "image",
+                      "texture": "textures/ui/map_cardinal_s",
+                      "size": [
+                        "100%",
+                        "100%"
+                      ],
+                      "layer": 11
+                    }
+                  }
+                ],
+                "bindings": [
+                  {
+                    "binding_name": "#hud_subtitle_text_string",
+                    "binding_type": "global"
+                  },
+                  {
+                    "binding_type": "view",
+                    "source_property_name": "(('%.1s' * (#hud_subtitle_text_string - ('%.4912s' * #hud_subtitle_text_string))) = '1')",
+                    "target_property_name": "#visible"
+                  }
+                ]
+              }
+            },
+            {
+              "radar_w": {
+                "type": "panel",
+                "size": [
+                  10,
+                  10
+                ],
+                "anchor_from": "left_middle",
+                "anchor_to": "left_middle",
+                "offset": [
+                  -8,
+                  0
+                ],
+                "layer": 10,
+                "controls": [
+                  {
+                    "radar_w_badge": {
+                      "type": "image",
+                      "texture": "textures/ui/map_cardinal_w",
+                      "size": [
+                        "100%",
+                        "100%"
+                      ],
+                      "layer": 11
+                    }
+                  }
+                ],
+                "bindings": [
+                  {
+                    "binding_name": "#hud_subtitle_text_string",
+                    "binding_type": "global"
+                  },
+                  {
+                    "binding_type": "view",
+                    "source_property_name": "(('%.1s' * (#hud_subtitle_text_string - ('%.4912s' * #hud_subtitle_text_string))) = '1')",
+                    "target_property_name": "#visible"
+                  }
+                ]
+              }
+            },
+            {
+              "radar_self": {
+                "type": "label",
+                "text": "#text",
+                "size": [
+                  "default",
+                  "default"
+                ],
+                "font_size": "small",
+                "font_scale_factor": 0.75,
+                "shadow": false,
+                "localize": false,
+                "color": [
+                  1,
+                  1,
+                  1
+                ],
+                "locked_alpha": 1,
+                "anchor_from": "center",
+                "anchor_to": "center",
+                "layer": 8,
+                "bindings": [
+                  {
+                    "binding_name": "#hud_subtitle_text_string",
+                    "binding_type": "global"
+                  },
+                  {
+                    "binding_type": "view",
+                    "source_property_name": "('%.3s' * (#hud_subtitle_text_string - ('%.4909s' * #hud_subtitle_text_string)))",
+                    "target_property_name": "#text"
+                  }
+                ]
+              }
+            },
+            {
               "radar_border": {
                 "type": "image",
                 "texture": "textures/ui/radar_frame",
                 "size": [
-                  100.8,
-                  105.8
+                  118.8,
+                  123.8
                 ],
                 "anchor_from": "center",
                 "anchor_to": "center",
-                "layer": 5
+                "layer": 9
               }
             }
+          ],
+          "offset": [
+            -9,
+            -9
           ]
         }
       }
@@ -480,14 +762,17 @@
       },
       {
         "binding_type": "view",
-        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (('%.1351s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) = $radar_empty)))",
+        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (('%.1s' * #hud_subtitle_text_string) = 'R'))",
         "target_property_name": "#visible"
       }
     ]
   },
   "realm_sidebar_slot": {
     "type": "panel",
-    "size": ["100%", "100%c"],
+    "size": [
+      "100%",
+      "100%c"
+    ],
     "anchor_from": "top_left",
     "anchor_to": "top_left",
     "controls": [
@@ -523,10 +808,16 @@
       {
         "realm_side_radar": {
           "type": "panel",
-          "size": ["50%", 108],
+          "size": [
+            "50%",
+            108
+          ],
           "anchor_from": "top_right",
           "anchor_to": "top_right",
-          "offset": [-4, 48],
+          "offset": [
+            -4,
+            48
+          ],
           "controls": [
             {
               "realm_radar@hud.realm_radar_panel": {}
@@ -537,30 +828,74 @@
       {
         "realm_side_right": {
           "type": "panel",
-          "size": ["100% - 8px", "100% - 160px"],
+          "size": [
+            "100% - 8px",
+            "100% - 160px"
+          ],
           "clips_children": true,
           "anchor_from": "top_right",
           "anchor_to": "top_right",
-          "offset": [-4, 156],
+          "offset": [
+            -4,
+            156
+          ],
           "controls": [
             {
               "realm_right_stack": {
                 "type": "stack_panel",
                 "orientation": "vertical",
                 "use_child_anchors": true,
-                "size": ["50%", "100%c"],
-                "max_size": ["100%", "100%"],
+                "size": [
+                  "50%",
+                  "100%c"
+                ],
+                "max_size": [
+                  "100%",
+                  "100%"
+                ],
                 "anchor_from": "right_middle",
                 "anchor_to": "right_middle",
                 "controls": [
-                  { "realm_right1@hud.realm_pinned_slot": { "$skip": "%.10s" } },
-                  { "realm_quest_right1@hud.realm_quest_slot": { "$quest_code": "§s§q§1" } },
-                  { "realm_right2@hud.realm_pinned_slot": { "$skip": "%.170s" } },
-                  { "realm_quest_right2@hud.realm_quest_slot": { "$quest_code": "§s§q§2" } },
-                  { "realm_right3@hud.realm_pinned_slot": { "$skip": "%.330s" } },
-                  { "realm_quest_right3@hud.realm_quest_slot": { "$quest_code": "§s§q§3" } },
-                  { "realm_right4@hud.realm_pinned_slot": { "$skip": "%.490s" } },
-                  { "realm_quest_right4@hud.realm_quest_slot": { "$quest_code": "§s§q§4" } }
+                  {
+                    "realm_right1@hud.realm_pinned_slot": {
+                      "$skip": "%.10s"
+                    }
+                  },
+                  {
+                    "realm_quest_right1@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§1"
+                    }
+                  },
+                  {
+                    "realm_right2@hud.realm_pinned_slot": {
+                      "$skip": "%.170s"
+                    }
+                  },
+                  {
+                    "realm_quest_right2@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§2"
+                    }
+                  },
+                  {
+                    "realm_right3@hud.realm_pinned_slot": {
+                      "$skip": "%.330s"
+                    }
+                  },
+                  {
+                    "realm_quest_right3@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§3"
+                    }
+                  },
+                  {
+                    "realm_right4@hud.realm_pinned_slot": {
+                      "$skip": "%.490s"
+                    }
+                  },
+                  {
+                    "realm_quest_right4@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§4"
+                    }
+                  }
                 ]
               }
             }
@@ -570,31 +905,93 @@
       {
         "realm_side_left": {
           "type": "panel",
-          "size": ["100% - 8px", "100% - 52px"],
+          "size": [
+            "100% - 8px",
+            "100% - 52px"
+          ],
           "clips_children": true,
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "offset": [4, 48],
+          "offset": [
+            4,
+            48
+          ],
           "controls": [
             {
               "realm_left_stack": {
                 "type": "stack_panel",
                 "orientation": "vertical",
                 "use_child_anchors": true,
-                "size": ["50%", "100%c"],
-                "max_size": ["100%", "100%"],
+                "size": [
+                  "50%",
+                  "100%c"
+                ],
+                "max_size": [
+                  "100%",
+                  "100%"
+                ],
                 "anchor_from": "left_middle",
                 "anchor_to": "left_middle",
                 "controls": [
-                  { "realm_left1@hud.realm_pinned_slot": { "$skip": "%.650s", "$slot_anchor": "top_left", "$slot_align": "left" } },
-                  { "realm_quest_left1@hud.realm_quest_slot": { "$quest_code": "§s§q§5", "$slot_anchor": "top_left", "$slot_align": "left" } },
-                  { "realm_left2@hud.realm_pinned_slot": { "$skip": "%.810s", "$slot_anchor": "top_left", "$slot_align": "left" } },
-                  { "realm_quest_left2@hud.realm_quest_slot": { "$quest_code": "§s§q§6", "$slot_anchor": "top_left", "$slot_align": "left" } },
-                  { "realm_left3@hud.realm_pinned_slot": { "$skip": "%.970s", "$slot_anchor": "top_left", "$slot_align": "left" } },
-                  { "realm_quest_left3@hud.realm_quest_slot": { "$quest_code": "§s§q§7", "$slot_anchor": "top_left", "$slot_align": "left" } },
-                  { "realm_left4@hud.realm_pinned_slot": { "$skip": "%.1130s", "$slot_anchor": "top_left", "$slot_align": "left" } },
-                  { "realm_quest_left4@hud.realm_quest_slot": { "$quest_code": "§s§q§8", "$slot_anchor": "top_left", "$slot_align": "left" } },
-                  { "realm_sidebar@hud.realm_sidebar_slot": {} }
+                  {
+                    "realm_left1@hud.realm_pinned_slot": {
+                      "$skip": "%.650s",
+                      "$slot_anchor": "top_left",
+                      "$slot_align": "left"
+                    }
+                  },
+                  {
+                    "realm_quest_left1@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§5",
+                      "$slot_anchor": "top_left",
+                      "$slot_align": "left"
+                    }
+                  },
+                  {
+                    "realm_left2@hud.realm_pinned_slot": {
+                      "$skip": "%.810s",
+                      "$slot_anchor": "top_left",
+                      "$slot_align": "left"
+                    }
+                  },
+                  {
+                    "realm_quest_left2@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§6",
+                      "$slot_anchor": "top_left",
+                      "$slot_align": "left"
+                    }
+                  },
+                  {
+                    "realm_left3@hud.realm_pinned_slot": {
+                      "$skip": "%.970s",
+                      "$slot_anchor": "top_left",
+                      "$slot_align": "left"
+                    }
+                  },
+                  {
+                    "realm_quest_left3@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§7",
+                      "$slot_anchor": "top_left",
+                      "$slot_align": "left"
+                    }
+                  },
+                  {
+                    "realm_left4@hud.realm_pinned_slot": {
+                      "$skip": "%.1130s",
+                      "$slot_anchor": "top_left",
+                      "$slot_align": "left"
+                    }
+                  },
+                  {
+                    "realm_quest_left4@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§8",
+                      "$slot_anchor": "top_left",
+                      "$slot_align": "left"
+                    }
+                  },
+                  {
+                    "realm_sidebar@hud.realm_sidebar_slot": {}
+                  }
                 ]
               }
             }
@@ -620,7 +1017,10 @@
                 "type": "stack_panel",
                 "orientation": "vertical",
                 "use_child_anchors": true,
-                "size": ["100%", "100%c"],
+                "size": [
+                  "100%",
+                  "100%c"
+                ],
                 "anchor_from": "top_middle",
                 "anchor_to": "top_middle",
                 "controls": [
@@ -631,7 +1031,13 @@
                       "$slot_align": "center"
                     }
                   },
-                  { "realm_quest_middle@hud.realm_quest_slot": { "$quest_code": "§s§q§9", "$slot_anchor": "top_middle", "$slot_align": "center" } }
+                  {
+                    "realm_quest_middle@hud.realm_quest_slot": {
+                      "$quest_code": "§s§q§9",
+                      "$slot_anchor": "top_middle",
+                      "$slot_align": "center"
+                    }
+                  }
                 ]
               }
             }
@@ -718,7 +1124,7 @@
                   1,
                   1
                 ],
-                "locked_alpha": 1.0,
+                "locked_alpha": 1,
                 "shadow": true,
                 "localize": false,
                 "layer": 1,

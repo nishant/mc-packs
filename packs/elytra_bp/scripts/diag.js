@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "elytra_bp";
-const VERSION = "1.3.21";
+const VERSION = "1.3.22";
 const NAME = "Elytra HUD";
 /** @type {string[]} */
 const PREFIXES = ["elytra"];

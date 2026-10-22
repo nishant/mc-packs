@@ -10,6 +10,31 @@ const L = { RAINBOW: g(0x70) };
 const R = { RAINBOW: g(0x71) };
 const Q = { TOWN: g(0x80), HOME: g(0x81), RAINBOW: g(0x82) };
 
+// Bounded realm:map_state packets arrive as {player,channel:'state',v:1,chunk:{id,index,total,text}}; join them inline (test packs cannot import runtime modules).
+const mapStateParts = new Map();
+function reassembleMapState(message, now = 0) {
+  for (const [k, e] of mapStateParts) if (now - e.at > 200) mapStateParts.delete(k);
+  const d = JSON.parse(message),
+    c = d && d.chunk;
+  if (!c) return d;
+  if (d.channel !== "state" || d.v !== 1 || !Number.isInteger(c.total) || c.total < 1 || c.total > 12 || !Number.isInteger(c.index) || c.index < 0 || c.index >= c.total || typeof c.text !== "string") throw Error("bad map state packet");
+  const key = `${d.player ?? ""}:${c.id}`;
+  let e = mapStateParts.get(key);
+  if (!e) {
+    if (mapStateParts.size >= 16) mapStateParts.delete(mapStateParts.keys().next().value);
+    e = { total: c.total, parts: new Array(c.total), got: 0, at: now };
+    mapStateParts.set(key, e);
+  }
+  if (e.total !== c.total || e.parts[c.index] !== undefined) {
+    mapStateParts.delete(key);
+    throw Error("bad map state packet");
+  }
+  e.parts[c.index] = c.text;
+  if (++e.got < e.total) return undefined;
+  mapStateParts.delete(key);
+  return JSON.parse(e.parts.join(""));
+}
+
 export default async function (t) {
   const sys = t.system;
   const Y = -60;
@@ -17,9 +42,11 @@ export default async function (t) {
   const ev = [];
   sys.afterEvents.scriptEventReceive.subscribe(
     ({ id, message }) => {
-      if (!["realm:map_state", "realm:town_list", "realm:rainbow_pot"].includes(id)) return;
+      if (!["realm:map_state", "realm:town_list", "realm:rainbow_pot", "realm:cfg_ack"].includes(id)) return;
       try {
-        ev.push({ id, m: JSON.parse(message), tick: sys.currentTick });
+        const m = id === "realm:map_state" ? reassembleMapState(message, sys.currentTick) : JSON.parse(message);
+        if (m === undefined) return;
+        ev.push({ id, m, tick: sys.currentTick });
       } catch {}
     },
     { namespaces: ["realm"] },
@@ -56,7 +83,14 @@ export default async function (t) {
   const p = await t.player("Mapper", { op: true, x: 0, z: 0, gameMode: "creative" });
   stand(p, 0, 0);
   await t.wait(40);
-  cfg("radar", true, p);
+  // The radar defaults OFF: opt in AFTER spawn and wait for each ACK. Terrain off and north up keep the legacy F3 marker glyphs
+  // (town/bed/rainbow) these checks match; over terrain colors they are F6+ overlay glyphs.
+  for (const [key, value] of [["radar", true], ["terrain", false], ["radarNorthUp", true]]) {
+    const id = `places_${key}`;
+    send("realm:cfg_set", { id, pack: "map_bp", key, value, player: p.id });
+    const ack = await t.waitUntil(() => ev.find((e) => e.id === "realm:cfg_ack" && e.m.id === id), { timeout: 100, message: `cfg_ack for ${key}` });
+    t.check(ack.m.ok === true, `${key} = ${value} acknowledged`);
+  }
 
   // --- Towns: Riverside 150 north, Hilltop 300 north-east. Facing north: Riverside in the middle.
   await t.loadArea(0, -150);

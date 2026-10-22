@@ -52,8 +52,33 @@ function fromUtf8(b) {
 /** Slot k of the subtitle, as hud_rp cuts it (9 = top, 10 = radar). */
 function slot(sub, k) {
   const b = utf8(sub ?? "");
-  const len = k === 10 ? 1352 : 160;
+  const len = k === 10 ? 3304 : 160; // radar segment: separator + 3303 bytes (33x33 grid 3299 + self glyph 3 + flag 1)
   return fromUtf8(b.slice(9 + 160 * k + 1, 9 + 160 * k + len)).replace(/~/g, "").replace(/(§r)+$/, "");
+}
+
+// Bounded realm:map_state packets arrive as {player,channel:'state',v:1,chunk:{id,index,total,text}}; join them inline (test packs cannot import runtime modules).
+const mapStateParts = new Map();
+function reassembleMapState(message, now = 0) {
+  for (const [k, e] of mapStateParts) if (now - e.at > 200) mapStateParts.delete(k);
+  const d = JSON.parse(message),
+    c = d && d.chunk;
+  if (!c) return d;
+  if (d.channel !== "state" || d.v !== 1 || !Number.isInteger(c.total) || c.total < 1 || c.total > 12 || !Number.isInteger(c.index) || c.index < 0 || c.index >= c.total || typeof c.text !== "string") throw Error("bad map state packet");
+  const key = `${d.player ?? ""}:${c.id}`;
+  let e = mapStateParts.get(key);
+  if (!e) {
+    if (mapStateParts.size >= 16) mapStateParts.delete(mapStateParts.keys().next().value);
+    e = { total: c.total, parts: new Array(c.total), got: 0, at: now };
+    mapStateParts.set(key, e);
+  }
+  if (e.total !== c.total || e.parts[c.index] !== undefined) {
+    mapStateParts.delete(key);
+    throw Error("bad map state packet");
+  }
+  e.parts[c.index] = c.text;
+  if (++e.got < e.total) return undefined;
+  mapStateParts.delete(key);
+  return JSON.parse(e.parts.join(""));
 }
 
 export default async function (t) {
@@ -69,7 +94,9 @@ export default async function (t) {
     ({ id, message }) => {
       if (!["realm:map_state", "realm:npc_places", "realm:waystones_known", "realm:atlas_region", "realm:atlas_sites", "realm:atlas_site", "realm:death_point", "realm:track", "realm:wander_spawn", "realm:wander_state", "realm:place_ready"].includes(id)) return;
       try {
-        ev.push({ id, m: JSON.parse(message), tick: sys.currentTick });
+        const m = id === "realm:map_state" ? reassembleMapState(message, sys.currentTick) : JSON.parse(message);
+        if (m === undefined) return;
+        ev.push({ id, m, tick: sys.currentTick });
       } catch {}
     },
     { namespaces: ["realm"] },
@@ -77,6 +104,31 @@ export default async function (t) {
   const of = (id, f = () => true, since = 0) => ev.filter((e) => e.id === id && e.tick >= since && f(e.m)).map((e) => e.m);
   const send = (id, m) => sys.sendScriptEvent(id, JSON.stringify(m));
   const cfg = (key, value, player) => send("realm:cfg_set", { id: `t_${key}_${t.tick}`, pack: "map_bp", key, value, ...(player ? { player: player.id } : {}) });
+  /** Sets a player pref through realm:cfg_set and waits for its ACK. */
+  const cfgAck = async (player, key, value) => {
+    const id = `map_${key}_${player.id}_${t.tick}`;
+    let ack;
+    const sub = sys.afterEvents.scriptEventReceive.subscribe(
+      ({ id: eid, message }) => {
+        if (eid !== "realm:cfg_ack") return;
+        try {
+          const m = JSON.parse(message);
+          if (m.id === id) ack = m;
+        } catch {}
+      },
+      { namespaces: ["realm"] },
+    );
+    send("realm:cfg_set", { id, pack: "map_bp", key, value, player: player.id });
+    await t.waitUntil(() => ack, { timeout: 100, message: `cfg_ack for ${key}` });
+    sys.afterEvents.scriptEventReceive.unsubscribe(sub);
+    t.check(ack.ok === true, `${key} = ${value} acknowledged (${JSON.stringify(ack)})`);
+  };
+  /** Opt a player in to the (default OFF) radar, north up, with or without terrain colors. */
+  const optIn = async (player, { terrain }) => {
+    await cfgAck(player, "radar", true);
+    await cfgAck(player, "terrain", terrain);
+    await cfgAck(player, "radarNorthUp", true);
+  };
   /** The minimap's state for a player (what it last drew). */
   const state = async (p) => {
     const since = t.tick;
@@ -116,14 +168,17 @@ export default async function (t) {
 
   // --- Facing north: N in the middle. Mara north-east: in the radar's upper right, not cluttering the compass strip.
   stand(p, mara.x - 10, mara.z + 17);
-  cfg("radar", true, p);
-  let st = await until(p, (s) => s.strip?.length === 25 && rows(s.radar)[3]?.[14] === Q.FOLK, "Mara in the 21x21 radar's upper right");
+  // The radar defaults OFF (and migrates off once at spawn): opt Mapper in AFTER spawn and wait for the ACKs. Terrain off keeps the
+  // legacy F3 marker glyphs these checks match (over terrain colors a marker is an F6+ overlay glyph); north up is the new default.
+  await optIn(p, { terrain: false });
+  let st = await until(p, (s) => s.strip?.length === 25 && rows(s.radar)[8]?.[20] === Q.FOLK, "Mara in the 33x33 circular radar's upper right");
   const strip0 = [...st.strip];
   t.log("strip:", strip0.map((c) => (c.codePointAt(0) - 0xf300).toString(16)).join(" "), "| line2:", st.line2);
   t.check(strip0.length === 25, `25 cells (${strip0.length})`);
   t.check(strip0[12] === S.N, "facing north: N in the middle");
   t.check(!strip0.includes(S.FOLK), "ordinary NPCs do not clutter the compass strip");
-  t.check(rows(st.radar)[3]?.[14] === Q.FOLK, "Mara in the 21x21 radar's upper right (row 3, column 14)");
+  t.check(rows(st.radar)[8]?.[20] === Q.FOLK, "Mara in the 33x33 radar's upper right (row 8, column 20: +9.5 east / -17.5 north at 2.25 blocks a cell)");
+  t.check(rows(st.radar).length === 33 && rows(st.radar).slice(0, 32).every((r) => r.length === 33), "the radar is 33 rows of 33 cells");
   t.check(st.line2.includes("§7The ") || st.line2.length > 0, `the region on the second line (${st.line2})`);
   t.check(st.known.folk >= 1 && st.known.region, `map_bp heard the townsfolk and the region (${JSON.stringify(st.known)})`);
 
@@ -135,9 +190,9 @@ export default async function (t) {
   if (!last) t.log("titles seen:", JSON.stringify(t.messages(p, { kind: "title", since }).slice(-2)).slice(0, 600));
   t.check(!!last, "map_bp draws the Side HUD title");
   if (last) {
-    t.check(utf8(last.subtitle).length === 9 + 10 * 160 + 1352 + 512, `subtitle is 3473 bytes (${utf8(last.subtitle).length})`);
+    t.check(utf8(last.subtitle).length === 9 + 10 * 160 + 3304 + 512, `subtitle is 5425 bytes (${utf8(last.subtitle).length})`);
     t.check(slot(last.subtitle, 9).startsWith([...st.strip].slice(0, 5).join("")), "the strip is in the top slot");
-    t.check(slot(last.subtitle, 10).split("\n").length === 21, "the radar (21 rows) is in the radar slot");
+    t.check(slot(last.subtitle, 10).split("\n").length === 33, "the radar (33 rows) is in the radar slot");
   }
 
   // --- Mobs: one ahead-left in red, one behind as an arrow at the edge; then the player's switch hides them.
@@ -355,11 +410,11 @@ export default async function (t) {
   t.check(t.cmd(p, "/realm:minimap").ok, "/realm:minimap hides the minimap radar");
   st = await until(p, (s) => s.radar === "" && s.strip.length === 25, "minimap toggled off while compass stays on");
   t.check(t.cmd(p, "/realm:minimap").ok, "/realm:minimap shows the minimap radar again");
-  st = await until(p, (s) => rows(s.radar).length === 21 && s.strip.length === 25, "minimap toggled back on");
+  st = await until(p, (s) => rows(s.radar).length === 33 && s.strip.length === 25, "minimap toggled back on");
   t.check(t.cmd(p, "/realm:compass").ok, "/realm:compass hides the compass strip");
-  st = await until(p, (s) => s.strip === "" && rows(s.radar).length === 21, "compass toggled off while minimap stays on");
+  st = await until(p, (s) => s.strip === "" && rows(s.radar).length === 33, "compass toggled off while minimap stays on");
   t.check(t.cmd(p, "/realm:compass").ok, "/realm:compass shows the compass strip again");
-  st = await until(p, (s) => s.strip.length === 25 && rows(s.radar).length === 21, "compass toggled back on");
+  st = await until(p, (s) => s.strip.length === 25 && rows(s.radar).length === 33, "compass toggled back on");
 
   // --- Both off: the top and radar slots go empty.
   cfg("compass", false, p);
@@ -373,10 +428,13 @@ export default async function (t) {
   cfg("radar", true, p);
 
   // --- Cost: 10 players with the strip and the radar, 8 mobs around each of a few.
-  cfg("radarDefault", true);
+  // The realm default stays OFF (new players also migrate off once at spawn): opt each crowd player in explicitly after spawn.
+  await optIn(mate, { terrain: true });
+  await optIn(other, { terrain: true });
   const crowd = [p, mate, other];
   for (let i = 0; i < 7; i++) {
     const q = await t.player(`Walker${i}`, { x: i * 40, z: -300, settle: 2 });
+    await optIn(q, { terrain: true });
     crowd.push(q);
   }
   for (let i = 0; i < 24; i++) {

@@ -5,6 +5,31 @@
 // operator with none, not a later joiner), and a spot marked after the reset survives.
 // The offline-player half (applied once on the next join) is covered by tools/map-reset.test.mjs. About 60 s:
 //   node tools/test-bds/run.mjs --quiet --timeout 600 --only map_bp --scenario tools/test-bds/examples/map-reset.js
+// Bounded realm:map_state packets arrive as {player,channel:'state',v:1,chunk:{id,index,total,text}}; join them inline (test packs cannot import runtime modules).
+const mapStateParts = new Map();
+function reassembleMapState(message, now = 0) {
+  for (const [k, e] of mapStateParts) if (now - e.at > 200) mapStateParts.delete(k);
+  const d = JSON.parse(message),
+    c = d && d.chunk;
+  if (!c) return d;
+  if (d.channel !== "state" || d.v !== 1 || !Number.isInteger(c.total) || c.total < 1 || c.total > 12 || !Number.isInteger(c.index) || c.index < 0 || c.index >= c.total || typeof c.text !== "string") throw Error("bad map state packet");
+  const key = `${d.player ?? ""}:${c.id}`;
+  let e = mapStateParts.get(key);
+  if (!e) {
+    if (mapStateParts.size >= 16) mapStateParts.delete(mapStateParts.keys().next().value);
+    e = { total: c.total, parts: new Array(c.total), got: 0, at: now };
+    mapStateParts.set(key, e);
+  }
+  if (e.total !== c.total || e.parts[c.index] !== undefined) {
+    mapStateParts.delete(key);
+    throw Error("bad map state packet");
+  }
+  e.parts[c.index] = c.text;
+  if (++e.got < e.total) return undefined;
+  mapStateParts.delete(key);
+  return JSON.parse(e.parts.join(""));
+}
+
 export default async function (t) {
   const sys = t.system;
   /** @type {{ m: any, tick: number }[]} */
@@ -13,7 +38,9 @@ export default async function (t) {
     ({ id, message }) => {
       if (id !== "realm:map_state") return;
       try {
-        ev.push({ m: JSON.parse(message), tick: sys.currentTick });
+        const m = reassembleMapState(message, sys.currentTick);
+        if (m === undefined) return;
+        ev.push({ m, tick: sys.currentTick });
       } catch {}
     },
     { namespaces: ["realm"] },

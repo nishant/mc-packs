@@ -91,7 +91,7 @@ export const G = {
   Q_SITE: "",
   /** U+F337 radar: another player (white) */
   Q_OTHER: "",
-  /** U+F338 radar: empty */
+  /** U+F338 radar: unknown (cosmetic grass; unsampled) */
   Q_EMPTY: "",
   /** U+F339 radar: compass N, on the edge, turning as you turn */
   Q_NORTH: "",
@@ -281,4 +281,72 @@ export const G = {
   Q_SANDSTONE_HI: "",
   /** U+F3D3 radar terrain: planted green and gold crop rows */
   Q_CROP: "",
+  /** U+F3D4 radar: you (no background), facing N */
+  Q_SELF_0: "",
+  /** U+F3D5 radar: you (no background), facing NE */
+  Q_SELF_1: "",
+  /** U+F3D6 radar: you (no background), facing E */
+  Q_SELF_2: "",
+  /** U+F3D7 radar: you (no background), facing SE */
+  Q_SELF_3: "",
+  /** U+F3D8 radar: you (no background), facing S */
+  Q_SELF_4: "",
+  /** U+F3D9 radar: you (no background), facing SW */
+  Q_SELF_5: "",
+  /** U+F3DA radar: you (no background), facing W */
+  Q_SELF_6: "",
+  /** U+F3DB radar: you (no background), facing NW */
+  Q_SELF_7: "",
+  /** U+F3E0 radar: Nether unknown, dark ember with small orange hatch (not sampled lava) */
+  Q_NETHER_UNKNOWN: "",
+  /** U+F3E1 radar: End unknown, muted purple hatch, clearly unread */
+  Q_END_UNKNOWN: "",
+  /** U+F3E2 radar: End known empty void, solid near-black purple */
+  Q_VOID: "",
+  /** U+F3E3 radar: Nether known empty air, charcoal red */
+  Q_NETHER_EMPTY: "",
+  /** U+F3FF radar: policy-excluded transparent tile, full encoded extent */
+  Q_OUTSIDE: "",
 };
+
+/** The player's own arrow with no background, facing N, NE, E, SE, S, SW, W, NW (cells D4-DB): drawn over the terrain. */
+export const SELF_ARROWS = [G.Q_SELF_0, G.Q_SELF_1, G.Q_SELF_2, G.Q_SELF_3, G.Q_SELF_4, G.Q_SELF_5, G.Q_SELF_6, G.Q_SELF_7];
+
+/** Original 512-color glyph atlas on pages F4/F5; used only in map HUD text. @param {number} index */
+export function paletteGlyph(index) {
+  return Number.isInteger(index) && index >= 0 && index < 512 ? String.fromCharCode(0xf400 + index) : G.Q_EMPTY;
+}
+
+/** Slot (0-47) of each legacy F3 radar marker that has background-matched variants, by cell; -1 for every other glyph. */
+const OVERLAY_SLOT = [
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 32, 33, 34, 35, 36, 37, 38, 39, -1, 44, 45, 46, 47, -1, -1, -1,
+  0, 1, 2, 3, 4, 5, 6, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  40, 41, 42, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+  24, 25, 26, 27, 28, 29, 30, 31, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, 43, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+];
+/** Nearest of the 16 backgrounds for each of the 512 native colors: letter a-p, from our own small palette (an approximation). */
+const NEAREST_BG = "miiieeeebiiieeeebbiieeecbbiieeccbbbihcccbbbbhdddbbbbhdddbbaaadddmmiieeeemiiieeecbbiiieccbbiihcccbbbhhdddbbbhhdddbbaaadddaaaaaooommmiieecmmiiieccbbiihdddbbihhdddbbphhdddbbaahdddaaaaaoooaaaaaooommmmieccmmmihhddmmihhhddbbphhhddbbphhhddaaaaaoooaaaaaoooaaaaaooommmmhhddmmmjhhddmjjjhhddjjjjhhddaaaahoooaaaaaoooaaaannooaaaannggmmmmlhddkkkllhddkklllhddkllllfoollllffooaaaaffooaaaannngaaaannggkkkkklddkkkkllfdkkkllffokkllfffokllffffoaaafffngaaafnnngaaannnggkkkkkkldkkkkklfokkkklffokkklfffokklffffnklffffngaaffnnngaafnnngg";
+const OVERLAY_GLYPHS = Array.from({ length: 768 }, (_, i) => String.fromCharCode(0xf600 + i));
+
+/**
+ * A radar marker drawn on a background that approximates the terrain under it (pages F6-F8: 16 backgrounds x 48 markers).
+ * A known F3 marker over actual F4/F5 or estimated F1/F2 terrain uses the same background; other inputs stay legacy.
+ * @param {string} legacyGlyph @param {string} backgroundGlyph
+ */
+export function overlayGlyph(legacyGlyph, backgroundGlyph) {
+  if (typeof legacyGlyph !== "string" || typeof backgroundGlyph !== "string" || legacyGlyph.length !== 1 || backgroundGlyph.length !== 1) return legacyGlyph;
+  const code = backgroundGlyph.charCodeAt(0);
+  const bg = code >= 0xf100 && code < 0xf300 ? code - 0xf100 : code - 0xf400;
+  const slot = OVERLAY_SLOT[legacyGlyph.charCodeAt(0) - 0xf300];
+  if (!(bg >= 0 && bg < 512) || !(slot >= 0)) return legacyGlyph;
+  return OVERLAY_GLYPHS[(NEAREST_BG.charCodeAt(bg) - 97) * 48 + slot];
+}
+
+/** Visually marked estimated color, never proof of a genuine sample; same 512-color index as paletteGlyph. @param {number} index */
+export function estimatedPaletteGlyph(index) {
+  return Number.isInteger(index) && index >= 0 && index < 512 ? String.fromCharCode(0xf100 + index) : G.Q_EMPTY;
+}
