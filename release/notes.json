@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Expansive Inventory: after a server crash, your pages still open. A page you switched away from is kept 2 hours before it is cleaned up, and page switches no longer fail after a crash.",
     "Minimap: uses about half the server time it did; with many players moving the radar's land and mob dots catch up a few seconds later. Operators can pick High in /realm:config -> Minimap for the earlier behavior.",
     "Silly Enchants costs less on a busy server: its every-tick checks run only while someone wears Hyper Jump boots.",
     "Expedition dungeons build in shorter steps, so a busy server no longer hitches while one is built.",
@@ -44,6 +45,10 @@
     "elite_bp": {
       "version": "1.3.17",
       "notes": "A player who leaves with the Champions menu open no longer leaves an error in the server log."
+    },
+    "stash_bp": {
+      "version": "1.8.11",
+      "notes": "Crash-safe pages: a replaced page snapshot is retired and deleted 120 minutes later (stash:retired, at most 32 a minute, 1500 waiting), so an index a crash rolled back still finds its pages; a snapshot sequence a crash rolled back steps past the snapshots still on disk instead of failing the switch."
     }
   }
 }

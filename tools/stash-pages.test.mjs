@@ -1288,10 +1288,15 @@ function census(/** @type {any} */ p) {
 }
 const liveView = (/** @type {any} */ p) => p.container.slots.map((i) => (i ? `${i.typeId}:${i.amount}:${i.nameTag ?? ""}:${JSON.stringify(i.contents ?? null)}` : ""));
 const structureIds = () => new Set(mc.structures.keys());
-/** Structures this player's index doesn't reference that were not there before: leaks. */
+/** Snapshots waiting in stash:retired (deleted 120 minutes after they were replaced). */
+const retiredIds = () => new Set(JSON.parse(mc.worldProps.get("stash:retired") ?? "[]").map((/** @type {[number, number]} */ [n]) => `stash:page_${n}`));
+/** Gone, or retired and so deleted later. @param {string} id */
+const discarded = (id) => !mc.structures.has(id) || retiredIds().has(id);
+/** Structures this player's index doesn't reference, not retired, that were not there before: leaks. */
 const leaked = (/** @type {any} */ p, /** @type {Set<string>} */ known) => {
   const live = new Set(Object.values(nativeIndex(p).pages).map((r) => r.id));
-  return [...mc.structures.keys()].filter((id) => !known.has(id) && !live.has(id));
+  const retired = retiredIds();
+  return [...mc.structures.keys()].filter((id) => !known.has(id) && !live.has(id) && !retired.has(id));
 };
 /** Fills a page's storage slots, except the given free ones, with distinct stone stacks. */
 const full = (/** @type {number[]} */ free = []) => Object.fromEntries(STORAGE_SLOTS.filter((s) => !free.includes(s)).map((s) => [s, stack("minecraft:stone", 64)]));
@@ -1724,7 +1729,7 @@ test("O18: an operator confirms, the before-image lands in chests once, opaque s
   for (const k of ["diamond", "iron_ingot", "white_shulker_box"]) assert.ok(kinds.includes(k), k);
   assert.deepEqual(stacks.find((i) => i.contents)?.contents, ["a"]);
   assert.equal(nativeIndex(p).pending, undefined, "journal cleared");
-  assert.ok(!mc.structures.has(pending.before.id) && !mc.structures.has(pending.after.id));
+  assert.ok(discarded(pending.before.id) && discarded(pending.after.id));
   assert.equal(storage.pendingSummary(p), undefined);
   mc.formResponses.set(op.id, [{ selection: 0 }]);
   assert.match(await pages.recoverInventory(op, p), /nothing waiting/);
@@ -1788,7 +1793,7 @@ test("F4 recover: a player who still carries everything gets no chest, only a cl
   assert.match(message, /nothing was exported/, message);
   assert.equal(chestsOf(dim).length, 0);
   assert.equal(nativeIndex(p).pending, undefined);
-  assert.ok(!mc.structures.has(pending.before.id) && !mc.structures.has(pending.after.id), "both images discarded");
+  assert.ok(discarded(pending.before.id) && discarded(pending.after.id), "both images discarded");
 });
 
 test("F4 recover: a stack held on the cursor counts as carried", async () => {
@@ -3374,4 +3379,39 @@ test("F49: storedCount reads an old JSON page property once, never one a snapsho
   } finally {
     p.getDynamicProperty = real;
   }
+});
+
+test("a replaced page snapshot is retired, still loadable, and deleted 120 minutes later", () => {
+  const p = joined();
+  mc.worldProps.delete("stash:retired"); // earlier tests' retirements
+  arrange(p, { 1: { 10: stack("minecraft:apple", 2) }, 2: { 9: stack("minecraft:diamond", 4) } });
+  const oldRef = nativeIndex(p).pages[2];
+  const realNow = Date.now;
+  try {
+    assert.equal(switchPage(p, 2), true);
+    assert.equal(switchPage(p, 1), true);
+    assert.notEqual(nativeIndex(p).pages[2].id, oldRef.id, "page 2 has a new snapshot");
+    assert.ok(mc.structures.has(oldRef.id) && retiredIds().has(oldRef.id), "the replaced snapshot is kept, retired");
+    // An index a crash rolled back still names it: it loads.
+    assert.deepEqual(storage.loadSnapshot(p, oldRef).map((e) => e.item.typeId), ["minecraft:diamond"]);
+    advance(4);
+    assert.ok(mc.structures.has(oldRef.id), "not deleted early");
+    const start = realNow();
+    Date.now = () => start + 121 * 60000;
+    advance(4);
+    assert.ok(!mc.structures.has(oldRef.id) && !retiredIds().has(oldRef.id), "deleted after 120 minutes");
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("a snapshot sequence a crash rolled back steps past the snapshots still on disk", () => {
+  const p = joined();
+  arrange(p, { 1: { 10: stack("minecraft:apple", 2) }, 2: { 9: stack("minecraft:diamond", 4) } });
+  const next = mc.worldProps.get("stash:snapshot_next");
+  mc.worldProps.set("stash:snapshot_next", next - 3);
+  assert.equal(switchPage(p, 2), true, "the switch works");
+  assert.equal(switchPage(p, 1), true);
+  assert.equal(savedPage(p, 2).get(9).typeId, "minecraft:diamond");
+  assert.ok(mc.worldProps.get("stash:snapshot_next") > next, "the sequence moved past what exists");
 });

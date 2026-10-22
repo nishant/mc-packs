@@ -7,6 +7,11 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Backpack pages survive a crash
+
+- Last night the Realm froze and restarted from an older save, so about half an hour of play was rolled back. Sorry about that.
+- Expansive Inventory is now safer when that happens: the pages you switched away from are kept for 2 hours before they are cleaned up, so every page still opens after a rollback, and switching pages keeps working right away.
+
 ## Towns: your blocks stay when a build is taken away
 
 - Town Projects: when an operator takes a town's build away, only the town's own blocks go. Your blocks there stay, even when they are the same kind as the build's (your cobblestone next to a well, dirt you put on its leveled ground).
