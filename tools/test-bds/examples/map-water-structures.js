@@ -312,7 +312,11 @@ export default async function (t) {
   // whole picture is back within two seconds of the area loading.
   await t.wait(40);
   const loaded = await radar();
-  t.check(!loaded.includes(EMPTY), "pending native misses recover promptly after the area loads");
+  // Whole-string absence of Q_EMPTY is invalid: boundary anchors outside the exact read circle remain unknown by policy.
+  // Keep the same40-tick recovery window and require genuine valid samples at four previously unread, eligible anchors.
+  const recovered=await raw(p,[[2001,2001],[1993,2001],[2001,1993],[2009,2009]],"loaded-area native retries",{tries:1});
+  t.check(recovered.samples.every(d=>d.valid===true&&d.source==="native"),"pending eligible native misses recover promptly after the area loads; no estimate is accepted as acquired terrain");
+  await radar();
   t.log(`operation peak total=${state.cost.scanPeak}`);
 }
 

@@ -341,8 +341,8 @@ export default async function (t) {
   stand(p, 0, -300);
   const mate = await t.player("Mate", { x: 30, z: -300 });
   stand(mate, 30, -300);
-  const other = await t.player("Other", { x: -20, z: -330 });
-  stand(other, -20, -330);
+  const other = await t.player("Other", { x: -45, z: -345 }); // beyond the new36-block radius, not just the old24-block view
+  stand(other, -45, -345);
   t.cmd(p, "/realm:party_invite Mate");
   await t.wait(5);
   t.cmd(mate, "/realm:party_accept");
@@ -424,17 +424,14 @@ export default async function (t) {
   const lastOff = t.messages(p, { kind: "title" }).filter((m) => m.pack === "map_bp").at(-1);
   t.log("titles after off:", after.length, JSON.stringify(lastOff?.text));
   t.check(!lastOff || lastOff.text !== MARK || (!slot(lastOff.subtitle, 9) && !slot(lastOff.subtitle, 10)), "the slots are cleared");
-  cfg("compass", true, p);
-  cfg("radar", true, p);
+  await cfgAck(p,"compass",true);
+  await cfgAck(p,"radar",false);
 
-  // --- Cost: 10 players with the strip and the radar, 8 mobs around each of a few.
-  // The realm default stays OFF (new players also migrate off once at spawn): opt each crowd player in explicitly after spawn.
-  await optIn(mate, { terrain: true });
-  await optIn(other, { terrain: true });
+  // --- Default-OFF cost:10 compass viewers,8 mobs around each of a few; no optional radar opt-in.
+  // Earlier explicit radar-functionality checks are over; default cost actors do not opt in.
   const crowd = [p, mate, other];
   for (let i = 0; i < 7; i++) {
     const q = await t.player(`Walker${i}`, { x: i * 40, z: -300, settle: 2 });
-    await optIn(q, { terrain: true });
     crowd.push(q);
   }
   for (let i = 0; i < 24; i++) {
@@ -448,6 +445,7 @@ export default async function (t) {
   send("realm:map_debug", { player: p.id, action: "cost" });
   await t.waitUntil(() => of("realm:map_state", () => true, since).length > 0, { timeout: 20 });
   const c = of("realm:map_state", () => true, since).at(-1).cost;
+  t.check(c.scanReads===0,"default-OFF compass crowd performs zero terrain sampling");
   const perPlayer = c.ms / Math.max(1, c.players);
   t.log(`draw: ${c.drawMs} ms of it`);
   t.log(`cost: ${c.ms} ms over ${c.passes} passes, ${c.players} player passes: ${perPlayer.toFixed(3)} ms per player pass, ${(c.ms / Math.max(1, c.passes)).toFixed(2)} ms per pass`);
