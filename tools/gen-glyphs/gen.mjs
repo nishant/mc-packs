@@ -223,6 +223,39 @@ MARKS.forEach(([name, what, draw], i) => {
   });
 });
 glyph("Q_EMPTY", 0x38, "radar: empty", (img, ox, oy) => square(img, ox, oy));
+// A champion (Champions, or a Choir siege's Singer): the mob's red dot in a bright orange ring, so it reads bigger.
+// On the strip, at its edges and on the radar; it shows at the radar's edge too when it's beyond it.
+const CHAMP_RING = /** @type {RGBA} */ ([255, 150, 20, 255]);
+/** @param {Image} img @param {number} ox @param {number} oy */
+const champDot = (img, ox, oy) => {
+  disc(img, ox, oy, 8, 7.5, 6.6, RIM);
+  disc(img, ox, oy, 8, 7.5, 5.6, CHAMP_RING);
+  disc(img, ox, oy, 8, 7.5, 3.7, COLOR.mob);
+};
+/** An edge arrow in the champion's colors: dark rim, orange ring, red middle. @param {Image} img @param {number} ox @param {number} oy @param {number[][]} pts */
+const champArrow = (img, ox, oy, pts) => {
+  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  const scale = (/** @type {number} */ k) => pts.map(([x, y]) => [cx + (x - cx) * k, cy + (y - cy) * k]);
+  rimmedPoly(img, ox, oy, pts, CHAMP_RING);
+  poly(img, ox, oy, scale(0.55), COLOR.mob);
+};
+glyph("S_CHAMP", 0x74, "strip: a champion or a Choir Singer (red, orange ring)", (img, ox, oy) => {
+  baseline(img, ox, oy);
+  champDot(img, ox, oy);
+});
+glyph("L_CHAMP", 0x72, "strip edge, left: a champion or a Choir Singer", (img, ox, oy) => {
+  baseline(img, ox, oy);
+  champArrow(img, ox, oy, LEFT);
+});
+glyph("R_CHAMP", 0x73, "strip edge, right: a champion or a Choir Singer", (img, ox, oy) => {
+  baseline(img, ox, oy);
+  champArrow(img, ox, oy, RIGHT);
+});
+glyph("Q_CHAMP", 0x3d, "radar: a champion or a Choir Singer (red, orange ring)", (img, ox, oy) => {
+  square(img, ox, oy);
+  champDot(img, ox, oy);
+});
+
 // Compass badges on the radar's edge: a dark rimmed disc with a bold letter, N in red, the rest warm white.
 const COMPASS_WHITE = /** @type {RGBA} */ ([245, 240, 220, 255]);
 for (const [i, l] of ["N", "E", "S", "W"].entries()) {
@@ -547,7 +580,7 @@ function render(sheet) {
   strip[12] = "S_CENTER";
   strip[3] = "S_NE";
   strip[16] = "S_E";
-  Object.assign(strip, { 0: "L_MOB", 5: "S_TOWN", 7: "S_PARTY", 10: "S_STAR", 14: "S_MOB", 19: "S_OTHER", 21: "S_SITE", 22: "S_HOME", 24: "R_RAINBOW" });
+  Object.assign(strip, { 0: "L_MOB", 2: "S_CHAMP", 5: "S_TOWN", 7: "S_PARTY", 10: "S_STAR", 14: "S_MOB", 19: "S_OTHER", 21: "S_SITE", 22: "S_HOME", 24: "R_RAINBOW" });
   const dim = /** @type {RGBA} */ ([0, 0, 0, 120]);
   rect(img, 9, 3, 9 + 25 * CELL + 5, 3 + CELL + 3, dim);
   strip.forEach((g, i) => blit(g, 12 + i * CELL, 5));
@@ -566,7 +599,7 @@ function render(sheet) {
     ["Q_GRASS", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_YOU_0", "Q_PATH", "Q_PATH", "Q_PATH", "Q_GRASS", "Q_MOB", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_FRIEND_2"],
     ["Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER"],
     ["Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS_HI", "Q_WANDER", "Q_GRASS", "Q_MOB", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
-    ["Q_FOREST", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
+    ["Q_FOREST", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_CHAMP", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
     ["Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
     ["Q_FOREST", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_STONE_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER"],
     ["Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_CHERRY", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_STONE_HI", "Q_STONE_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER"],
