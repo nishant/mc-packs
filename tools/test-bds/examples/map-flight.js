@@ -50,7 +50,8 @@ export default async function (t) {
       try {
         const m = reassembleMapState(message, sys.currentTick);
         if (m === undefined) return;
-        last[m.player] = m;
+        // A detail_raw response is not a full render/cost snapshot; keep each reply kind separate.
+        if(m.terrain||m.cost)last[m.player]=m;
       } catch {}
     },
     { namespaces: ["realm"] },

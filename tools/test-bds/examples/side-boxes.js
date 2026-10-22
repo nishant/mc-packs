@@ -128,7 +128,7 @@ export default async function (t) {
     await hit(a);
     let m = await t.waitUntil(() => firstBoxBy(a, "mobhp_bp", since), { timeout: 20, message: `mobhp draws in ${slot}` });
     let d = decode(m.subtitle);
-    t.check(d.bytes === 3473, `subtitle is 3473 bytes: nine boxes, the minimap's strip, the 21x21 radar and the quest box (${d.bytes})`);
+    t.check(d.bytes === 5425, `subtitle is5425bytes: nine unchanged boxes, the compass strip, optional33-cell radar segment and quest box (${d.bytes})`);
     t.check(/Cow\s+§f\d+\/10/.test(d.out[slot]), `mobhp in ${slot}: "${d.out[slot]}"`);
     // Warmer / Colder
     await set("maps_bp", "where", slot, a);
