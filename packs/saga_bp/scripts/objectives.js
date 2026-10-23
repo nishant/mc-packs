@@ -56,6 +56,8 @@ const LONG = 20000000;
 export const CHAMPION_TAG = "saga:champion"; // champions this pack spawned itself (no Champions pack)
 const PLACED_MEMORY = 2000;
 const FAST_TICKS = 5;
+const STRAY_NEAR = 24; // a spawned fight's mob this far from every fighter (blocks; the Minimap's red dots reach 24)...
+const STRAY_TICKS = 600; // ...for 30 seconds is replaced by a fresh one in the area
 const ESCORT_TICKS = 2; // an escorted character takes a short step this often
 const ESCORT_STEP = 0.42; // blocks per step at walking pace (about 4 a second, a player's walk)
 const ESCORT_HURRY = 0.6; // ...when the player is 5+ blocks ahead
@@ -2322,9 +2324,32 @@ function defeatSpawnTick(player, e, i, obj) {
   if (d > r + 24) return;
   const s = sceneFor(player, e, i, "defeat");
   const now = system.currentTick;
-  const mobs = actorsOf(s.pid, s.key, "add").filter((a) => a.ent.isValid);
+  let mobs = actorsOf(s.pid, s.key, "add").filter((a) => a.ent.isValid);
   // In a fight they don't time out (expireAdds).
   for (const a of mobs) a.born = now;
+  // A straggler (wandered off, stuck in a cave or on a roof) would hold its place for good and nothing new would come:
+  // one that no fighter has been within STRAY_NEAR blocks of for STRAY_TICKS while someone is in the ring goes, and a
+  // fresh one comes into the ring at once.
+  if (d <= r) {
+    /** When each add was last near a fighter. @type {Map<string, number>} */
+    const near = (s.data.near ??= new Map());
+    const fighters = membersOf(s).filter(({ p }) => p.dimension.id === loc.dim);
+    let gone = 0;
+    for (const a of mobs) {
+      const at = a.ent.location;
+      if (fighters.some(({ p }) => dist3(p.location, at) <= STRAY_NEAR)) near.set(a.ent.id, now);
+      else if (now - (near.get(a.ent.id) ?? (near.set(a.ent.id, now), now)) >= STRAY_TICKS) {
+        near.delete(a.ent.id);
+        removeActor(a.ent.id, true);
+        gone++;
+      }
+    }
+    for (const id of near.keys()) if (!mobs.some((a) => a.ent.isValid && a.ent.id === id)) near.delete(id);
+    if (gone) {
+      mobs = mobs.filter((a) => a.ent.isValid);
+      s.data.next = now;
+    }
+  }
   /** Who has been told the fight is on. @type {Set<string>} */
   const warned = (s.data.warned ??= new Set());
   const warn = (/** @type {Player} */ p) => {

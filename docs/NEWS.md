@@ -7,6 +7,10 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## No more missing last Choir fighter
+
+- At the Gray Ring (and other story fights at a place, like the Smugglers' Cove and the Sky Seal), the last mob could wander off or get stuck where nobody could reach it, and no new one came. Now a mob that nobody in the fight has been near (24 blocks) for 30 seconds is swapped for a fresh one in the area. Stay in the area and it comes to you.
+
 ## The wooden compass plaques are back
 
 - The optional Oak minimap always keeps north up, as designed. Old rotation settings no longer hide its wooden N, E, S and W plaques outside the rim.
