@@ -562,17 +562,6 @@
                       "layer": 11
                     }
                   }
-                ],
-                "bindings": [
-                  {
-                    "binding_name": "#hud_subtitle_text_string",
-                    "binding_type": "global"
-                  },
-                  {
-                    "binding_type": "view",
-                    "source_property_name": "(('%.1s' * (#hud_subtitle_text_string - ('%.4912s' * #hud_subtitle_text_string))) = '1')",
-                    "target_property_name": "#visible"
-                  }
                 ]
               }
             },
@@ -601,17 +590,6 @@
                       ],
                       "layer": 11
                     }
-                  }
-                ],
-                "bindings": [
-                  {
-                    "binding_name": "#hud_subtitle_text_string",
-                    "binding_type": "global"
-                  },
-                  {
-                    "binding_type": "view",
-                    "source_property_name": "(('%.1s' * (#hud_subtitle_text_string - ('%.4912s' * #hud_subtitle_text_string))) = '1')",
-                    "target_property_name": "#visible"
                   }
                 ]
               }
@@ -642,17 +620,6 @@
                       "layer": 11
                     }
                   }
-                ],
-                "bindings": [
-                  {
-                    "binding_name": "#hud_subtitle_text_string",
-                    "binding_type": "global"
-                  },
-                  {
-                    "binding_type": "view",
-                    "source_property_name": "(('%.1s' * (#hud_subtitle_text_string - ('%.4912s' * #hud_subtitle_text_string))) = '1')",
-                    "target_property_name": "#visible"
-                  }
                 ]
               }
             },
@@ -681,17 +648,6 @@
                       ],
                       "layer": 11
                     }
-                  }
-                ],
-                "bindings": [
-                  {
-                    "binding_name": "#hud_subtitle_text_string",
-                    "binding_type": "global"
-                  },
-                  {
-                    "binding_type": "view",
-                    "source_property_name": "(('%.1s' * (#hud_subtitle_text_string - ('%.4912s' * #hud_subtitle_text_string))) = '1')",
-                    "target_property_name": "#visible"
                   }
                 ]
               }

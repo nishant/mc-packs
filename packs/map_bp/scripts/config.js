@@ -9,7 +9,7 @@ export const CONFIG = {
   radarDefault: false,
   radarCells:33,radarRadius:36,revealRadius:36,nativeTerrain:true,fineDetail:false,
 
-  /** The radar keeps north up for players who haven't chosen. false: it turns with the player, so ahead is always up. */
+  /** Fixed compatibility constant: the Oak radar always keeps north up; older saved orientation values are ignored. */
   radarNorthUp: true,
 
   /** The radar colors empty cells by the land around you (grass, water, sand, forest, stone, snow, paths, caves). */

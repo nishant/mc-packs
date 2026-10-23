@@ -123,11 +123,10 @@ export default async function (t) {
     sys.afterEvents.scriptEventReceive.unsubscribe(sub);
     t.check(ack.ok === true, `${key} = ${value} acknowledged (${JSON.stringify(ack)})`);
   };
-  /** Opt a player in to the (default OFF) radar, north up, with or without terrain colors. */
+  /** Opt a player in to the (default OFF) radar (always north up) with or without terrain colors. */
   const optIn = async (player, { terrain }) => {
     await cfgAck(player, "radar", true);
     await cfgAck(player, "terrain", terrain);
-    await cfgAck(player, "radarNorthUp", true);
   };
   /** The minimap's state for a player (what it last drew). */
   const state = async (p) => {

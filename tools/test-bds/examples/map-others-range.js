@@ -87,7 +87,6 @@ export default async function (t) {
   await t.wait(60);
   await cfg(p, "radar", true);
   await cfg(p, "terrain", false);
-  await cfg(p, "radarNorthUp", true);
   await t.wait(20);
 
   let st = await state(p);

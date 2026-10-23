@@ -7,6 +7,12 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## The wooden compass plaques are back
+
+- The optional Oak minimap always keeps north up, as designed. Old rotation settings no longer hide its wooden N, E, S and W plaques outside the rim.
+- Your arrow still follows where you face. The compass strip, champions, Choir Singers and other readouts are unchanged.
+- The radar still starts off and stays fully optional. Your later opt-in and compass choices are kept.
+
 ## A rounder minimap, off until you want it
 
 - The minimap radar is now a 33 x 33 circle that reaches 36 blocks, and it starts turned off. Switch it on in /realm:prefs or with /realm:minimap. Anyone who had it on is switched off one time.

@@ -92,7 +92,6 @@ export default async function (t) {
   t.check((before.radar ?? "") === "", "the radar defaults OFF before any opt-in");
   await cfg(p, "radar", true);
   await cfg(p, "terrain", false);
-  await cfg(p, "radarNorthUp", true);
   const dim = p.dimension;
   await t.waitUntil(() => {
     try {

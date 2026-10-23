@@ -85,7 +85,7 @@ export default async function (t) {
   await t.wait(40);
   // The radar defaults OFF: opt in AFTER spawn and wait for each ACK. Terrain off and north up keep the legacy F3 marker glyphs
   // (town/bed/rainbow) these checks match; over terrain colors they are F6+ overlay glyphs.
-  for (const [key, value] of [["radar", true], ["terrain", false], ["radarNorthUp", true]]) {
+  for (const [key, value] of [["radar", true], ["terrain", false]]) {
     const id = `places_${key}`;
     send("realm:cfg_set", { id, pack: "map_bp", key, value, player: p.id });
     const ack = await t.waitUntil(() => ev.find((e) => e.id === "realm:cfg_ack" && e.m.id === id), { timeout: 100, message: `cfg_ack for ${key}` });
