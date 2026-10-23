@@ -4,7 +4,7 @@
     "name": "Side HUD",
     "description": "Nine boxes on the sides of the screen (four on the right, four on the left, one under the crosshair) where Mob Health, the Elytra HUD, treasure map hints, the story tracker and the Coordinates HUD show their text at the same time, plus the Minimap's compass strip, radar and icon font.",
     "uuid": "35913242-6abb-47da-a995-d6b32c043e82",
-    "version": [1, 6, 0],
+    "version": [1, 6, 1],
     "min_engine_version": [
       1,
       21,

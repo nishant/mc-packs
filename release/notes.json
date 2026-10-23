@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Minimap correction: the optional Oak radar is always north-up, with the custom exterior wooden N/E/S/W plaques restored. Old rotation settings no longer affect it; compass, champions and Choir Singers remain unchanged.",
     "Minimap is fully optional and off by default, including a one-time reset of older saved radar choices. North-up is now the default; players can still choose a turning map. Compass and Champion/Choir Singer markers remain independent and intact.",
     "Expansive Inventory: after a server crash, your pages still open. A page you switched away from is kept 2 hours before it is cleaned up, and page switches no longer fail after a crash.",
     "Quick Stack & Sort: /realm:sort and Sort my inventory now sort every inventory page together: like stacks merge across pages and the sorted stacks fill page 1 first, then page 2 and on. /realm:inv adds Sort all pages; Sort this page still sorts only the page you see.",
@@ -17,14 +18,15 @@
     "Side boxes: the HUD packs (Calendar, Elytra, HUD, Maps, Mob HP, Story) carry the new radar size; Help and the Realm Configuration menu describe the new Minimap commands."
   ],
   "resourceNotes": [
+    "Side HUD correction: the original wooden cardinal plaque images stay visible whenever the optional radar is displayed; remove the incompatible rotation-flag visibility gate without resizing the frame or terrain.",
     "Side HUD: new Minimap icons for champions and Choir Singers (a red dot in a bright orange ring, and its edge arrows).",
     "Easy Building's resources: line endings tidied (no change for players).",
     "Side HUD: the Minimap's circular 33 x 33 radar art, fixed N/E/S/W badges, and the unknown and estimate terrain glyphs."
   ],
   "packNotes": {
     "map_bp": {
-      "version": "1.5.0",
-      "notes": "The radar is a 33 x 33 circle reaching 36 blocks and starts off (existing players are switched off once); fixed N/E/S/W badges when north-up; unknown and marked-estimate terrain; /realm:minimap scan <1-384, default 64>, status and cancel; Nether floor layers with hysteresis; champions and the per-level script time budget kept. Owner-approved Oak defaults take priority over the old radar: normal uses the tested profile, with working relative low/high admission controls; no active-radar CPU certification. Debug snapshots use bounded message packets for the larger radar; no change to normal player HUD delivery."
+      "version": "1.5.1",
+      "notes": "Restore the intended always-north-up Oak radar. Ignore old player/world rotation values and remove the obsolete rotation menu options. Preserve radar-off defaults, existing once-only radar reset, later opt-ins, compass and Champion/Singer markers."
     },
     "town_bp": {
       "version": "1.7.3",
@@ -63,8 +65,8 @@
       "notes": "Reads the Minimap's new 33 x 33 radar wire (a fixed 3-byte self slot plus a 1/0 north flag) from the shared side boxes protocol copy; no change to your readout."
     },
     "hud_rp": {
-      "version": "1.6.0",
-      "notes": "Draws the 33 x 33 circular radar and its calibrated art, four fixed N/E/S/W badges shown by the north flag, the unknown and estimate glyphs and the 5425-byte side boxes subtitle."
+      "version": "1.6.1",
+      "notes": "Restore all four original exterior wooden N/E/S/W plaque images as unconditional radar children. Parent radar visibility still hides the whole widget when off. Artwork, frame fit, terrain mesh, placement and self-arrow geometry unchanged."
     },
     "elytra_bp": {
       "version": "1.3.22",
@@ -87,12 +89,12 @@
       "notes": "Reads the Minimap's new 33 x 33 radar wire (a fixed 3-byte self slot plus a 1/0 north flag) from the shared side boxes protocol copy; no change to your readout."
     },
     "help_bp": {
-      "version": "1.1.84",
-      "notes": "The in-game help describes the new Minimap radar and its commands."
+      "version": "1.1.85",
+      "notes": "Minimap help now describes the always-north-up radar and restored custom wooden direction plaques."
     },
     "news_bp": {
-      "version": "1.7.94",
-      "notes": "A rounder minimap, off until you want it."
+      "version": "1.7.95",
+      "notes": "Announce the fixed north-up minimap and restored exterior wooden cardinal plaques."
     }
   }
 }

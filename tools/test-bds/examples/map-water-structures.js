@@ -172,7 +172,7 @@ export default async function (t) {
   t.check((await radar()) === "", "the radar is OFF before the viewer opts in (radarDefault stays false)");
   /** Opt a viewer in AFTER spawn: radar on, terrain colors on, north up (the default); wait for each ACK. */
   const optIn = async (viewer) => {
-    for (const [key, value] of [["radar", true], ["terrain", true], ["radarNorthUp", true]]) {
+    for (const [key, value] of [["radar", true], ["terrain", true]]) {
       const id = `water_${viewer.id}_${key}`;
       t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id, pack: "map_bp", key, value, player: viewer.id }));
       const ack = await t.waitUntil(() => acks.find((a) => a.id === id), { timeout: 100, message: `cfg_ack for ${key}` });
@@ -266,7 +266,7 @@ export default async function (t) {
   p.teleport({ x: 0.1, y: -44, z: 0.1 }, { rotation: { x: 0, y: 270 } });
   await t.wait(20);
   const east = await radar();
-  t.check(state.pose?.north === true, "the radar keeps north up by default (radarNorthUp)");
+  t.check(state.pose?.north === true, "the live radar is always north up (no orientation setting)");
   t.check(state.strip[12] === g(0x14), "compass destination bearing is straight ahead when facing east");
   const eastRows = lines(east).map((row) => [...row]);
   let star;

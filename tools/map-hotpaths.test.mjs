@@ -300,7 +300,7 @@ test("the real pass draws again only when it found something new: a still player
   const lastSent = new Map([["p", { ctext: "c", cat: 0, rtext: "r", rat: 0, compass: true, radar: true }]]);
   const player = { id: "p", location: { x: 0, y: 64, z: 0 }, dimension: { id: "minecraft:overworld" } };
   const sandbox = {
-    prefsOf: () => ({ compass: true, radar: true, radius: 24, north: false, terrain: true }), get: () => true, lastSent, views, Date,
+    prefsOf: () => ({ compass: true, radar: true, radius: 24, north: true, terrain: true }), get: () => true, lastSent, views, Date,
     gather: () => ({ markers: found, liveFolk: new Map() }), destination: () => undefined, arrival: () => undefined, arrived: new Map(),
     regions: new Map(), line2: (r, d) => `${r}|${d}`, OVERWORLD: "minecraft:overworld", DIM_NAMES: {}, G: {}, cutWords: (t) => t, costMs: 0, costPlayers: 0,
     side: { clear() {}, redraw() {} }, Math,

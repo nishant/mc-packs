@@ -586,26 +586,36 @@ test("dense producer roundtrips all UI cuts at full capacity without self/quest/
     assert.equal(side.compose({}).slice(0,9),"N00000000");
   }
 });
-test("turned radar keeps a fixed 3-byte self slot and a 0 flag: static N/E/S/W badges show only when the flag at byte 4912 is 1", () => {
+test("live radar is always north-up: fixed 3-byte self slot and flag 1, four unconditional outside-rim plaques", () => {
   const side = loadSide();
   const grid = Array.from({length:33},()=>G.Q_EMPTY.repeat(33)).join("\n");
   const widget = ui.realm_radar_panel.controls[0].radar_widget;
   const children = Object.fromEntries(widget.controls.map(c=>Object.entries(c)[0]));
-  for (const [north, self, flag] of [[true,SELF_ARROWS[3],"1"],[false,G.Q_OUTSIDE,"0"]]) {
-    const wire = grid + self + flag;
-    assert.equal(Buffer.byteLength(wire),3303,"wire length never varies with the north preference");
-    const sub = side.compose({ radar: wire }), bytes = Buffer.from(sub), env = {"#hud_title_text_string":side.MARK,"#hud_subtitle_text_string":sub};
-    assert.equal(bytes.subarray(4909,4912).toString(),self); assert.equal(bytes[4912],flag.charCodeAt(0));
-    assert.equal(evaluate(children.radar_self.bindings.at(-1).source_property_name,{},env,"string"),self);
-    for (const name of ["radar_n","radar_e","radar_s","radar_w"]) {
-      const view = children[name].bindings.find(b=>b.target_property_name==="#visible");
-      assert.ok(view.source_property_name.includes("%.4912s"),name+" reads the flag byte only");
-      assert.equal(evaluate(view.source_property_name,{},env,"boolean"),north,name+" visible only with the north flag");
-    }
-    assert.equal(side.compose({ radar: wire }).slice(0,1),"R","outer panel visibility uses the R prefix, not the flag");
+  const self = SELF_ARROWS[3], wire = grid + self + "1";
+  assert.equal(Buffer.byteLength(wire),3303,"stable wire length");
+  const sub = side.compose({ radar: wire }), bytes = Buffer.from(sub), env = {"#hud_title_text_string":side.MARK,"#hud_subtitle_text_string":sub};
+  assert.equal(bytes.subarray(4909,4912).toString(),self); assert.equal(bytes[4912],49,"flag byte offset 4912 stays an ASCII 1");
+  assert.equal(evaluate(children.radar_self.bindings.at(-1).source_property_name,{},env,"string"),self);
+  assert.equal(side.compose({ radar: wire }).slice(0,1),"R","outer panel visibility uses the R prefix");
+  const plaques = {n:["top_middle",[0,-8]],e:["right_middle",[8,0]],s:["bottom_middle",[0,8]],w:["left_middle",[-8,0]]};
+  for (const [d,[anchor,offset]] of Object.entries(plaques)) {
+    const own = children["radar_"+d], badge = own.controls[0]["radar_"+d+"_badge"];
+    assert.deepEqual(own.size,[10,10]); assert.equal(own.anchor_from,anchor); assert.equal(own.anchor_to,anchor); assert.deepEqual(own.offset,offset);
+    assert.equal(own.layer,10); assert.equal(badge.layer,11); assert.equal(badge.texture,"textures/ui/map_cardinal_"+d); assert.deepEqual(badge.size,["100%","100%"]);
+    assert.ok(!(own.bindings??[]).some(b=>b.target_property_name==="#visible"),"radar_"+d+" has no #visible binding");
+    assert.ok(!(badge.bindings??[]).some(b=>b.target_property_name==="#visible"),"radar_"+d+" badge has no #visible binding");
+    assert.equal(own.visible,undefined); assert.equal(badge.visible,undefined);
+    const png = image(`textures/ui/map_cardinal_${d}.png`); assert.ok(png.width>0&&png.height>0,"existing "+d+" art is still present");
   }
+  const rule = ui.realm_radar_panel.bindings.find(b=>b.target_property_name==="#visible").source_property_name;
+  assert.ok(rule.includes("'R'"),"parent panel visibility is the R prefix");
+  assert.equal(evaluate(rule,{},env,"boolean"),true);
+  const off = side.compose({}); assert.equal(off.slice(0,1) === "R",false,"radar off: no R prefix");
+  assert.equal(evaluate(rule,{},{"#hud_title_text_string":side.MARK,"#hud_subtitle_text_string":off},"boolean"),false,"plaques hidden with the parent when radar is off");
   const mainSrc = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
-  assert.ok(mainSrc.includes("${v.north ? SELF_ARROWS[Math.round(heading / 45) % 8] : G.Q_OUTSIDE}${v.north ? \"1\" : \"0\"}"), "producer always sends 3 self bytes plus a 1/0 north flag");
+  const wireLine = mainSrc.split(/\r?\n/).find((l) => l.includes("const radarWire"));
+  assert.ok(wireLine?.includes("SELF_ARROWS[Math.round(heading / 45) % 8]") && /1`/.test(wireLine), "producer always sends the heading self arrow plus ASCII 1");
+  assert.ok(!wireLine.includes("Q_OUTSIDE") && !wireLine.includes("v.north") && !wireLine.includes('"0"'), "no turned-radar flag 0 wire remains");
 });
 test("the approved unknown glyph keeps its distinct F338 id with flat opaque cosmetic grass paint", () => {
   assert.equal(G.Q_EMPTY.codePointAt(0),0xf338); assert.notEqual(G.Q_EMPTY,G.Q_GRASS);

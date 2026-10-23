@@ -19,19 +19,22 @@ test('real options schema protocol lists the latest player bindings, exact world
   const h=harness();h.request({id:'schema',player:h.player.id});
   const packets=h.sent.filter(p=>p[0]==='realm:cfg_schema').map(p=>p[1]);assert.ok(packets.length);
   const options=packets.flatMap(p=>p.options);
-  assert.deepEqual(options.filter(o=>o.scope==='player').map(o=>o.key),['compass','radar','radarNorthUp','terrain','showMobs','showTown','showHome','mobRadius']);
+  assert.deepEqual(options.filter(o=>o.scope==='player').map(o=>o.key),['compass','radar','terrain','showMobs','showTown','showHome','mobRadius']);
   for(const key of ['mobRadius','mobRadiusMax']){const o=options.find(o=>o.scope==='world'&&o.key===key);assert.equal(o.max,48);assert.equal(o.min,8);}
   const playerMob=options.find(o=>o.scope==='player'&&o.key==='mobRadius');assert.equal(playerMob.max,48);assert.equal(playerMob.min,8);assert.ok(!/player/i.test(options.find(o=>o.scope==='world'&&o.key==='mobRadius').label));
-  for(const key of ['showMobs','showTown','showHome','radarTerrain','radarDefault','radarNorthUp'])assert.ok(options.some(o=>o.scope==='world'&&o.key===key),key);
-  for(const internal of ['nativeTerrain','radarRadius','revealRadius','radarCells','fineDetail',RADAR_OFF_RESET_PROP])assert.ok(!options.some(o=>o.key===internal),internal+' must not be a menu option');
+  for(const key of ['showMobs','showTown','showHome','radarTerrain','radarDefault'])assert.ok(options.some(o=>o.scope==='world'&&o.key===key),key);
+  assert.ok(!options.some(o=>/north|rotat|turn/i.test(o.key+' '+(o.label||''))),'no orientation option in player or world schema');
+  for(const internal of ['radarNorthUp','nativeTerrain','radarRadius','revealRadius','radarCells','fineDetail',RADAR_OFF_RESET_PROP])assert.ok(!options.some(o=>o.key===internal),internal+' must not be a menu option');
 });
 test('actual command get/set remains independent; removed internal fields cannot be written',()=>{
   const h=harness(),context={getFor:h.api.getFor,setFor:h.api.setFor};const toggle=vm.runInNewContext(fn('toggleMinimap')+';'+fn('toggleCompass')+';({toggleMinimap,toggleCompass})',context);
   toggle.toggleMinimap(h.player);assert.equal(h.api.getFor(h.player,'radar'),true);assert.equal(h.api.getFor(h.player,'compass'),true);
   toggle.toggleMinimap(h.player);toggle.toggleCompass(h.player);assert.equal(h.api.getFor(h.player,'radar'),false);assert.equal(h.api.getFor(h.player,'compass'),false);
-  const writes={showMobs:false,showTown:false,showHome:false,terrain:false,mobRadius:40,radarNorthUp:true};
+  const writes={showMobs:false,showTown:false,showHome:false,terrain:false,mobRadius:40};
   for(const [key,value] of Object.entries(writes)){assert.equal(h.api.setFor(h.player,key,value),undefined,key);assert.equal(h.api.getFor(h.player,key),value,key);}
-  for(const key of ['nativeTerrain','radarRadius','revealRadius','radarCells','fineDetail'])assert.equal(h.api.setFor(h.player,key,false),"isn't a preference");
+  for(const key of ['radarNorthUp','nativeTerrain','radarRadius','revealRadius','radarCells','fineDetail'])assert.equal(h.api.setFor(h.player,key,false),"isn't a preference");
+  assert.notEqual(h.api.set('radarNorthUp',false),undefined,"radarNorthUp isn't a world setting");
+  assert.equal(h.api.getFor(h.player,'compass'),false);
 });
 test('one-time radar OFF migration: existing radar resets once, later opt-ins persist, compass untouched',()=>{
   const h=harness();
@@ -46,7 +49,7 @@ test('one-time radar OFF migration: existing radar resets once, later opt-ins pe
 test('legacy non-radar player choices still apply; world mob bounds are 8..48 and reject above 48',()=>{
   const h=harness(),prefs=vm.runInNewContext('('+fn('prefsOf')+')',{get:h.api.get,getFor:h.api.getFor,CONFIG:h.context.CONFIG,prefCache:new Map()});const p=prefs(h.player);
   assert.equal(p.compass,true);assert.equal(p.radar,false);
-  assert.equal(p.north,false);assert.equal(p.terrain,false);assert.equal(p.mobs,false);assert.equal(p.town,false);assert.equal(p.home,false);
+  assert.equal(p.north,true,'saved player+world radarNorthUp false cannot rotate the live radar');assert.equal(p.terrain,false);assert.equal(p.mobs,false);assert.equal(p.town,false);assert.equal(p.home,false);
   assert.equal(p.radius,48);assert.equal(p.radarRadius,36);assert.equal(p.revealRadius,36);
   for(const key of ['mobRadius','mobRadiusMax']){assert.equal(h.api.set(key,48),undefined);assert.notEqual(h.api.set(key,49),undefined);assert.equal(h.api.get(key),48);assert.equal(h.api.set(key,32),undefined);assert.equal(h.api.get(key),32);}
   assert.equal(h.api.set('showMobs',false),undefined);assert.equal(h.api.getFor(h.player,'showMobs'),false);assert.equal(h.api.get('nativeTerrain'),true);

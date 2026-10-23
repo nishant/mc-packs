@@ -484,7 +484,7 @@ function prefsOf(player) {
   const p = {
     compass: getFor(player, "compass") === true,
     radar: getFor(player, "radar") === true,
-    north: getFor(player, "radarNorthUp") === true,
+    north: true, // Oak radar is always north-up; legacy orientation preferences are intentionally ignored.
     terrain: getFor(player, "terrain") === true,
     mobs: getFor(player, "showMobs") === true,
     radius: Math.min(cap, Math.max(8, Number(getFor(player, "mobRadius")) || 24)),
@@ -1811,7 +1811,7 @@ function render(player, v, now, refresh, heading = headingOf(player), at = playe
   if(residentTrace.active(player.id))residentTrace.note(player.id,now,"terrain_admission",reuse!==undefined?"body_reuse":!v.radar?"radar_off":!rebuildBudget.ok?"rebuild_budget":!allowTerrain?"four_tick_cadence":"admitted",{x:at.x,z:at.z,budget:rebuildBudget.left,previousBuilt:terrainBaseMemo.get(player.id)?.coverage?.builtTick??null});
   const radar = reuse ?? (v.radar ? radarOf(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id, allowTerrain, now) : "");
   if (reuse === undefined) v.rsig = sig ?? (v.radar && !radarStale ? radarSig(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id, now) : undefined);
-  const radarWire = v.radar ? `${radar}${v.north ? SELF_ARROWS[Math.round(heading / 45) % 8] : G.Q_OUTSIDE}${v.north ? "1" : "0"}` : "";
+  const radarWire = v.radar ? `${radar}${SELF_ARROWS[Math.round(heading / 45) % 8]}1` : "";
   const tookRadar = Date.now() - tr;
   if (radarRebuilds > before) {
     if(residentTrace.active(player.id))residentTrace.note(player.id,now,"terrain","built",{view:terrainBaseMemo.get(player.id)?.coverage?.frameKey??"",built:now,x:at.x,z:at.z});

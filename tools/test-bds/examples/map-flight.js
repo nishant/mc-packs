@@ -67,7 +67,7 @@ export default async function(t) {
     t.check(!before.radar,p.name+" starts with the optional radar OFF");
   }
   // This is an explicit two-viewer terrain-functionality case, not a general CI/performance default.
-  for(const p of[flier,roofed]){await set(p,"terrain",true);await set(p,"radarNorthUp",true);await set(p,"radar",true);}
+  for(const p of[flier,roofed]){await set(p,"terrain",true);await set(p,"radar",true);}
   const roof=await raw(roofed,[[1,101],[-7,93]],"fresh upper roof is acquired");
   t.check(roof.store.endsWith("|surface")&&roof.samples.every(s=>s.kind==="stone"&&s.y===-45),"fresh roofed viewer reads the actual upper surface, not an old cave layer or cached grass");
   for(let x=0;x<=75;x+=3){flier.teleport({x:x+.5,y:-60,z:.5},{rotation:{x:0,y:270}});await t.wait(1);}
