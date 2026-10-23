@@ -1,4 +1,6 @@
-// Minimap: a compass strip at the top of the screen, an optional radar, destinations and Mara's Field Map.
+// Minimap terrain: movement/circle preview and native-palette radar, tuned by the build profile in map-profile.js.
+// Requires its companion modules (terrain-work.js, preview-persistence.js and the others imported below).
+ // Minimap: a compass strip at the top of the screen, an optional radar, destinations and Mara's Field Map.
 // Scripts can't draw on the HUD or on map items, so the picture is made of glyphs (glyphs.js, drawn by the
 // glyph page in Side HUD, hud_rp) sent in the Side HUD title (side.js: the strip in slot "top", the radar in
 // slot "radar" as the part "map/radar"). The Minimap is the side boxes' compositor: it draws the title of the players
@@ -31,14 +33,19 @@
 // Party mates are the online players with the same `realm_party:<code>` tag (Parties).
 // See "Minimap" in docs/PACKS.md.
 import "./diag.js";
+import { DetailPersistence, isDetailStore } from "./detail-persistence.js";
+import { ResidentTrace } from "./resident-trace.js";
+import { createStatePacketizer } from "./map-debug-state.js";
+const residentTrace = new ResidentTrace();
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { Budget, oldestDue } from "./budget.js";
 import { CONFIG } from "./config.js";
-import { G } from "./glyphs.js";
+import { G, overlayGlyph, SELF_ARROWS } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
-import { aheadPicks, colKey, COL, glyphAt, KEY_BIAS, KEY_SPAN, MISS_RETRY, readColumn, sampleCoord, spendBudget, TerrainWorld } from "./terrain.js";
+import { aheadPicks, colKey, COL, glyphAt, hydratePreview, MISS_RETRY, PREVIEW, previewGlyph, radarGeometry, northUpRadarGeometry, readColumn, retainVisible, sampleCoord, scanQueueCounters, spendBudget, TerrainWorld, TerrainUnavailableError } from "./terrain.js";
+import { PreviewPersistence } from "./preview-persistence.js";
 import { onScriptEvent } from "./script-events.js";
 import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetPlayer, staleForm, WORLD_GEN } from "./reset.js";
 
@@ -48,6 +55,94 @@ import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetP
 /** The destination a player picked: what kind, which one, and where it was when picked. @typedef {Spot & { k: string, id?: string }} Waypoint */
 /** A player's place and party tag this pass. @typedef {{ id: string, dim: string, x: number, z: number, party?: string }} Seen */
 /** A marker this pass: kind, where it is (x, z); `clamp` ones show at the edge when out of sight. @typedef {{ kind: string, x: number, z: number, clamp: boolean }} Marker */
+
+import { MAP_PROFILE as EXP } from "./map-profile.js";
+import { MANUAL_SCAN_MAX_RADIUS, circleCandidates, circleAnchors, insideRadar, circularMarker, radarBadgeCells, circularMarkerNeighbors, orderLatticeWork } from "./terrain-work.js";
+import { ManualScanner } from "./manual-scanner.js";
+import { rollTerrainDemand } from "./rolling-demand.js";
+import { reconstructRaster } from "./terrain-estimate.js";
+import { RADAR_PIXELS, snapshotCoverage, rasterCadenceReady } from "./raster-work.js";
+import { selectNetherLayer } from "./nether-layer.js";
+import { estimatedPaletteGlyph } from "./glyphs.js";
+import { registerMinimapCommand } from "./minimap-command.js";
+// BEGIN VISUAL LAB CORE -- shared by all eight experiments, no new Minecraft APIs.
+// Per-tick admission targets, not preemption, and no CPU-release claim: the instrumentation below counts work for QA only.
+class LabBudget {
+  /** @param {number} perTick @param {number} max @param {number} tickMax */
+  constructor(perTick, max, tickMax) { this.perTick = perTick; this.max = max; this.tickMax = tickMax; this.left = 0; }
+  tick() { this.left = Math.min(this.perTick, this.tickMax); }
+  get room() { return Math.max(0, Math.min(this.left, this.tickMax)); }
+  get ok() { return this.room > 0; }
+  /** @param {number} ms */
+  spend(ms) { this.left -= ms; }
+}
+class LabEnvelope {
+  constructor() { this.at = -1; this.used = 0; this.last = 0; this.peak = 0; }
+  /** @param {number} tick */
+  begin(tick) {
+    if (this.at !== tick) { this.last = this.used; this.used = 0; this.at = tick; }
+    return Date.now();
+  }
+  /** @param {number} start */
+  end(start) { this.used += Math.max(0, Date.now() - start); this.peak = Math.max(this.peak, this.used); }
+  get room() { return Math.max(0, EXP.featureMs - this.used); }
+}
+// Disabled means no terrain persistence IO, including the legacy preview provider.
+// Player preferences / waypoints still use their existing storage.
+class LabDisabledPersistence {
+  constructor() { this.profile = "native"; this.ready = false; this.needsLoad = false; this.dirtyCount = 0; this.readVersion = 0; }
+  /** @param {boolean} _ready */
+  setReady(_ready) {}
+  /** @param {string} profile */
+  setProfile(profile) { const changed = this.profile !== profile; this.profile = profile; return changed; }
+  /** @returns {import("./detail-persistence.js").Lookup} */
+  lookup() { return { state: "unknown", provenance:"persisted" }; }
+  request() {}
+  note() { return false; }
+  invalidate() { return true; }
+  loadOne() { return undefined; }
+  flushOne() { return false; }
+  stats() { return { disabled: true, ready: true, pending: 0, reads: 0, dirty: 0 }; }
+}
+function experimentNative() { return EXP.palette === "native"; }
+/** @typedef {import("./terrain.js").Pick & {d:number,stale:boolean,queuedAt:number,visible?:boolean}} LabPick */
+/** @type {Map<string,{key:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,demandVersion?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
+const labPlans = new Map();
+/** @type {Map<string,{storeId:string,x:number,z:number,sample:import("./detail-persistence.js").Raw,wall:number}>} */
+const labPendingWrites = new Map();
+const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
+const LAB_SAVE_LIMIT = 2048;
+
+/** Sorts fresh work without losing its original request age. Native4 can only seed one genuine2 anchor. */
+/** @param {LabPick[]} picks @param {number} now */
+function labOrder(picks, now) { return orderLatticeWork(picks,now,EXP.preview); }
+
+/** @param {import("./terrain.js").Store} store @param {number} x @param {number} z @param {import("./detail-persistence.js").Raw} sample @param {number} wall */
+function labSaveSample(store, x, z, sample, wall) {
+  if (!EXP.persistence || !isDetailStore(store.id)) return;
+  const key = store.id + "|" + colKey(x, z, COL);
+  try { if (detailPersistence.note(store.id, x, z, sample, wall)) { labPendingWrites.delete(key); return; } }
+  catch { labStats.saveErrors++; }
+  // Dispatch reserves one queue slot per possible native completion before issuing work.
+  labPendingWrites.set(key, { storeId: store.id, x, z, sample: { ...sample }, wall });
+  detailCost.noteBackpressure++; labStats.deferredSaves++;
+}
+function labRetrySaves() {
+  let count = 0;
+  for (const [key, record] of labPendingWrites) {
+    if (++count > 8) break;
+    try {
+      if (!detailPersistence.note(record.storeId, record.x, record.z, record.sample, record.wall)) break;
+      labPendingWrites.delete(key);
+    } catch { labStats.saveErrors++; break; }
+  }
+}
+
+/** Metadata comes from the exact pixel snapshot used to construct base, never from newer mutable records. */
+/** @param {ReturnType<typeof radarGeometry>} geometry @param {Uint8Array} flags @param {Float64Array} ticks @param {{x:number,z:number}} at @param {number} radius @param {number} now @param {number} maxAge @returns {NonNullable<TerrainMemo["coverage"]>} */
+function labCoverage(geometry, flags, ticks, at, radius, now, maxAge) { return snapshotCoverage(geometry,flags,ticks,at,radius,now,maxAge); }
+
+// END VISUAL LAB CORE
 
 const PACK = "map_bp";
 const PROP_WP = "map:wp"; // player: JSON Waypoint
@@ -70,7 +165,7 @@ const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const CELLS = 25; // the strip: 25 cells of 5 degrees, 60 degrees each side of where you face
 const MID = 12;
 const DEG = 5;
-const R = 10; // the radar: 21 x 21 cells (441 pixels), you in the middle
+const R = 16; // Fixed 33 x 33 quality raster.
 // A readout stays this long without an update (ticks), and an unchanged one is sent again after REFRESH (before HOLD
 // runs out). Long, because the refresh of everyone's title was most of the drawing with many players on; a strip only
 // lingers this long if the Minimap stops (a changed one is sent at once, and turning it off clears it).
@@ -117,6 +212,16 @@ const send = (id, msg) => {
     system.sendScriptEvent(id, JSON.stringify(msg));
   } catch (e) {
     console.warn(`[map] ${id}: ${e}`);
+  }
+};
+const statePackets = createStatePacketizer();
+/** Operator debug state: one legacy message when it fits, else bounded packets; a state too large for them sends the metrics with the reason. @param {string} json @param {unknown} player @param {object} metrics */
+const sendDebugState = (json, player, metrics) => {
+  try {
+    for (const text of statePackets(json, player)) system.sendScriptEvent("realm:map_state", text);
+  } catch (e) {
+    console.warn(`[map] realm:map_state: ${e}`);
+    send("realm:map_state", { ...metrics, chunkError: String(e instanceof Error ? e.message : e).slice(0, 160) });
   }
 };
 /** @param {unknown} v @returns {v is number} */
@@ -317,7 +422,9 @@ function applyReset(player) {
     wpCache.set(player.id, null);
     marksCache.set(player.id, []);
     lastSent.delete(player.id);
-    views.delete(player.id);
+    hidePlayerHud(player);
+    terrainBaseMemo.delete(player.id);
+    passAt.delete(player.id);
     passAt.delete(player.id);
     // Only someone who lost a destination or spots is told; a brand-new player is just stamped with the generation.
     if (cleared) player.sendMessage("§7[Map] An operator reset everyone's destination and marked spots.");
@@ -360,8 +467,15 @@ function markHere(player, name) {
 // One pass for one player
 // ---------------------------------------------------------------------------
 
-/** What each player's preferences are (cached until /realm:prefs or /realm:config changes them). @type {Map<string, { compass: boolean, radar: boolean, north: boolean, terrain: boolean, mobs: boolean, radius: number, town: boolean, home: boolean }>} */
+/** Independent compass/radar flags and fixed quality choices. */
 const prefCache = new Map();
+const RADAR_OFF_RESET="map:radarOffReset20261022";
+/** Owner-requested ONE-TIME preference reset. Never resets compass or later opt-in choices. @param {Player} player */
+function resetRadarOffOnce(player){
+  if(player.getDynamicProperty(RADAR_OFF_RESET)===true)return false;
+  const error=setFor(player,"radar",false);if(error)throw new Error(error);
+  player.setDynamicProperty(RADAR_OFF_RESET,true);return true;
+}
 /** @param {Player} player */
 function prefsOf(player) {
   const hit = prefCache.get(player.id);
@@ -374,6 +488,9 @@ function prefsOf(player) {
     terrain: getFor(player, "terrain") === true,
     mobs: getFor(player, "showMobs") === true,
     radius: Math.min(cap, Math.max(8, Number(getFor(player, "mobRadius")) || 24)),
+    // Fixed terrain circle, independent of the player's mob radius.
+    radarRadius: 36,
+    revealRadius: 36,
     town: getFor(player, "showTown") === true,
     home: getFor(player, "showHome") === true,
   };
@@ -381,6 +498,11 @@ function prefsOf(player) {
   return p;
 }
 onChange((_key, player) => {
+  if (!player && (_key === "nativeTerrain" || _key === "*")) {
+    previewPersistence.setProfile(experimentNative() ? "native" : "material");
+    if (detailPersistence.setProfile(experimentNative() ? "native" : "material")) detailHydrationBlocked = false;
+    terrain.stores.clear(); playerStore.clear(); scanPlans.clear(); terrainBaseMemo.clear(); pendingTerrain.clear();
+  }
   if (player) prefCache.delete(player.id);
   else prefCache.clear();
   if (player) {
@@ -653,16 +775,141 @@ function stripOf(heading, markers, at) {
 
 // The terrain is world data kept by terrain.js: one surface store per dimension, shared by everyone, and one
 // store per underground layer (the height a roofed player stands at), shared by those at that height.
+const NETHER_BAND = 8;
+/** Last selected Nether center;2-block hysteresis prevents step/jump boundary flicker. @type {Map<string,number>} */
+const netherLayers=new Map();
+/** @param {string} id @param {number} y */
+function netherLayerFor(id,y){const layer=selectNetherLayer(y,netherLayers.get(id),NETHER_BAND,2);if(layer===undefined)throw new RangeError("Invalid Nether altitude");netherLayers.set(id,layer);return layer;}
+/** Display identities only: unknown is never promoted to lava, ground or confirmed empty. @param {string} dim */
+const unknownTerrainGlyph=dim=>dim==="minecraft:nether"?G.Q_NETHER_UNKNOWN:dim==="minecraft:the_end"?G.Q_END_UNKNOWN:G.Q_EMPTY;
+/** @param {string} dim */
+const emptyTerrainGlyph=dim=>dim==="minecraft:the_end"?G.Q_VOID:dim==="minecraft:nether"?G.Q_NETHER_EMPTY:G.Q_EMPTY;
 const terrain = new TerrainWorld(6000, 24);
-/**
- * Per player: the radar's terrain (`base`, in the pieces layout) for one pose and terrain version, and the text being
- * drawn from it (`rows`: the base plus this draw's markers, which `touched` lists, so the next draw puts back only
- * those). A player who doesn't move or turn far enough for the terrain to change costs no terrain lookups.
- * `need` is what the scanner should read for it (missing columns nearest first, then stale ones), made at `needAt`.
- * `slot`: the player's turn for the STALE_EVERY rebuild (staleSlot).
- * @type {Map<string, { key: string, base: string[], rows: string[], touched: number[], need: import("./terrain.js").Pick[], needAt: number, needStore?: import("./terrain.js").Store, slot: number, bucket?: number }>}
+// Constructor, request and note are memory-only. Native property IO lives in the bounded host below.
+const previewPersistence = EXP.persistence && EXP.preview ? new PreviewPersistence({ get: (k) => world.getDynamicProperty(k), set: (k, v) => world.setDynamicProperty(k, v) }, { resolution: PREVIEW, maxResidentPages: 32 }) : new LabDisabledPersistence();
+const detailPersistence = EXP.persistence ? new DetailPersistence({ get: (k) => world.getDynamicProperty(k), set: (k, v) => world.setDynamicProperty(k, v) }, { ready: false, profile: "native", maxResidentPages: 16, maxSavedPages: 128 }) : new LabDisabledPersistence();
+let detailHydrationTick = -1, detailHydrationUsed = 0;
+/** Bounded raw-page replay shares one64-sample allowance across render and scanner.
+ * @param {import("./terrain.js").Store} store @param {number} x @param {number} z
+ * @param {import("./detail-persistence.js").Sample} sample @param {number} now
  */
+function restoreCachedDetail(store, x, z, sample, now) {
+  if (detailHydrationTick !== now) { detailHydrationTick = now; detailHydrationUsed = 0; }
+  if (detailHydrationUsed >= EXP.replayLimit) return false;
+  if (!terrain.restoreDetail(store, x, z, sample, now, Date.now())) return false;
+  pendingTerrain.delete(store.id + "|" + colKey(x, z, COL));
+  detailHydrationUsed++; detailCost.hydrated++; return true;
+}
+let detailHydrationBlocked = false;
+/** @type {Map<string,{storeId:string,x:number,z:number,at:number}>} */
+const pendingTombstones = new Map();
+let tombstoneOverflow = false;
+/** Existing scan demand is the bounded replay worklist; rendering never requests or restores a record. */
+const replayCursor = new WeakMap();
+let replayFirst = 0, replayVisitTick=-1, replayVisits=0;
+/** @param {number} now */
+function replayVisibleDetail(now) {
+  if(replayVisitTick!==now){replayVisitTick=now;replayVisits=0;}
+  if (detailHydrationBlocked || !detailPersistence.ready || !scanPlans.size) return;
+  const plans = [...scanPlans.values()];
+  const started = Date.now();
+  let visited = 0;
+  for (let n = 0; n < plans.length && visited < 128 && replayVisits < 128; n++) {
+    const plan = plans[(n + replayFirst) % plans.length];
+    let i = Math.max(plan.pos, replayCursor.get(plan) ?? plan.pos);
+    for (; i < plan.picks.length && visited < 128 && replayVisits < 128; i++) {
+      if (detailHydrationTick === now && detailHydrationUsed >= EXP.replayLimit) break;
+      if (Date.now() - started >= featureEnvelope.room) break;
+      const pick = plan.picks[i], store = pick.store ?? plan.store; visited++;replayVisits++;
+      if (pick.resolution !== COL || pick.stale || store.cols.has(pick.key) || !terrainPickInRange({x:plan.x,z:plan.z,radius:36},pick)) continue;
+      const hit = detailPersistence.lookup(store.id, pick.wx, pick.wz, Date.now());
+      if (hit.state === "pending") break;
+      if (hit.state === "known") restoreCachedDetail(store, pick.wx, pick.wz, hit.sample, now);
+    }
+    replayCursor.set(plan, i);
+  }
+  replayFirst = (replayFirst + 1) % plans.length;
+}
+const detailCost = { nativeCompleted: 0, hydrated: 0, persistedHits: 0, pending: 0, invalid: 0, noteBackpressure: 0, invalidationBackpressure: 0 };
+let previewWorldLoaded = false;
+const previewCost = { queries: 0, nativeReads: 0, nativeFills: 0, hits: 0, diskLoads: 0, hydrated: 0, rejects: 0, loadCalls: 0, flushCalls: 0, loadMs: 0, flushMs: 0 };
+world.afterEvents.worldLoad.subscribe(() => {
+  previewPersistence.setProfile(experimentNative() ? "native" : "material");
+  detailPersistence.setProfile(experimentNative() ? "native" : "material");
+  detailPersistence.setReady(true);
+  previewWorldLoaded = true;
+  console.warn("[map] Oak terrain with marked display estimates; budgetLevel controls remain active");
+});
+// At most one manifest/page read per tick while queued, before the scanner; never from render or before worldLoad.
+system.runInterval(() => {
+  const featureStarted = featureEnvelope.begin(system.currentTick);
+  try {
+  if (!EXP.persistence || !previewWorldLoaded || get("enabled") !== true) return;
+  labRetrySaves();
+  const active = playersNow().some((player) => {
+    try { const pr = prefsOf(player); return pr.radar && pr.terrain; } catch { return false; }
+  });
+  if (!active) return;
+  replayVisibleDetail(system.currentTick);
+  let retriedTombstones = 0;
+  for (const [key, tomb] of pendingTombstones) {
+    if (retriedTombstones++ >= 4) break;
+    if (!detailPersistence.invalidate(tomb.storeId, tomb.x, tomb.z, Date.now())) break;
+    pendingTombstones.delete(key);
+  }
+  detailHydrationBlocked = tombstoneOverflow || pendingTombstones.size > 0;
+  const detailReadVersion = detailPersistence.readVersion ?? 0;
+  if (detailPersistence.needsLoad && detailPersistence.loadOne(Date.now())) {
+    if ((detailPersistence.readVersion ?? 0) === detailReadVersion) return;
+    // A disk read is not a terrain mutation. Raw restoration bumps only its affected store/regions.
+    // Never invalidate all viewers here: that turns page IO into an unbounded raster rebuild storm.
+    return; // One host read attempt TOTAL, including failed reads.
+  }
+  const queued = previewPersistence.stats();
+  if (queued.ready && !queued.pending) return;
+  const started = Date.now();
+  const readsBefore = queued.reads;
+  previewCost.loadCalls++;
+  try {
+    const data = previewPersistence.loadOne(started);
+    if (!data) return;
+    // Never recreate an evicted Nether band or alias a persisted ID to a viewer's current dimension.
+    const store = terrain.stores.get(data.storeId);
+    if (!store) { previewCost.rejects += data.entries.length; return; }
+    for (const entry of data.entries) if (hydratePreview(store, entry.wx, entry.wz, entry.glyph, system.currentTick)) previewCost.hydrated++;
+  } finally {
+    // Includes a manifest-only read; resident replay and hydration are not native property reads.
+    previewCost.diskLoads += Math.max(0, (previewPersistence.stats().reads ?? 0) - (readsBefore ?? 0));
+    previewCost.loadMs += Date.now() - started;
+  }
+
+  } finally { featureEnvelope.end(featureStarted); }
+}, 1);
+// Existing dirty pages may finish flushing while HUDs are off. One world-property write at most per call.
+let lastPersistenceFlushTick = -Infinity;
+system.runInterval(() => {
+  const featureStarted = featureEnvelope.begin(system.currentTick);
+  try {
+  if (!EXP.persistence || !previewWorldLoaded) return;
+  labRetrySaves();
+  const flushTick = system.currentTick;
+  if (flushTick - lastPersistenceFlushTick < EXP.flushTicks && !detailHydrationBlocked && detailPersistence.dirtyCount < 8) return;
+  lastPersistenceFlushTick = flushTick;
+  const started = Date.now();
+  previewCost.flushCalls++;
+  try { if (!detailPersistence.flushOne(started)) previewPersistence.flushOne(started); } finally { previewCost.flushMs += Date.now() - started; }
+
+  } finally { featureEnvelope.end(featureStarted); }
+}, 2);
+
+
+/** Terrain base and its released per-player stale slot; geometry/coverage belong to this viewer.
+ * @typedef {{labFlags?:Uint8Array,labTicks?:Float64Array,labHeights?:Float32Array,coverageSignature?:string,labBuilt?:number,estimateScratch?:import("./terrain-estimate.js").EstimateScratch,key:string,base:string[],rows:string[],touched:number[],need:import("./terrain.js").Pick[],needAt:number,needStore?:import("./terrain.js").Store,slot:number,bucket?:number,geometry?:ReturnType<typeof radarGeometry>,coverage?:{firstTick:number,firstKnownTick?:number,firstCoveredTick?:number,detailCells:number,previewCells:number,unknownCells:number,eligibleCells:number,eligibleKnownCells:number,eligibleDetailCells:number,totalCells:number,sampled2?:number,live2?:number,persisted2?:number,validEmpty2?:number,invalidated2?:number,estimatedCells?:number,eligibleEstimatedCells?:number,nextExpiry?:number,frameKey?:string,builtTick?:number}}} TerrainMemo
+ */
+/** @type {Map<string,TerrainMemo>} */
 const terrainBaseMemo = new Map();
+/** Current plus at most four other exact rendered poses; image reuse only, not another terrain provider. */
+// Exact-pose history removed: a single terrain base per viewer is retained.
 /** The store each player's radar reads, set by the scan every tick (roofed players read their layer). @type {Map<string, import("./terrain.js").Store>} */
 const playerStore = new Map();
 /** @param {string} id @param {string} dimId */
@@ -677,7 +924,7 @@ const storeFor = (id, dimId) => {
  */
 const terrainVerOf = (id, dimId, at, radius) => {
   const s = storeFor(id, dimId);
-  return `${s.id}#${terrain.viewVer(s, at.x, at.z, radius * 1.5 + 8)}`;
+  return `${s.id}#${terrain.viewVer(s, at.x, at.z, radius + PREVIEW + 1)}`;
 };
 
 /** In-progress readers are shared by store/key just like completed samples. */
@@ -690,7 +937,20 @@ const pendingTerrain = new Map();
  */
 function blockChanged(block) {
   terrain.invalidate(block.dimension.id, block.location.x, block.location.z);
-  pendingTerrain.clear();
+  const dim = block.dimension.id, x = block.location.x, z = block.location.z;
+  for (const [key, pending] of labPendingWrites) if (pending.storeId.startsWith(dim + "|") && colKey(pending.x, pending.z, COL) === colKey(x, z, COL)) labPendingWrites.delete(key);
+  const ids = new Set([...terrain.stores.keys()].filter(id => id.startsWith(dim + "|")));
+  if (dim !== "minecraft:nether") ids.add(dim + "|surface");
+  else { const band = Math.floor(block.location.y / NETHER_BAND) * NETHER_BAND + NETHER_BAND / 2; for (let y = band; y <= band + 24; y += NETHER_BAND) ids.add(dim + "|layer" + y); }
+  for (const storeId of ids) {
+    if (isDetailStore(storeId) && !detailPersistence.invalidate(storeId, x, z, Date.now())) {
+      detailHydrationBlocked = true; detailCost.invalidationBackpressure++;
+      const key = storeId + "|" + colKey(x, z, COL);
+      if (pendingTombstones.has(key) || pendingTombstones.size < 256) pendingTombstones.set(key, { storeId, x, z, at: Date.now() });
+      else tombstoneOverflow = true; // Explicit fail-closed overflow: never claim drained/durable.
+    }
+    for (const resolution of [1, COL, PREVIEW]) pendingTerrain.delete(storeId + "|" + colKey(x, z, resolution));
+  }
 }
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
@@ -720,14 +980,16 @@ world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
 const SCAN_TOTAL = 48;
 const SCAN_EACH = 24;
 /** The scanner's time: planning checks and reads (a read is one native block query or ray, ~0.1 ms). */
-const scanBudget = new Budget(0.25, 15, 3);
+const scanBudget = new LabBudget(EXP.scanMs,EXP.scanMs,EXP.scanMs);
+// Bounded per-tick experiment admission replaces the episode controller.
+const featureEnvelope = new LabEnvelope();
 /** What one read took lately (ms), to fit the reads to the time left. */
 let readCost = 0.06;
 let readMsSum = 0;
 let readOpsSum = 0;
 const SCAN_MAX_AGE = 2400;
 const PLAN_EACH_TICK = 2;
-const PLAN_EVERY = 20;
+const PLAN_EVERY = EXP.checkEvery;
 /** Viewers to check first: their radar was just built (a new list of what it misses) or they move fast. @type {Set<string>} */
 const planNow = new Set();
 /** Viewers whose reads failed (unloaded chunks), and when to check them again. @type {Map<string, number>} */
@@ -737,8 +999,9 @@ const lastPose = new Map();
 const PLAN_MIN_AGE = 4;
 /** Columns kept per store at least, and per viewer of it (40 viewers spread out need more than the minimum). */
 const STORE_MIN = 6000;
-const STORE_PER_VIEWER = 300;
-/** @typedef {{ id: string, store: import("./terrain.js").Store, picks: import("./terrain.js").Pick[], dim: import("@minecraft/server").Dimension, py: number, roof: boolean, at: number, pos: number, missed: number, missRun: number, x: number, z: number }} ScanPlan */
+const STORE_PER_VIEWER = 1200;
+/** @typedef {{x:number,z:number,radius:number}} TerrainViewerSnapshot */
+/** @typedef {{ id: string, player: Player, store: import("./terrain.js").Store, picks: import("./terrain.js").Pick[], dim: import("@minecraft/server").Dimension, py: number, at: number, pos: number, missed: number, missRun: number, viewer?: TerrainViewerSnapshot, manualOwner?: string, rangeDeleted?: Set<import("./terrain.js").Pick>, failed?: Map<string, import("./terrain.js").Pick>, x: number, z: number }} ScanPlan */
 /** Per player: the plan being read, resumed every tick. @type {Map<string, ScanPlan>} */
 const scanPlans = new Map();
 /** How many viewers may still be planned again this tick (set by the scanner each tick). */
@@ -751,6 +1014,7 @@ let scanPeak = 0;
 let scanEachPeak = 0;
 /** Of scanMs, the time spent planning (which columns each viewer still needs). */
 let scanPlanMs = 0;
+const scanQueueCost = scanQueueCounters();
 
 let playersTick = -1;
 /** @type {Player[]} */
@@ -765,89 +1029,273 @@ function playersNow() {
   return playersList;
 }
 
-system.runInterval(() => {
-  if (get("enabled") !== true) return;
-  const t0 = Date.now();
-  const now = system.currentTick;
-  scanBudget.tick();
-  const all = playersNow();
-  planTurn.left = PLAN_EACH_TICK;
-  // Each viewer is checked (moved, turned, a new list from their radar, the roof) every PLAN_EVERY ticks, a share of
-  // them each tick, taking turns; the plans in between are read from where they stopped.
-  const n = all.length;
-  const checks = Math.min(n, Math.max(1, Math.ceil(n / PLAN_EVERY)));
-  for (const [id, at] of retryAt) {
-    if (at > now) continue;
-    retryAt.delete(id);
-    planNow.add(id);
+/** @param {ScanPlan} plan @param {boolean} [trustedRoster] @returns {TerrainViewerSnapshot | undefined} */
+function terrainViewerOf(plan,trustedRoster=false) {
+  try {
+    const player = plan.player;
+    if(!trustedRoster&&!player.isValid)return undefined;
+    const dim = player.dimension;
+    if (dim.id !== plan.dim.id) return undefined;
+    const pref = prefsOf(player);
+    if (!pref.radar || !pref.terrain) return undefined;
+    const at = player.location;
+    if (plan.store.id.includes("|layer") && netherLayerFor(plan.id,at.y) !== plan.py) return undefined;
+    return { x: at.x, z: at.z, radius: pref.revealRadius };
+  } catch {
+    return undefined;
   }
-  for (const id of planNow) {
-    if (!scanBudget.ok) break;
-    planNow.delete(id);
-    const player = all.find((p) => p.id === id);
-    if (!player) continue;
-    const t = Date.now();
-    try {
-      planFor(player, now);
-    } catch {
-      // unloaded chunk or player left
-    }
-    scanBudget.spend(Date.now() - t);
-  }
-  let checked = 0;
-  for (; checked < checks && scanBudget.ok; checked++) {
-    const t = Date.now();
-    try {
-      const p = all[(checked + scanFirst) % n];
-      if (!planIdle(p.id, now)) planFor(p, now);
-    } catch {
-      // unloaded chunk or player left
-    }
-    scanBudget.spend(Date.now() - t);
-  }
-  if (n) scanFirst = (scanFirst + checked) % n;
-  /** @type {ScanPlan[]} */
-  const plans = [];
-  for (const plan of scanPlans.values()) if (plan.pos < plan.picks.length) plans.push(plan);
-  terrain.maxCols = Math.max(STORE_MIN, scanPlans.size * STORE_PER_VIEWER);
-  scanPlanMs += Date.now() - t0;
-  const total = Math.min(SCAN_TOTAL, Math.floor(scanBudget.room / readCost));
-  if (plans.length && total > 0) {
-    const tRead = Date.now();
-    const readsBefore = scanReads;
-    const spent = spendBudget(plans, total, SCAN_EACH, now % plans.length, now, (plan, pick) => {
+}
+
+/** @param {TerrainViewerSnapshot | undefined} viewer @param {import("./terrain.js").Pick} pick */
+function terrainPickInRange(viewer, pick) {
+  if (!viewer) return false;
+  const dx = pick.wx - viewer.x;
+  const dz = pick.wz - viewer.z;
+  return dx * dx + dz * dz <= viewer.radius * viewer.radius;
+}
+
+/** A shared miss is not a successful completion: preserve this consumer ticket age and exact retry.
+ * @param {ScanPlan} plan @param {import("./terrain.js").Pick} pick @param {number} missedAt */
+function observeCoolingSkip(plan,pick,missedAt){
+ if(plan.manualOwner)return;const store=pick.store??plan.store,key=store.id+"|"+pick.key,history=plan.failed??=new Map(),prior=history.get(key);
+ if(!prior&&history.size>=4096){const first=history.keys().next().value;if(first!==undefined)history.delete(first);scanQueueCost.historyRetired++;}
+ history.set(key,{...pick,queuedAt:Math.min(prior?.queuedAt??Infinity,pick.queuedAt??plan.at)});scanQueueCost.failedPeak=Math.max(scanQueueCost.failedPeak,history.size);
+ const deadline=missedAt+MISS_RETRY,state=labPlans.get(plan.id);if(state)state.retryDeadline=Math.min(state.retryDeadline??Infinity,deadline);const previous=retryAt.get(plan.id);if(previous===undefined||deadline<previous)retryAt.set(plan.id,deadline);
+}
+
+/** A single charged operation on the globally shared reader map. Auto and manual call this same function.
+ * @param {ScanPlan} plan @param {import("./terrain.js").Pick} pick @param {number} now @returns {import("./manual-scanner.js").StepResult} */
+function dispatchTerrainRead(plan,pick,now){
+      if (!terrainPickInRange(plan.viewer, pick)) return "canceled";
       const store = pick.store ?? plan.store;
       const key = `${store.id}|${pick.key}`;
       try {
         scanReads++;
+        scanQueueCost.nativeAttempt++;
+        if (pick.resolution === PREVIEW) previewCost.nativeReads++;
         let job = pendingTerrain.get(key);
         if (!job) {
-          const reader = readColumn(plan.dim, pick.wx, pick.wz, store.id.includes("|surface") ? undefined : plan.py);
-          job = { reader, next: reader.next(), tick: now };
+          const reader = readColumn(plan.dim, pick.wx, pick.wz, store.id.includes("|surface") ? undefined : plan.py, experimentNative());
+          job = { reader, next: reader.next(), tick: now, manualOwner:plan.manualOwner, automatic:!plan.manualOwner };
           pendingTerrain.set(key, job);
         }
+        if(!plan.manualOwner)job.automatic=true;
         const next = job.reader.next(job.next.value());
         job.tick = now;
         if (!next.done) {
+          scanQueueCost.nativeContinuation++;
           job.next = next;
-          return false;
+          return "continued";
         }
+        if (pendingTerrain.get(key) !== job || terrain.stores.get(store.id) !== store) { if (pendingTerrain.get(key) === job) pendingTerrain.delete(key); return "canceled"; } // A targeted mutation or profile transition canceled this exact reader.
+        if(plan.manualOwner&&manualScans.contexts.get(plan.manualOwner)?.plan!==plan&&!job.automatic){if(pendingTerrain.get(key)===job)pendingTerrain.delete(key);return "canceled";}
         terrain.put(store, pick.wx, pick.wz, next.value, now, pick.resolution);
+        const committed=(pick.resolution===PREVIEW?store.preview:store.cols).get(pick.key);
+        if(!committed||committed.tick!==now){pendingTerrain.delete(key);return "capacity";}
+        scanQueueCost.nativePuts++;
+        if (pick.resolution === COL || pick.resolution === PREVIEW) {
+          const x = sampleCoord(pick.wx, pick.resolution), z = sampleCoord(pick.wz, pick.resolution);
+          const actual = store.cols.get(colKey(x, z, COL));
+          if (actual?.tick === now) {
+            actual.acquiredAtMs = Date.now();
+            detailCost.nativeCompleted++;
+            labSaveSample(store, x, z, next.value, actual.acquiredAtMs);
+          }
+        }
+        if (pick.resolution === PREVIEW) {
+          previewCost.nativeFills++;
+          // Only a completed actual native preview sample may dirty a saved page. Hydration never comes here.
+          const actual = store.preview.get(pick.key);
+          if (actual?.tick === now && actual.glyph === previewGlyph(next.value)) {
+            // Legacy preview pages are read-only in v2; completed genuine2 is persisted above.
+          }
+        }
         pendingTerrain.delete(key);
+        plan.failed?.delete(key);
+        scanQueueCost.nativeSuccess++;
         plan.missRun = 0;
-      } catch {
+      } catch (error) {
         // unloaded chunk: keep what was known, ask again in a few ticks
         pendingTerrain.delete(key);
+        const history = plan.failed ??= new Map();
+        if (!history.has(key) && history.size >= 4096) {
+          const oldest = history.keys().next().value;
+          if (oldest !== undefined) history.delete(oldest);
+          scanQueueCost.historyRetired++;
+        }
+        history.set(key, pick);
+        scanQueueCost.failedPeak = Math.max(scanQueueCost.failedPeak, history.size);
         terrain.miss(store, pick.wx, pick.wz, now, pick.resolution);
+        scanQueueCost.nativeMiss++;
         plan.missed++;
         // Several in a row: the area isn't loaded (a teleport, a join). Stop here and try the whole plan again in
         // MISS_RETRY ticks, instead of spending the budget on reads that fail.
-        if (++plan.missRun >= 4) {
-          plan.pos = plan.picks.length;
-          plan.missRun = 0;
-        }
+        // Preview anchors can straddle unloaded chunks; their misses must not discard queued 2-block detail.
+        if(!plan.manualOwner){const deadline=now+MISS_RETRY,state=labPlans.get(plan.id);if(state)state.retryDeadline=Math.min(state.retryDeadline??Infinity,deadline);const pending=retryAt.get(plan.id);if(pending===undefined||deadline<pending)retryAt.set(plan.id,deadline);}
+        plan.missRun++; // Each unloaded anchor cools independently; retain the loaded remainder.
+        const name=error&&typeof error==="object"&&"name" in error?String(error.name):"";
+        return error instanceof TerrainUnavailableError||name==="LocationInUnloadedChunkError"?"unavailable":"failed";
       }
-    });
+
+      return "mapped";
+}
+const manualScans=new ManualScanner({
+ terrain,profile:()=>experimentNative()?"native":"material",maxRadius:()=>MANUAL_SCAN_MAX_RADIUS,players:playersNow,
+ visible:p=>get("enabled")===true&&prefsOf(p).radar&&prefsOf(p).terrain,
+ snapshot:p=>{const at=p.location,dim=p.dimension,py=dim.id==="minecraft:nether"?netherLayerFor(p.id,at.y):Math.floor(at.y);return{dim,py,store:terrain.store(dim.id,dim.id==="minecraft:nether"?py:undefined)};},
+ pending:pendingTerrain,step:dispatchTerrainRead
+});
+function scanFrame() {
+  const t0 = Date.now();
+  let scanDeadline=t0+Math.max(0,Math.min(EXP.scanMs,featureEnvelope.room-EXP.renderReserve));
+  let scanExpired=false;
+  const scanTimeLeft=()=>{if(scanExpired)return false;if(Date.now()<scanDeadline)return true;scanExpired=true;return false;};
+  const enabled=get("enabled")===true;
+  if (!enabled&&!manualScans.contexts.size) return;
+  const readsAtEntry=scanReads;
+  const now = system.currentTick;
+  scanBudget.tick();
+  scanDeadline=Math.min(scanDeadline,t0+scanBudget.room);
+  const all = playersNow();
+  const candidates = all.filter((player) => {
+    const pref = prefsOf(player);
+    return enabled && pref.radar && pref.terrain;
+  });
+  const candidateIds = new Set(candidates.map((player) => player.id));
+  for (const [id] of scanPlans) {
+    if (candidateIds.has(id)) continue;
+    scanPlans.delete(id);
+    playerStore.delete(id);
+    retryAt.delete(id);
+    lastPose.delete(id);
+    planNow.delete(id);
+  }
+  planTurn.left = PLAN_EACH_TICK;
+  // Each viewer is checked (moved, turned, or a new list from their radar) every PLAN_EVERY ticks, a share of
+  // them each tick, taking turns; the plans in between are read from where they stopped.
+  const n = candidates.length;
+  const checks = Math.min(n, Math.max(1, Math.ceil(n / PLAN_EVERY)));
+  for (const [id, at] of retryAt) {
+    if (!candidateIds.has(id)) {
+      retryAt.delete(id);
+      continue;
+    }
+    if (at > now) continue;
+    retryAt.delete(id);
+    planNow.add(id);
+  }
+  const tPlans = Date.now();
+  scanQueueCost.candidateRetryMs += tPlans - t0;
+  const indexPlanNow = planNow.size > 1;
+  /** @type {Map<string, Player> | undefined} */
+  let playersById;
+  for (const id of planNow) {
+    if(!scanBudget.ok||!scanTimeLeft())break;
+    planNow.delete(id);
+    if (!candidateIds.has(id)) continue;
+    let player;
+    if (indexPlanNow) {
+      if (!playersById) {
+        playersById = new Map();
+        for (const online of candidates) playersById.set(online.id, online);
+      }
+      player = playersById.get(id);
+    } else player = candidates.find((p) => p.id === id);
+    if (!player) continue;
+    const t = Date.now();
+    try {
+      planFor(player, now,true);
+    } catch {
+      // unloaded chunk or player left
+    }
+    const charged = Date.now() - t;
+    scanBudget.spend(charged);
+    scanQueueCost.chargedMs += charged;
+  }
+  let checked = 0;
+  for (; checked < checks && scanBudget.ok && scanTimeLeft(); checked++) {
+    const t = Date.now();
+    try {
+      const p = candidates[(checked + scanFirst) % n];
+      if (!planIdle(p.id, now)) planFor(p, now,true);
+    } catch {
+      // unloaded chunk or player left
+    }
+    const charged = Date.now() - t;
+    scanBudget.spend(charged);
+    scanQueueCost.chargedMs += charged;
+  }
+  if (n) scanFirst = (scanFirst + checked) % n;
+  const tViewer = Date.now();
+  scanQueueCost.planForMs += tViewer - tPlans;
+  /** @type {ScanPlan[]} */
+  const plans = [];
+  const operationLimit = EXP.ops;
+  const allowance = Math.max(0, Math.min(scanBudget.room, scanDeadline-Date.now()));
+  // Count actual dispatch operations and check real elapsed time between them.
+  // Reserve retry-buffer space before a completion can be produced.
+  const total = allowance > 0 ? Math.min(operationLimit, EXP.persistence ? Math.max(0, LAB_SAVE_LIMIT - labPendingWrites.size) : operationLimit) : 0;
+  /** Eligibility values never survive this scanner invocation, even when called twice in one tick. @type {Set<ScanPlan>} */
+  const checkedViewers = new Set();
+  /** @type {(plan: ScanPlan, pick: import("./terrain.js").Pick) => boolean} */
+  const admit = (plan, pick) => {
+    if (!checkedViewers.has(plan)) {
+      checkedViewers.add(plan);
+      scanQueueCost.viewerChecks++;
+      plan.viewer = terrainViewerOf(plan,true);
+      if (!plan.viewer) {
+        // Invalid/off/dimension/layer plans lose only their unattempted tail, in O(1).
+        scanQueueCost.invalidPlans++;
+        plan.picks.length = plan.pos;
+        return false;
+      }
+    }
+    scanQueueCost.admissionVisited++;
+    if (terrainPickInRange(plan.viewer, pick)) return true;
+    // A lazy range deletion is NOT a native miss. Keep it out of future failed-history merges.
+    (plan.rangeDeleted ??= new Set()).add(pick);
+    scanQueueCost.rangeSkips++;
+    return false;
+  };
+  let remaining = 0,pruneInspections=0;
+  for (const plan of scanPlans.values()) {
+    if (plan.pos >= plan.picks.length) continue;
+    remaining += plan.picks.length - plan.pos;
+    if(total<=0||!scanTimeLeft()){scanQueueCost.deferredPlans++;continue;}
+    // Peek only the first eligible frontier, not the whole moving tail. Empty frontiers must be excluded BEFORE
+    // now % plans.length so Queue's exact viewer rotation/order is retained. Later picks are admitted lazily.
+    while (plan.pos < plan.picks.length && ((pruneInspections++%16)!==0||scanTimeLeft()) && !admit(plan, plan.picks[plan.pos])) {
+      if (plan.pos < plan.picks.length) plan.pos++;
+    }
+    if (plan.pos < plan.picks.length&&scanTimeLeft()) plans.push(plan);
+  }
+  scanQueueCost.remainingPeak = Math.max(scanQueueCost.remainingPeak, remaining);
+  manualScans.synchronize(all,now,true);
+  let tCleanup = Date.now();
+  scanQueueCost.viewerPruneMs += tCleanup - tViewer;
+  scanPlanMs += Date.now() - t0;
+  if (plans.length && total > 0) {
+    const tRead = Date.now();
+    const readsBefore = scanReads;
+    const eachLimit = operationLimit; // One shared round-robin ledger: unused viewer shares remain available globally.
+    const spent = spendBudget(plans, total, eachLimit, now % plans.length, now, (plan,pick)=>dispatchTerrainRead(plan,pick,now)!=="continued", scanQueueCost, admit, scanTimeLeft, (plan, pick) => {
+      const store = pick.store ?? plan.store;
+      if(!terrain.makeRoom(store,pick.wx,pick.wz,pick.resolution===PREVIEW?COL:(pick.resolution??COL),now))return "defer";
+      if(pick.resolution!==COL)return undefined;
+      const current=store.cols.get(pick.key);
+      if(current&&current.valid!==false&&now-current.tick<=SCAN_MAX_AGE&&(!pick.stale||current.tick>=(pick.since??now)))return "known";
+      if(pick.stale)return undefined;
+      if (detailHydrationBlocked || !detailPersistence.ready) return undefined;
+      const cached = detailPersistence.lookup(store.id, pick.wx, pick.wz, Date.now());
+      if (cached.state === "known") {
+        return "defer"; // Replay quota exhausted; known disk data must not turn into duplicate Native work.
+      }
+      if (cached.state === "pending" && now - (pick.queuedAt ?? plan.at) < 10) return "defer";
+      return undefined;
+    },observeCoolingSkip);
+    const tDispatched = Date.now();
+    scanQueueCost.dispatchMs += tDispatched - tCleanup;
+    tCleanup = tDispatched;
     let sum = 0;
     for (const v of spent.values()) {
       sum += v;
@@ -855,11 +1303,18 @@ system.runInterval(() => {
     }
     if (sum > scanPeak) scanPeak = sum;
     for (const p of plans) {
+      if(!scanTimeLeft())break;
+      // Native credits may end on the last eligible pick while an out-of-circle tail remains. Drain only
+      // consecutive rejected entries with this invocation's cached viewer, before deciding completion/retry.
+      while (p.pos < p.picks.length && ((pruneInspections++%16)!==0||scanTimeLeft()) && !admit(p, p.picks[p.pos])) {
+        if (p.pos < p.picks.length) p.pos++;
+      }
       if (p.pos < p.picks.length) continue;
       if (p.missed && !retryAt.has(p.id)) retryAt.set(p.id, now + MISS_RETRY);
     }
     const took = Date.now() - tRead;
     scanBudget.spend(took);
+    scanQueueCost.chargedMs += took;
     // Learn what a read costs from ticks with many of them (a tick's fixed work would inflate a few).
     const ops = scanReads - readsBefore;
     if (ops >= 8) {
@@ -872,11 +1327,18 @@ system.runInterval(() => {
       }
     }
   }
+  const manualStarted=Date.now();
+  manualScans.tick(now,Math.max(0,EXP.ops-(scanReads-readsAtEntry)),()=>scanBudget.room>0&&scanTimeLeft(),plans.some(p=>p.pos<p.picks.length));
+  scanBudget.spend(Date.now()-manualStarted);
   for (const [key, job] of pendingTerrain) if (now - job.tick > 20) pendingTerrain.delete(key);
-  scanMs += Date.now() - t0;
+  const tEnd = Date.now();
+  scanQueueCost.cleanupMs += tEnd - tCleanup;
+  scanQueueCost.envelopeMs += tEnd - t0;
+  scanQueueCost.ticks++;
+  scanMs += tEnd - t0;
   scanTicks++;
-}, 1);
-
+}
+system.runInterval(() => { const started = featureEnvelope.begin(system.currentTick); try { scanFrame(); } finally { featureEnvelope.end(started); } }, 1);
 /** Blocks a viewer moves before the rotating check plans them again (their own radar asks sooner when it needs land). */
 const IDLE_MOVE = 16;
 /**
@@ -884,129 +1346,104 @@ const IDLE_MOVE = 16;
  * or dimension since their plan was made (their last draw says where they are), their radar listed nothing newer and
  * their roof probe isn't due. A plan still being read goes on being read as it is; one whose reads failed is asked again
  * by retryAt, a radar's new list by planNow, a fast mover by the turn check (planNow).
- * @param {string} id @param {number} now
+ * @param {string} id @param {import("./terrain.js").Store} store @param {{x:number,z:number}} at @param {number} radius
  */
-function planIdle(id, now) {
-  const plan = scanPlans.get(id);
-  const v = views.get(id);
-  if (!plan || !v || v.dim !== plan.dim.id) return false;
-  if (Math.abs(v.x - plan.x) + Math.abs(v.z - plan.z) >= IDLE_MOVE) return false;
-  // Under a roof every layer is a store of its own; in the open a jump changes nothing (the roof probe sees a new roof).
-  const dy = Math.floor(v.y) - plan.py;
-  if (plan.roof ? dy !== 0 : Math.abs(dy) >= LAYER_KEEP) return false;
-  const memo = terrainBaseMemo.get(id);
-  if (memo && memo.needAt > plan.at) return false;
-  const top = terrain.get(terrain.store(v.dim, undefined), v.x, v.z, 1, true);
-  return !!top && now - top.tick <= 100;
+function requestDetailFootprint(id, store, at, radius) {
+  if (!EXP.persistence) return;
+  const x0 = Math.floor((at.x - radius) / 64), x1 = Math.floor((at.x + radius) / 64);
+  const z0 = Math.floor((at.z - radius) / 64), z1 = Math.floor((at.z + radius) / 64);
+  const key = store.id + "|" + detailPersistence.profile + "|" + x0 + "|" + x1 + "|" + z0 + "|" + z1;
+  if (detailFootprints.get(id) === key) return;
+  detailFootprints.set(id, key);
+  for (let px = x0; px <= x1; px++) for (let pz = z0; pz <= z1; pz++) {
+    detailPersistence.lookup(store.id, px * 64 + 1, pz * 64 + 1, Date.now());
+    previewPersistence.request(store.id, px * 64 + 3, pz * 64 + 3);
+  }
 }
+const detailFootprints = new Map();
 
-/** Blocks up or down that change a roofed viewer's layer even in the air (a jump is about 1.25). */
-const LAYER_KEEP = 3;
-/** @param {Player} player @param {number} now @returns {ScanPlan | undefined} */
-function planFor(player, now) {
-  if (!player.isValid) return undefined;
+/** Independent of raster construction: scanning can begin before the first HUD frame. */
+/** @param {string} _id @param {number} _now */
+function planIdle(_id, _now) { return false; }
+
+/** @param {Player} player @param {number} now @param {boolean} [trustedRoster] */
+function planFor(player, now,trustedRoster=false) {
+  if(!trustedRoster&&!player.isValid)return undefined;
   const pr = prefsOf(player);
-  if (!pr.radar || !pr.terrain) {
-    playerStore.delete(player.id);
-    scanPlans.delete(player.id);
-    return undefined;
-  }
-  const dim = player.dimension;
-  const at = player.location;
-  const surface = terrain.store(dim.id, undefined);
-  const top = terrain.get(surface, at.x, at.z, 1, true);
-  const roof = dim.id === "minecraft:nether" || (!!top && top.kind !== "water" && top.y > at.y + 6);
-  // The layer is the height they stand at: a jump (or a step off a ledge) keeps the layer they stood on, since every
-  // layer is a store of its own that the scanner reads again from nothing (O1). A move of LAYER_KEEP blocks or more
-  // (a fall, a ladder, swimming) changes it at once.
-  let py = Math.floor(at.y);
-  const before = scanPlans.get(player.id);
-  if (roof && before?.roof && before.dim.id === dim.id && py !== before.py && Math.abs(py - before.py) < LAYER_KEEP) {
-    let grounded = true;
-    try {
-      grounded = player.isOnGround;
-    } catch {
-      // left meanwhile: the layer doesn't matter
-    }
-    if (!grounded) py = before.py;
-  }
-  const store = terrain.store(dim.id, roof ? py : undefined);
+  if (!pr.radar || !pr.terrain) { labPlans.delete(player.id); scanPlans.delete(player.id); playerStore.delete(player.id); return undefined; }
+  const at = player.location, dim = player.dimension;
+  const py = dim.id === "minecraft:nether" ? netherLayerFor(player.id,at.y) : Math.floor(at.y);
+  const store = terrain.store(dim.id, dim.id === "minecraft:nether" ? py : undefined);
   playerStore.set(player.id, store);
-  // Where the radar draws its terrain from (radarOf: whole blocks).
-  const pose = { x: Math.round(at.x), z: Math.round(at.z) };
-  // How fast they move: the game's velocity, or what they covered since the last check (a teleporting flier or a
-  // minecart has little velocity of its own).
-  const got = player.getVelocity?.() ?? { x: 0, z: 0 };
-  const prev = lastPose.get(player.id);
-  const dt = prev ? now - prev.tick : 0;
-  const moved = prev && dt > 0 && dt <= 40 ? { x: (at.x - prev.x) / dt, z: (at.z - prev.z) / dt } : { x: 0, z: 0 };
-  if (prev) {
-    prev.x = at.x;
-    prev.z = at.z;
-    prev.tick = now;
-  } else lastPose.set(player.id, { x: at.x, z: at.z, tick: now });
-  const vel = Math.abs(moved.x) + Math.abs(moved.z) > Math.abs(got.x) + Math.abs(got.z) && Math.abs(moved.x) + Math.abs(moved.z) < 16 ? moved : got;
-  const lead = { x: Math.max(-28, Math.min(28, vel.x * 8)), z: Math.max(-28, Math.min(28, vel.z * 8)) };
-  // Roof detection uses an exact surface sample from this same budget, never an extra per-viewer native read.
-  const origin = colKey(at.x, at.z, 1);
-  const missed = surface.miss.get(origin);
-  const probe = (!top || now - top.tick > 100) && (missed === undefined || now - missed >= MISS_RETRY);
-  /** @type {import("./terrain.js").Pick} */
-  const probePick = { wx: Math.floor(at.x), wz: Math.floor(at.z), key: origin, resolution: 1, store: surface, since: now };
-  const old = scanPlans.get(player.id);
+  requestDetailFootprint(player.id, store, at, pr.revealRadius);
+  const old = scanPlans.get(player.id), state = labPlans.get(player.id);
   const same = !!old && old.store === store;
-  const fast = Math.abs(lead.x) + Math.abs(lead.z) >= 4;
-  // Walking or standing: the radar lists what its own picture is missing whenever it is built (radarOf), so planning
-  // costs nothing extra. Flying or riding fast: plan the ground ahead too (aheadPicks, PLAN_EACH_TICK viewers a tick).
-  const drawn = terrainBaseMemo.get(player.id);
-  /** @type {import("./terrain.js").Pick[] | undefined} */
-  let picks;
-  if (!fast) {
-    // Walking, exact block columns near the player (the near field) are left for when they stop: each step needs a
-    // dozen new ones, which with many players walking would take most of the reading budget. Until then the near
-    // field shows the coarse samples, as it does before they are read.
-    const walking = Math.abs(vel.x) + Math.abs(vel.z) > 0.1;
-    if (drawn && drawn.needStore === store && drawn.needAt > (same ? old.at : -1)) picks = walking ? drawn.need.filter((p) => p.resolution !== 1) : drawn.need.slice();
-    // Reads that failed (an unloaded chunk) are asked again MISS_RETRY ticks later.
-    else if (same && old.missed > 0 && old.pos >= old.picks.length && now - old.at >= MISS_RETRY) {
-      picks = old.picks.filter((p) => !(p.store ?? store).cols.has(p.key));
-    }
-  } else {
-    // Moving fast: what the radar listed (the view now) and, alternating with it, the ground ahead (the radar's whole
-    // reach around the point `lead` blocks ahead), planned again every PLAN_MIN_AGE ticks.
-    const left = same && old.pos < old.picks.length;
-    if ((!left || now - old.at >= PLAN_MIN_AGE) && planTurn.left > 0) {
-      planTurn.left--;
-      const listed = drawn && drawn.needStore === store ? drawn.need.filter((p) => p.resolution !== 1 && !p.stale) : [];
-      const ahead = aheadPicks(store, pose.x + lead.x, pose.z + lead.z, pr.radius * 1.5, now, SCAN_MAX_AGE, 96);
-      picks = [];
-      for (let i = 0; i < listed.length || i < ahead.length; i++) {
-        if (i < listed.length) picks.push(listed[i]);
-        if (i < ahead.length) picks.push(ahead[i]);
-      }
+  const geometryKey = store.id + "|" + Math.round(at.x) + "|" + Math.round(at.z) + "|" + pr.radarRadius;
+  let version="";
+  const sameFootprint = state && state.key === geometryKey && state.x === at.x && state.z === at.z;
+  if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&state.demandVersion===store.demandVer&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*.75)**2){
+    const geometry=northUpRadarGeometry(store.id,Math.round(at.x),Math.round(at.z),pr.radarRadius,R,state.geometry);
+    const rerank=now>=(state.reorderAt??Infinity);
+    const rolled=rollTerrainDemand({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,geometry,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed,rerank});
+    if(rolled){old.picks=rolled.picks;old.pos=0;old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;old.rangeDeleted=undefined;
+      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(player.id,dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh);
+      if(rerank)state.reorderAt=now+80;if(rolled.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,rolled.nextRetry);retryAt.set(player.id,Math.min(retryAt.get(player.id)??Infinity,rolled.nextRetry));}
+      labStats.rolled++;labStats.rollTail+=rolled.stats.tailVisited;labStats.rollEntered+=rolled.stats.entered;labStats.rollRawChecks+=rolled.stats.rawChecks;planTurn.made++;return old;
     }
   }
-  if (!picks) {
-    if (!old || !same) {
-      if (!probe) return undefined;
-      picks = [];
-    } else {
-      // Keep reading the current plan; the roof probe goes first.
-      if (probe && old.picks[old.pos]?.key !== origin) old.picks.splice(old.pos, 0, probePick);
-      old.dim = dim;
-      old.py = py;
-      old.roof = roof;
-      // Checked here: the rotating check skips them until they move on from this point (planIdle).
-      old.x = at.x;
-      old.z = at.z;
-      return old.pos < old.picks.length ? old : undefined;
+  if(same&&sameFootprint&&(state.retryDeadline===undefined||now<state.retryDeadline)){
+    const complete=old.pos>=old.picks.length;
+    if(!complete&&now<(state.freshUntil??0)&&state.demandVersion===store.demandVer&&(!EXP.persistence||state.storeVersion===store.ver)){
+      if(now>=(state.reorderAt??Infinity)){old.picks=labOrder(old.picks.slice(old.pos).map(p=>({...p,d:(p.wx-at.x)**2+(p.wz-at.z)**2,stale:p.stale===true,queuedAt:p.queuedAt??old.at,visible:"visible" in p?p.visible!==false:undefined})),now);old.pos=0;state.reorderAt=now+80;}
+      return old;
+    }
+    // Any drained nonempty queue must be verified once: same-color renewals do not bump visual versions.
+    if(complete&&old.picks.length===0&&now<(state.freshUntil??0)){
+      if(state.storeVersion===store.ver)return old;
+      version=terrainVerOf(player.id,dim.id,at,pr.radarRadius);
+      if(state.version===version){state.storeVersion=store.ver;return old;}
     }
   }
-  if (probe) picks.unshift(probePick);
-  /** @type {ScanPlan} */
-  const plan = { id: player.id, store, picks, dim, py, roof, missRun: 0, at: fast || !drawn || drawn.needAt <= (same ? old.at : -1) ? now : drawn.needAt, pos: 0, missed: 0, x: at.x, z: at.z };
+  version ||= terrainVerOf(player.id,dim.id,at,pr.radarRadius);
+  const geometry = state?.key === geometryKey ? state.geometry : northUpRadarGeometry(store.id, Math.round(at.x), Math.round(at.z), pr.radarRadius, R,state?.geometry);
+  const footprintKey=[store.id,pr.revealRadius,sampleCoord(at.x-pr.revealRadius,COL),sampleCoord(at.x+pr.revealRadius,COL),sampleCoord(at.z-pr.revealRadius,COL),sampleCoord(at.z+pr.revealRadius,COL)].join("|");
+  const anchors=state?.footprintKey===footprintKey&&state.anchors?state.anchors:circleCandidates(at,pr.revealRadius,sampleCoord,colKey).anchors;
+  const ages = new Map();
+  if (same) for (let i = old.pos; i < old.picks.length; i++) ages.set(old.picks[i].key, old.picks[i].queuedAt ?? old.at);
+  if(same)for(const pick of old.failed?.values()??[]){const identity=pick.key;ages.set(identity,Math.min(ages.get(identity)??Infinity,pick.queuedAt??old.at));}
+  /** @type {LabPick[]} */ const picks=[];
+  const seenKeys=new Set();
+  let nextRetry = Infinity,nextRefresh=Infinity;
+  const add = (/** @type {number} */ key, /** @type {number} */ x, /** @type {number} */ z, /** @type {number} */ resolution, visible=false) => {
+    const identity = key; // colKey already encodes a disjoint resolution domain; never coerce to32bit.
+    if (key < 0 || seenKeys.has(identity)) return;
+    const d = (x - at.x) ** 2 + (z - at.z) ** 2;
+    if (d > pr.revealRadius * pr.revealRadius) return;
+    seenKeys.add(identity);
+    const sample = (resolution === PREVIEW ? store.preview : store.cols).get(key);
+    const valid = !!sample && (!("valid" in sample) || sample.valid !== false);
+    if(valid&&now-sample.tick<=SCAN_MAX_AGE){nextRefresh=Math.min(nextRefresh,sample.tick+SCAN_MAX_AGE+1);return;}
+    const miss = (resolution === PREVIEW ? store.previewMiss : store.miss).get(key);
+    if (miss !== undefined && now - miss < MISS_RETRY) { nextRetry = Math.min(nextRetry, miss + MISS_RETRY); return; }
+    const stale = valid;
+    picks.push({ wx: x, wz: z, key, resolution, d, stale, visible, queuedAt: ages.get(identity) ?? now, since: stale ? now : now - SCAN_MAX_AGE });
+  };
+  for (const {index:i} of RADAR_PIXELS) {
+    add(geometry.coarseKey[i], geometry.coarseX[i], geometry.coarseZ[i], COL,true);
+    if (!EXP.preview) continue;
+    const c = store.cols.get(geometry.coarseKey[i]);
+    // Never cover a tombstone with a preview; only missing detail admits new preview work.
+    if (c) continue;
+    const x = sampleCoord(geometry.x[i], PREVIEW), z = sampleCoord(geometry.z[i], PREVIEW);
+    add(colKey(x, z, PREVIEW), x, z, PREVIEW);
+  }
+  for(const anchor of anchors)add(anchor.key,anchor.x,anchor.z,COL,false);
+  const plan = { id: player.id, player, store, picks: labOrder(picks, now), dim, py, x: at.x, z: at.z,
+    at: now, pos: 0, missed: 0, missRun: 0, failed: same ? old.failed : undefined };
   scanPlans.set(player.id, plan);
-  planTurn.made++;
+  labPlans.set(player.id, { key: geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,demandVersion:store.demandVer,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
+  if (nextRetry < Infinity) retryAt.set(player.id, nextRetry);
+  planTurn.made++; labStats.planned++;
   return plan;
 }
 
@@ -1015,9 +1452,10 @@ const RADAR_SIZE = 2 * R + 1;
 const ROW = RADAR_SIZE + 1;
 const RADAR_PIECES = RADAR_SIZE * ROW - 1;
 const EMPTY_ROWS = /** @type {string[]} */ (Array(RADAR_PIECES).fill("\n"));
-for (let r = 0; r < RADAR_SIZE; r++) for (let c = 0; c < RADAR_SIZE; c++) EMPTY_ROWS[r * ROW + c] = G.Q_EMPTY;
+for (let r = 0; r < RADAR_SIZE; r++) for (let c = 0; c < RADAR_SIZE; c++) EMPTY_ROWS[r * ROW + c] = insideRadar(c-R,r-R,R)?G.Q_EMPTY:G.Q_OUTSIDE;
 /** Marker priorities by piece, all 0 between calls (each call puts back the ones it set). */
 const prioBuf = new Float64Array(RADAR_PIECES);
+const RADAR_BADGE_CELLS=radarBadgeCells(R);
 /** Terrain pictures built so far (each costs about 0.8 ms; the redraw spends REBUILDS_PER_TICK of them a tick). */
 let radarRebuilds = 0;
 /** Radars drawn from the last one's text (radarSig unchanged), and radars built (radarOf). */
@@ -1061,20 +1499,12 @@ function radarSig(heading, markers, radius, north, at, dimId, useTerrain, player
   const memo = terrainBaseMemo.get(playerId);
   if (!memo) return undefined;
   const th = north ? 0 : Math.round(heading / TERRAIN_TURN) * TERRAIN_TURN;
-  let sig = !store ? "empty" : `${terrainVerOf(playerId, dimId, at, radius)}|${Math.round(at.x)}|${Math.round(at.z)}|${th}|${radius}|${Math.floor((now + memo.slot) / STALE_EVERY)}`;
-  sig += `|${north ? 1 : 0}|${heading.toFixed(1)}`;
-  const h = (heading * Math.PI) / 180;
-  const cos = Math.cos(h);
-  const sin = Math.sin(h);
-  const cell = radius / R;
-  for (const m of markers) {
-    if (m.kind === "star") return undefined;
-    const dx = m.x - at.x;
-    const dz = m.z - at.z;
-    const sx = north ? dx : dx * cos + dz * sin;
-    const sy = north ? dz : -dx * sin + dz * cos;
-    sig += `|${m.kind}${Math.round(sx / cell)},${Math.round(sy / cell)}`;
-  }
+  let sig = !store ? "empty" : terrainVerOf(playerId, dimId, at, radius) + "|" + Math.round(at.x) + "|" + Math.round(at.z) + "|" + th + "|" + radius + "|" + Math.floor((now + memo.slot) / STALE_EVERY);
+  sig += north ? "|north" : "|turn|" + heading;
+  sig += "|exact|" + at.x + "|" + at.z+"|profile="+EXP.id+"|estimate="+(EXP.estimateRadiusBlocks??0);
+  if (markers.length) sig += "|origin|" + at.x + "|" + at.z;
+  // Exact ordered marker inputs preserve collision priorities, route dots and off-map directions.
+  for (const m of markers) sig += "|" + m.kind + ":" + m.x + "," + m.z;
   return sig;
 }
 
@@ -1085,99 +1515,70 @@ function radarSig(heading, markers, radius, north, at, dimId, useTerrain, player
  * @param {string} [dimId] @param {boolean} [useTerrain] @param {string} [playerId]
  * @param {boolean} [rebuild] false: if the terrain would have to be built again, draw on the last one (no time left; radarStale)
  * @param {number} [now] the tick (stale columns, failed reads)
+ * @param {string} [terrainVersion] optional version for this pose
  */
-function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerrain = false, playerId = "", rebuild = true, now = 0) {
-  const h = (heading * Math.PI) / 180;
-  const cos = Math.cos(h);
-  const sin = Math.sin(h);
-  const cell = radius / R;
+function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerrain = false, playerId = "", rebuild = true, now = 0, terrainVersion) {
+  const h = heading * Math.PI / 180, cos = Math.cos(h), sin = Math.sin(h), cell = radius / R;
   const store = useTerrain ? storeFor(playerId, dimId) : undefined;
-  let memo = playerId ? terrainBaseMemo.get(playerId) : undefined;
+  let memo = terrainBaseMemo.get(playerId);
   if (!memo) {
     memo = { key: "", base: EMPTY_ROWS.slice(), rows: EMPTY_ROWS.slice(), touched: [], need: [], needAt: -1, slot: staleSlot(playerId) };
-    if (playerId) terrainBaseMemo.set(playerId, memo);
+    terrainBaseMemo.set(playerId, memo);
   }
   const { base, rows, touched } = memo;
-  const tx = Math.round(at.x);
-  const tz = Math.round(at.z);
-  const th = north ? 0 : Math.round(heading / TERRAIN_TURN) * TERRAIN_TURN;
-  // Built again when the pose (whole blocks, TERRAIN_TURN degrees) or the land near the player changed, and every
-  // STALE_EVERY ticks (each player at their own turn) so columns older than SCAN_MAX_AGE are found and read again.
-  const key = !store ? "empty" : `${terrainVerOf(playerId, dimId, at, radius)}|${tx}|${tz}|${th}|${radius}|${Math.floor((now + memo.slot) / STALE_EVERY)}`;
-  radarStale = false;
-  if (memo.key !== key && !rebuild && memo.key && key !== "empty") {
-    // No time to build the terrain again: this tick's markers go on the last picture (radarStale tells the caller).
-    radarStale = true;
-    for (const i of touched) rows[i] = base[i];
-  } else if (memo.key !== key) {
+  const estimateRadius=EXP.estimateRadiusBlocks??0;
+  const tx = Math.round(at.x), tz = Math.round(at.z), th = north ? 0 : Math.round(heading / TERRAIN_TURN) * TERRAIN_TURN;
+  const bucket = Math.floor((now + memo.slot) / STALE_EVERY);
+  // Fractional position affects coverage and markers, not the rounded terrain raster itself.
+  const key = !store ? "empty|"+dimId : `${terrainVersion ?? terrainVerOf(playerId, dimId, at, radius)}|${tx}|${tz}|${th}|${radius}|${bucket}|${north ? 1 : 0}|${experimentNative() ? "native" : "material"}` + "|profile=" + EXP.id + "|estimate=" + (EXP.estimateRadiusBlocks??0);
+  radarStale = !!store && memo.key !== key && !rebuild;
+  if (memo.key !== key && !radarStale) {
     if (!store) {
-      for (let i = 0; i < RADAR_PIECES; i++) base[i] = EMPTY_ROWS[i];
+      for(let i=0;i<RADAR_PIECES;i++)base[i]=EMPTY_ROWS[i];
+      for(const{piece}of RADAR_PIXELS)base[piece]=unknownTerrainGlyph(dimId);
+      memo.coverage = undefined; memo.needStore = undefined;
     } else {
-      radarRebuilds++;
-      const cols = store.cols;
-      const miss = store.miss;
-      /** What the scanner should read for this picture (planFor): missing columns, then stale ones. @type {(import("./terrain.js").Pick & { d: number, stale: boolean })[]} */
-      const need = [];
-      /** @type {Set<number>} */
-      const listed = new Set();
-      /** @param {number} k @param {number} wx @param {number} wz @param {number} resolution @param {number} d @param {boolean} stale */
-      const want = (k, wx, wz, resolution, d, stale) => {
-        if (listed.has(k)) return;
-        const m = miss.get(k);
-        if (m !== undefined && now - m < MISS_RETRY) return;
-        listed.add(k);
-        need.push({ wx: sampleCoord(wx, resolution), wz: sampleCoord(wz, resolution), key: k, resolution, d: d + (resolution === 1 ? 1e6 : 0), stale });
-      };
-      const tcos = Math.cos((th * Math.PI) / 180);
-      const tsin = Math.sin((th * Math.PI) / 180);
-      // cellWorld, sampleResolution and the coarse colKey and glyphAt, inline: this runs for every cell of every
-      // rebuilt radar. Neighboring cells often sample the same 4 x 4 column: the last one is kept.
-      let lastKey = -1;
-      let lastGlyph = G.Q_EMPTY;
-      for (let row = -R; row <= R; row++) {
-        const sy = row * cell;
-        let idx = (row + R) * ROW;
-        for (let col = -R; col <= R; col++) {
-          const sx = col * cell;
-          const d = sx * sx + sy * sy;
-          const wx = north ? tx + sx : tx + sx * tcos - sy * tsin;
-          const wz = north ? tz + sy : tz + sx * tsin + sy * tcos;
-          const k = (Math.floor(wx / COL) + KEY_BIAS) * KEY_SPAN + Math.floor(wz / COL) + KEY_BIAS;
-          if (k !== lastKey) {
-            const c = cols.get(k);
-            if (!c) want(k, wx, wz, COL, d, false);
-            else if (now - c.tick > SCAN_MAX_AGE) want(k, wx, wz, COL, d, true);
-            lastGlyph = !c || c.kind === "empty" ? G.Q_EMPTY : c.glyph ?? glyphAt(terrain, store, wx, wz, COL);
-            lastKey = k;
-          }
-          if (d <= 36) {
-            // The near field: exact block columns (thin roofs), over the coarse base until they are read.
-            const kf = colKey(wx, wz, 1);
-            const f = kf < 0 ? undefined : cols.get(kf);
-            if (!f) {
-              if (kf >= 0) want(kf, wx, wz, 1, d, false);
-              base[idx++] = lastGlyph;
-            } else {
-              if (now - f.tick > SCAN_MAX_AGE) want(kf, wx, wz, 1, d, true);
-              base[idx++] = glyphAt(terrain, store, wx, wz, 1);
-            }
-            continue;
-          }
-          base[idx++] = lastGlyph;
-        }
+      radarRebuilds++; labStats.rasterBuilds++;
+      const geometryKey = `${store.id}|${tx}|${tz}|${th}|${north ? 1 : 0}|${radius}|${R}`;
+      let geometry = memo.geometry;
+      if (!geometry || geometry.key !== geometryKey) geometry = north ? northUpRadarGeometry(store.id, tx, tz, radius, R, geometry) : radarGeometry(store.id, tx, tz, th, false, radius, R);
+      memo.geometry = geometry;
+      const count=RADAR_SIZE*RADAR_SIZE;
+      const flags=memo.labFlags?.length===count?memo.labFlags:new Uint8Array(count);
+      const ticks=memo.labTicks?.length===count?memo.labTicks:new Float64Array(count);
+      const heights=memo.labHeights?.length===count?memo.labHeights:new Float32Array(count);
+      flags.fill(32);ticks.fill(0);let estimateNeeded=false,estimateSources=0;
+      for(const{index:j,piece}of RADAR_PIXELS){
+        flags[j]=0;heights[j]=NaN;
+        const raw=store.cols.get(geometry.coarseKey[j]),valid=!!raw&&raw.valid!==false;let glyph=unknownTerrainGlyph(dimId);
+        if(valid){flags[j]=1|(raw.source==="persisted"?2:0)|(raw.kind==="empty"?4:0);ticks[j]=raw.tick;heights[j]=raw.y;glyph=raw.kind==="empty"?emptyTerrainGlyph(dimId):raw.glyph??glyphAt(terrain,store,geometry.x[j],geometry.z[j],COL);raw.visible=true;if(raw.kind!=="empty"&&now-raw.tick<=SCAN_MAX_AGE)estimateSources++;}
+        else if(raw)flags[j]=16;
+        else if(EXP.preview&&!detailHydrationBlocked){const pk=colKey(geometry.x[j],geometry.z[j],PREVIEW),preview=store.preview.get(pk);previewCost.queries++;if(preview){flags[j]=8;glyph=preview.glyph;previewCost.hits++;preview.visible=true;}}
+        base[piece]=glyph;
+        if(estimateRadius>0&&flags[j]===0&&(geometry.coarseX[j]-at.x)**2+(geometry.coarseZ[j]-at.z)**2<=radius*radius)estimateNeeded=true;
       }
-      need.sort((a, b) => Number(a.stale) - Number(b.stale) || a.d - b.d);
-      memo.need = need;
-      memo.needAt = now;
-      memo.needStore = store;
+      if(estimateNeeded&&estimateSources>=2){const estimate=reconstructRaster({width:RADAR_SIZE,height:RADAR_SIZE,stride:ROW,flags,ticks,heights,base,worldX:geometry.coarseX,worldZ:geometry.coarseZ,origin:at,readRadius:radius,worldRadius:estimateRadius,step:cell,now,maxAge:SCAN_MAX_AGE},estimatedPaletteGlyph,memo.estimateScratch);memo.estimateScratch=estimate.scratch;labStats.estimatedBuilds++;labStats.estimatedCells+=estimate.estimated;labStats.estimateVisited+=estimate.visited;}
+      memo.labFlags=flags;memo.labTicks=ticks;memo.labHeights=heights;memo.labBuilt=now;
+      memo.needStore = store; memo.bucket = bucket;
     }
     for (let i = 0; i < RADAR_PIECES; i++) rows[i] = base[i];
     memo.key = key;
-    if (store) memo.bucket = Math.floor((now + memo.slot) / STALE_EVERY);
-  } else {
-    for (const i of touched) rows[i] = base[i];
+  } else for (const i of touched) rows[i] = base[i];
+  if (store && !radarStale && memo.labFlags && memo.labTicks && memo.geometry) {
+    const previous = memo.coverage;
+    const signature=memo.key+"|raster="+memo.labBuilt+"|exact="+at.x+"|"+at.z+"|r="+radius;
+    const reusable=!!previous&&memo.coverageSignature===signature&&now<(previous.nextExpiry??Infinity);
+    const coverage=reusable?previous:labCoverage(memo.geometry,memo.labFlags,memo.labTicks,at,radius,now,SCAN_MAX_AGE);
+    if(!reusable)labStats.coveragePasses++;memo.coverageSignature=signature;
+    coverage.firstTick = previous?.firstTick ?? now;
+    coverage.firstKnownTick = previous?.firstKnownTick ?? (coverage.eligibleKnownCells ? now : undefined);
+    coverage.firstCoveredTick = previous?.firstCoveredTick ?? (coverage.eligibleKnownCells === coverage.eligibleCells ? now : undefined);
+    coverage.builtTick = memo.labBuilt;
+    coverage.frameKey = store.id + "|" + tx + "|" + tz + "|" + th + "|" + radius + "|" + (experimentNative() ? "native" : "material") + "|" + at.x + "|" + at.z + "|circle" + "|profile=" + EXP.id + "|estimate=" + (EXP.estimateRadiusBlocks??0);
+    memo.coverage = coverage;
   }
   touched.length = 0;
+  if(north)for(const p of RADAR_BADGE_CELLS){const i=(p.z+R)*ROW+p.x+R;prioBuf[i]=100;touched.push(i);}
   /** Screen offset (right, down) of a world offset. @param {number} dx @param {number} dz */
   const screen = (dx, dz) => (north ? [dx, dz] : [dx * cos + dz * sin, -dx * sin + dz * cos]);
   /** @param {number} sx @param {number} sy @param {string} g @param {number} p @param {boolean} clamp @param {string} [kind] */
@@ -1185,11 +1586,9 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     let c = Math.round(sx / cell);
     let r = Math.round(sy / cell);
     let glyph = g;
-    if (Math.max(Math.abs(c), Math.abs(r)) > R) {
+    if (!insideRadar(c,r,R)) {
       if (!clamp) return;
-      const m = Math.max(Math.abs(sx), Math.abs(sy));
-      c = Math.round((sx * R) / m);
-      r = Math.round((sy * R) / m);
+      const clipped=circularMarker(sx/cell,sy/cell,R);c=clipped.x;r=clipped.z;
       const dirIdx = ((Math.round((Math.atan2(sx, -sy) * 180) / Math.PI / 45) % 8) + 8) % 8;
       if (kind === "star") glyph = STAR_ARR[dirIdx] ?? g;
       else if (kind === "party") glyph = PARTY_ARR[dirIdx] ?? g;
@@ -1200,25 +1599,24 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     if (p <= prioBuf[idx]) {
       if (prioBuf[idx] !== 100 || p >= 100) return;
       // A protected direction badge keeps its cell; an edge marker uses the next cell along the same edge.
-      const neighbors = Math.abs(c) === R ? [[c, r - 1], [c, r + 1]] : [[c - 1, r], [c + 1, r]];
-      const free = neighbors.find(([nc, nr]) => Math.abs(nc) <= R && Math.abs(nr) <= R &&
-        p > prioBuf[(nr + R) * ROW + (nc + R)]);
-      if (!free) return;
-      idx = (free[1] + R) * ROW + (free[0] + R);
+      const free=circularMarkerNeighbors(c,r,R).find(q=>p>prioBuf[(q.z+R)*ROW+q.x+R]);
+      if(!free)return;idx=(free.z+R)*ROW+free.x+R;
     }
-    rows[idx] = glyph;
+    rows[idx] = overlayGlyph(glyph, base[idx]);
     if (!prioBuf[idx]) touched.push(idx);
     prioBuf[idx] = p;
   };
-  // Protect all four directions from markers (fixed up/right/down/left when north is up).
-  for (const [dx, dz, g] of /** @type {[number, number, string][]} */ ([
-    [0, -radius * 2, G.Q_NORTH],
-    [radius * 2, 0, G.Q_EAST],
-    [0, radius * 2, G.Q_SOUTH],
-    [-radius * 2, 0, G.Q_WEST],
-  ])) {
-    const [sx, sy] = screen(dx, dz);
-    place(sx, sy, g, 100, true);
+  // Legacy turned-map helper calls retain their in-grid compass; live preferences are always north-up and use fixed UI overlays.
+  if (!north) {
+    for (const [dx, dz, g] of /** @type {[number, number, string][]} */ ([
+      [0, -radius * 2, G.Q_NORTH],
+      [radius * 2, 0, G.Q_EAST],
+      [0, radius * 2, G.Q_SOUTH],
+      [-radius * 2, 0, G.Q_WEST],
+    ])) {
+      const [sx, sy] = screen(dx, dz);
+      place(sx, sy, g, 100, true);
+    }
   }
   const star = markers.find((m) => m.kind === "star");
   if (star) {
@@ -1239,8 +1637,10 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     const [sx, sy] = screen(dx, dz);
     place(sx, sy, k.q, 10 + k.p - Math.min(dx * dx + dz * dz, 998001) / 998002, m.kind === "star" || m.kind === "party" || m.kind === "other" || m.kind === "rainbow" || m.kind === "champ", m.kind);
   }
-  rows[R * ROW + R] = north ? YOU[Math.round(heading / 45) % 8] : YOU[0];
-  touched.push(R * ROW + R);
+  if (!north) {
+    rows[R * ROW + R] = overlayGlyph(YOU[0], base[R * ROW + R]);
+    touched.push(R * ROW + R);
+  }
   for (const i of touched) prioBuf[i] = 0;
   return rows.join("");
 }
@@ -1275,10 +1675,21 @@ function line2Of(region, dest) {
  * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
  * markers, the second line, which parts show, and the heading and place they were last drawn for.
  * `shown` and `shownSecond`: the markers and second line it was last drawn with (a pass that finds the same draws nothing).
- * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string, drawn?: number, lag?: boolean, fresh?: number, dirty?: boolean, shown?: Marker[], shownSecond?: string, checked?: number, rsig?: string }} View
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string, drawn?: number, lag?: boolean, fresh?: number, dirty?: boolean, shown?: Marker[], shownSecond?: string, checked?: number,observedX?:number,observedZ?:number, rsig?: string }} View
  */
 /** @type {Map<string, View>} */
 const views = new Map();
+/** @typedef {{tag:string,viewKey:string,tick:number,eligible:number,sampled2:number,live2:number,persisted2:number,validEmpty2:number,estimated2?:number,radarWire:string,x:number,z:number,built?:number}} DetailFrame */
+/** @type {Map<string,DetailFrame>} */ const preparedDetailFrames = new Map();
+/** @type {Map<string,DetailFrame>} */ const publishedDetailFrames = new Map();
+let detailFrameSequence = 0;
+/** @param {Player} player @param {DetailFrame | undefined} frame */
+function acceptDetailFrame(player, frame) {
+  const receipt = side.delivery(player);
+  if (residentTrace.active(player.id)) residentTrace.note(player.id,system.currentTick,"publication",!frame?"no_frame":!receipt?"no_receipt":receipt.tag!==frame.tag?"tag_mismatch":"accepted",{tag:frame?.tag??"",receipt:receipt?.tag??"",view:frame?.viewKey??"",...residentTrace.older(system.currentTick,residentTrace.current.x,residentTrace.current.z)});
+  if (frame && receipt?.tag === frame.tag) publishedDetailFrames.set(player.id, { ...frame, tick: receipt.tick });
+}
+
 
 /** Markers closer than this (blocks) to where they were drawn count as unmoved: a strip cell is 5 degrees and a radar cell 2.4 blocks or more. */
 const MARKER_SLACK = 0.25;
@@ -1299,22 +1710,34 @@ function sameMarkers(a, b) {
 /** 0 = north, clockwise. @param {Player} player */
 const headingOf = (player) => (((player.getRotation().y + 180) % 360) + 360) % 360;
 
+/** @param {Player} player */
+function hidePlayerHud(player) {
+  const id = player.id;
+  labPlans.delete(id); detailFootprints.delete(id);
+  views.delete(id);
+  preparedDetailFrames.delete(id); publishedDetailFrames.delete(id);
+  lastText.delete(id);
+  planNow.delete(id);
+  scanPlans.delete(id);
+  retryAt.delete(id);
+  playerStore.delete(id);
+  lastPose.delete(id);
+  if (lastSent.has(id)) {
+    side.clear(player, "", false);
+    side.clear(player, "radar", false);
+    side.redraw(player);
+    lastSent.delete(id);
+  }
+}
+
 /** @param {Player} player @param {Player[]} all @param {Seen[]} seen @param {number} now */
 function pass(player, all, seen, now) {
   const pr = prefsOf(player);
   const on = get("enabled") === true;
   const showCompass = on && pr.compass;
   const showRadar = on && pr.radar;
-  const sent = lastSent.get(player.id);
   if (!showCompass && !showRadar) {
-    views.delete(player.id);
-    lastText.delete(player.id);
-    if (sent) {
-      side.clear(player, "", false);
-      side.clear(player, "radar", false);
-      side.redraw(player);
-      lastSent.delete(player.id);
-    }
+    hidePlayerHud(player);
     if (on) arrival(player, destination(player, all, new Map()));
     return;
   }
@@ -1341,10 +1764,10 @@ function pass(player, all, seen, now) {
   const dimId = player.dimension.id;
   const region = dimId === OVERWORLD ? regions.get(player.id) ?? "" : `In ${DIM_NAMES[dimId] ?? "another dimension"}`;
   /** @type {View} */
-  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, terrain: pr.terrain, dest: dest?.spot?.n, target: dest?.spot, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, y: 0, z: 0 };
+  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radarRadius, north: pr.north, terrain: pr.terrain, dest: dest?.spot?.n, target: dest?.spot, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, y: 0, z: 0 };
   const old = views.get(player.id);
   const same = !!old && old.dim === view.dim;
-  if (same) Object.assign(view, { heading: old.heading, x: old.x, y: old.y, z: old.z, tv: old.tv, drawn: old.drawn, fresh: old.fresh, shown: old.shown, shownSecond: old.shownSecond });
+  if (same) Object.assign(view, { heading: old.heading, x: old.x, y: old.y, z: old.z, tv: old.tv, drawn: old.drawn, fresh: old.fresh, shown: old.shown, shownSecond: old.shownSecond, rsig: old.rsig, lag: old.lag, checked: old.checked,observedX:old.observedX,observedZ:old.observedZ });
   // Drawn by the per-tick redraw, within its budget (next tick unless many players are waiting), unless the pass found
   // what is already on screen: then only turning, moving, new land or the refresh draws it (a still player's pass
   // costs no strip and radar).
@@ -1363,6 +1786,8 @@ function pass(player, all, seen, now) {
  * @returns {boolean} whether anything was sent
  */
 function render(player, v, now, refresh, heading = headingOf(player), at = player.location) {
+  if(residentTrace.active(player.id))residentTrace.note(player.id,now,"render","entered",{x:at.x,z:at.z,...residentTrace.older(now,at.x,at.z)});
+  if (side.held(player)) { if(residentTrace.active(player.id))residentTrace.note(player.id,now,"render","held_entry");v.dirty = true; return false; }
   v.heading = heading;
   v.x = at.x;
   v.y = at.y;
@@ -1380,11 +1805,17 @@ function render(player, v, now, refresh, heading = headingOf(player), at = playe
   const reuse = sig !== undefined && sig === v.rsig ? lastText.get(player.id)?.radar : undefined;
   if (reuse !== undefined) radarReuses++;
   else if (v.radar) radarBuilds++;
-  const radar = reuse ?? (v.radar ? radarOf(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id, rebuildBudget.ok, now) : "");
+  const terrainMemo=terrainBaseMemo.get(player.id);
+  const wantedGeometry=v.radar&&v.terrain?storeFor(player.id,v.dim).id+"|"+Math.round(at.x)+"|"+Math.round(at.z)+"|"+(v.north?0:Math.round(heading/TERRAIN_TURN)*TERRAIN_TURN)+"|"+(v.north?1:0)+"|"+v.radius+"|"+R:"empty";
+  const allowTerrain=rebuildBudget.ok&&featureEnvelope.room>0&&rasterCadenceReady(terrainMemo?.geometry?.key,wantedGeometry,terrainMemo?.labBuilt,now,EXP.renderTicks);
+  if(residentTrace.active(player.id))residentTrace.note(player.id,now,"terrain_admission",reuse!==undefined?"body_reuse":!v.radar?"radar_off":!rebuildBudget.ok?"rebuild_budget":!allowTerrain?"four_tick_cadence":"admitted",{x:at.x,z:at.z,budget:rebuildBudget.left,previousBuilt:terrainBaseMemo.get(player.id)?.coverage?.builtTick??null});
+  const radar = reuse ?? (v.radar ? radarOf(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id, allowTerrain, now) : "");
   if (reuse === undefined) v.rsig = sig ?? (v.radar && !radarStale ? radarSig(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id, now) : undefined);
+  const radarWire = v.radar ? `${radar}${v.north ? SELF_ARROWS[Math.round(heading / 45) % 8] : G.Q_OUTSIDE}${v.north ? "1" : "0"}` : "";
   const tookRadar = Date.now() - tr;
   if (radarRebuilds > before) {
-    planNow.add(player.id); // a new list of what the radar misses
+    if(residentTrace.active(player.id))residentTrace.note(player.id,now,"terrain","built",{view:terrainBaseMemo.get(player.id)?.coverage?.frameKey??"",built:now,x:at.x,z:at.z});
+    // Planning is independent of raster arrivals; normal rotation observes movement.
     rebuildBudget.spend(tookRadar);
     drawBudget.spend(-tookRadar); // render() charges its whole time to drawBudget; the rebuild was charged here
   }
@@ -1409,30 +1840,51 @@ function render(player, v, now, refresh, heading = headingOf(player), at = playe
     shot.radius = v.radius;
     shot.north = v.north;
   }
+  const coverage = terrainBaseMemo.get(player.id)?.coverage;
+  const currentViewKey = storeFor(player.id, v.dim).id + "|" + Math.round(at.x) + "|" + Math.round(at.z) + "|0|" + v.radius + "|" + (experimentNative() ? "native" : "material") + "|" + at.x + "|" + at.z + "|circle" + "|profile=" + EXP.id + "|estimate=" + (EXP.estimateRadiusBlocks??0);
+  /** @type {DetailFrame | undefined} */
+  const frame = v.radar && !v.lag && coverage?.frameKey === currentViewKey ? { tag: "d" + now + "_" + (++detailFrameSequence), viewKey: currentViewKey, tick: now, eligible: coverage.eligibleCells, sampled2: coverage.sampled2 ?? 0, live2: coverage.live2 ?? 0, persisted2: coverage.persisted2 ?? 0, validEmpty2: coverage.validEmpty2 ?? 0,estimated2:coverage.eligibleEstimatedCells??0, radarWire, x:at.x,z:at.z,built:coverage.builtTick } : undefined;
+  if (frame) preparedDetailFrames.set(player.id, frame);
+  if(residentTrace.active(player.id)){
+    if(frame)residentTrace.frame(frame.tag,{view:frame.viewKey,x:frame.x,z:frame.z,built:frame.built});
+    residentTrace.note(player.id,now,"frame",frame?"prepared":v.lag?"stale_terrain":"frame_key_mismatch",{view:currentViewKey,terrainView:coverage?.frameKey??"",tag:frame?.tag??"",x:at.x,z:at.z,built:coverage?.builtTick??null,...residentTrace.older(now,at.x,at.z)});
+  }
   const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
-  if (side.held(player)) return false;
+  if (side.held(player)) { if(residentTrace.active(player.id))residentTrace.note(player.id,now,"render","held_pre_stage");v.dirty = true; return false; }
   // On screen from now (or already): a pass that finds the same markers and line doesn't draw again.
   v.shown = v.markers;
   v.shownSecond = v.second;
   const sent = lastSent.get(player.id);
   let showC = v.compass && (!sent || !sent.compass || sent.ctext !== compassText || (refresh && now - sent.cat >= REFRESH));
-  let showR = v.radar && (!sent || !sent.radar || sent.rtext !== radar || (refresh && now - sent.rat >= REFRESH));
+  let showR = v.radar && (!sent || !sent.radar || sent.rtext !== radarWire || (refresh && now - sent.rat >= REFRESH));
   // A part sent anyway takes the other along once that one is half-way to its refresh, so the two stay in step and
   // a still player's refresh is one title, not one per part.
   if (sent && showC && !showR && v.radar && sent.radar && now - sent.rat >= REFRESH / 2) showR = true;
   if (sent && showR && !showC && v.compass && sent.compass && now - sent.cat >= REFRESH / 2) showC = true;
+  if (frame && publishedDetailFrames.get(player.id)?.viewKey !== frame.viewKey) showR = true;
   const offC = !v.compass && !!sent?.compass;
   const offR = !v.radar && !!sent?.radar;
-  if (!showC && !showR && !offC && !offR) return false;
+  if (!showC && !showR && !offC && !offR) {
+    if(residentTrace.active(player.id))residentTrace.note(player.id,now,"submit","no_content_change",{tag:frame?.tag??"",view:currentViewKey});
+    const accepted = publishedDetailFrames.get(player.id);
+    // Same accepted frame/store/pose and identical body may acknowledge provenance without another title send.
+    if (frame && accepted?.viewKey === frame.viewKey && accepted.radarWire === frame.radarWire) {publishedDetailFrames.set(player.id, { ...frame, tick: accepted.tick });if(residentTrace.active(player.id))residentTrace.note(player.id,now,"publication","identical_body_provenance",{tag:frame.tag,receipt:accepted.tag,view:frame.viewKey});}
+    return false;
+  }
   const t1 = Date.now();
+  if (offC) side.clear(player, "", false);
+  if (offR) side.clear(player, "radar", false);
+  if(residentTrace.active(player.id))residentTrace.note(player.id,now,"submit","stage_show_redraw",{tag:frame?.tag??"",view:currentViewKey,showC,showR});
+  if (frame) side.stage(player, frame.tag);
   if (showC) side.show(player, "top", compassText, HOLD, "", false);
-  else if (offC) side.clear(player, "", false);
-  if (showR) side.show(player, "radar", radar, HOLD, "radar", false);
-  else if (offR) side.clear(player, "radar", false);
+
+  if (showR) side.show(player, "radar", radarWire, HOLD, "radar", false);
+
   side.redraw(player);
+  acceptDetailFrame(player, frame);
   lastSent.set(player.id, {
     ctext: v.compass ? compassText : "", cat: showC ? now : sent?.cat ?? now,
-    rtext: v.radar ? radar : "", rat: showR ? now : sent?.rat ?? now,
+    rtext: v.radar ? radarWire : "", rat: showR ? now : sent?.rat ?? now,
     compass: v.compass, radar: v.radar,
   });
   drawMs += Date.now() - t1;
@@ -1502,8 +1954,8 @@ let turnFirst = 0;
  * picture again (rebuildBudget, ~1 ms each). With many players moving at once a player's strip comes a few ticks
  * later and their terrain picture lags (it is drawn with the markers of the same moment), instead of the server.
  */
-const drawBudget = new Budget(0.4, 6, 2);
-const rebuildBudget = new Budget(0.15, 4, 2);
+const drawBudget = new LabBudget(EXP.drawMs,EXP.drawMs,EXP.drawMs);
+const rebuildBudget = new LabBudget(EXP.rebuildMs,EXP.rebuildMs,EXP.rebuildMs);
 let turnMs = 0;
 let turnTicks = 0;
 let turnDraws = 0;
@@ -1520,6 +1972,8 @@ let radarMs = 0;
 // around). Only players who turned or moved, or whose land nearby was read, are drawn again, and only a changed
 // part is sent; a part REFRESH ticks old is sent again so it never fades.
 system.runInterval(() => {
+  const featureStarted = featureEnvelope.begin(system.currentTick);
+  try {
   drawBudget.tick();
   rebuildBudget.tick();
   if (!views.size) return;
@@ -1548,9 +2002,9 @@ system.runInterval(() => {
     // of them a tick (about one picture fits in a tick's rebuild time): the others wait their turn.
     const lagDue = v.lag && rebuildBudget.ok && lagChecks < LAG_CHECKS;
     if (lagDue) lagChecks++;
-    if (!v.dirty && !lagDue && !refresh && (k - turnFirst + n) % n >= checks) continue;
+    if (!v.dirty && !lagDue && !refresh && (k - turnFirst + n) % n >= checks) {if(residentTrace.active(p.id))residentTrace.note(p.id,now,"scheduler","check_rotation");continue;}
     // A player drawn a moment ago waits DRAW_MIN ticks, unless the pass found something new or the title is due.
-    if (busy && !v.dirty && !refresh && (now - (v.drawn ?? -Infinity) < DRAW_MIN || now - (v.checked ?? -Infinity) < DRAW_MIN)) continue;
+    if (busy && !v.dirty && !refresh && (now - (v.drawn ?? -Infinity) < DRAW_MIN || now - (v.checked ?? -Infinity) < DRAW_MIN)) {if(residentTrace.active(p.id))residentTrace.note(p.id,now,"scheduler","busy_min_age");continue;}
     v.checked = now;
     try {
       // No isValid first: on a handle kept from an earlier tick it makes every read after it several times dearer
@@ -1558,12 +2012,15 @@ system.runInterval(() => {
       // Far from where the pass looked (a teleport): wait for the next pass. Another dimension (a portal) drops the view
       // (playerDimensionChange), so the check needn't read it.
       const at = p.location;
-      if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
+      if(residentTrace.active(p.id))residentTrace.note(p.id,now,"eligible","pose_observed",{x:at.x,z:at.z,dirty:v.dirty,lag:v.lag,...residentTrace.older(now,at.x,at.z)});
+      if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) {if(residentTrace.active(p.id))residentTrace.note(p.id,now,"scheduler","far_move");continue;}
       /** @type {number | undefined} read only when a new pass didn't already settle it; render() reads it otherwise, inside the draw budget */
       let heading;
-      const changed = !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && (v.tv !== terrainVerOf(p.id, v.dim, at, v.radius) || (refresh && staleDue(p.id, now))));
+      // A stopped sub-MOVE_MIN drift still needs one exact-pose certificate; do not redraw every moving micron.
+      const settledPose=v.observedX===at.x&&v.observedZ===at.z&&(at.x!==v.x||at.z!==v.z);v.observedX=at.x;v.observedZ=at.z;
+      const changed = !!v.dirty || settledPose || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && (v.tv !== terrainVerOf(p.id, v.dim, at, v.radius) || (refresh && staleDue(p.id, now))));
       const moved = refresh || changed;
-      if (!moved && !v.lag) continue;
+      if (!moved && !v.lag) {if(residentTrace.active(p.id))residentTrace.note(p.id,now,"scheduler","unchanged");continue;}
       // Moving fast (flying, riding): the scanner plans ahead for them often.
       if (Math.abs(at.x - v.x) + Math.abs(at.z - v.z) > 0.6 * Math.max(1, now - (v.drawn ?? now))) planNow.add(p.id);
       due.push({ p, v, refresh, moved, keep: refresh && !changed && !v.lag, heading, at });
@@ -1583,11 +2040,12 @@ system.runInterval(() => {
     // Out of budget, a title about to fade is still drawn again as it is (cheap: no strip or radar is built), so with
     // many players moving a strip can lag but never goes off; the refreshes come first, so the rest wait.
     const over = sends >= TURN_BUDGET || built >= RENDER_BUDGET || !drawBudget.ok;
-    if (over && !refresh) break;
+    if (over && !refresh) {if(residentTrace.active(p.id))residentTrace.note(p.id,now,"scheduler",sends>=TURN_BUDGET?"send_budget":built>=RENDER_BUDGET?"render_budget":"draw_budget",{x:at.x,z:at.z,left:drawBudget.left});break;}
     // A radar waiting for its terrain, with nothing else new, waits for a rebuild in the budget.
-    if (!moved && !rebuildBudget.ok) continue;
+    if (!moved && !rebuildBudget.ok) {if(residentTrace.active(p.id))residentTrace.note(p.id,now,"scheduler","rebuild_budget",{x:at.x,z:at.z,left:rebuildBudget.left});continue;}
     const tr = Date.now();
     try {
+      if(residentTrace.active(p.id))residentTrace.note(p.id,now,"scheduler",keep||over?"keep":"render",{x:at.x,z:at.z,left:drawBudget.left,rebuild:rebuildBudget.left});
       if (keep || over) {
         // Nothing they see changed (or no time to build it): the same title again, so it doesn't fade.
         const drawn = v.drawn;
@@ -1614,6 +2072,8 @@ system.runInterval(() => {
   turnSends += sends - refreshSends + refreshBefore;
   turnMs += Date.now() - t0;
   turnTicks++;
+
+  } finally { featureEnvelope.end(featureStarted); }
 }, 1);
 
 /**
@@ -1662,16 +2122,16 @@ const BUDGETS = [drawBudget, rebuildBudget, passBudget, scanBudget];
 let budgetLevel = "";
 /** Sets the budgets to budgetLevel's share (at load and when an operator changes it). */
 function applyBudgetLevel() {
-  const level = String(get("budgetLevel"));
-  if (level === budgetLevel) return;
-  budgetLevel = level;
-  const ks = BUDGET_LEVELS[level] ?? BUDGET_LEVELS.normal;
-  for (const [i, b] of BUDGETS.entries()) {
-    [b.perTick, b.max, b.tickMax] = ks[i];
-    b.left = Math.min(b.left, b.max);
+  const level=String(get("budgetLevel"));if(level===budgetLevel)return;budgetLevel=level;
+  // Our tested normal profile is authoritative; existing server-size controls still reduce/raise admitted work.
+  const factor=level==="low"?0.5:level==="high"?1.25:1;
+  for(const[b,ms]of /** @type {[LabBudget,number][]} */ ([[drawBudget,EXP.drawMs],[rebuildBudget,EXP.rebuildMs],[scanBudget,EXP.scanMs]])){
+    b.perTick=ms*factor;b.max=ms*factor;b.tickMax=ms*factor;b.left=Math.min(b.left,b.max);
   }
-  TURN_CHECKS = TURN_CHECKS_BY[level] ?? TURN_CHECKS_BY.normal;
+  passBudget.perTick=0.2*factor;passBudget.max=4*factor;passBudget.tickMax=2;passBudget.left=Math.min(passBudget.left,passBudget.max);
+  TURN_CHECKS=TURN_CHECKS_BY[level]??EXP.checks;
 }
+
 applyBudgetLevel();
 world.afterEvents.worldLoad.subscribe(() => applyBudgetLevel()); // a saved level can't be read before the world loads
 onChange((key) => {
@@ -1681,6 +2141,8 @@ onChange((key) => {
 let seen = [];
 let seenAt = -Infinity;
 system.runInterval(() => {
+  const featureStarted = featureEnvelope.begin(system.currentTick);
+  try {
   const now = system.currentTick;
   passBudget.tick();
   const all = playersNow();
@@ -1714,15 +2176,24 @@ system.runInterval(() => {
     }
     passBudget.spend(Date.now() - t);
   }
+
+  } finally { featureEnvelope.end(featureStarted); }
 }, 1);
 
 // A portal: the view goes until the next pass (it holds the other dimension's markers).
 world.afterEvents.playerDimensionChange.subscribe(({ player }) => {
-  views.delete(player.id);
+  netherLayers.delete(player.id);
+  manualScans.cancel(player.id,"Dimension changed");
+  hidePlayerHud(player);
+  terrainBaseMemo.delete(player.id);
+  detailFootprints.delete(player.id);
+  passAt.delete(player.id);
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, retryAt, lastPose]) m.delete(playerId);
+  manualScans.cancel(playerId,"Player left",false);
+  labPlans.delete(playerId); detailFootprints.delete(playerId);
+  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, retryAt, lastPose]) m.delete(playerId);
   planNow.delete(playerId);
 });
 
@@ -1774,6 +2245,14 @@ function giveMap(player) {
     return;
   }
   player.sendMessage("§a[Map] Mara's Field Map is in your inventory. §7Use it once to draw the land around you, then hold it in your offhand to keep it in view.");
+}
+
+/** Report real accepted-frame provenance separately from scan progress and visual reconstruction. @param {Player} player */
+function minimapStatus(player){
+ manualScans.status(player);const frame=publishedDetailFrames.get(player.id),estimate=EXP.estimateRadiusBlocks??0;
+ const mode=estimate>0?"Marked color estimates up to "+estimate+" world blocks, never stored as actual terrain.":"Sharp: actual sampled terrain only.";
+ if(frame&&!side.held(player)&&side.delivery(player))manualScans.send(player,"Last accepted radar: "+frame.sampled2+"/"+frame.eligible+" actual 2-block samples; "+(frame.estimated2??0)+" marked estimates; receipt age "+Math.max(0,system.currentTick-frame.tick)+" ticks. Shared native cache "+terrain.totalCols+"/"+terrain.maxTotalCols+" records. "+mode);
+ else manualScans.send(player,"No currently available accepted radar frame (radar may be off/held/not drawn). Shared native cache "+terrain.totalCols+"/"+terrain.maxTotalCols+" records. "+mode);
 }
 
 /** Toggles the player's minimap radar on or off. @param {Player} player */
@@ -2054,10 +2533,81 @@ function onEvent(id, m, source) {
     case "realm:map_debug": {
       if (source instanceof Player && !isOp(source)) return;
       const player = world.getAllPlayers().find((p) => p.id === pid || p.name === pid);
+      if (m.action === "lab") {
+        send("realm:map_state", { experiment: EXP, tick: system.currentTick, counters: labStats,
+          pendingSaves: labPendingWrites.size, hydrated: detailCost.hydrated, nativeOps: scanReads,
+          completed2: detailCost.nativeCompleted, rasterBuilds: radarRebuilds, scanMs, radarMs, turnMs,
+          elapsedTargetMs: EXP.featureMs, observedPeakMs: featureEnvelope.peak,
+          manual:{...manualScans.stats,active:manualScans.contexts.size},cache:{native:terrain.totalCols,limit:terrain.maxTotalCols,retainedFootprints:terrain.retained.size} });
+        return;
+      }
+      if(player && m.action==="resident_trace") {
+        if(m.op==="start"){
+          residentTrace.start(player.id,system.currentTick);
+          const prior=publishedDetailFrames.get(player.id);
+          if(prior){residentTrace.frame(prior.tag,{view:prior.viewKey,x:prior.x,z:prior.z,built:prior.built});residentTrace.visible={view:prior.viewKey,x:prior.x,z:prior.z,built:side.delivery(player)?.tag===prior.tag?prior.built:undefined,tag:prior.tag,submitted:prior.tick};}
+          side.traceDelivery(player,(e)=>residentTrace.note(player.id,e.tick,"side",e.reason,e));
+        } else if(m.op==="stop"){residentTrace.stop();side.traceDelivery(player,undefined);}
+        const trace={...residentTrace.page(isNum(m.offset)?m.offset:0),costSnapshot:{turnMs,radarMs,drawMs,scanMs,flushMs:previewCost.flushMs,passMs:costMs,terrainRebuilds:radarRebuilds}};
+        while(trace.events.length && JSON.stringify({player:player.id,tick:system.currentTick,trace}).length>=1900){trace.events.pop();trace.next=trace.offset+trace.events.length;}
+        send("realm:map_state",{player:player.id,tick:system.currentTick,trace});return;
+      }
       const t = player ? lastText.get(player.id) : undefined;
+      if (m.action === "detail_raw" && player) {
+        const store = storeFor(player.id, player.dimension.id);
+        const points = Array.isArray(m.points) ? m.points.slice(0, 4) : [];
+        const samples = points.map((/** @type {unknown} */ point) => {
+          if (!Array.isArray(point) || !isNum(point[0]) || !isNum(point[1]) || Math.abs(point[0]) > 30000000 || Math.abs(point[1]) > 30000000) return null;
+          const x = sampleCoord(point[0], COL), z = sampleCoord(point[1], COL), c = store.cols.get(colKey(x, z, COL));
+          return c ? { x, z, kind: c.kind, y: c.y, depth: c.depth, palette: c.palette, valid: c.valid !== false, source: c.source, acquiredAtMs: c.acquiredAtMs } : { x, z, valid: false };
+        });
+        send("realm:map_state", { player: player.id, tick: system.currentTick, store: store.id, profile: experimentNative() ? "native" : "material", samples });
+        return;
+      }
+      if (m.action === "detail" && player) {
+        const now = system.currentTick, at = player.location, pr = prefsOf(player), store = storeFor(player.id, player.dimension.id);
+        const tx = Math.round(at.x), tz = Math.round(at.z);
+        const geometry = northUpRadarGeometry(store.id, tx, tz, pr.radarRadius, R);
+        let eligible = 0, sampled = 0, live = 0, restored = 0, empty = 0, invalid = 0;
+        const displayCells=797,maskOutside=RADAR_SIZE*RADAR_SIZE-displayCells;let fullCircleTotal=0,fullCircleSampled=0;
+        for(const a of circleAnchors(at,pr.revealRadius,sampleCoord,colKey)){fullCircleTotal++;const c=store.cols.get(a.key);if(c&&c.valid!==false)fullCircleSampled++;}
+        for (let i = 0; i < geometry.coarseKey.length; i++) {
+          if(!insideRadar(i%RADAR_SIZE-R,Math.floor(i/RADAR_SIZE)-R,R))continue;
+          if ((geometry.coarseX[i] - at.x) ** 2 + (geometry.coarseZ[i] - at.z) ** 2 > pr.revealRadius ** 2) continue;
+          eligible++; const c = store.cols.get(geometry.coarseKey[i]);
+          if (!c) continue; if (c.valid === false) { invalid++; continue; }
+          sampled++; if (c.kind === "empty") empty++;
+          if (c.source === "persisted") restored++; else if (now - c.tick <= SCAN_MAX_AGE) live++;
+        }
+        const viewKey = store.id + "|" + tx + "|" + tz + "|0|" + pr.radarRadius + "|" + (experimentNative() ? "native" : "material") + "|" + at.x + "|" + at.z + "|circle" + "|profile=" + EXP.id + "|estimate=" + (EXP.estimateRadiusBlocks??0);
+        acceptDetailFrame(player, preparedDetailFrames.get(player.id));
+        const accepted = publishedDetailFrames.get(player.id);
+        const matches = !side.held(player) && accepted?.viewKey === viewKey && !!side.delivery(player);
+        if(residentTrace.active(player.id))residentTrace.note(player.id,now,"metric",side.held(player)?"held":!accepted?"no_accepted_frame":accepted.viewKey!==viewKey?"wrong_view":!side.delivery(player)?"no_live_delivery":"accepted",{view:viewKey,acceptedView:accepted?.viewKey??"",tag:accepted?.tag??"",...residentTrace.older(now,at.x,at.z)});
+        let oldest = 0, queued2 = 0, queued4 = 0;
+        for (const plan of scanPlans.values()) for (let i = plan.pos; i < plan.picks.length; i++) { const pick = plan.picks[i]; oldest = Math.max(oldest, now - (pick.queuedAt ?? plan.at)); if (pick.resolution === COL) queued2++; else if (pick.resolution === PREVIEW) queued4++; }
+        send("realm:map_state", { player: player.id, tick: now, detail: { viewKey, raster: RADAR_SIZE * RADAR_SIZE, rasterShape:"circle",displayCells,maskOutside,anchorOutside:displayCells-eligible,fullCircleTotal,fullCircleSampled,eligible, policyOutside: RADAR_SIZE * RADAR_SIZE - eligible, sampled2: sampled, live2: live, persisted2: restored, validEmpty2: empty, invalidated2: invalid, unknown2: eligible - sampled, published2: matches ? accepted.sampled2 : 0,estimatedDisplay:matches?(accepted.estimated2??0):0,estimateRadiusBlocks:EXP.estimateRadiusBlocks??0, publicationTick: matches ? accepted.tick : null, nativeOps: scanReads, completed2: detailCost.nativeCompleted, hydrated2: detailCost.hydrated, queued2, queued4, oldestAge: oldest, featureUsedMs: featureEnvelope.used, featurePeakMs: featureEnvelope.peak }, persistence: { ...detailPersistence.stats(), pendingTombstones: pendingTombstones.size, tombstoneOverflow } });
+        return;
+      }
+      if (m.action === "queue") { send("realm:map_state", { player: player?.id, tick: system.currentTick, queue: { ...scanQueueCost } }); return; }
+      if (m.action === "preview") {
+        const coverage = player ? terrainBaseMemo.get(player.id)?.coverage : undefined;
+        send("realm:map_state", { player: player?.id, tick: system.currentTick, preview: {
+          detailCells: coverage?.detailCells ?? 0, previewCells: coverage?.previewCells ?? 0,estimatedCells:coverage?.estimatedCells??0,
+          unknownCells: coverage?.unknownCells ?? 797,
+          eligibleCells: coverage?.eligibleCells ?? 0, eligibleKnownCells: coverage?.eligibleKnownCells ?? 0, eligibleDetailCells: coverage?.eligibleDetailCells ?? 0, totalCells: coverage?.totalCells ?? 797,rasterCells:RADAR_SIZE*RADAR_SIZE,maskOutside:292,rasterShape:"circle",
+          nativePeak: scanPeak, perViewerPeak: scanEachPeak,
+          reads: scanReads, previewReads: previewCost.nativeReads, previewPuts: previewCost.nativeFills,
+          previewHits: previewCost.hits, hydrated: previewCost.hydrated, diskLoads: previewCost.diskLoads,
+        }, persistence: previewPersistence.stats() });
+        return;
+      }
+      const preview = { ...previewCost, persistence: previewPersistence.stats(), coverage: player ? terrainBaseMemo.get(player.id)?.coverage : undefined };
       const surface = player ? terrain.store(player.dimension.id, undefined) : undefined;
-      send("realm:map_state", {
+      const state = {
         player: player?.id,
+        quality: { cells: RADAR_SIZE, preview: PREVIEW, detail: COL, nativeTerrain: experimentNative() },
+        preview,
         strip: t?.strip,
         line2: t?.line2,
         radar: t?.radar,
@@ -2072,8 +2622,8 @@ function onEvent(id, m, source) {
           surface: surface ? { columns: surface.cols.size, fine: surface.fine.size } : undefined,
           misses: storeFor(player.id, player.dimension.id).miss.size,
           samples: Array.isArray(m.samples) ? m.samples.slice(0, 4).filter((/** @type {any} */ s) => isNum(s?.x) && isNum(s?.z)).map((/** @type {any} */ s) => ({
-            x: s.x, z: s.z, resolution: s.resolution === 1 ? 1 : 4,
-            data: terrain.get(storeFor(player.id, player.dimension.id), s.x, s.z, s.resolution === 1 ? 1 : 4) ?? null,
+            x: s.x, z: s.z, resolution: s.resolution === PREVIEW ? PREVIEW : s.resolution === 1 ? 1 : COL,
+            data: terrain.get(storeFor(player.id, player.dimension.id), s.x, s.z, s.resolution === PREVIEW ? PREVIEW : s.resolution === 1 ? 1 : COL) ?? null,
           })) : [],
         } : undefined,
         cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, keepSends, rebuilds: radarRebuilds, reuses: radarReuses, builds: radarBuilds, turnCheckMs, radarMs, readCost },
@@ -2081,8 +2631,12 @@ function onEvent(id, m, source) {
         budgetLevel,
         perTick: BUDGETS.reduce((n, b) => n + b.perTick, 0),
         known: { folk: folk.size, camps: camps.size, towns: towns.size, pot: pot ?? null, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
-      });
+      };
+      const metrics = { player: state.player, quality: state.quality, pose: state.pose, cost: state.cost, preview, budgets: state.budgets, budgetLevel: state.budgetLevel, perTick: state.perTick, renderTextOmitted: true };
+      if (m.action === "cost") send("realm:map_state", metrics);
+      else sendDebugState(JSON.stringify(state), state.player, metrics);
       if (m.action === "cost") {
+        Object.assign(scanQueueCost, scanQueueCounters());
         costMs = 0;
         drawMs = 0;
         costPasses = 0;
@@ -2100,9 +2654,7 @@ function onEvent(id, m, source) {
         planTurn.made = 0;
         refreshSends = 0;
         keepSends = 0;
-        radarRebuilds = 0;
-        radarReuses = 0;
-        radarBuilds = 0;
+        radarRebuilds = 0; radarReuses = 0; radarBuilds = 0;
         turnCheckMs = 0;
         radarMs = 0;
       }
@@ -2141,12 +2693,14 @@ function ping(player) {
 }
 
 world.afterEvents.worldLoad.subscribe(() => {
+  for(const player of world.getAllPlayers())resetRadarOffOnce(player);
   system.runTimeout(() => ping(), 60);
 });
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   resetChecked.delete(player.id);
   applyReset(player);
+  resetRadarOffOnce(player);
   const id = player.id;
   system.runTimeout(() => ping(id), 40);
 });
@@ -2231,17 +2785,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       return { status: CustomCommandStatus.Success };
     }
   );
-  customCommandRegistry.registerCommand(
-    { name: "realm:minimap", description: "Toggle your minimap radar on or off", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
-    (origin) => {
-      const player = playerOf(origin);
-      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      system.run(() => {
-        if (player.isValid) toggleMinimap(player);
-      });
-      return { status: CustomCommandStatus.Success };
-    }
-  );
+  registerMinimapCommand(customCommandRegistry,{toggle:toggleMinimap,start:(p,r)=>manualScans.start(p,r,system.currentTick),status:minimapStatus,cancel:p=>{if(manualScans.contexts.has(p.id))manualScans.cancel(p.id);else manualScans.send(p,"No scan is active. Use scan [world-block radius], default 64; status and cancel are top-level actions.");}});
   customCommandRegistry.registerCommand(
     { name: "realm:compass", description: "Toggle your top compass strip on or off", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
     (origin) => {

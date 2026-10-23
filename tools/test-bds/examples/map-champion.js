@@ -10,6 +10,31 @@ const R_CHAMP = g(0x73);
 const Q_CHAMP = g(0x3d);
 const MOB = [g(0x10), g(0x20), g(0x28), g(0x30)]; // strip dot, edge arrows, radar dot
 
+// Bounded realm:map_state packets arrive as {player,channel:'state',v:1,chunk:{id,index,total,text}}; join them inline (test packs cannot import runtime modules).
+const mapStateParts = new Map();
+function reassembleMapState(message, now = 0) {
+  for (const [k, e] of mapStateParts) if (now - e.at > 200) mapStateParts.delete(k);
+  const d = JSON.parse(message),
+    c = d && d.chunk;
+  if (!c) return d;
+  if (d.channel !== "state" || d.v !== 1 || !Number.isInteger(c.total) || c.total < 1 || c.total > 12 || !Number.isInteger(c.index) || c.index < 0 || c.index >= c.total || typeof c.text !== "string") throw Error("bad map state packet");
+  const key = `${d.player ?? ""}:${c.id}`;
+  let e = mapStateParts.get(key);
+  if (!e) {
+    if (mapStateParts.size >= 16) mapStateParts.delete(mapStateParts.keys().next().value);
+    e = { total: c.total, parts: new Array(c.total), got: 0, at: now };
+    mapStateParts.set(key, e);
+  }
+  if (e.total !== c.total || e.parts[c.index] !== undefined) {
+    mapStateParts.delete(key);
+    throw Error("bad map state packet");
+  }
+  e.parts[c.index] = c.text;
+  if (++e.got < e.total) return undefined;
+  mapStateParts.delete(key);
+  return JSON.parse(e.parts.join(""));
+}
+
 export default async function (t) {
   const sys = t.system;
   const Y = -60;
@@ -18,7 +43,9 @@ export default async function (t) {
     ({ id, message }) => {
       if (id !== "realm:map_state") return;
       try {
-        ev.push({ m: JSON.parse(message), tick: sys.currentTick });
+        const m = reassembleMapState(message, sys.currentTick);
+        if (m === undefined) return;
+        ev.push({ m, tick: sys.currentTick });
       } catch {}
     },
     { namespaces: ["realm"] },
@@ -33,6 +60,26 @@ export default async function (t) {
   const count = (s, list) => [...(s ?? "")].filter((c) => list.includes(c)).length;
   const stand = (p, x, z, yaw = 180) => p.teleport({ x: x + 0.5, y: Y, z: z + 0.5 }, { rotation: { x: 0, y: yaw } });
 
+  // The radar defaults OFF now: opt Looker in AFTER spawn (the one-time migration has run) and wait for each ACK. Terrain off and
+  // north up keep the legacy F3 marker glyphs this test counts (over real terrain a marker is an F6+ overlay glyph, not Q_MOB/Q_CHAMP).
+  const acks = [];
+  sys.afterEvents.scriptEventReceive.subscribe(
+    ({ id, message }) => {
+      if (id !== "realm:cfg_ack") return;
+      try {
+        acks.push(JSON.parse(message));
+      } catch {}
+    },
+    { namespaces: ["realm"] },
+  );
+  let cfgN = 0;
+  const cfg = async (player, key, value) => {
+    const id = `champ_${key}_${++cfgN}`;
+    send("realm:cfg_set", { id, pack: "map_bp", key, value, player: player.id });
+    const ack = await t.waitUntil(() => acks.find((a) => a.id === id), { timeout: 100, message: `cfg_ack for ${key}` });
+    t.check(ack.ok === true, `${key} = ${value} acknowledged (${JSON.stringify(ack)})`);
+  };
+
   await t.server("/gamerule domobspawning false");
   await t.server("/difficulty normal");
   await t.server("/time set midnight");
@@ -40,6 +87,12 @@ export default async function (t) {
   await t.server("/tickingarea add circle 0 -60 0 4 champ_area");
   const p = await t.player("Looker", { op: true, x: 0, z: 0, gameMode: "creative" });
   stand(p, 0, 0); // facing north
+  await t.wait(40);
+  const before = await state(p);
+  t.check((before.radar ?? "") === "", "the radar defaults OFF before any opt-in");
+  await cfg(p, "radar", true);
+  await cfg(p, "terrain", false);
+  await cfg(p, "radarNorthUp", true);
   const dim = p.dimension;
   await t.waitUntil(() => {
     try {

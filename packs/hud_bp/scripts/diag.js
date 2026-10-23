@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "hud_bp";
-const VERSION = "1.3.10";
+const VERSION = "1.3.11";
 const NAME = "Coordinates HUD";
 /** @type {string[]} */
 const PREFIXES = ["hud"];

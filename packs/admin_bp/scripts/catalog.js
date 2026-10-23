@@ -280,7 +280,7 @@ export const PACKS = [
       {"name":"realm:map_clear","description":"Clear your destination (the strip follows your story again)","permission":"any","params":[]},
       {"name":"realm:map_mark","description":"Mark the spot where you stand, to pick it as a destination later","permission":"any","params":[{"name":"name","type":"String","optional":true}]},
       {"name":"realm:map_reset","description":"Operators: clear every player's map destination and marked spots (offline players on their next join). Run it with confirm","permission":"op","params":[{"name":"confirm","type":"String","optional":true}]},
-      {"name":"realm:minimap","description":"Toggle your minimap radar on or off","permission":"any","params":[]},
+      {"name":"realm:minimap","description":"Toggle minimap; scan <block radius>, status, cancel","permission":"any","params":[{"name":"action","type":"String","optional":true},{"name":"radius","type":"Integer","optional":true}]},
     ],
   },
   {

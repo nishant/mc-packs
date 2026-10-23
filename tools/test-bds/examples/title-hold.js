@@ -26,7 +26,7 @@ export default async function (t) {
   const p = await t.player("Tester", { op: true });
   const boxes = (since) => t.messages(p, { kind: "title", since }).filter((m) => m.text === MARK);
 
-  await t.waitUntil(() => boxes(0).some((m) => m.pack === "hud_bp" && (m.subtitle ?? "").startsWith(MARK)), { timeout: 200, message: "the HUD draws its box" });
+  await t.waitUntil(() => boxes(0).some((m) => m.pack === "hud_bp" && (m.subtitle ?? "").startsWith("N00000000")), { timeout: 200, message: "the HUD draws its box" });
   t.log(`HUD box drawn, ${boxes(0).length} box titles so far`);
 
   t.server("/time set midnight");

@@ -37,8 +37,8 @@ function fromUtf8(b) {
 }
 /** Slot k's text as hud_rp cuts it, without the filler. */
 function cut(sub, k) {
-  const skip = 9 + (k <= 10 ? 160 * k : 160 * 10 + 1352) + 1;
-  const len = k === 10 ? 1351 : k === 11 ? 511 : 159;
+  const skip = 9 + (k <= 10 ? 160 * k : 160 * 10 + 3304) + 1;
+  const len = k === 10 ? 3303 : k === 11 ? 511 : 159;
   return fromUtf8(utf8(sub ?? "").slice(skip, skip + len)).replace(/~/g, "").replace(/§r/g, "");
 }
 
@@ -77,7 +77,7 @@ export default async function (t) {
     timeout: 300,
     message: "a Minimap title carries the HUD's box and the radar",
   });
-  t.check(utf8(both.subtitle).length === 3473, `the subtitle is 3473 bytes (${utf8(both.subtitle).length})`);
+  t.check(utf8(both.subtitle).length === 5425, `the subtitle is 5425 bytes (${utf8(both.subtitle).length})`);
   t.check(events.some((e) => e.id === "realm:side_comp" && e.m.from === "map" && e.m.players.includes(p.id) && e.m.ticks > 0), "the Minimap claims the player (realm:side_comp)");
 
   // --- Steady: turn the player for 10 seconds (many redraws). Nothing from the Minimap on realm:side, and the HUD

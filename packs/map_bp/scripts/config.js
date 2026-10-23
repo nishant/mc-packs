@@ -5,11 +5,12 @@ export const CONFIG = {
   /** The compass strip at the top of the screen, for players who haven't chosen in /realm:prefs. */
   compassDefault: true,
 
-  /** The radar (a 7 x 7 grid at the top right below the compass strip), for players who haven't chosen. */
-  radarDefault: true,
+  /** The33-cell radar defaultsOFF; an existing player is resetOFF once before later opt-ins persist. */
+  radarDefault: false,
+  radarCells:33,radarRadius:36,revealRadius:36,nativeTerrain:true,fineDetail:false,
 
   /** The radar keeps north up for players who haven't chosen. false: it turns with the player, so ahead is always up. */
-  radarNorthUp: false,
+  radarNorthUp: true,
 
   /** The radar colors empty cells by the land around you (grass, water, sand, forest, stone, snow, paths, caves). */
   radarTerrain: true,

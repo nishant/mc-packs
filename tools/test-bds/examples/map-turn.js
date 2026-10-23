@@ -42,6 +42,31 @@ function strip(sub) {
   return [...fromUtf8(b.slice(9 + 160 * 9 + 1, 9 + 160 * 9 + 160)).split("\n")[0]];
 }
 
+// Bounded realm:map_state packets arrive as {player,channel:'state',v:1,chunk:{id,index,total,text}}; join them inline (test packs cannot import runtime modules).
+const mapStateParts = new Map();
+function reassembleMapState(message, now = 0) {
+  for (const [k, e] of mapStateParts) if (now - e.at > 200) mapStateParts.delete(k);
+  const d = JSON.parse(message),
+    c = d && d.chunk;
+  if (!c) return d;
+  if (d.channel !== "state" || d.v !== 1 || !Number.isInteger(c.total) || c.total < 1 || c.total > 12 || !Number.isInteger(c.index) || c.index < 0 || c.index >= c.total || typeof c.text !== "string") throw Error("bad map state packet");
+  const key = `${d.player ?? ""}:${c.id}`;
+  let e = mapStateParts.get(key);
+  if (!e) {
+    if (mapStateParts.size >= 16) mapStateParts.delete(mapStateParts.keys().next().value);
+    e = { total: c.total, parts: new Array(c.total), got: 0, at: now };
+    mapStateParts.set(key, e);
+  }
+  if (e.total !== c.total || e.parts[c.index] !== undefined) {
+    mapStateParts.delete(key);
+    throw Error("bad map state packet");
+  }
+  e.parts[c.index] = c.text;
+  if (++e.got < e.total) return undefined;
+  mapStateParts.delete(key);
+  return JSON.parse(e.parts.join(""));
+}
+
 export default async function (t) {
   // These checks describe the Minimap with the time it had before its 1 ms budget (October 2026): budgetLevel high
   // gives it exactly those budgets, the same code with more time a tick. Its cost at normal is perf-soak's to measure.
@@ -53,18 +78,29 @@ export default async function (t) {
     ({ id, message }) => {
       if (id !== "realm:map_state") return;
       try {
-        ev.push({ m: JSON.parse(message), tick: sys.currentTick });
+        const m = reassembleMapState(message, sys.currentTick);
+        if (m === undefined) return;
+        ev.push({ m, tick: sys.currentTick });
       } catch {}
     },
     { namespaces: ["realm"] },
   );
   const send = (id, m) => sys.sendScriptEvent(id, JSON.stringify(m));
+  // This is the default compass/performance case: NEVER opt the optional radar in.
+  // Dedicated radar cases opt in explicitly and are not represented by this default-OFF timing result.
+  const assertRadarOff=async(player)=>{
+    const since=t.tick;send("realm:map_debug",{player:player.id,action:"state"});
+    await t.waitUntil(()=>ev.some(e=>e.tick>=since&&e.m.player===player.id),{timeout:100,message:"default-OFF radar state"});
+    const state=ev.filter(e=>e.tick>=since&&e.m.player===player.id).at(-1).m;
+    t.check(!state.radar,player.name+" keeps the optional radar OFF by default");
+  };
   const titles = (p, since) => t.messages(p, { kind: "title", since }).filter((m) => m.pack === "map_bp" && m.text === MARK);
 
   await t.server("/gamerule domobspawning false");
   const p = await t.player("Turner", { op: true, x: 0, z: 0, gameMode: "creative" });
   const face = (pl, yaw) => pl.teleport(pl.location, { rotation: { x: 0, y: yaw } });
   face(p, 180); // north
+  await assertRadarOff(p);
   await t.wait(60);
 
   // --- Standing still: only the pass's refresh (every REFRESH = 30 ticks at most).
@@ -92,9 +128,13 @@ export default async function (t) {
   t.log("last strip middle:", (last[12]?.codePointAt(0) ?? 0).toString(16), "S is", LETTER[180].codePointAt(0).toString(16), "at tick", turned.at(-1)?.tick, "turn ended", t.tick - 2);
   t.check(last[12] === LETTER[180], "the strip on screen faces where the player faces, a tick after the turn");
 
-  // --- Cost: 10 players turning every tick.
+  // --- Cost: 10 compass viewers turning every tick, optional radar OFF.
   const crowd = [p];
-  for (let i = 0; i < 9; i++) crowd.push(await t.player(`Turner${i}`, { x: i * 20, z: 40, settle: 2 }));
+  for (let i = 0; i < 9; i++) {
+    const q = await t.player(`Turner${i}`, { x: i * 20, z: 40, settle: 2 });
+    await assertRadarOff(q);
+    crowd.push(q);
+  }
   await t.wait(40);
   send("realm:map_debug", { player: p.id, action: "cost" });
   const turnFrom = t.tick;
@@ -131,7 +171,7 @@ export default async function (t) {
   t.log(`per send: ${perSend.toFixed(2)} ms`);
   t.log(`title/side draw ${c.drawMs} ms; terrain scanner ${c.scanMs ?? "baseline-unmetered"} ms, ${c.scanReads ?? "?"} real operations, peaks ${c.scanPeak ?? "?"}/${c.scanEachPeak ?? "?"}`);
   if (c.scanTicks) t.log(`scanner ${(c.scanMs / c.scanTicks).toFixed(3)} ms/tick; accounted scanner+redraw+periodic work ${((c.scanMs + c.turnMs + c.ms) / Math.max(1, c.turnTicks)).toFixed(3)} ms/tick (not whole-server CPU; drawMs is already included)`);
-  if (c.scanPeak !== undefined) t.check(c.scanPeak <= 96 && c.scanEachPeak <= 48, "rotating viewers retain the shared real-operation budget");
+  t.check(c.scanReads === 0, "compass-only/default-OFF viewers perform no terrain sampling");
   t.check(perSend < 4, `each strip sent costs under 4 ms with 10 players turning nonstop (${perSend.toFixed(2)} ms)`);
 
   // The same 10 players standing still, once the land around them is read: the per-tick check only reads their

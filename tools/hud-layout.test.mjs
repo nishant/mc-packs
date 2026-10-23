@@ -2,9 +2,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import crypto from "node:crypto";
 import vm from "node:vm";
+import ts from "typescript";
 import { decode } from "./gen-rain/png.mjs";
+import { G, SELF_ARROWS } from "../packs/map_bp/scripts/glyphs.js";
 import { CONFIG as mobhp } from "../packs/mobhp_bp/scripts/config.js";
 import { CONFIG as elytra } from "../packs/elytra_bp/scripts/config.js";
 import { CONFIG as saga } from "../packs/saga_bp/scripts/config.js";
@@ -14,7 +17,9 @@ const area = Object.fromEntries(ui.realm_side_area.controls.map((c) => Object.en
 const stack = (side) => area[`realm_side_${side}`].controls[0][`realm_${side}_stack`];
 const names = (control) => control.controls.map((c) => Object.keys(c)[0].split("@")[0]);
 const hash = (value) => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
-const image = (file) => decode(fs.readFileSync(new URL(`../packs/hud_rp/${file}`, import.meta.url)));
+// Only generated image reads may target an isolated pre-integration tree; UI, wire and foreign HUD checks stay on root source.
+const artRoot = path.resolve(process.env.MINIMAP_ART_ROOT ?? path.resolve(import.meta.dirname, ".."), "packs/hud_rp");
+const image = (file) => decode(fs.readFileSync(path.join(artRoot, file)));
 
 test("published compass geometry, shared templates and art remain exactly unchanged", () => {
   for (const [value, expected] of [
@@ -141,39 +146,58 @@ test("full-width clipping ancestors preserve natural-width side content and edge
   }
 });
 
-test("the calibrated native-aspect map keeps all grid ink inside its thin boundary", () => {
+test("the calibrated dense33 four-mesh map stays unchanged inside the exact approved external oak art", () => {
   const widget = ui.realm_radar_panel.controls[0].radar_widget;
   const children = Object.fromEntries(widget.controls.map((c) => Object.entries(c)[0]));
-  assert.deepEqual(widget.size, [100.8, 105.8]);
-  assert.deepEqual(children.radar_border.size, widget.size);
+  assert.deepEqual(widget.size, [100.8, 105.8], "calibrated widget footprint stays fixed");
+  assert.deepEqual(widget.offset, [-9, -9], "exact approved Astra oak placement");
+  assert.deepEqual(children.radar_border.size, [118.8, 123.8]);
+  assert.equal(children.radar_border.layer, 9, "actual approved JSON, not an inferred generator layer");
   assert.equal(children.radar_shade, undefined);
   assert.deepEqual(children.radar_clip.size, [98.8, 103.8]);
-  assert.deepEqual(children.radar_bg.size, children.radar_clip.size);
-  const font = (103.8 - 2) / (20 * 9 + 8);
-  const x = (98.8 - 21 * 8.5 * font) / 2;
+  assert.deepEqual(children.radar_bg.size, [118.8, 123.8]);
+  assert.equal(children.radar_bg.layer, 1);
+  const font = (103.8 - 2) / (32 * 9 + 8);
+  const x = (98.8 - 33 * 8.5 * font) / 2;
+  assert.equal(children.radar_clip.controls.length, 4, "2 x 2 meshes fill native glyph/row gaps");
   for (const [i, c] of children.radar_clip.controls.entries()) {
-    const mesh = c[`radar_mesh_${i}`];
-    assert.equal(mesh.font_scale_factor, font);
+    const mesh = c["radar_mesh_" + i];
+    assert.ok(mesh); assert.equal(mesh.font_scale_factor, font);
     assert.equal(mesh.line_padding, 7.7753571428571435);
-    assert.ok(Math.abs(mesh.offset[0] - x - (i ? font / 2 : 0)) < 1e-9);
-    assert.equal(mesh.offset[1], 1);
+    assert.ok(Math.abs(mesh.offset[0] - x - (i % 2) * font / 2) < 1e-9);
+    assert.ok(Math.abs(mesh.offset[1] - 1 - Math.floor(i / 2) * font) < 1e-9);
     for (const axis of [0, 1]) {
-      const last = mesh.offset[axis] + (20 * (axis ? 9 : 8.5) + 8) * font;
+      const last = mesh.offset[axis] + (32 * (axis ? 9 : 8.5) + 8) * font;
+      // Base ink has 1-unit margin. The intentional full-font vertical copy spends at most one font of it.
+      const margin = axis ? 1 - font : 1;
+      assert.ok(margin > 0.5, "overlap filling still leaves positive ideal clip clearance");
       assert.ok(mesh.offset[axis] >= 1 - 1e-9);
-      assert.ok(last <= children.radar_clip.size[axis] - 1 + 1e-9);
+      assert.ok(last <= children.radar_clip.size[axis] - margin + 1e-9);
     }
-    assert.match(mesh.bindings.at(-1).source_property_name, /%\.1351s/);
-    assert.match(mesh.bindings.at(-1).source_property_name, /%\.1610s/);
+    const src = mesh.bindings.at(-1).source_property_name;
+    assert.ok(src.includes("%.3299s") && src.includes("%.1610s"), "grid only: self/visibility metadata never enter any mesh");
   }
+  // All four Cartesian shifts cover each full 8.5 x 9 native cell, including the half-unit/one-unit gaps.
+  for (const [pitch, ink, shifts] of [[8.5, 8, [0, 0.5]], [9, 8, [0, 1]]])
+    for (let q = 0; q <= pitch; q += 0.125) assert.ok(shifts.some(d => q >= d && q <= d + ink));
+  for (const d of ["n", "e", "s", "w"]) {
+    const badge = children["radar_" + d];
+    assert.deepEqual(badge.size, [10, 10]); assert.equal(badge.layer, 10);
+    const positions = {n:["top_middle",[0,-8]],e:["right_middle",[8,0]],s:["bottom_middle",[0,8]],w:["left_middle",[-8,0]]};
+    assert.equal(badge.anchor_from,positions[d][0]); assert.equal(badge.anchor_to,positions[d][0]); assert.deepEqual(badge.offset,positions[d][1]);
+    assert.equal(badge.controls[0]["radar_" + d + "_badge"].texture, "textures/ui/map_cardinal_" + d);
+    assert.equal(badge.controls[0]["radar_" + d + "_badge"].layer, 11);
+  }
+  assert.equal(children.radar_self.anchor_from, "center"); assert.equal(children.radar_self.anchor_to, "center");
+  assert.ok(children.radar_self.layer > 7); assert.equal(children.radar_self.font_scale_factor, 0.75);
 });
 
-test("generated map art keeps the thin frame and player-only emphasis", () => {
+test("generated circular art keeps transparent corners and unchanged player/icon emphasis", () => {
   const font = image("font/glyph_F3.png");
-  for (const file of ["textures/ui/radar_frame.png", "textures/ui/radar_shade.png"]) {
-    const png = image(file);
-    assert.deepEqual([png.width, png.height], [101, 106]);
-    for (let y = 1; y < png.height - 1; y++) for (let x = 1; x < png.width - 1; x++)
-      assert.equal(png.data[(y * png.width + x) * 4 + 3], 0);
+  for(const file of["textures/ui/radar_frame.png","textures/ui/radar_shade.png"]){const png=image(file);assert.deepEqual([png.width,png.height],[238,248]);for(const[x,y]of[[0,0],[237,0],[0,247],[237,247]])assert.equal(png.data[(y*png.width+x)*4+3],0,"no opaque square corners");const center=png.data[(124*png.width+119)*4+3];if(file.includes("frame"))assert.equal(center,0);else assert.equal(center,255,"actual approved oak shade has an opaque center");}
+  for (const d of ["n", "e", "s", "w"]) {
+    const badge = image(`textures/ui/map_cardinal_${d}.png`);
+    assert.deepEqual([badge.width, badge.height], [24, 24]);
   }
   const pixels = (cell) => {
     const data = [];
@@ -211,7 +235,7 @@ test("generated map art keeps the thin frame and player-only emphasis", () => {
 
 test("the story's quest box shows next to the place the player picked, from its own 512-byte segment", () => {
   const quest = ui["realm_quest_slot@hud.realm_slot"];
-  assert.equal(quest.$skip, `%.${9 + 160 * 10 + 1352 + 1}s`, "after the nine boxes, the strip and the radar");
+  assert.equal(quest.$skip, `%.${9 + 160 * 10 + 3304 + 1}s`, "after the nine boxes, the strip and the radar");
   assert.equal(quest.$slot_slice, "%.511s");
   assert.deepEqual(quest.$slot_max, [200, 110], "about 10 rows: taller than a numbered box");
   assert.match(quest.bindings.at(-1).source_property_name, /%\.9s/);
@@ -236,10 +260,48 @@ test("map_bp takes its compass and radar parts down when the Minimap is off, for
   const map = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   // Both off (realm option or the player's choices): both parts are cleared and the title drawn once more.
   assert.match(map, /const showCompass = on && pr\.compass;\n\s+const showRadar = on && pr\.radar;/, "the realm option and the player's choice both count");
-  assert.match(map, /if \(!showCompass && !showRadar\) \{[\s\S]*?side\.clear\(player, "", false\);\n\s+side\.clear\(player, "radar", false\);\n\s+side\.redraw\(player\);/);
-  // One part off: that part alone is cleared.
-  assert.match(map, /else if \(offC\) side\.clear\(player, "", false\);/);
-  assert.match(map, /else if \(offR\) side\.clear\(player, "radar", false\);/);
+  assert.match(map, /if \(!showCompass && !showRadar\) \{\s+hidePlayerHud\(player\);/);
+  const hide = map.match(/^function hidePlayerHud\([\s\S]*?^\}/m)?.[0];
+  const pass = map.match(/^function pass\([\s\S]*?^\}/m)?.[0];
+  assert.ok(hide && pass, "execute actual extracted current off path, not a rewritten renderer");
+  for (const [enabled, prefs] of [[false, {compass:true,radar:true}], [true, {compass:false,radar:false}]]) {
+    const calls = [];
+    const state = Object.fromEntries(["views","preparedDetailFrames","publishedDetailFrames","lastText","planNow","scanPlans","retryAt","playerStore","lastPose","lastSent","labPlans","detailFootprints"].map(k => [k,new Map([["p",{}],["foreign",{}]])]));
+    const portalState = Object.fromEntries(["terrainBaseMemo", "passAt", "netherLayers"].map(k => [k, new Map([["p",{}],["foreign",{}]])]));
+    const ctx = { ...state, ...portalState,manualScans:{cancel(){}}, prefsOf:()=>prefs, get:()=>enabled, arrival(){}, destination(){},
+      side: { clear(p,part,draw){calls.push(["clear",p.id,part,draw]);}, redraw(p){calls.push(["redraw",p.id]);} } };
+    const run = vm.runInNewContext(hide + "\n" + pass + "\n;pass",ctx);
+    run({id:"p"},[],[],0);
+    assert.deepEqual(calls, [["clear","p","",false],["clear","p","radar",false],["redraw","p"]]);
+    for (const values of Object.values(state)) { assert.equal(values.has("p"),false); assert.equal(values.has("foreign"),true); }
+    run({id:"p"},[],[],1); assert.equal(calls.length,3,"already hidden is idempotent");
+    for (const values of Object.values(portalState)) assert.equal(values.has("p"), true, "ordinary hiding does not masquerade as portal invalidation");
+    const ast = ts.createSourceFile("main.js", map, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const portal = ast.statements.filter(ts.isExpressionStatement).map(statement => statement.expression)
+      .find(expression => ts.isCallExpression(expression) && expression.expression.getText(ast) === "world.afterEvents.playerDimensionChange.subscribe");
+    assert.ok(portal && ts.isArrowFunction(portal.arguments[0]), "execute the actual portal cleanup callback");
+    vm.runInNewContext(`(${portal.arguments[0].getText(ast)})`,ctx)({player:{id:"p"}});
+    for (const values of [...Object.values(state), ...Object.values(portalState)]) {
+      assert.equal(values.has("p"), false, "portal removes this viewer's geometry/pass and unpublished/published receipts");
+      assert.equal(values.has("foreign"), true, "portal must retain every other viewer's state");
+    }
+    assert.equal(calls.length,3,"a portal does not re-clear an already hidden HUD");
+  }
+  // V2 clears retired parts before staging a new receipt. Test the actual guards, not the old else-if spelling.
+  const renderAst = ts.createSourceFile("main.js", map, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const renderer = renderAst.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "render");
+  assert.ok(renderer?.body, "the actual renderer exists");
+  const declarations = renderer.body.statements.filter(node => ts.isVariableStatement(node) &&
+    node.declarationList.declarations.some(declaration => ts.isIdentifier(declaration.name) && ["offC", "offR"].includes(declaration.name.text)));
+  const clears = renderer.body.statements.filter(node => ts.isIfStatement(node) && ["offC", "offR"].includes(node.expression.getText(renderAst)));
+  assert.equal(declarations.length, 2); assert.equal(clears.length, 2);
+  for (const [compass, radar, expected] of [[false, true, ""], [true, false, "radar"]]) {
+    const calls = [];
+    const ctx = { v: { compass, radar }, sent: { compass: true, radar: true }, player: { id: "p" },
+      side: { clear(player, part, draw) { calls.push([player.id, part, draw]); } } };
+    vm.runInNewContext([...declarations, ...clears].map(node => node.getText(renderAst)).join("\n"),ctx);
+    assert.deepEqual(calls, [["p", expected, false]], "turning off one part clears only that part, retaining the other");
+  }
   // A changed choice forgets the text it sent (so the next draw is whole), but not which parts are on screen.
   assert.match(map, /if \(s\) s\.ctext = s\.rtext = "";/);
   assert.match(map, /for \(const s of lastSent\.values\(\)\) s\.ctext = s\.rtext = "";/);
@@ -251,11 +313,12 @@ test("every Side HUD cut matches the side boxes protocol and the minimap's text 
   const SEG = num("SEG_BYTES");
   const RADAR_SEG = num("RADAR_SEG_BYTES");
   const MARK = JSON.parse(side.match(/export const MARK = ("[^"]+");/)[1]);
-  const markBytes = Buffer.byteLength(MARK);
+  const headerBytes = Buffer.byteLength(loadSide().compose({}).slice(0, 9));
+  assert.equal(headerBytes, 9, "visibility prefix is nine ASCII bytes, not title MARK");
   const QUEST_SEG = num("QUEST_SEG_BYTES");
   const slots = [...JSON.parse(side.match(/export const SLOTS = (\[[^\]]+\]);/)[1].replace(/'/g, '"')), "top", "radar", "quest"];
   assert.ok(side.includes('export const ALL_SLOTS = [...SLOTS, "top", "radar", "quest"];'), "the subtitle order this test follows");
-  const skip = (k) => `%.${markBytes + SEG * k + 1}s`;
+  const skip = (k) => `%.${headerBytes + SEG * k + 1}s`;
   const json = JSON.stringify(ui);
   for (const [k, name] of slots.entries()) {
     if (name === "radar" || name === "quest") continue;
@@ -267,19 +330,21 @@ test("every Side HUD cut matches the side boxes protocol and the minimap's text 
   const meshes = ui.realm_radar_panel.controls[0].radar_widget.controls.find((c) => c.radar_clip).radar_clip.controls;
   for (const [i, c] of meshes.entries()) {
     const src = c[`radar_mesh_${i}`].bindings.at(-1).source_property_name;
-    assert.ok(src.includes(skip(10)) && src.includes(`%.${RADAR_SEG - 1}s`), "the radar is cut at its own segment");
+    assert.ok(src.includes(skip(10)) && src.includes(`%.${RADAR_SEG - 5}s`), "the radar is cut at its own segment");
   }
   // The quest box: its segment starts after the radar's.
-  assert.equal(ui["realm_quest_slot@hud.realm_slot"].$skip, `%.${markBytes + SEG * 10 + RADAR_SEG + 1}s`, "the quest box is cut at its own segment");
+  assert.equal(ui["realm_quest_slot@hud.realm_slot"].$skip, `%.${headerBytes + SEG * 10 + RADAR_SEG + 1}s`, "the quest box is cut at its own segment");
   assert.equal(ui["realm_quest_slot@hud.realm_slot"].$slot_slice, `%.${QUEST_SEG - 1}s`);
-  assert.equal(markBytes + SEG * 10 + RADAR_SEG + QUEST_SEG, 3473, "the whole subtitle");
+  assert.equal(headerBytes + SEG * 10 + RADAR_SEG + QUEST_SEG, 5425, "the whole subtitle");
   // What the minimap sends must fit: the radar's rows (3-byte glyphs, a newline between rows) and the strip's two lines.
   const map = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
   const R = Number(map.match(/const R = (\d+);/)[1]);
   const CELLS = Number(map.match(/const CELLS = (\d+);/)[1]);
   const size = 2 * R + 1;
   assert.ok(size * size * 3 + (size - 1) <= RADAR_SEG - 1, `a full radar fits its slot (${size * size * 3 + size - 1} bytes)`);
-  assert.equal(size, 21, "the measured 21-glyph grid (8.5 x 9 units a glyph) the radar widget is sized for");
+  assert.equal(size, 33, "the explicit dense33 grid keeps the accepted widget footprint");
+  assert.equal(size * size * 3 + size - 1, 3299);
+  assert.equal(size * size * 3 + size - 1 + 3 + 1, RADAR_SEG - 1, "grid + self + ASCII visibility exactly fill radar body");
   const spacer = JSON.parse(map.match(/const SPACER = ("[^"]+");/)[1]);
   assert.ok(map.includes("const LINE2_BYTES = 159 - CELLS * 3 - SPACER.length - 1;"), "the strip's second line takes what is left of the slot");
   assert.ok(CELLS * 3 + spacer.length + 1 < SEG - 1, "the strip and its spacer leave room for a second line");
@@ -309,7 +374,7 @@ function loadSide() {
  * `a - b` takes the first b out of a, `=`, `and`, `or`, `not`. `$name` is a variable of the control.
  * @param {string} expression @param {Record<string, string>} vars @param {Record<string, string>} env
  */
-function evaluate(expression, vars, env) {
+function evaluate(expression, vars, env, expectedType = "boolean") {
   /** @type {{ k: "str" | "var" | "id" | "op", v: string }[]} */
   const tokens = [];
   const re = /\s*(?:(\()|(\))|'([^']*)'|(#[a-z_]+)|\$([a-z_]+)|(\*)|(-)|(=)|\b(and|or|not)\b)/y;
@@ -377,7 +442,7 @@ function evaluate(expression, vars, env) {
   };
   const value = or();
   assert.equal(at, tokens.length, `all of ${expression} was read`);
-  assert.equal(typeof value, "boolean");
+  assert.equal(typeof value, expectedType);
   return value;
 }
 
@@ -443,9 +508,9 @@ test("the empty radar the producer sends is the empty radar the HUD's visibility
 
 test("a slot with nothing in it hides its whole panel, background included: the radar, the compass strip, the quest box", () => {
   const side = loadSide();
-  const radarFull = Array.from({ length: 21 }, () => String.fromCodePoint(0xf330).repeat(21)).join("\n");
+  const radarFull = Array.from({ length: 33 }, () => G.Q_EMPTY.repeat(33)).join("\n") + SELF_ARROWS[0] + "1";
   const radarMax = "x".repeat(side.RADAR_SEG_BYTES - 1);
-  assert.equal(Buffer.byteLength(radarFull), 21 * 21 * 3 + 20, "a real radar: 21 rows of 21 three-byte glyphs");
+  assert.equal(Buffer.byteLength(radarFull), 3303, "current wire: 33 rows plus self glyph and ASCII visibility");
   const text = (/** @type {string} */ slot) => (slot === "radar" ? radarFull : slot === "top" ? "N" : "§fReadout");
   const quest = (/** @type {string} */ slot) => `${side.questCode(slot)}§bLast Map§7: Three Pins`;
   /** @type {[string, string, Record<string, string>, string[]][]} */
@@ -459,6 +524,8 @@ test("a slot with nothing in it hides its whole panel, background included: the 
   for (const slot of side.SLOTS) states.push([`${slot} alone (no radar, no compass, no quest box)`, side.MARK, side.compose({ [slot]: text(slot) }), [`realm_${slot}`]]);
   states.push(["the compass strip alone", side.MARK, side.compose({ top: text("top") }), ["realm_top"]]);
   states.push(["the radar alone", side.MARK, side.compose({ radar: text("radar") }), ["realm_radar"]]);
+  states.push(["N header hides retained dense grid", side.MARK, "N00000000" + side.compose({radar:radarFull}).slice(9), []]);
+  states.push(["real title suppresses Side HUD including dense map", "A real held title", side.compose({radar:radarFull,top:"N",right1:"foreign"}), []]);
   for (const slot of side.SLOTS) states.push([`the quest box alone, at ${slot}`, side.MARK, side.compose({ quest: quest(slot) }), [`realm_quest_${slot}`]]);
   states.push(["the quest box beside a box", side.MARK, side.compose({ right1: "§fHi", quest: quest("right1") }), ["realm_quest_right1", "realm_right1"]]);
   /** @type {string[]} */
@@ -477,4 +544,75 @@ test("every black box and frame the side area draws belongs to a panel that is h
     assert.ok(b.gates.length > 0, `${b.name} has an ancestor that hides it`);
     assert.ok(b.gates.some((g) => g.expr.includes("#hud_subtitle_text_string")), `${b.name} is hidden by what the subtitle holds, not only by the title`);
   }
+});
+// Explicit current dense fixture: producer bytes are evaluated through the actual HUD binding expressions.
+test("dense producer roundtrips all UI cuts at full capacity without self/quest/slot overlap", () => {
+  const side = loadSide();
+  const grid = Array.from({length:33},(_,r)=>Array.from({length:33},(_,c)=>String.fromCodePoint(0xf400+(r+c)%32)).join("")).join("\n");
+  const find = (name, node = ui.realm_side_area) => {
+    for (const control of node.controls ?? []) for (const [key, own] of Object.entries(control)) {
+      if (key.split("@")[0] === "realm_" + name) return own;
+      const nested = find(name, own); if (nested) return nested;
+    }
+  };
+  const textExpr = ui.realm_slot_text.bindings.at(-1).source_property_name;
+  const widget = ui.realm_radar_panel.controls[0].radar_widget;
+  const children = Object.fromEntries(widget.controls.map(c=>Object.entries(c)[0]));
+  const quest = side.questCode("right4") + "Q".repeat(502);
+  assert.equal(Buffer.byteLength(quest), 511, "whole 512-byte quest segment includes one separator");
+  assert.equal(Buffer.byteLength(grid), 3299);
+  for (const self of SELF_ARROWS) {
+    const wire = grid + self + "1";
+    const texts = Object.fromEntries([...side.SLOTS,"top"].map((name,i)=>[name,(i+":"+name+":").padEnd(159,String.fromCharCode(65+i))]));
+    Object.assign(texts,{radar:wire,quest});
+    const sub = side.compose(texts), bytes = Buffer.from(sub), env = {"#hud_title_text_string":side.MARK,"#hud_subtitle_text_string":sub};
+    assert.equal(Buffer.byteLength(wire),3303); assert.equal(bytes.length,5425); assert.equal(sub.slice(0,9),"R00000000");
+    for (const name of [...side.SLOTS,"top"]) {
+      const own = find(name); assert.ok(own?.$skip,name);
+      const got = evaluate(textExpr,{skip:own.$skip,slot_slice:ui.realm_slot_text["$slot_slice|default"]},env,"string");
+      assert.equal(got,texts[name],name+" actual UI binding retains all159 bytes with no neighbor data");
+    }
+    for (const child of children.radar_clip.controls) {
+      const mesh = Object.values(child)[0];
+      assert.equal(evaluate(mesh.bindings.at(-1).source_property_name,{},env,"string"),grid,"every mesh cuts only3299 grid bytes");
+    }
+    assert.equal(evaluate(children.radar_self.bindings.at(-1).source_property_name,{},env,"string"),self);
+    assert.equal(bytes.subarray(1610,4909).toString(),grid); assert.equal(bytes.subarray(4909,4912).toString(),self);
+    assert.equal(bytes[4912],49,"ASCII visibility is outside the grid/self"); assert.equal(bytes[4913],10,"quest has its own separator");
+    assert.equal(bytes.subarray(4914).toString(),quest);
+    const q = ui["realm_quest_slot@hud.realm_slot"];
+    assert.equal(evaluate(textExpr,{skip:q.$skip,slot_slice:q.$slot_slice},env,"string"),quest,"quest's real511-byte UI cut survives full dense payload");
+    assert.deepEqual(visibleOwners(side.MARK,sub),[...side.SLOTS.map(n=>"realm_"+n),"realm_top","realm_radar","realm_quest_right4"].sort());
+    assert.equal(side.compose({}).slice(0,9),"N00000000");
+  }
+});
+test("turned radar keeps a fixed 3-byte self slot and a 0 flag: static N/E/S/W badges show only when the flag at byte 4912 is 1", () => {
+  const side = loadSide();
+  const grid = Array.from({length:33},()=>G.Q_EMPTY.repeat(33)).join("\n");
+  const widget = ui.realm_radar_panel.controls[0].radar_widget;
+  const children = Object.fromEntries(widget.controls.map(c=>Object.entries(c)[0]));
+  for (const [north, self, flag] of [[true,SELF_ARROWS[3],"1"],[false,G.Q_OUTSIDE,"0"]]) {
+    const wire = grid + self + flag;
+    assert.equal(Buffer.byteLength(wire),3303,"wire length never varies with the north preference");
+    const sub = side.compose({ radar: wire }), bytes = Buffer.from(sub), env = {"#hud_title_text_string":side.MARK,"#hud_subtitle_text_string":sub};
+    assert.equal(bytes.subarray(4909,4912).toString(),self); assert.equal(bytes[4912],flag.charCodeAt(0));
+    assert.equal(evaluate(children.radar_self.bindings.at(-1).source_property_name,{},env,"string"),self);
+    for (const name of ["radar_n","radar_e","radar_s","radar_w"]) {
+      const view = children[name].bindings.find(b=>b.target_property_name==="#visible");
+      assert.ok(view.source_property_name.includes("%.4912s"),name+" reads the flag byte only");
+      assert.equal(evaluate(view.source_property_name,{},env,"boolean"),north,name+" visible only with the north flag");
+    }
+    assert.equal(side.compose({ radar: wire }).slice(0,1),"R","outer panel visibility uses the R prefix, not the flag");
+  }
+  const mainSrc = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
+  assert.ok(mainSrc.includes("${v.north ? SELF_ARROWS[Math.round(heading / 45) % 8] : G.Q_OUTSIDE}${v.north ? \"1\" : \"0\"}"), "producer always sends 3 self bytes plus a 1/0 north flag");
+});
+test("the approved unknown glyph keeps its distinct F338 id with flat opaque cosmetic grass paint", () => {
+  assert.equal(G.Q_EMPTY.codePointAt(0),0xf338); assert.notEqual(G.Q_EMPTY,G.Q_GRASS);
+  const font = image("font/glyph_F3.png");
+  for (let y=0;y<16;y++) for (let x=0;x<16;x++) {
+    const i=((48+y)*font.width+128+x)*4;
+    assert.deepEqual([...font.data.subarray(i,i+4)],[56,128,48,255]);
+  }
+  // This is bitmap/identity evidence only: no known-terrain, native sampling, FPS or client-render claim.
 });

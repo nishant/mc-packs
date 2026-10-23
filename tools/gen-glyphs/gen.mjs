@@ -11,12 +11,18 @@
 //
 //   node tools/gen-glyphs/gen.mjs           write them (npm run gen:glyphs)
 //   node tools/gen-glyphs/gen.mjs --check   fail if a committed file differs or is missing (part of npm run check)
+//   Add --output=<relative path> (repeatable) to write/check only named outputs, leaving other assets untouched.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { THEMES } from "./themes.mjs";
 import { blank, decode, encode, samePixels } from "../gen-rain/png.mjs";
 
-const root = join(import.meta.dirname, "..", "..");
+const outputRootArg=process.argv.find(a=>a.startsWith("--output-root="));
+const root=outputRootArg?resolve(outputRootArg.slice(14)):join(import.meta.dirname,"..","..");
+const themeId=process.argv.find(a=>a.startsWith("--theme="))?.slice(8)??"oak";
+const THEME=THEMES[themeId];if(!THEME)throw new Error("Unknown minimap art theme: "+themeId);
 const check = process.argv.includes("--check");
+const selectedOutputs = process.argv.filter((arg) => arg.startsWith("--output=")).map((arg) => arg.slice("--output=".length));
 const PAGE = 0xf3;
 const CELL = 16;
 
@@ -130,11 +136,14 @@ const RIGHT = [[14, 8], [4, 2.5], [4, 13.5]];
 /** Strip cells: a thin baseline across the bottom, so every cell is full width. */
 const baseline = (/** @type {Image} */ img, /** @type {number} */ ox, /** @type {number} */ oy) => rect(img, ox, oy + 15, ox + 15, oy + 15, LINE);
 /** Radar cells: a seamless grass-toned ground tile with zero grid lines. */
+/** While a background-matched marker variant is drawn, the tile colors that replace the grass ones (null otherwise). @type {{ base: RGBA, accent: RGBA } | null} */
+let bgOverride = null;
 const square = (/** @type {Image} */ img, /** @type {number} */ ox, /** @type {number} */ oy) => {
-  rect(img, ox, oy, ox + 15, oy + 15, BG);
+  const base = bgOverride ? bgOverride.base : BG, accent = bgOverride ? bgOverride.accent : BG_ACCENT;
+  rect(img, ox, oy, ox + 15, oy + 15, base);
   for (let y = 0; y < CELL; y++)
     for (let x = 0; x < CELL; x++)
-      if ((x * 5 + y * 7) % 11 === 0) put(img, ox + x, oy + y, BG_ACCENT);
+      if ((x * 5 + y * 7) % 11 === 0) put(img, ox + x, oy + y, accent);
 };
 /**
  * Radar terrain cell: an opaque, seamless borderless ground tile with deterministic pixel accents.
@@ -146,6 +155,7 @@ const square = (/** @type {Image} */ img, /** @type {number} */ ox, /** @type {n
  * @param {(x: number, y: number) => boolean} patternFn
  */
 const terrainSquare = (img, ox, oy, baseRGBA, accentRGBA, patternFn) => {
+  if (bgOverride) { baseRGBA = bgOverride.base; accentRGBA = bgOverride.accent; }
   /** @type {RGBA} */
   const base = [baseRGBA[0], baseRGBA[1], baseRGBA[2], 255];
   /** @type {RGBA} */
@@ -222,7 +232,19 @@ MARKS.forEach(([name, what, draw], i) => {
     else draw(img, ox, oy, c);
   });
 });
-glyph("Q_EMPTY", 0x38, "radar: empty", (img, ox, oy) => square(img, ox, oy));
+// Unknown terrain (not cached or unavailable, not remembered exploration): muted stone/parchment neutral, not grass.
+const UNKNOWN_RGBA = /** @type {RGBA} */ ([56, 128, 48, 255]);
+glyph("Q_EMPTY", 0x38, "radar: unknown (cosmetic grass; unsampled)", (img, ox, oy) => rect(img, ox, oy, ox + 15, oy + 15, UNKNOWN_RGBA));
+// Dimension-specific unknown/known-empty tiles (row E). Opaque, generated, never sampled terrain; OVERWORLD keeps Q_EMPTY green.
+for (const cell of [0xe0, 0xe1, 0xe2, 0xe3]) if (GLYPHS.some((g) => g.cell === cell)) throw new Error("Dimension glyph slot collision");
+const dimTile = (/** @type {RGBA} */ base, /** @type {RGBA | null} */ ink, /** @type {(x: number, y: number) => boolean} */ hatch) => (/** @type {Image} */ img, /** @type {number} */ ox, /** @type {number} */ oy) => {
+  rect(img, ox, oy, ox + 15, oy + 15, base);
+  if (ink) for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) if (hatch(x, y)) put(img, ox + x, oy + y, ink);
+};
+glyph("Q_NETHER_UNKNOWN", 0xe0, "radar: Nether unknown, dark ember with small orange hatch (not sampled lava)", dimTile([62, 28, 24, 255], [168, 82, 34, 255], (x, y) => (x + y) % 6 === 0 && x % 2 === 0));
+glyph("Q_END_UNKNOWN", 0xe1, "radar: End unknown, muted purple hatch, clearly unread", dimTile([44, 34, 62, 255], [92, 74, 124, 255], (x, y) => (x - y + 16) % 4 === 0));
+glyph("Q_VOID", 0xe2, "radar: End known empty void, solid near-black purple", dimTile([10, 6, 18, 255], null, () => false));
+glyph("Q_NETHER_EMPTY", 0xe3, "radar: Nether known empty air, charcoal red", dimTile([48, 30, 32, 255], null, () => false));
 // A champion (Champions, or a Choir siege's Singer): the mob's red dot in a bright orange ring, so it reads bigger.
 // On the strip, at its edges and on the radar; it shows at the radar's edge too when it's beyond it.
 const CHAMP_RING = /** @type {RGBA} */ ([255, 150, 20, 255]);
@@ -271,6 +293,12 @@ for (const [i, l] of ["N", "E", "S", "W"].entries()) {
 for (let k = 0; k < 8; k++)
   glyph(`Q_YOU_${k}`, 0x40 + k, `radar: you, facing ${["N", "NE", "E", "SE", "S", "SW", "W", "NW"][k]}`, (img, ox, oy) => {
     square(img, ox, oy);
+    rimmedPoly(img, ox, oy, arrow(k * 45, 1.08), WHITE);
+  });
+// Cells D4-DB: the same arrow with no square behind it, a transparent foreground layer for the player's own arrow
+// (the map draws it in its own fixed-centre label above the terrain), facing N, NE, E, SE, S, SW, W, NW.
+for (let k = 0; k < 8; k++)
+  glyph(`Q_SELF_${k}`, 0xd4 + k, `radar: you (no background), facing ${["N", "NE", "E", "SE", "S", "SW", "W", "NW"][k]}`, (img, ox, oy) => {
     rimmedPoly(img, ox, oy, arrow(k * 45, 1.08), WHITE);
   });
 // Row 5: inline icons for the strip's second line (no baseline, no square).
@@ -503,6 +531,61 @@ glyph("Q_CROP", 0xd3, "radar terrain: planted green and gold crop rows", (img, o
   terrainSquare(img, ox, oy, [100, 132, 44, 255], [174, 164, 74, 255], (x, y) => x % 6 < 2),
 );
 
+// Background-matched radar markers. The legacy Q markers sit on an opaque grass tile, which shows as a green patch on
+// native water, snow or stone. These variants are the same artwork (the same draw functions) on one of 16 tiles, pages
+// F6-F8 (768 cells = 16 backgrounds x 48 markers). The 16 colors are our own small palette; each of the 512 native
+// colors maps to the nearest one (squared RGB distance, lowest index on a tie), so the match is approximate, not exact.
+/** Snaps a channel to the 3-bit cube the native palette uses (the same 8 levels as pages F4/F5). @param {number} v */
+const cube = (v) => Math.round((Math.round((v * 7) / 255) * 255) / 7);
+// The first five are the native colors seen in probes (grass, forest, water, shallow water, deep water), so they snap
+// exactly; every center is in the 512-color cube, so a fallback material also lands on its own background.
+const BG16 = /** @type {[string, number, number, number][]} */ (/** @type {[string, number, number, number][]} */ ([
+  ["grass", 146, 182, 73], ["forest", 73, 109, 36], ["water", 36, 73, 255], ["shallow water", 73, 109, 255],
+  ["deep water", 0, 36, 219], ["sand", 208, 186, 128], ["snow", 232, 238, 244], ["stone", 116, 120, 126],
+  ["deepslate", 64, 68, 76], ["path", 148, 114, 80], ["lava", 224, 88, 24], ["mesa", 178, 102, 66],
+  ["nether", 122, 42, 40], ["end/sandstone", 216, 218, 164], ["ice", 148, 194, 238], ["swamp", 104, 120, 56],
+]).map(([n, r, g, b]) => [n, cube(r), cube(g), cube(b)]));const OVERLAY_NAMES = /** @type {string[]} */ ([
+  ...Array.from({ length: 8 }, (_, k) => `Q_YOU_${k}`),
+  ...Array.from({ length: 8 }, (_, k) => `Q_FRIEND_${k}`),
+  ...Array.from({ length: 8 }, (_, k) => `Q_PARTY_${k}`),
+  ...Array.from({ length: 8 }, (_, k) => `Q_STAR_${k}`),
+  "Q_MOB", "Q_FOLK", "Q_WANDER", "Q_PARTY", "Q_STAR", "Q_CAMP", "Q_SITE", "Q_OTHER",
+  "Q_TOWN", "Q_HOME", "Q_RAINBOW", "Q_ROUTE", "Q_NORTH", "Q_EAST", "Q_SOUTH", "Q_WEST",
+]);
+const OVERLAY_PAGE = 0xf6, OVERLAY_COUNT = OVERLAY_NAMES.length;
+if (OVERLAY_COUNT > 48 || BG16.length * OVERLAY_COUNT > 768) throw new Error("background variants overflow pages F6-F8");
+/** Nearest of the 16 backgrounds to each of the 512 native colors (index = r << 6 | g << 3 | b, each 0-7). */
+const NEAREST_BG = Array.from({ length: 512 }, (_, i) => {
+  const rgb = [(i >> 6) & 7, (i >> 3) & 7, i & 7].map((v) => Math.round((v * 255) / 7));
+  let best = 0, bestD = Infinity;
+  BG16.forEach((c, k) => {
+    const d = (c[1] - rgb[0]) ** 2 + (c[2] - rgb[1]) ** 2 + (c[3] - rgb[2]) ** 2;
+    if (d < bestD) { bestD = d; best = k; }
+  });
+  return best;
+});
+function overlayPages() {
+  const pages = [0, 1, 2].map(() => blank(16 * CELL, 16 * CELL));
+  const byName = new Map(GLYPHS.map((g) => [g.name, g]));
+  BG16.forEach(([, r, g, b], v) => {
+    /** @type {RGBA} */
+    const base = [r, g, b, 255];
+    /** @type {RGBA} */
+    const accent = base; // a flat tile: native terrain has no grass checker
+    OVERLAY_NAMES.forEach((name, j) => {
+      const cell = v * OVERLAY_COUNT + j;
+      const page = cell >> 8, c = cell & 255;
+      bgOverride = { base, accent };
+      try {
+        /** @type {{ draw: (img: Image, ox: number, oy: number) => void }} */ (byName.get(name)).draw(pages[page], (c % 16) * CELL, Math.floor(c / 16) * CELL);
+      } finally {
+        bgOverride = null;
+      }
+    });
+  });
+  return pages;
+}
+
 // ---------------------------------------------------------------------------
 // The outputs
 // ---------------------------------------------------------------------------
@@ -510,6 +593,42 @@ glyph("Q_CROP", 0xd3, "radar terrain: planted green and gold crop rows", (img, o
 function page() {
   const img = blank(16 * CELL, 16 * CELL);
   for (const g of GLYPHS) g.draw(img, (g.cell % 16) * CELL, Math.floor(g.cell / 16) * CELL);
+  return img;
+}
+
+// Original solid RGB glyphs for the hybrid cartographic prototype: 3 bits per channel, not reference-addon art.
+function colorPage(pageIndex) {
+  const img = blank(16 * CELL, 16 * CELL);
+  for (let cell = 0; cell < 256; cell++) {
+    const index = pageIndex * 256 + cell;
+    const r = Math.round(((index >> 6) & 7) * 255 / 7);
+    const g = Math.round(((index >> 3) & 7) * 255 / 7);
+    const b = Math.round((index & 7) * 255 / 7);
+    const x = (cell % 16) * CELL, y = Math.floor(cell / 16) * CELL;
+    rect(img, x, y, x + CELL - 1, y + CELL - 1, [r, g, b, 255]);
+  }
+  return img;
+}
+
+/** The same palette and opaque extent as F4/F5, with an uncertainty cue confined to the final 4x4 pixels.
+ * Only eight pixels change: two diagonal 2x2 blocks, never invented material or sampled terrain detail.
+ * @param {number} pageIndex */
+function estimatedColorPage(pageIndex) {
+  const img = colorPage(pageIndex);
+  const darkInk = /** @type {RGBA} */ ([20, 20, 20, 255]);
+  for (let cell = 0; cell < 256; cell++) {
+    const x0 = (cell % 16) * CELL, y0 = Math.floor(cell / 16) * CELL;
+    const offset = (y0 * img.width + x0) * 4;
+    // Choose light ink for very dark colors, including black, instead of an invisible dark-on-dark mark.
+    const linear = [0, 1, 2].map((k) => {
+      const channel = img.data[offset + k] / 255;
+      return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+    });
+    const luminance = linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722;
+    const ink = luminance < .18 ? COMPASS_WHITE : darkInk;
+    for (let y = 12; y < CELL; y++) for (let x = 12; x < CELL; x++)
+      if ((x >> 1 & 1) === (y >> 1 & 1)) put(img, x0 + x, y0 + y, ink);
+  }
   return img;
 }
 
@@ -526,14 +645,61 @@ function glyphsJs() {
     "export const G = {",
   ];
   for (const g of [...GLYPHS].sort((a, b) => a.cell - b.cell)) lines.push(`  /** U+${((PAGE << 8) + g.cell).toString(16).toUpperCase()} ${g.what} */`, `  ${g.name}: "${char(g.cell)}",`);
-  lines.push("};", "");
+  lines.push("};", "", "/** The player's own arrow with no background, facing N, NE, E, SE, S, SW, W, NW (cells D4-DB): drawn over the terrain. */", `export const SELF_ARROWS = [${Array.from({ length: 8 }, (_, k) => `G.Q_SELF_${k}`).join(", ")}];`, "", "/** Original 512-color glyph atlas on pages F4/F5; used only in map HUD text. @param {number} index */", "export function paletteGlyph(index) {", "  return Number.isInteger(index) && index >= 0 && index < 512 ? String.fromCharCode(0xf400 + index) : G.Q_EMPTY;", "}", "");
+  const slots = Array.from({ length: 256 }, () => -1);
+  OVERLAY_NAMES.forEach((name, j) => { slots[/** @type {{ cell: number }} */ (GLYPHS.find((g) => g.name === name)).cell] = j; });
+  lines.push(
+    "/** Slot (0-47) of each legacy F3 radar marker that has background-matched variants, by cell; -1 for every other glyph. */",
+    "const OVERLAY_SLOT = [",
+  );
+  for (let i = 0; i < 256; i += 32) lines.push(`  ${slots.slice(i, i + 32).join(", ")},`);
+  lines.push(
+    "];",
+    "/** Nearest of the 16 backgrounds for each of the 512 native colors: letter a-p, from our own small palette (an approximation). */",
+    `const NEAREST_BG = ${JSON.stringify(NEAREST_BG.map((k) => String.fromCharCode(97 + k)).join(""))};`,
+    `const OVERLAY_GLYPHS = Array.from({ length: ${BG16.length * OVERLAY_COUNT} }, (_, i) => String.fromCharCode(0x${(OVERLAY_PAGE << 8).toString(16)} + i));`,
+    "",
+    "/**",
+    ` * A radar marker drawn on a background that approximates the terrain under it (pages F6-F8: ${BG16.length} backgrounds x ${OVERLAY_COUNT} markers).`,
+    " * A known F3 marker over actual F4/F5 or estimated F1/F2 terrain uses the same background; other inputs stay legacy.",
+    " * @param {string} legacyGlyph @param {string} backgroundGlyph",
+    " */",
+    "export function overlayGlyph(legacyGlyph, backgroundGlyph) {",
+    '  if (typeof legacyGlyph !== "string" || typeof backgroundGlyph !== "string" || legacyGlyph.length !== 1 || backgroundGlyph.length !== 1) return legacyGlyph;',
+    "  const code = backgroundGlyph.charCodeAt(0);",
+    "  const bg = code >= 0xf100 && code < 0xf300 ? code - 0xf100 : code - 0xf400;",
+    "  const slot = OVERLAY_SLOT[legacyGlyph.charCodeAt(0) - 0xf300];",
+    "  if (!(bg >= 0 && bg < 512) || !(slot >= 0)) return legacyGlyph;",
+    `  return OVERLAY_GLYPHS[(NEAREST_BG.charCodeAt(bg) - 97) * ${OVERLAY_COUNT} + slot];`,
+    "}",
+    "",
+    "/** Visually marked estimated color, never proof of a genuine sample; same 512-color index as paletteGlyph. @param {number} index */",
+    "export function estimatedPaletteGlyph(index) {",
+    "  return Number.isInteger(index) && index >= 0 && index < 512 ? String.fromCharCode(0xf100 + index) : G.Q_EMPTY;",
+    "}",
+    "",
+  );
   return lines.join("\n");
 }
 
-/** A render of the HUD (not a screenshot): the strip facing east-northeast with markers, and the 21x21 radar. @param {Image} sheet */
+/** Nearest-neighbor art compositing, without changing the source palette or pixel edges.
+ * @param {Image} target @param {Image} source @param {number} x @param {number} y @param {number} width @param {number} height */
+function stamp(target, source, x, y, width, height) {
+  for (let dy = 0; dy < height; dy++) for (let dx = 0; dx < width; dx++) {
+    const sx = Math.min(source.width - 1, Math.floor(dx * source.width / width));
+    const sy = Math.min(source.height - 1, Math.floor(dy * source.height / height));
+    const i = (sy * source.width + sx) * 4;
+    put(target, Math.round(x) + dx, Math.round(y) + dy, [source.data[i], source.data[i + 1], source.data[i + 2], source.data[i + 3]]);
+  }
+}
+
+/** A render of the HUD (not a screenshot): the unchanged compass strip and the circular 33x33 radar.
+ * Badge, bezel and shade ink comes from the generated UI textures, not a separate illustration.
+ * @param {Image} sheet */
 function render(sheet) {
+  if (THEME.oakFrame) return renderOak(sheet);
   const MINI = 6;
-  const W = 25 * CELL + 24, H = 21 * MINI + 2 * CELL + 48;
+  const W = 25 * CELL + 24, H = 33 * MINI + 2 * CELL + 48;
   const img = blank(W, H);
   // Sky over grass, roughly what's behind the HUD.
   for (let y = 0; y < H; y++)
@@ -584,41 +750,26 @@ function render(sheet) {
   const dim = /** @type {RGBA} */ ([0, 0, 0, 120]);
   rect(img, 9, 3, 9 + 25 * CELL + 5, 3 + CELL + 3, dim);
   strip.forEach((g, i) => blit(g, 12 + i * CELL, 5));
-  // The 21x21 radar below the compass, with a one-pixel boundary instead of a wide dark frame.
-  const grid = [
-    ["Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST", "Q_CHERRY", "Q_CHERRY", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_STAR_0", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP", "Q_WATER_DEEP"],
-    ["Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST", "Q_CHERRY", "Q_CHERRY", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP", "Q_WATER_DEEP"],
-    ["Q_FOREST_HI", "Q_NORTH", "Q_FOREST", "Q_CHERRY", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP"],
-    ["Q_FOREST", "Q_FOREST", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP"],
-    ["Q_FOREST", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
-    ["Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
-    ["Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER"],
-    ["Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_PATH", "Q_TOWN", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER", "Q_WATER"],
-    ["Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_PATH", "Q_PATH", "Q_PATH", "Q_ROUTE", "Q_PATH", "Q_PATH", "Q_PATH", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER", "Q_WATER"],
-    ["Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
-    ["Q_GRASS", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_YOU_0", "Q_PATH", "Q_PATH", "Q_PATH", "Q_GRASS", "Q_MOB", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_FRIEND_2"],
-    ["Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER"],
-    ["Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS_HI", "Q_WANDER", "Q_GRASS", "Q_MOB", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
-    ["Q_FOREST", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_CHAMP", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
-    ["Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
-    ["Q_FOREST", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_STONE_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER"],
-    ["Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_CHERRY", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_STONE_HI", "Q_STONE_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER"],
-    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_CHERRY", "Q_CHERRY", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW"],
-    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW"],
-    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_SAND", "Q_SAND"],
-    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_SAND"],
-  ];
-  const rx0 = W - 12 - 21 * MINI, ry0 = CELL + 24;
-  const frame = /** @type {RGBA} */ ([10, 14, 18, 210]);
-  rect(img, rx0 - 1, ry0 - 1, rx0 + 21 * MINI, ry0 + 21 * MINI, frame);
-  grid.forEach((row, r) => row.forEach((g, c) => blitMini(g, rx0 + c * MINI, ry0 + r * MINI)));
-  // Separate information plate below the map, not a border around the terrain.
-  rect(img, rx0, ry0 + 21 * MINI + 3, rx0 + 21 * MINI - 1, ry0 + 21 * MINI + 18, frame);
-  rect(img, rx0, ry0 + 21 * MINI + 2, rx0 + 21 * MINI - 1, ry0 + 21 * MINI + 2, [45, 52, 62, 255]);
-  rect(img, rx0 + 2, ry0 + 21 * MINI + 5, rx0 + 6, ry0 + 21 * MINI + 8, COLOR.star);
-  rect(img, rx0 + 10, ry0 + 21 * MINI + 5, rx0 + 78, ry0 + 21 * MINI + 8, WHITE);
-  rect(img, rx0 + 2, ry0 + 21 * MINI + 12, rx0 + 6, ry0 + 21 * MINI + 15, [232, 132, 168, 255]);
-  rect(img, rx0 + 10, ry0 + 21 * MINI + 12, rx0 + 96, ry0 + 21 * MINI + 15, [180, 190, 202, 255]);
+  // GENERATED33-circle visual preview, not a client screenshot or a sampled world.
+  const N=33,rx0=W-12-N*MINI,ry0=CELL+24,cx=rx0+N*MINI/2,cy=ry0+N*MINI/2;
+  const drawSize=N*MINI+8,bx=cx-drawSize/2,by=cy-drawSize/2;
+  stamp(img,radarShade(),bx,by,drawSize,drawSize);
+  for(let row=0;row<N;row++)for(let col=0;col<N;col++){
+    const x=col-16,z=row-16;if(x*x+z*z>256)continue;
+    const river=3+Math.round(Math.sin(z/5)*2);let g="Q_GRASS";
+    if(x>river+3)g="Q_WATER_DEEP";else if(x>river+1)g="Q_WATER";else if(x>=river)g="Q_WATER_SHALLOW";else if(x>=river-2)g="Q_SAND";
+    else if(x<-7&&z<-2)g=(x+z)%3?"Q_FOREST":"Q_FOREST_HI";
+    else if(z>8&&x<-3)g=(x-z)%3?"Q_STONE":"Q_STONE_HI";
+    if(Math.abs(z+1)<=1&&x<river-2)g="Q_PATH";
+    if(x>=-7&&x<=-4&&z>=-5&&z<=-3)g="Q_BRICK";
+    if(x>=-2&&x<=0&&z>=3&&z<=5)g="Q_SANDSTONE_HI";
+    blitMini(g,rx0+col*MINI,ry0+row*MINI);
+  }
+  stamp(img,radarFrame(),bx,by,drawSize,drawSize);
+  for(const[g,x,z]of[["Q_STAR",-4,-7],["Q_PARTY",7,6],["Q_CAMP",-9,3],["Q_CHAMP",-7,9]])blitMini(String(g),rx0+(Number(x)+16)*MINI,ry0+(Number(z)+16)*MINI);
+  blit("Q_SELF_2",cx-8,cy-8);
+  for(const[l,x,y]of[["N",cx,ry0],["E",rx0+N*MINI,cy],["S",cx,ry0+N*MINI],["W",rx0,cy]])
+    stamp(img,cardinalBadge(String(l)),Number(x)-8,Number(y)-8,16,16);
   return img;
 }
 
@@ -699,32 +850,215 @@ function packIcon() {
   return img;
 }
 
-const RADAR_W = 101, RADAR_H = 106;
-/** A single-pixel boundary leaves the interior available for map terrain. */
-function radarFrame() {
-  const W = RADAR_W, H = RADAR_H;
-  const img = blank(W, H);
-  rect(img, 0, 0, W - 1, 0, RIM);
-  rect(img, 0, H - 1, W - 1, H - 1, RIM);
-  rect(img, 0, 0, 0, H - 1, RIM);
-  rect(img, W - 1, 0, W - 1, H - 1, RIM);
+/** Any-size absolute disc for generated UI art, unlike the16px glyph-cell disc. @param {Image} img @param {number} cx @param {number} cy @param {number} r @param {RGBA} color */
+function disk(img,cx,cy,r,color){fill(img,cx-r,cy-r,cx+r,cy+r,(x,y)=>Math.hypot(x-cx,y-cy)<=r,color);}
+const RADAR_W=128,RADAR_H=128;
+/** Two-source-pixel steps, with no filtered edge colors or partially covered texels.
+ * @param {number} x @param {number} y @param {number} [cx] @param {number} [cy] */
+function steppedRadius(x, y, cx = 64, cy = 64) {
+  return Math.hypot(Math.floor(x / 2) * 2 + 1 - cx, Math.floor(y / 2) * 2 + 1 - cy);
+}
+/** Original map-paper bezel; its transparent center never paints over terrain or markers. */
+function paperFrame() {
+  const img = blank(RADAR_W, RADAR_H);
+  const paper = /** @type {RGBA} */ ([221, 194, 138, 255]);
+  for (let y = 0; y < RADAR_H; y++) for (let x = 0; x < RADAR_W; x++) {
+    const r = steppedRadius(x, y);
+    if (r > 63.5 || r <= 58.5) continue;
+    let c = THEME.rim;
+    if (r <= 62 && r > 59.5) c = paper;
+    // A restrained upper-left paper bevel, never a noisy checker or simulated terrain detail.
+    if (r <= 62 && r > 61) c = x + y < 128 ? THEME.accent : THEME.inner;
+    put(img, x, y, c);
+  }
+  // Four square registration nicks, aligned with the circular frame rather than the terrain grid.
+  for (const [x, y, w, h] of [[63, 4, 2, 3], [121, 63, 3, 2], [63, 121, 2, 3], [4, 63, 3, 2]])
+    rect(img, x, y, x + w - 1, y + h - 1, THEME.rim);
   return img;
 }
-
-/** Transparent compatibility asset; the map no longer uses an edge-darkening vignette. */
-function radarShade() {
-  return blank(RADAR_W, RADAR_H);
+// Exact approved Astra oak pixel geometry, selectively ported from oak-art.mjs.
+// Keep the source dimensions, integer wood grain, recessed letters, and palette byte-for-byte reproducible.
+const OAK = /** @type {Record<string, RGBA>} */ ({
+  edge: [58, 38, 23, 255], dark: [91, 60, 32, 255], seam: [113, 78, 41, 255],
+  oak: [165, 124, 65, 255], grain: [151, 109, 55, 255], light: [190, 148, 83, 255],
+  shine: [216, 177, 106, 255], cream: [255, 239, 191, 255],
+});
+const OAK_FONT = /** @type {Record<string, string[]>} */ ({
+  N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  S: ["11111", "10000", "10000", "11111", "00001", "00001", "11111"],
+  W: ["10001", "10001", "10001", "10101", "10101", "11011", "10001"],
+});
+/** @param {number} x @param {number} y */
+const oakNoise = (x, y) => (Math.imul(x + 521, 374761393) ^ Math.imul(y + 197, 668265263)) >>> 0;
+/** @param {number} x @param {number} y */
+function wood(x, y) {
+  const row = Math.floor(y / 8), joint = ((x + (row % 2) * 13) % 27 + 27) % 27;
+  if (y % 8 === 0 || joint === 0) return OAK.seam;
+  if (y % 8 === 1) return OAK.light;
+  const n = oakNoise(Math.floor(x / 5), y);
+  return n % 7 === 0 ? OAK.grain : n % 13 === 0 ? OAK.light : OAK.oak;
 }
+/** @param {number} x @param {number} y @param {number} rx @param {number} ry */
+const insideOak = (x, y, rx, ry) => ((Math.floor(x / 2) * 2 + 1 - 119) / rx) ** 2 + ((Math.floor(y / 2) * 2 + 1 - 124) / ry) ** 2 <= 1;
+function oakFrame() {
+  const img = blank(238, 248);
+  for (let y = 0; y < 248; y++) for (let x = 0; x < 238; x++) {
+    if (!insideOak(x, y, 118, 123) || insideOak(x, y, 99, 105)) continue;
+    let c = wood(Math.floor(x / 2), Math.floor(y / 2));
+    if (!insideOak(x, y, 116, 121)) c = OAK.edge;
+    else if (!insideOak(x, y, 113, 118)) c = y < 124 ? OAK.shine : OAK.dark;
+    else if (insideOak(x, y, 102, 108)) c = y < 124 ? OAK.dark : OAK.light;
+    put(img, x, y, c);
+  }
+  return img;
+}
+/** Width/height rectangle used by the original oak artwork, unlike the inclusive glyph helper.
+ * @param {Image} img @param {number} x @param {number} y @param {number} width @param {number} height @param {RGBA} color */
+const oakRect = (img, x, y, width, height, color) => rect(img, x, y, x + width - 1, y + height - 1, color);
+/** @param {string} l */
+function oakBadge(l) {
+  const img = blank(24, 24);
+  oakRect(img, 2, 0, 20, 24, OAK.edge);
+  oakRect(img, 0, 2, 24, 20, OAK.edge);
+  for (let y = 2; y < 22; y++) for (let x = 2; x < 22; x++) put(img, x, y, wood(x, y));
+  oakRect(img, 2, 2, 20, 2, OAK.shine);
+  oakRect(img, 2, 20, 20, 2, OAK.dark);
+  const color = l === "N" ? /** @type {RGBA} */ ([255, 211, 177, 255]) : OAK.cream;
+  oakRect(img, 6, 4, 12, 16, l === "N" ? [111, 48, 30, 255] : OAK.dark);
+  letter(img, 0, 0, OAK_FONT[l], 7, 5, 2, color);
+  return img;
+}
+function oakShade() {
+  const img = blank(238, 248);
+  for (let y = 0; y < 248; y++) for (let x = 0; x < 238; x++)
+    if (insideOak(x, y, 116, 121)) put(img, x, y, [66, 45, 26, 255]);
+  return img;
+}
+/** Exact oak-art.mjs illustrative scene, assembled from our unchanged glyph pages; not a screenshot.
+ * @param {Image} sheet */
+function renderOak(sheet) {
+  const sheets = new Map([[0xf3, sheet], [0xf4, colorPage(0)], [0xf5, colorPage(1)]]);
+  overlayPages().forEach((img, i) => sheets.set(0xf6 + i, img));
+  const named = new Map(GLYPHS.map((g) => [g.name, (PAGE << 8) + g.cell]));
+  /** @param {Image} dst @param {number} code @param {number} dx @param {number} dy @param {number} width @param {number} height */
+  const tile = (dst, code, dx, dy, width, height) => {
+    const source = /** @type {Image} */ (sheets.get(code >> 8));
+    const x0 = (code & 15) * CELL, y0 = ((code >> 4) & 15) * CELL;
+    const cell = blank(CELL, CELL);
+    for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+      const i = ((y + y0) * source.width + x + x0) * 4;
+      put(cell, x, y, [source.data[i], source.data[i + 1], source.data[i + 2], source.data[i + 3]]);
+    }
+    stamp(dst, cell, dx, dy, width, height);
+  };
+  /** @param {string} name @param {number} palette */
+  const overlayCode = (name, palette) => (OVERLAY_PAGE << 8) + NEAREST_BG[palette] * OVERLAY_COUNT + OVERLAY_NAMES.indexOf(name);
+  const preview = blank(476, 496);
+  stamp(preview, oakShade(), 0, 0, 476, 496);
+  for (let r = -16; r <= 16; r++) for (let c = -16; c <= 16; c++) {
+    if (c * c + r * r > 256) continue;
+    const river = 4 * Math.sin(r / 5) + 3;
+    let palette = (((3 << 3) | 5) << 3) | 2;
+    if (Math.abs(c - river) < 2.3) palette = (((1 << 3) | 3) << 3) | 6;
+    else if (Math.abs(c - river) < 3.3) palette = (((6 << 3) | 5) << 3) | 3;
+    else if ((c + 8) ** 2 + (r + 6) ** 2 < 52) palette = (((2 << 3) | 4) << 3) | 1;
+    else if (c > 7 && r < -3) palette = (((4 << 3) | 4) << 3) | 4;
+    else if (oakNoise(c, r) % 11 < 3) palette = (((3 << 3) | 4) << 3) | 2;
+    if (Math.abs(r - 5) < 1 && c < -2) palette = (((6 << 3) | 4) << 3) | 2;
+    let code = 0xf400 + palette;
+    if (c === -7 && r === -7) code = overlayCode("Q_STAR", palette);
+    if (c === 9 && r === 5) code = overlayCode("Q_PARTY", palette);
+    if (c === -5 && r === 9) code = overlayCode("Q_MOB", palette);
+    tile(preview, code, Math.round(40 + (c + 16) * 12), Math.round(40 + (r + 16) * 12.6), 12, 13);
+  }
+  stamp(preview, oakFrame(), 0, 0, 476, 496);
+  for (const [l, x, y] of [["N", 218, 8], ["E", 428, 228], ["S", 218, 448], ["W", 8, 228]])
+    stamp(preview, oakBadge(String(l)), Number(x), Number(y), 40, 40);
+  tile(preview, /** @type {number} */ (named.get("Q_SELF_0")), 226, 236, 24, 24);
+  return preview;
+}
+
+/** Original circular bezels; old themes remain available for rollback. */
+function radarFrame() {
+  if (THEME.oakFrame) return oakFrame();
+  if (THEME.pixelFrame) return paperFrame();
+  const img = blank(RADAR_W, RADAR_H), cx = RADAR_W / 2, cy = RADAR_H / 2;
+  fill(img, 0, 0, RADAR_W, RADAR_H, (x, y) => Math.hypot(x - cx, y - cy) <= 63.7 && Math.hypot(x - cx, y - cy) >= 59.8, THEME.rim);
+  fill(img, 0, 0, RADAR_W, RADAR_H, (x, y) => Math.hypot(x - cx, y - cy) <= 62.8 && Math.hypot(x - cx, y - cy) >= 61.7, THEME.inner);
+  fill(img, 0, 0, RADAR_W, RADAR_H, (x, y) => Math.hypot(x - cx, y - cy) <= 60.7 && Math.hypot(x - cx, y - cy) >= 60.1, THEME.accent);
+  for (let i = 0; i < THEME.ticks; i++) {
+    const angle = i * Math.PI * 2 / THEME.ticks;
+    for (let r = 57.5; r < 60; r += .4) disk(img, cx + Math.sin(angle) * r, cy - Math.cos(angle) * r, .45, THEME.accent);
+  }
+  return img;
+}
+/** A transparent-corner disc, not a square panel behind transparent text. */
+function radarShade() {
+  if (THEME.oakFrame) return oakShade();
+  const img = blank(RADAR_W, RADAR_H);
+  if (THEME.pixelFrame) {
+    for (let y = 0; y < RADAR_H; y++) for (let x = 0; x < RADAR_W; x++)
+      if (steppedRadius(x, y) <= 62.2) put(img, x, y, THEME.background);
+  } else fill(img, 0, 0, RADAR_W, RADAR_H, (x, y) => Math.hypot(x - 64, y - 64) <= 62.2, THEME.background);
+  return img;
+}
+// UI-only microletters, distinct from the published seven-row compass/font glyphs above.
+// Five by five at 4x source resolution keeps all five columns legible in the unchanged 8x8 UI tabs.
+const CARDINAL_PIXEL = /** @type {Record<string, string[]>} */ ({
+  N: ["10001", "11001", "10101", "10011", "10001"],
+  E: ["11111", "10000", "11110", "10000", "11111"],
+  S: ["01111", "10000", "01110", "00001", "11110"],
+  W: ["10001", "10001", "10101", "11011", "10001"],
+});
+/** Original chiseled cardinal tabs: high-contrast ink on paper, north in muted brick red.
+ * @param {string} l */
+function cardinalBadge(l) {
+  if (THEME.oakFrame) return oakBadge(l);
+  const img = blank(32, 32);
+  if (THEME.pixelFrame) {
+    const paper = /** @type {RGBA} */ ([221, 194, 138, 255]);
+    for (let y = 1; y < 31; y++) for (let x = 1; x < 31; x++) {
+      const edge = Math.min(x, y, 31 - x, 31 - y);
+      if (x + y < 8 || x + y > 54 || x - y > 23 || y - x > 23) continue;
+      let c = THEME.rim;
+      if (edge >= 2 && x + y >= 10 && x + y <= 52 && Math.abs(x - y) <= 21)
+        c = x + y < 31 && edge <= 3 ? THEME.accent : paper;
+      put(img, x, y, c);
+    }
+    letter(img, 0, 0, CARDINAL_PIXEL[l], 6, 6, 4, l === "N" ? THEME.north : THEME.letter);
+  } else {
+    fill(img, 0, 0, 32, 32, (x, y) => Math.hypot(x - 16, y - 16) <= 15.8, THEME.inner);
+    fill(img, 0, 0, 32, 32, (x, y) => Math.hypot(x - 16, y - 16) <= 14.5, THEME.background);
+    letter(img, 0, 0, BIG[l], 8, 5, 3, l === "N" ? THEME.north : THEME.letter);
+  }
+  return img;
+}
+// The tile is visually transparent (two alpha1 extent anchors, not a visible baseline).
+// Completely empty glyphs can collapse native advance; actual client extent remains a visual gate.
+if(GLYPHS.some(g=>g.cell===0xff))throw new Error("Outside-mask glyph slot collision");
+glyph("Q_OUTSIDE",0xff,"radar: policy-excluded transparent tile, full encoded extent",(img,ox,oy)=>{put(img,ox,oy,[0,0,0,1]);put(img,ox+15,oy+15,[0,0,0,1]);});
 
 const sheet = page();
 /** @type {Map<string, Image | string>} */
 const outputs = new Map();
+outputs.set("packs/hud_rp/font/glyph_F1.png", estimatedColorPage(0));
+outputs.set("packs/hud_rp/font/glyph_F2.png", estimatedColorPage(1));
 outputs.set("packs/hud_rp/font/glyph_F3.png", sheet);
+outputs.set("packs/hud_rp/font/glyph_F4.png", colorPage(0));
+outputs.set("packs/hud_rp/font/glyph_F5.png", colorPage(1));
+overlayPages().forEach((img, i) => outputs.set(`packs/hud_rp/font/glyph_F${6 + i}.png`, img));
 outputs.set("packs/hud_rp/textures/ui/radar_frame.png", radarFrame());
 outputs.set("packs/hud_rp/textures/ui/radar_shade.png", radarShade());
+for (const l of ["N", "E", "S", "W"]) outputs.set(`packs/hud_rp/textures/ui/map_cardinal_${l.toLowerCase()}.png`, cardinalBadge(l));
 outputs.set("packs/hud_rp/pack_icon.png", packIcon());
 outputs.set("packs/map_bp/scripts/glyphs.js", glyphsJs());
 outputs.set("docs/media/map/map-hud.png", render(sheet));
+
+if (selectedOutputs.length) {
+  for (const rel of selectedOutputs) if (!outputs.has(rel)) throw new Error(`unknown glyph output: ${rel}`);
+  for (const rel of outputs.keys()) if (!selectedOutputs.includes(rel)) outputs.delete(rel);
+}
 
 if (check) {
   const stale = [];

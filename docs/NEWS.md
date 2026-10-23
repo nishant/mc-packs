@@ -7,6 +7,15 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## A rounder minimap, off until you want it
+
+- The minimap radar is now a 33 x 33 circle that reaches 36 blocks, and it starts turned off. Switch it on in /realm:prefs or with /realm:minimap. Anyone who had it on is switched off one time.
+- North, east, south and west badges stay fixed around the circle when you keep north up. Turn that off and the map turns with you.
+- Land you have not seen is marked as unknown or as an estimate. Run /realm:minimap scan 64 (1 to 384) to map the land around you; /realm:minimap status and /realm:minimap cancel check on it or stop it.
+- The Nether map follows the floor you are standing on.
+
+- North stays up by default; you can still choose a turning minimap. Compass settings are unchanged.
+
 ## Backpack pages survive a crash
 
 - Last night the Realm froze and restarted from an older save, so about half an hour of play was rolled back. Sorry about that.

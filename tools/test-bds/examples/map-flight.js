@@ -1,159 +1,91 @@
-// Minimap terrain while flying: a player teleported 3 blocks a tick over ground that changes (a sand band built
-// ahead of them) sees the sand on the radar within a few ticks of arriving and few unknown cells while moving, and
-// a second player standing under a roof (cave terrain) never changes what the first one sees of the same dimension.
-//   node tools/test-bds/run.mjs --quiet --flat --only map_bp,hud_rp --scenario tools/test-bds/examples/map-flight.js --timeout 900
-const g = (n) => String.fromCodePoint(0xf300 + n);
-const SAND = g(0xaa);
-const EMPTY = g(0x38);
-const CAVE = [g(0xaf), g(0xcc), g(0xcd)];
-const SANDS = [SAND, g(0xb7), g(0xb8)];
-const count = (s, glyph) => [...(s ?? "")].filter((c) => (glyph === SAND ? SANDS.includes(c) : c === glyph)).length;
-
-export default async function (t) {
-  // These checks describe the Minimap with the time it had before its 1 ms budget (October 2026): budgetLevel high
-  // gives it exactly those budgets, the same code with more time a tick. Its cost at normal is perf-soak's to measure.
-  await mapBudgetHigh(t);
-  const sys = t.system;
-  let last = {};
-  sys.afterEvents.scriptEventReceive.subscribe(
-    ({ id, message }) => {
-      if (id !== "realm:map_state") return;
-      try {
-        const m = JSON.parse(message);
-        last[m.player] = m;
-      } catch {}
-    },
-    { namespaces: ["realm"] },
-  );
-  const radarOf = async (p) => {
-    const since = t.tick;
-    last[p.id] = undefined;
-    const at = p.location;
-    const samples = [-24, 24].flatMap((dx) => [-24, 24].map((dz) => ({ x: at.x + dx, z: at.z + dz, resolution: 4 })));
-    sys.sendScriptEvent("realm:map_debug", JSON.stringify({ player: p.id, action: "state", samples }));
-    await t.waitUntil(() => last[p.id] !== undefined, { timeout: 20, message: "realm:map_state" });
-    return last[p.id].radar ?? "";
-  };
-  await t.server("/gamerule domobspawning false");
-  const a = await t.player("Flier", { op: true, x: 0, z: 0, gameMode: "creative" });
-  const b = await t.player("Caver", { op: true, x: 0, z: 100, gameMode: "creative" });
-  await t.loadArea(0, 100, { radius: 4 }); // Keep the entire stationary radar loaded after the flier leaves.
-  await t.wait(60);
-
-  // Roof over Caver, high enough to count as roofed terrain.
-  await t.server("/fill -8 -45 92 8 -45 108 stone");
-  await t.wait(60);
-  const rb = await radarOf(b);
-  t.check(CAVE.some((c) => rb.includes(c)), "the roofed player's radar draws cave terrain");
-
-  // Flier flies east over ground that changes: a sand band is built ahead once they are on the way.
-  let unknownWorst = 0;
-  for (let x = 0; x <= 30; x += 3) {
-    a.teleport({ x, y: -60, z: 0 });
-    await t.wait(1);
+// Optional minimap surface/movement regression: build terrain BEFORE opt-in, then verify actual canonical native samples.
+// Default-OFF and opting out are checked; this is not the old cave/fine-cache saturation or active-radar performance test.
+// node tools/test-bds/run.mjs --quiet --flat --only map_bp,hud_rp --scenario tools/test-bds/examples/map-flight.js --timeout 180
+const mapStateParts = new Map();
+function reassembleMapState(message, now = 0) {
+  for (const [k, e] of mapStateParts) if (now - e.at > 200) mapStateParts.delete(k);
+  const d = JSON.parse(message),
+    c = d && d.chunk;
+  if (!c) return d;
+  if (d.channel !== "state" || d.v !== 1 || !Number.isInteger(c.total) || c.total < 1 || c.total > 12 || !Number.isInteger(c.index) || c.index < 0 || c.index >= c.total || typeof c.text !== "string") throw Error("bad map state packet");
+  const key = `${d.player ?? ""}:${c.id}`;
+  let e = mapStateParts.get(key);
+  if (!e) {
+    if (mapStateParts.size >= 16) mapStateParts.delete(mapStateParts.keys().next().value);
+    e = { total: c.total, parts: new Array(c.total), got: 0, at: now };
+    mapStateParts.set(key, e);
   }
-  await t.server("/tickingarea add 60 -61 -20 100 -61 20 sandarea");
-  await t.wait(40);
-  await t.server("/fill 60 -61 -20 100 -61 20 sand");
-  for (let x = 33; x <= 75; x += 3) {
-    a.teleport({ x, y: -60, z: 0 });
-    await t.wait(1);
-    unknownWorst = Math.max(unknownWorst, count(await radarOf(a), EMPTY));
+  if (e.total !== c.total || e.parts[c.index] !== undefined) {
+    mapStateParts.delete(key);
+    throw Error("bad map state packet");
   }
-  await t.wait(6);
-  const ra = await radarOf(a);
-  t.log(`flier radar: ${count(ra, SAND)} sand cells, ${count(ra, EMPTY)} unknown; worst unknown while flying ${unknownWorst} of 441`);
-  const hist = {};
-  for (const c of ra) hist[(c.codePointAt(0) - 0xf300).toString(16)] = (hist[(c.codePointAt(0) - 0xf300).toString(16)] ?? 0) + 1;
-  t.log(`glyph histogram ${JSON.stringify(hist)} pos ${JSON.stringify(a.location)}`);
-  t.check(count(ra, SAND) >= 20, "the sand built ahead shows on the flier's radar a few ticks after arriving");
-  t.check(unknownWorst <= 150, `few unknown cells while flying fast (${unknownWorst} of 441 at worst)`);
-  t.check(!CAVE.some((c) => ra.includes(c)), "the roofed player's cave terrain never reaches the flier's radar");
-  const rb2 = await radarOf(b);
-  t.check(!rb2.includes(SAND), "the flier's sand is not drawn for the player far away under the roof");
-
-  // Reach the real cache cap through native flight, then stop beneath a roof: detail must not churn forever. How long
-  // that takes depends on the scanner's reading budget and the machine (about 2200 ticks at budgetLevel high), so the
-  // flight goes on until the store is full, looked at every 200 ticks, for at most 6600 ticks.
-  let area;
-  for (let i = 0; i < 6600; i++) {
-    if (i >= 2000 && i % 200 === 0) {
-      await radarOf(a);
-      if (last[a.id].terrain.surface.columns >= 6000) break;
-    }
-    const x = 0.1 + (i + 1) * 3.2;
-    if (i % 10 === 0) {
-      const next = await t.loadArea(x, 300, { radius: 4 });
-      if (area) await t.server(`/tickingarea remove ${area}`);
-      area = next.name;
-    }
-    a.teleport({ x, y: 128, z: 300 }, { rotation: { x: 0, y: 270 } });
-    await t.wait(1);
-  }
-  await radarOf(a);
-  t.log(`native saturated surface ${JSON.stringify(last[a.id].terrain.surface)}`);
-  t.check(last[a.id].terrain.surface.columns === 6000 && last[a.id].terrain.surface.fine >= 100, "native flight saturates6000 while retaining a useful fine working set");
-  const x = Math.floor(a.location.x);
-  await t.server(`/fill ${x - 8} 63 292 ${x + 8} 63 308 stone`);
-  await t.server(`/fill ${x - 8} 80 292 ${x + 8} 80 308 stone`);
-  a.teleport({ x: x + 0.1, y: 64, z: 300 }, { rotation: { x: 0, y: 270 } });
-  await t.wait(130); // The existing surface sample refreshes within100 ticks after a command-built roof.
-  await radarOf(a);
-  t.check(last[a.id].terrain.store.endsWith("|layer64"), "saturated native cache keeps roof80/player64 in its cave");
-  await radarOf(b);
-  t.log(`stationary native misses: flier=${last[a.id].terrain.misses}, caver=${last[b.id].terrain.misses}`);
-  t.check(last[a.id].terrain.misses === 0 && last[b.id].terrain.misses === 0, "stationary cost excludes legitimate unloaded-chunk retries");
-  // The 2200-tick flight plus setup crosses the other viewer's intentional 2400-tick freshness boundary.
-  // Observe that age refresh explicitly before measuring idle eviction churn; keep both viewers scanning.
-  // How long the flight takes in ticks depends on t.loadArea (since F73 it waits for the whole area and 20 ticks
-  // more, 220 times here), so a flight that ran past the boundary has seen one refresh already: wait for the
-  // next cohort to come of age (at most one more 2400-tick period) instead of assuming where the flight ended.
-  const aged = () => last[b.id].terrain.samples.filter((s) => s.data && sys.currentTick - s.data.tick >= 2300);
-  for (let i = 0; i < 520 && !aged().length; i++) {
-    await t.wait(5);
-    await radarOf(b);
-  }
-  const expiring = aged();
-  t.log(`Caver coarse sample ages before idle: ${last[b.id].terrain.samples.map((s) => s.data ? sys.currentTick - s.data.tick : "missing").join(",")}`);
-  t.check(expiring.length > 0, "long flight reaches the stationary caver's existing age-refresh cohort");
-  const refreshed = () => expiring.every((old) => last[b.id].terrain.samples.some((s) => s.x === old.x && s.z === old.z && s.data?.tick > old.data.tick));
-  // map_bp reads a column again once it is older than SCAN_MAX_AGE (2400 ticks), found by the stale scan whose key
-  // changes every STALE_EVERY (200) ticks: from age 2300 that is at most 100 + 200 ticks, plus a scan. A fixed 48 polls
-  // (about 290 ticks) only held while the cohort was first seen past 2300; now it is seen at 2300 itself.
-  const refreshBy = sys.currentTick + (2400 - 2300) + 200 + 40;
-  while (sys.currentTick < refreshBy && !refreshed()) {
-    await t.wait(5);
-    await radarOf(b);
-  }
-  t.check(refreshed(), "old coarse samples actually refresh before the steady idle window");
-  await t.wait(12);
-  await radarOf(b);
-  t.log(`Caver coarse sample ages after refresh: ${last[b.id].terrain.samples.map((s) => s.data ? sys.currentTick - s.data.tick : "missing").join(",")}`);
-  sys.sendScriptEvent("realm:map_debug", JSON.stringify({ player: a.id, action: "cost" }));
-  await t.wait(2);
-  await t.wait(50);
-  await radarOf(a);
-  const cost = last[a.id].cost;
-  t.log(`saturated stop: ${cost.scanReads} real reads/${cost.scanTicks} ticks, scanner ${cost.scanMs}ms (${(cost.scanMs / Math.max(1, cost.scanTicks)).toFixed(3)}ms/tick), redraw ${cost.turnMs}ms/${cost.turnTicks}ticks, periodic ${cost.ms}ms; peaks ${cost.scanPeak}/${cost.scanEachPeak}`);
-  t.check(cost.scanReads <= 4, "saturated stationary native viewers do not keep rereading their fine detail");
-  t.check(cost.scanPeak <= 96 && cost.scanEachPeak <= 48, "saturated native flight and cave retain unchanged96/48 operation limits");
+  e.parts[c.index] = c.text;
+  if (++e.got < e.total) return undefined;
+  mapStateParts.delete(key);
+  return JSON.parse(e.parts.join(""));
 }
 
-// The Minimap at budgetLevel high (scenarios can't import: pasted where needed).
-async function mapBudgetHigh(t) {
-  let ack;
-  const sub = t.system.afterEvents.scriptEventReceive.subscribe(
-    ({ id, message }) => {
-      if (id !== "realm:cfg_ack") return;
-      try {
-        const m = JSON.parse(message);
-        if (m.id === "mapbudget") ack = m;
-      } catch {}
-    },
-    { namespaces: ["realm"] },
-  );
-  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "mapbudget", pack: "map_bp", key: "budgetLevel", value: "high" }));
-  await t.waitUntil(() => ack, { timeout: 60, message: "budgetLevel high was set" });
-  t.system.afterEvents.scriptEventReceive.unsubscribe(sub);
-  t.assert(ack.ok, `budgetLevel high: ${ack.error ?? "ok"}`);
+
+export default async function(t) {
+  const sys=t.system,dim=t.dimension,replies=[];
+  let request=0;
+  sys.afterEvents.scriptEventReceive.subscribe(({id,message})=>{
+    if(id!=="realm:map_state"&&id!=="realm:cfg_ack")return;
+    try{const m=id==="realm:map_state"?reassembleMapState(message,sys.currentTick):JSON.parse(message);if(m!==undefined)replies.push({id,m,tick:sys.currentTick});}catch{}
+  },{namespaces:["realm"]});
+  const send=(id,m)=>sys.sendScriptEvent(id,JSON.stringify(m));
+  const ask=async(p,action,extra={})=>{
+    const since=t.tick;replies.length=0;send("realm:map_debug",{player:p.id,action,...extra});
+    await t.waitUntil(()=>replies.some(e=>e.id==="realm:map_state"&&e.m.player===p.id&&e.tick>=since),{timeout:40,message:"map debug "+action});
+    return replies.filter(e=>e.id==="realm:map_state"&&e.m.player===p.id&&e.tick>=since).at(-1).m;
+  };
+  const set=async(p,key,value)=>{
+    const id="surface_"+(++request);send("realm:cfg_set",{id,pack:"map_bp",player:p.id,key,value});
+    await t.waitUntil(()=>replies.some(e=>e.id==="realm:cfg_ack"&&e.m.id===id),{timeout:80,message:"preference "+key});
+    t.assert(replies.find(e=>e.id==="realm:cfg_ack"&&e.m.id===id).m.ok===true,"preference saved: "+key+"="+value);
+  };
+  const raw=async(p,points,message)=>{
+    let last;
+    for(let i=0;i<40;i++){
+      last=await ask(p,"detail_raw",{points});
+      if(last.samples?.length===points.length&&last.samples.every(s=>s?.valid===true&&s.source==="native"))return last;
+      await t.wait(5);
+    }
+    t.log("unresolved native samples "+JSON.stringify(last));t.fail(message);
+  };
+  await t.server("/gamerule domobspawning false");
+  // Build ALL command-created terrain before opting in. /fill does not emit player block-change invalidations.
+  await t.loadArea(0,100,{radius:4});
+  await t.loadArea(75,0,{radius:4});
+  await t.server("/fill -8 -45 92 8 -45 108 stone");
+  await t.server("/fill 60 -61 -20 100 -61 20 sand");
+  const flier=await t.player("Flier",{op:true,x:0,y:-60,z:0,gameMode:"creative"});
+  const roofed=await t.player("Roofed",{op:true,x:0,y:-60,z:100,gameMode:"creative"});
+  await t.wait(20);
+  for(const p of[flier,roofed]){
+    const before=await ask(p,"state");
+    t.check(!before.radar,p.name+" starts with the optional radar OFF");
+  }
+  // This is an explicit two-viewer terrain-functionality case, not a general CI/performance default.
+  for(const p of[flier,roofed]){await set(p,"terrain",true);await set(p,"radarNorthUp",true);await set(p,"radar",true);}
+  const roof=await raw(roofed,[[1,101],[-7,93]],"fresh upper roof is acquired");
+  t.check(roof.store.endsWith("|surface")&&roof.samples.every(s=>s.kind==="stone"&&s.y===-45),"fresh roofed viewer reads the actual upper surface, not an old cave layer or cached grass");
+  for(let x=0;x<=75;x+=3){flier.teleport({x:x+.5,y:-60,z:.5},{rotation:{x:0,y:270}});await t.wait(1);}
+  const points=[[69,1],[75,1],[81,1],[87,1],[75,7],[75,-5]];
+  t.check(new Set(points.map(p=>p.join(","))).size===6&&points.every(p=>p.every(v=>Math.abs(v)%2===1)),"movement probes are six distinct canonical two-block anchors");
+  const one=await raw(flier,points.slice(0,4),"movement reaches the first four sand samples");
+  const two=await raw(flier,points.slice(4),"movement reaches the last two sand samples");
+  const sand=[...one.samples,...two.samples];
+  t.check(one.store.endsWith("|surface")&&two.store===one.store&&sand.every(s=>s.kind==="sand"&&s.y===-61&&Number.isInteger(s.palette)&&s.palette>=0&&s.palette<512),"all six movement samples are genuinely acquired sand at the native surface height with real color indexes");
+  const stillRoof=await raw(roofed,[[1,101],[-7,93]],"other viewer retains its actual roof");
+  t.check(stillRoof.store===one.store&&stillRoof.samples.every(s=>s.kind==="stone"&&s.y===-45),"moving viewer does not overwrite another location's shared surface samples");
+  const pose=await ask(flier,"state");
+  t.check(pose.pose?.dim===dim.id&&pose.pose.north===true&&Math.abs(pose.pose.x-flier.location.x)<1,"accepted state follows the current location and north-up terrain view");
+  // No cache-filling flight, old fine-detail tier, command-edit refresh promise or active-radar performance benchmark.
+  // Freshness, cache limits and ledger partitioning have focused regression coverage instead.
+  for(const p of[flier,roofed])await set(p,"radar",false);
+  await t.wait(20);
+  for(const p of[flier,roofed])t.check(!(await ask(p,"state")).radar,p.name+" can opt out again without disabling the compass");
+  await ask(flier,"cost");await t.wait(20);const off=await ask(flier,"cost");
+  t.check(off.cost.scanReads===0,"after both opt out, optional terrain sampling performs zero native reads");
 }
