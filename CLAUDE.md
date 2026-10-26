@@ -4,9 +4,16 @@ Minecraft Bedrock packs for a Realm. Each folder in `packs/` is a self-contained
 
 **Before big or multi-pack work, read `docs/WORKING.md`**: the order of the finishing steps, how subagents and reviewers split the work, known API quirks, and how to keep a session cheap (read `docs/PACKS.md`, 1 MB, one `## ` section at a time; never open generated catalogs), plus the recurring bug checklist (C1-C29) to apply to every pack you touch. Server owners outside this Realm start at `docs/SERVER_SETUP.md`: keep it current when install steps, requirements, Server size or performance change.
 
-## Rules
+## Autonomy
 
-- **Ship every change; don't ask.** The owner has standing approval: never ask whether to open a PR, merge, publish or deploy. Unless the request says otherwise, a change is done only when:
+Nish (2026-10-26): "you have full autonomy to merge and deploy. Just make sure everything is always live when you're done… Claude sessions can build and merge and deploy as they see fit. Do not hold up development waiting for an answer from me unless absolutely 100% critically necessary."
+
+- Claude sessions build, commit, push, open and merge PRs, release and deploy on their own judgment, without asking Nish.
+- Work is done only when it is merged, released, deployed and confirmed live (the finishing steps under "Ship every change" below). Never leave CI, the release run or a deploy red: read the log, fix it and ship again.
+- Pick sensible defaults instead of asking. Stop for Nish only when it is critically necessary: credentials or account signups, or anything destructive to production data (the Realm's saved data included).
+
+## Rules
+- **Ship every change; don't ask** (the Autonomy rule above): never ask whether to open a PR, merge, publish or deploy. Unless the request says otherwise, a change is done only when:
   1. `npm run check` and `npm run build` pass, and the change is committed with its docs, pushed, PR'd to the default branch **`master`** and merged by you with a merge commit (merge the default branch in first if it moved).
   2. The release notes are in `release/notes.json` in the same PR: `notes` for the Realm Bundle (and Realm Resources unless `resourceNotes` is given), `packNotes.<folder>` = `{ "version": "<new header.version>", "notes": "…" }` for every pack whose version went up (`npm run check` enforces it). After the merge, the `release` workflow (`.github/workflows/release.yml`, once `check` is green on `master`) publishes, regenerates the realm page, merges the hosting PR (that's the deploy) and runs check-live: wait for that run and read its job summary. **Fallback** when its summary says "Release skipped: no HOSTING_TOKEN" or the run failed: in `nishant/hosting` (cloned next to this repo; attach it to a cloud session if it isn't there), `cd minecraft`: `node tools/publish-packs.mjs --from <this repo> --notes "…" --pack-notes <folder>="…"` for every pack whose version went up (`--notes` whenever anything in the Realm Bundle changed), `node tools/pack-docs.mjs --from <this repo>` (and `--check`), `node tools/check-site.mjs realm` (only the realm page changes in a pack publish; a full run is for site changes), then a PR to `master` that you merge (that's the deploy). The two paths don't conflict: a version is published once. Docs-only changes skip publishing but still regenerate the realm page.
   3. check-live passes (the release run's last step, or `node tools/check-live.mjs` in hosting on the fallback): it waits for the deploy and checks the live pages, every pack's latest `.mcpack` and the realm page in Chromium. Never fetch a new file's URL before that: Cloudflare caches a 404.
