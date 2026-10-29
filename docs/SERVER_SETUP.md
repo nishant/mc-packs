@@ -256,7 +256,7 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 - **Measured with simulated players**, not real clients: no chunk sending, simple movement, no client packets. A
   real server spends more time per player outside the scripts, and a Realm's CPU differs from the test machine.
 - **Measured at 10 and 40 players only.** Larger servers are not measured. Coordinates HUD updates arrive in bounded parts (no cap at 100 players), but that is a code change, not a load test; the Minimap keep-alive and the story quest workload still need their 40-player measurements.
-- **At 40 players the packs are within their budget, with little room:** about 2.5 ms a tick (the Minimap 0.9 of its 1 ms), and a few packs close to 0.15 ms. A different workload (more building, more wanderers, more inventory traffic) can push one over. See Performance above.
+- **At 40 players the packs are within their budget, with little room:** about 2.5 ms a tick (the Minimap 0.9 of its 1 ms), and a few packs close to 0.15 ms. A slower machine or a different workload (more building, more wanderers, more inventory traffic) can push one over: on a CI runner about 25% slower the Minimap measured 1.12 and Wanderers of the Wilds 0.153 (October 29, before Minimap 1.5.2, which cut the Minimap about 14%). See Performance above.
 - **Ticking areas:** Bedrock allows 10 per world. Farm Loader's farms, Expeditions' dungeon resets (up to `slots`),
   Death Point's `/realm:death_back` and some story and town builds share them, as do any you add with `/tickingarea`.
 - **One cast:** there is one set of twelve townsfolk for the whole world; several towns share them. Each town also has its own mayor (Town Projects with Townsfolk, `townMayors`), one NPC per town.

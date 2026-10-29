@@ -108,13 +108,13 @@ function callbackSource(phase) {
 /** Real V2 envelope, not a no-op: every extracted wrapper executes its production begin/finally/end path. */
 function runInVm(source, context = {}) {
   context.featureEnvelope ??= new FeatureEnvelope();
-  context.residentTrace ??=new ResidentTrace();context.EXP??=BALANCED;
+  context.residentTrace ??=new ResidentTrace();context.EXP??=BALANCED;context.idOf??=(p)=>p.id;
   return vm.runInNewContext(source, context);
 }
 const okBudget = () => ({ tick() {}, ok: true, spend() {}, left: 100, room: 100 });
 
 test("the real pass callback never recreates a left player's entry, nor passes one that left between callbacks", () => {
-  const playersNowSrc = mainSource.match(/let playersTick = -1;[\s\S]*?\n\}\n/)[0];
+  const playersNowSrc = mainSource.match(/const roster = new Map\(\);[\s\S]*?\n\}\n/)[0];
   const mk = (id) => ({ id, isValid: true, location: { x: 0, z: 0 }, dimension: { id: "d" } });
   const alive = mk("a");
   const left = mk("b");
@@ -353,7 +353,7 @@ test("one scanner wrapper delegates to a bounded independent planner, never rely
   runInVm(`(${scanner[0].getText(mainAst)})`, scannerContext)();
   assert.equal(frames, 1, "the actual registered wrapper reaches the scanner exactly once");
   assert.equal(scannerContext.featureEnvelope.tick, 20, "the real V2 envelope receives the game tick");
-  assert.match(functionSource("scanFrame"), /if \(!planIdle\(p\.id, now\)\) planFor\(p, now,\s*true\);/);
+  assert.match(functionSource("scanFrame"), /if \(!planIdle\(idOf\(p\), now\)\) planFor\(p, now,\s*true\);/);
   const plan = { dim: { id: "minecraft:overworld" }, x: 0, z: 0, py: 64, at: 10 };
   Object.defineProperty(plan, "player", { get() { assert.fail("idle admission may not read a native player handle"); } });
   const view = { dim: "minecraft:overworld", x: 0, y: -40, z: 0 };
@@ -384,4 +384,31 @@ test("a title about to fade is refreshed on time even when it isn't the player's
   const run = runInVm(`let turnFirst = 0, turnMs = 0, turnTicks = 0, turnDraws = 0, turnSends = 0, refreshSends = 0, keepSends = 0, turnCheckMs = 0;\n(${callbackSource("redraw")})`, sandbox);
   run();
   assert.deepEqual(kept, ["p90"], "p90 (outside this tick's 12 checks) is refreshed now");
+});
+
+test("the strip's ticks and letters, built once per cell of facing, come out as building them every draw did", () => {
+  const G = new Proxy({}, { get: (_t, k) => String(k) });
+  const constants = ["CELLS", "MID", "DEG"].map((n) => mainSource.match(new RegExp(`^const ${n} = .+;`, "m"))[0]).join("\n");
+  const sandbox = { G, Math, Array, Map, KINDS: {} };
+  const strip = runInVm(`${constants}\nconst LETTERS = ${mainSource.match(/^const LETTERS = (.+);$/m)[1]};\n${mainSource.match(/^const wrap = [\s\S]*?\n\};$/m)[0]}\nconst bearingOf = () => 0;\n${mainSource.match(/^const stripBases = .+;$/m)[0]}\n${functionSource("stripBase")}\n${functionSource("stripOf")}\nstripOf`, sandbox);
+  const { CELLS, MID, DEG } = vm.runInNewContext(`${constants}\n({ CELLS, MID, DEG })`);
+  /** The strip's base as every draw built it before (October 2026). */
+  const legacy = (heading) => {
+    const wrap = (a) => { const w = ((a % 360) + 360) % 360; return w > 180 ? w - 360 : w; };
+    const LETTERS = ["S_N", "S_NE", "S_E", "S_SE", "S_S", "S_SW", "S_W", "S_NW"];
+    const cells = Array(CELLS).fill("S_BLANK");
+    const prio = Array(CELLS).fill(0);
+    cells[MID] = "S_CENTER";
+    prio[MID] = 1;
+    for (let a = 0; a < 360; a += 15) {
+      const i = MID + Math.round(wrap(a - heading) / DEG);
+      if (i < 0 || i >= CELLS) continue;
+      const p = a % 45 === 0 ? 2 : 1;
+      if (p < prio[i] || (p === prio[i] && i === MID)) continue;
+      cells[i] = a % 45 === 0 ? LETTERS[a / 45] : "S_TICK";
+      prio[i] = p;
+    }
+    return cells.join("");
+  };
+  for (let h = -540; h <= 540; h += 0.1) assert.equal(strip(h, [], { x: 0, z: 0 }), legacy(h), `facing ${h}`);
 });

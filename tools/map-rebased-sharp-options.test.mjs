@@ -47,7 +47,7 @@ test('one-time radar OFF migration: existing radar resets once, later opt-ins pe
   assert.equal(reset(h.player),false);assert.equal(h.api.getFor(h.player,'radar'),true);
 });
 test('legacy non-radar player choices still apply; world mob bounds are 8..48 and reject above 48',()=>{
-  const h=harness(),prefs=vm.runInNewContext('('+fn('prefsOf')+')',{get:h.api.get,getFor:h.api.getFor,CONFIG:h.context.CONFIG,prefCache:new Map()});const p=prefs(h.player);
+  const h=harness(),prefs=vm.runInNewContext('('+fn('prefsOf')+')',{get:h.api.get,getFor:h.api.getFor,CONFIG:h.context.CONFIG,prefCache:new Map(),idOf:(p)=>p.id});const p=prefs(h.player);
   assert.equal(p.compass,true);assert.equal(p.radar,false);
   assert.equal(p.north,true,'saved player+world radarNorthUp false cannot rotate the live radar');assert.equal(p.terrain,false);assert.equal(p.mobs,false);assert.equal(p.town,false);assert.equal(p.home,false);
   assert.equal(p.radius,48);assert.equal(p.radarRadius,36);assert.equal(p.revealRadius,36);
