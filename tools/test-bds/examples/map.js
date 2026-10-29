@@ -1,3 +1,4 @@
+// ci probe: does the map scenario pass on master today? (throwaway branch, not for merge)
 // Minimap (map_bp) and the broadcasts it reads. On a flat world: the compass strip facing north shows N in the
 // middle, a townsfolk to the north-east in the radar's upper right (without cluttering the strip), mobs in red
 // (one behind as an arrow at the strip's edge), mobs hidden by the player's switch; a destination picked in
