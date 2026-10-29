@@ -727,8 +727,17 @@ let labelRun = 0;
 let hotTargets = [];
 /** @type {Player[]} */
 let hotObservers = [];
-/** A wanderer's entity loaded (a new handle): the next label run is a full pass, which looks it up again. */
+/**
+ * A wanderer's entity loaded (a new handle), or a player arrived somewhere at once (joined, respawned, changed
+ * dimension) or changed game mode: the next label run is a full pass, which looks everyone up again.
+ */
 let labelsStale = false;
+const staleLabels = () => {
+  labelsStale = true;
+};
+world.afterEvents.playerSpawn.subscribe(staleLabels);
+world.afterEvents.playerDimensionChange.subscribe(staleLabels);
+world.afterEvents.playerGameModeChange.subscribe(staleLabels);
 
 const labelDims = () =>
   DIMENSIONS.flatMap((id) => {
@@ -1340,7 +1349,8 @@ world.afterEvents.entityLoad.subscribe(({ entity }) => {
     }
     if (TYPES.includes(entity.typeId)) {
       audit(entity);
-      labelsStale = true;
+      // Only our own wanderers: villages full of vanilla villagers load all the time.
+      if (entity.isValid && entity.hasTag(OWNER_TAG)) labelsStale = true;
     }
   } catch (e) {
     console.warn(`[wander] ${e}`);

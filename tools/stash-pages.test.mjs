@@ -3548,7 +3548,7 @@ test("a beat walks only the players changing and the quiet ones whose turn it is
     advance(100); // 50 beats
     const n = [...looks.values()];
     assert.ok(n.every((k) => k >= 1), "every quiet player is still looked at");
-    assert.ok(reads < 40 * 50, `${reads} id reads in 50 beats for 40 quiet players`);
+    assert.ok(reads <= 40 * 10, `${reads} id reads in 50 beats for 40 quiet players`);
   } finally {
     for (const p of crowd) p.getComponent = gets.get(p);
     mc.players = was;
