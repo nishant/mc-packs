@@ -1,5 +1,5 @@
 // Fails when a release would have no notes. The release workflow (.github/workflows/release.yml, tools/ci-release.mjs)
-// publishes every merge to master on mc.nish.software by itself, and CI can't invent what changed: the author writes it
+// publishes every merge to master on minecraft.nish.software by itself, and CI can't invent what changed: the author writes it
 // in release/notes.json, in the same PR as the change.
 //
 //   release/notes.json

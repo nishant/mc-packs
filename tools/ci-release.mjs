@@ -83,7 +83,7 @@ export function summaryMarkdown(r) {
   if (r.pr) out.push(`Hosting PR: ${r.pr}${r.merged ? " (merged: deploying)" : " (not merged)"}`, "");
   else if (!r.failed) out.push(r.changed ? "Hosting changes committed locally only (--no-merge)." : "The realm page was already up to date: no hosting PR.", "");
   if (r.live) out.push(`check-live: ${r.live}`, "");
-  if (r.live?.startsWith("passed") && (r.bundle || r.resources)) out.push(`Site up to date: Realm Bundle ${r.bundle ?? "?"} and Realm Resources ${r.resources ?? "?"} are live at https://mc.nish.software/realm/.`, "");
+  if (r.live?.startsWith("passed") && (r.bundle || r.resources)) out.push(`Site up to date: Realm Bundle ${r.bundle ?? "?"} and Realm Resources ${r.resources ?? "?"} are live at https://minecraft.nish.software/realm/.`, "");
   return out.join("\n");
 }
 

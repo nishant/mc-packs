@@ -4,13 +4,13 @@ What each pack in this repo does, how to use it, and how to configure it.
 
 > **Keep this file up to date.** Any change to a pack's behavior, commands or `config.js` must update this file in the same commit. `npm run check` fails if a pack, command, config option or `### How to use` section is missing from this file (see [Keeping this file current](#keeping-this-file-current)).
 >
-> **This file is also the players' documentation.** The [Our realm](https://mc.nish.software/realm/) page on mc.nish.software is generated from it (in the `nishant/hosting` repo: `cd minecraft && node tools/pack-docs.mjs`). Every pack section is published, plus the sections marked `<!-- on the site -->`. Write in plain American English, and quote in-game text and ids exactly as the code has them (in backticks). See [Publishing to mc.nish.software](#publishing-to-mcnishsoftware).
+> **This file is also the players' documentation.** The [Our realm](https://minecraft.nish.software/realm/) page on minecraft.nish.software is generated from it (in the `nishant/hosting` repo: `cd minecraft && node tools/pack-docs.mjs`). Every pack section is published, plus the sections marked `<!-- on the site -->`. Write in plain American English, and quote in-game text and ids exactly as the code has them (in backticks). See [Publishing to minecraft.nish.software](#publishing-to-minecraftnishsoftware).
 
 ## Contents
 
 - [Common to all packs](#common-to-all-packs)
   - [Requirements](#requirements)
-  - [Installing from mc.nish.software](#installing-from-mcnishsoftware)
+  - [Installing from minecraft.nish.software](#installing-from-minecraftnishsoftware)
   - [Installing on a Realm](#installing-on-a-realm)
   - [Commands](#commands)
   - [Two ways to configure](#two-ways-to-configure)
@@ -94,7 +94,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
 - [Keeping this file current](#keeping-this-file-current)
-- [Publishing to mc.nish.software](#publishing-to-mcnishsoftware)
+- [Publishing to minecraft.nish.software](#publishing-to-minecraftnishsoftware)
 
 ---
 
@@ -110,12 +110,12 @@ What each pack in this repo does, how to use it, and how to configure it.
 | Cheats | **Not required** for any command (`cheatsRequired: false`) |
 | Achievements | Any non-Marketplace behavior pack turns off achievements for the world (that's how Bedrock works) |
 
-### Installing from mc.nish.software
+### Installing from minecraft.nish.software
 <!-- on the site -->
 
 The realm runs everything as two packs: **Realm Bundle**, a behavior pack with every feature, and **Realm Resources**, a resource pack with every texture, particle, fog and sound. A pack can't be both kinds, so two is the fewest possible. To install or update them:
 
-1. **Download** the latest Realm Bundle and Realm Resources `.mcpack` files from [mc.nish.software/realm](https://mc.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open each. Minecraft starts and imports them as "Realm Bundle" and "Realm Resources".
+1. **Download** the latest Realm Bundle and Realm Resources `.mcpack` files from [minecraft.nish.software/realm](https://minecraft.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open each. Minecraft starts and imports them as "Realm Bundle" and "Realm Resources".
 2. **Open the realm's settings** (the pencil next to the realm). Under **Behavior Packs**, find Realm Bundle under **Available** and activate it. Under **Resource Packs**, activate Realm Resources and move it to the **top** of the active list, so its rain, sky and tools win over other resource packs. Minecraft uploads both to the realm.
 3. **Join** once the realm restarts, and accept the resource pack download if asked. The welcome popup and the `/realm:` commands mean it's running.
 
@@ -195,7 +195,7 @@ One help page for every realm command: how each feature works, and each command 
 
 - Only features that are installed show up: each pack answers when the help asks, so a realm running a few single packs gets help for just those.
 - Usages follow the usual notation: `<name>` must be typed, `[name]` is optional.
-- The text is the same as on mc.nish.software/realm: it's generated from this file.
+- The text is the same as on minecraft.nish.software/realm: it's generated from this file.
 - Running `/realm:help` again while the help is already open does nothing, so menus don't stack. If chat or another screen stays open for about 20 seconds, chat says `Couldn't open the help. Close chat or your inventory and try again.`
 
 ### Commands
@@ -1637,7 +1637,7 @@ Operator state queries use bounded debug packets when the complete33-cell snapsh
 
 ## Realm Mail — `mail_bp`
 
-Write letters to anyone who has played on the realm, online or not. Letters to offline players wait in their inbox, and they're told about them when they join. Letters carry words only: for items, see the [Player Mailroom](https://mc.nish.software/mailroom/) build.
+Write letters to anyone who has played on the realm, online or not. Letters to offline players wait in their inbox, and they're told about them when they join. Letters carry words only: for items, see the [Player Mailroom](https://minecraft.nish.software/mailroom/) build.
 
 ### How to use
 
@@ -1659,7 +1659,7 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 - **Full inboxes:** an inbox holds 50 letters (`inboxLimit`). For an ordinary player letter, the oldest letters its owner has already read are dropped to make room. If every letter in it is still unread, the letter isn't sent: the form comes back, filled in, with `Alex's mailbox is full of unread letters. Try again once they've read some.` at the top, so you can pick someone else or keep the text. Pack letters use the stricter policy below and never evict player-written letters.
 - **Reading** a letter shows who sent it and when (`3h ago (2026-10-06 14:05 UTC)`), and marks it read. **Reply** opens the letter form with the sender picked and the subject `Re: ...`.
 - **Sent** keeps your last 30 letters (`sentLimit`), each marked `read`, `not read yet` or `deleted` (by the recipient). **Remove from Sent** removes your copy only; the recipient keeps theirs.
-- **No items:** letters can't carry items, because an item's full data can't be stored safely by an add-on. To send items, use the [Player Mailroom](https://mc.nish.software/mailroom/) build (the mail menu points to `mc.nish.software/mailroom`; another realm can change or remove that line with `itemsHint`).
+- **No items:** letters can't carry items, because an item's full data can't be stored safely by an add-on. To send items, use the [Player Mailroom](https://minecraft.nish.software/mailroom/) build (the mail menu points to `minecraft.nish.software/mailroom`; another realm can change or remove that line with `itemsHint`).
 - **Letters from the realm:** other packs can send letters (a townsfolk writes when you become Close with them, in [Townsfolk](#townsfolk--npc_bp)). They show the sender's name (`From: Old Tobin`), have no **Reply** button, skip the wait between letters and keep no Sent copy. New arrivals keep at most 20 pack letters per inbox (`systemInboxLimit`), replacing an older pack letter rather than a player's letter. Pack letters expire after 30 days (`systemLetterDays`) even if unread; a missing or invalid old timestamp is not treated as ancient. At the realm-wide 5,000-letter bound, 1,000 places are reserved from pack senders for player correspondence (`systemReserve`); a pack letter that cannot fit is not delivered, and none of the recipient's letters are deleted to make room for it (only expired pack letters are cleared). Existing player letters are not evicted to meet this reserve.
 
 ### Commands
@@ -1683,7 +1683,7 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 | `notifyDelaySeconds` | `8` | Seconds after joining before that line, so it comes after the welcome and news popups |
 | `sendCooldownSeconds` | `10` | Seconds a player waits between two letters. `0` = no wait (0–120 in game) |
 | `maxRoster` | `400` | Most players remembered as recipients; the ones seen longest ago are forgotten first. Their letters stay |
-| `itemsHint` | `"To send items, use the Player Mailroom build (mc.nish.software/mailroom)."` | The mail menu's line on how to send items. `""` = no line |
+| `itemsHint` | `"To send items, use the Player Mailroom build (minecraft.nish.software/mailroom)."` | The mail menu's line on how to send items. `""` = no line |
 | `senderUnreadCap` | `5` | Most unread letters from one player that one inbox holds; they can send again once some are read or deleted. `0` = no cap (menu range 0 to 50). Letters from packs aren't counted |
 | `blockListMax` | `30` | Most players one player can block (config only). A blocked player's letters aren't delivered; letters from packs still are |
 
@@ -2108,7 +2108,7 @@ A coming cleanup is kept in memory only: a restart during the warning calls it o
 
 ## Chairs — `chairs_bp`
 
-Sit on any stair or bottom slab, which makes the furnished houses on mc.nish.software feel lived in.
+Sit on any stair or bottom slab, which makes the furnished houses on minecraft.nish.software feel lived in.
 
 ### How to use
 
@@ -6308,7 +6308,7 @@ Thicker, heavier rain that stays blue like vanilla, the realm's own rain and thu
 
 [Listen: rain, a distant roll, then a close strike (26 s)](media/rain/rain.mp3)
 
-The pictures are renders, not in-game screenshots: a simple scene drawn with this pack's own texture, fog and splash numbers, with how much rain shows matched to an in-game screenshot. Lighting and Vibrant Visuals aren't modeled, and the snow renders aren't matched to a screenshot: how many flakes fall and how big they look is up to the game, so only the flakes' shape and the fog are this pack's. Each pair is the same spot with vanilla on the left; on mc.nish.software, drag across it to compare. In the clip, the thunder is 12 dB quieter than in game so the rain stays audible.
+The pictures are renders, not in-game screenshots: a simple scene drawn with this pack's own texture, fog and splash numbers, with how much rain shows matched to an in-game screenshot. Lighting and Vibrant Visuals aren't modeled, and the snow renders aren't matched to a screenshot: how many flakes fall and how big they look is up to the game, so only the flakes' shape and the fog are this pack's. Each pair is the same spot with vanilla on the left; on minecraft.nish.software, drag across it to compare. In the clip, the thunder is 12 dB quieter than in game so the rain stays audible.
 
 ### How to use
 
@@ -6383,7 +6383,7 @@ Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leave
 
 [Listen: a breeze outdoors in rain, then indoors (the rain muffled through the roof, drumming on it, muffled wind), then a thunderstorm outdoors (34 s)](media/rain/extras.mp3)
 
-A render, not an in-game screenshot (see [Realistic Rain](#realistic-rain--rain_rp)), with vanilla from the same spot on the left; on mc.nish.software, drag across the picture to compare. The Vibrant Visuals haze isn't shown, since the render doesn't model Vibrant Visuals.
+A render, not an in-game screenshot (see [Realistic Rain](#realistic-rain--rain_rp)), with vanilla from the same spot on the left; on minecraft.nish.software, drag across the picture to compare. The Vibrant Visuals haze isn't shown, since the render doesn't model Vibrant Visuals.
 
 ### How to use
 
@@ -7018,16 +7018,16 @@ When adding or changing a pack: update its section here, and the pack table in `
 
 ---
 
-## Publishing to mc.nish.software
+## Publishing to minecraft.nish.software
 
-The [Our realm](https://mc.nish.software/realm/) page shows this file to players. It is generated, never hand-written, so the site and this repo can't drift:
+The [Our realm](https://minecraft.nish.software/realm/) page shows this file to players. It is generated, never hand-written, so the site and this repo can't drift:
 
 | | |
 |---|---|
 | What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first; behavior packs under the Realm Bundle, resource packs under **Realm Resources**), plus every section marked `<!-- on the site -->` |
 | What stays behind "For operators" | A pack's `### Configuration…`, `### Saved data` and `### Resetting…` subsections, collapsed |
 | What goes in "How it works in detail" | A pack's other subsections (`### What players see`, `### How it works`, `### Known limits`…), collapsed |
-| Commands page | Every pack's Commands rows also go into the searchable commands table on mc.nish.software (`site/commands/index.html`) |
+| Commands page | Every pack's Commands rows also go into the searchable commands table on minecraft.nish.software (`site/commands/index.html`) |
 | Pictures and sound clips | A pack's `### See and hear it` subsection becomes a gallery at the top of its card: each `[label](media/….mp3)` link as a listening clip at the top (with a **Listen** button in the card's header, so it plays without opening the card), each `![caption](media/…)` image (`.webp`, `.png`, `.jpg`, `.gif`) with its caption, two images on one line (`![Before label](media/…) ![After label](media/…) caption`) as a before/after comparison you drag across, and any other paragraph as a note. The files live in `docs/media/` here, and `pack-docs.mjs` copies the ones the page uses to `site/realm/media/` |
 | How | In a checkout of `nishant/hosting`: `cd minecraft && node tools/pack-docs.mjs --from <path to this repo>` (default `../../mc-packs`, or `MC_PACKS`), then `node tools/check-site.mjs realm` (only the realm page changes) and a PR to `master` there, which you merge (the merge is the deploy); `node tools/check-live.mjs` then checks the live pages. `--check` fails if the page is out of date |
 | Downloads | `node tools/publish-packs.mjs --from <path to this repo> --notes "what changed" --pack-notes <folder>="what changed"` there builds the Realm Bundle, Realm Resources and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"; `--resource-notes` gives Realm Resources its own notes, `--dry-run` writes nothing). A single pack is only published when its `header.version` goes up, and then needs its `--pack-notes` (a first version gets `First version hosted here.`); the same version with different files is an error, since a published version is never replaced. A bundle is published whenever anything in it changed, and needs `--notes`. The realm page leads with the two bundles, and every pack can still be downloaded on its own from its card |

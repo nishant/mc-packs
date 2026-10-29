@@ -41,7 +41,7 @@ for (const folder of packs) {
   }
   const scripts = join(root, "packs", folder, "scripts");
 
-  // Players read this section on mc.nish.software/realm/, so it starts with how to use the pack.
+  // Players read this section on minecraft.nish.software/realm/, so it starts with how to use the pack.
   if (!/^### How to use\s*$/m.test(section)) problems.push(`${folder}: no "### How to use" section`);
 
   for (const name of registeredNames(join(root, "packs", folder)).commands) {
