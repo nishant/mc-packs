@@ -1,4 +1,4 @@
-// Renders pictures of the rain packs for docs/PACKS.md and mc.nish.software (docs/media/rain/), from the pack's own
+// Renders pictures of the rain packs for docs/PACKS.md and minecraft.nish.software (docs/media/rain/), from the pack's own
 // files: the vanilla and Realistic Rain weather.png, the fog numbers in fogs.mjs, the splash sizes. A small voxel
 // scene (terrain, trees, a lake) seen from one spot at 10-chunk render distance, with rain falling in every block
 // column within 10 blocks, textured from the rain strip and scrolling down.

@@ -2,7 +2,7 @@
 
 For owners and operators of a Bedrock Realm or a dedicated server (BDS, or a host that runs one) who want these
 packs on their world. Players don't need this page: what each feature does, how to use it and every command are on
-**[mc.nish.software/realm](https://mc.nish.software/realm/)** (the same text as [`PACKS.md`](PACKS.md)).
+**[minecraft.nish.software/realm](https://minecraft.nish.software/realm/)** (the same text as [`PACKS.md`](PACKS.md)).
 
 ## What you get
 
@@ -24,7 +24,7 @@ You install them one of two ways. **Pick one and keep it**:
   from single packs to the bundle (or back) starts in-game settings, edited texts, story progress and other saved
   data over. Decide before players start.
 - Downloads: every version of both bundles and of every single pack is on
-  [mc.nish.software/realm](https://mc.nish.software/realm/), with its size and sha256. To build them yourself from
+  [minecraft.nish.software/realm](https://minecraft.nish.software/realm/), with its size and sha256. To build them yourself from
   this repository: `npm install`, then `npm run bundle -- --all` and `npm run bundle -- --resources`
   (`dist/realm_bundle.mcpack`, `dist/realm_resources.mcpack`) or `npm run build` (one `dist/<folder>.mcpack` per pack).
 - The repository's CI starts a private BDS with the genuine Realm Bundle as one script context after its checks
@@ -116,7 +116,7 @@ the step's own command:
 
 Steps can be skipped and come back later; every step stays in Operator Tools. Each pack's own settings are in
 `/realm:config` (operators, for everyone) and `/realm:prefs` (each player, for themselves); details per pack are in
-the pack's "For operators" part on [mc.nish.software/realm](https://mc.nish.software/realm/).
+the pack's "For operators" part on [minecraft.nish.software/realm](https://minecraft.nish.software/realm/).
 
 ## Choosing a server size
 
@@ -253,9 +253,9 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 
 ## Getting help
 
-- **[mc.nish.software/realm](https://mc.nish.software/realm/)**: every pack with how to use it, what players see,
+- **[minecraft.nish.software/realm](https://minecraft.nish.software/realm/)**: every pack with how to use it, what players see,
   its commands, settings and saved data, plus Troubleshooting and how the packs work together. The searchable list of
-  every command is at [mc.nish.software/commands](https://mc.nish.software/commands/).
+  every command is at [minecraft.nish.software/commands](https://minecraft.nish.software/commands/).
 - In game: `/realm:help` lists the installed features and their commands; the Realm Configuration item has every
   command a player may use, with operators' in red.
 - Script errors: on a dedicated server, the content log (`content-log-file-enabled=true`); in the client,

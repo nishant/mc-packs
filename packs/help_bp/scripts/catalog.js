@@ -1184,7 +1184,7 @@ export const PACKS = [
     "folder": "chairs_bp",
     "topic": "chairs",
     "name": "Chairs",
-    "summary": "Sit on any stair or bottom slab, which makes the furnished houses on mc.nish.software feel lived in.",
+    "summary": "Sit on any stair or bottom slab, which makes the furnished houses on minecraft.nish.software feel lived in.",
     "steps": [
       {
         "text": "Tap a stair or a bottom slab with an empty hand, standing within 2.5 blocks of it. You sit on it, facing away from the stair's back.",

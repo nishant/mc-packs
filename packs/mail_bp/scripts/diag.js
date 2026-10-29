@@ -45,7 +45,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "mail_bp";
-const VERSION = "1.2.9";
+const VERSION = "1.2.10";
 const NAME = "Realm Mail";
 /** @type {string[]} */
 const PREFIXES = ["mail"];

@@ -1,4 +1,4 @@
-# Releases master on mc.nish.software by itself: CLAUDE.md's "Ship every change" steps 2-3 (publish-packs, pack-docs and
+# Releases master on minecraft.nish.software by itself: CLAUDE.md's "Ship every change" steps 2-3 (publish-packs, pack-docs and
 # its check, check-site realm, the hosting PR merged = the deploy, then check-live), run by tools/ci-release.mjs once the
 # check workflow passed on a push to master (or by hand: Actions > release > Run workflow). The notes come from
 # release/notes.json, written in the same PR as the change (tools/release-notes.mjs, in npm run check).
@@ -36,7 +36,7 @@ jobs:
           {
             echo "## Release skipped: no HOSTING_TOKEN"
             echo
-            echo "This workflow publishes master on mc.nish.software through a PR in nishant/hosting, and needs a token for it."
+            echo "This workflow publishes master on minecraft.nish.software through a PR in nishant/hosting, and needs a token for it."
             echo
             echo "1. GitHub > Settings > Developer settings > Fine-grained tokens > Generate new token: resource owner \`nishant\`,"
             echo "   only the repository \`nishant/hosting\`, permissions **Contents: Read and write** and **Pull requests: Read and write**."
