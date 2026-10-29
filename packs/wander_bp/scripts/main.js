@@ -718,8 +718,26 @@ const LABEL_QUERY_TARGETS = 16;
 let onlineN = 0;
 let onlineAt = -Infinity;
 let labelRun = 0;
-/** Label keys (`road:<wid>`, `camp:<wid>`) with a player within LABEL_HOT at the last full pass. @type {Set<string>} */
-let hotLabels = new Set();
+/**
+ * The wanderers with a player within LABEL_HOT at the last full pass, and those players: the 2-tick syncs until the next
+ * full pass reuse both instead of asking the game again (one native query per wanderer every 2 ticks was half of this
+ * pack's time with a few wanderers near 40 players), since a player farther than LABEL_HOT can't reach LABEL_REACH in a second.
+ * @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string }[]}
+ */
+let hotTargets = [];
+/** @type {Player[]} */
+let hotObservers = [];
+/**
+ * A wanderer's entity loaded (a new handle), or a player arrived somewhere at once (joined, respawned, changed
+ * dimension) or changed game mode: the next label run is a full pass, which looks everyone up again.
+ */
+let labelsStale = false;
+const staleLabels = () => {
+  labelsStale = true;
+};
+world.afterEvents.playerSpawn.subscribe(staleLabels);
+world.afterEvents.playerDimensionChange.subscribe(staleLabels);
+world.afterEvents.playerGameModeChange.subscribe(staleLabels);
 
 const labelDims = () =>
   DIMENSIONS.flatMap((id) => {
@@ -733,34 +751,31 @@ const labelDims = () =>
 /**
  * Syncs the road and camp wanderers' nameplate helpers with the players near them. Once a second (and when `full`)
  * every wanderer is synced and sorted by whether a player is within LABEL_HOT; between those, every 2 ticks, only the
- * near ones are, so the wanderers nobody is close to cost nothing (a label shows only within LABEL_REACH, and the
- * resends after a new viewer comes near keep their 2-tick timing). @param {boolean} [full]
+ * near ones are, with the players found near them, so the wanderers nobody is close to cost nothing (a label shows only
+ * within LABEL_REACH, and the resends after a new viewer comes near keep their 2-tick timing). A wanderer appearing
+ * asks for a full pass at once. @param {boolean} [full]
  */
 function updateLabels(full = false) {
   if (!ready) return;
-  if (labelRun++ % LABEL_FULL_EVERY === 0) full = true;
-  if (!full && !hotLabels.size) {
-    nameLabels.sync([], [], labelDims);
+  if (labelRun++ % LABEL_FULL_EVERY === 0 || labelsStale) full = true;
+  labelsStale = false;
+  if (!full) {
+    // A wanderer gone since the full pass is no longer valid: the sync skips it and takes its label down.
+    nameLabels.sync(hotTargets, hotTargets.length ? hotObservers : [], labelDims);
     return;
   }
   /** @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string }[]} */
   const targets = [];
   for (const rec of Object.values(live)) {
     const id = `road:${rec.w}`;
-    if (!full && !hotLabels.has(id)) continue;
     const ent = entityById(rec.e);
     if (ent) targets.push({ id, entity: ent, name: wandererLabel(rec.w, rec.n), suppressedName: wandererMarker(id) });
   }
   for (const [wid, c] of Object.entries(camps)) {
     const id = `camp:${wid}`;
-    if (!full && !hotLabels.has(id)) continue;
     const n = NAMED_BY_ID.get(wid);
     const ent = n && entityById(c.e);
     if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
-  }
-  if (!full) {
-    nameLabels.sync(targets, () => labelObservers(targets), labelDims);
-    return;
   }
   // The full pass asks for the players within LABEL_HOT (the same reads as a sync's observers, a little wider): they
   // sort the wanderers and are the sync's observers (it measures the real distance itself).
@@ -773,36 +788,42 @@ function updateLabels(full = false) {
       players = [];
     }
   }
-  /** @type {{ dimId: string, x: number, y: number, z: number }[]} */
+  /** @type {{ p: Player, dimId: string, x: number, y: number, z: number, near?: boolean }[]} */
   const at = [];
   for (const p of players) {
     try {
       const l = p.location;
-      at.push({ dimId: p.dimension.id, x: l.x, y: l.y, z: l.z });
+      at.push({ p, dimId: p.dimension.id, x: l.x, y: l.y, z: l.z });
     } catch {
       // left
     }
   }
-  /** @type {Set<string>} */
-  const hot = new Set();
+  /** @type {typeof hotTargets} */
+  const hot = [];
   const hotSq = LABEL_HOT * LABEL_HOT;
   for (const t of targets) {
     try {
       const l = t.entity.location;
       const dimId = t.entity.dimension.id;
-      if (at.some((p) => p.dimId === dimId && (p.x - l.x) ** 2 + (p.y - l.y) ** 2 + (p.z - l.z) ** 2 <= hotSq)) hot.add(t.id);
+      let near = false;
+      for (const a of at) {
+        if (a.dimId !== dimId || (a.x - l.x) ** 2 + (a.y - l.y) ** 2 + (a.z - l.z) ** 2 > hotSq) continue;
+        a.near = near = true;
+      }
+      if (near) hot.push(t);
     } catch {
       // unloaded this tick
     }
   }
-  hotLabels = hot;
+  hotTargets = hot;
+  hotObservers = at.filter((a) => a.near).map((a) => a.p);
   nameLabels.sync(targets, () => players, labelDims);
 }
 
 /**
- * Who a label sync reads: every player, or, on a busy server, only the players near a wanderer (one native query
- * per wanderer instead of a read of every player's place on every sync; the sync still measures the real
- * distance, so what it does is the same).
+ * Who the full label pass reads: every player, or, on a busy server, only the players near a wanderer (one native query
+ * per wanderer instead of a read of every player's place; the sync still measures the real distance, so what it does
+ * is the same).
  * @param {{ entity: Entity }[]} targets @param {number} [reach] how far from a wanderer a player counts (LABEL_REACH)
  */
 function labelObservers(targets, reach = LABEL_REACH) {
@@ -1326,7 +1347,11 @@ world.afterEvents.entityLoad.subscribe(({ entity }) => {
       if (entity.isValid) entity.remove();
       return;
     }
-    if (TYPES.includes(entity.typeId)) audit(entity);
+    if (TYPES.includes(entity.typeId)) {
+      audit(entity);
+      // Only our own wanderers: villages full of vanilla villagers load all the time.
+      if (entity.isValid && entity.hasTag(OWNER_TAG)) labelsStale = true;
+    }
   } catch (e) {
     console.warn(`[wander] ${e}`);
   }

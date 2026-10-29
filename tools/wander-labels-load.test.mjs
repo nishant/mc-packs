@@ -3,7 +3,9 @@
 // players and 0.304 at 100). Every 2 ticks it looked up every wanderer with world.getEntity and synced all of them,
 // even the ones nobody was near. Now a handle is kept while it stays valid, and between the once-a-second full passes
 // only wanderers with a player within LABEL_HOT are synced, so a near one keeps its 2-tick sync (and the label
-// module's resend timing) while far ones cost one sync a second. The counts are native lookups and synced labels,
+// module's resend timing) while far ones cost one sync a second. Those 2-tick syncs also reuse the players the full pass
+// found within LABEL_HOT instead of one native player query per wanderer each time (half of wander_bp's time with a
+// few wanderers near 40 players, October 28). The counts are native lookups and synced labels,
 // not milliseconds. Run against the old file with WANDER_MAIN=<path> to see the before numbers fail.
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -16,7 +18,7 @@ const file = process.env.WANDER_MAIN ?? path.join(import.meta.dirname, "..", "pa
 const text = fs.readFileSync(file, "utf8");
 const source = ts.createSourceFile("main.js", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
 const FUNCS = new Set(["entityById", "updateLabels", "labelObservers"]);
-const VARS = /\b(handles|LABEL_REACH|LABEL_HOT|LABEL_FULL_EVERY|LABEL_QUERY_PLAYERS|LABEL_QUERY_TARGETS|onlineN|onlineAt|labelRun|hotLabels|labelDims) = /;
+const VARS = /\b(handles|LABEL_REACH|LABEL_HOT|LABEL_FULL_EVERY|LABEL_QUERY_PLAYERS|LABEL_QUERY_TARGETS|onlineN|onlineAt|labelRun|hotTargets|hotObservers|labelsStale|labelDims) = /;
 /** @type {string[]} */
 const parts = [];
 for (const node of source.statements) {
@@ -29,8 +31,8 @@ const OVERWORLD = "minecraft:overworld";
 
 /** A fake world with wanderers at `spots` and players at `players` (all in the overworld). */
 function setup(spots, playerSpots) {
-  const counts = { getEntity: 0, synced: /** @type {Record<string, number>} */ ({}), syncs: 0 };
-  const dim = { id: OVERWORLD, getPlayers: (o) => players.filter((p) => Math.hypot(p.location.x - o.location.x, p.location.z - o.location.z) <= o.maxDistance), getEntities: () => [] };
+  const counts = { getEntity: 0, synced: /** @type {Record<string, number>} */ ({}), syncs: 0, queries: 0, observed: 0 };
+  const dim = { id: OVERWORLD, getPlayers: (o) => (counts.queries++, players).filter((p) => Math.hypot(p.location.x - o.location.x, p.location.z - o.location.z) <= o.maxDistance), getEntities: () => [] };
   const entities = new Map();
   const live = {};
   spots.forEach((s, i) => {
@@ -56,13 +58,14 @@ function setup(spots, playerSpots) {
         return entities.get(id);
       },
       getDimension: () => dim,
-      getPlayers: () => [...players],
+      getPlayers: () => (counts.queries++, [...players]),
       getAllPlayers: () => [...players],
     },
     nameLabels: {
       sync(targets, observers) {
         counts.syncs++;
-        if (typeof observers === "function") observers();
+        const seen = typeof observers === "function" ? observers() : observers;
+        if (targets.length) counts.observed += seen.length;
         for (const t of targets) counts.synced[t.id] = (counts.synced[t.id] ?? 0) + 1;
       },
     },
@@ -101,8 +104,20 @@ test("an unloaded or removed wanderer's handle is looked up again and the new on
   s.entities.get("e0").isValid = false; // unloaded: the old handle is dead
   const again = { id: "e0", isValid: true, location: { x: 5, y: 64, z: 0 }, dimension: s.entities.get("e0").dimension };
   s.entities.set("e0", again);
+  s.ctx.labelsStale = true; // its entityLoad event
   s.ctx.run();
   assert.equal(s.counts.getEntity, looked + 1, "looked up again once");
   for (let i = 0; i < 5; i++) s.ctx.run();
   assert.equal(s.counts.getEntity, looked + 1, "then the new handle is kept");
+});
+
+test("between full passes the near wanderers' syncs ask the game for no players: they reuse the full pass's", () => {
+  // 20 players: 10 near each of two wanderers, 10 far away; per-wanderer queries (more players than LABEL_QUERY_PLAYERS).
+  const near = [...Array(10)].map((_, i) => ({ x: i, z: 3 }));
+  const far = [...Array(10)].map((_, i) => ({ x: 2000 + i, z: 0 }));
+  const s = setup([{ x: 5, z: 0 }, { x: 8, z: 0 }], [...near, ...far]);
+  for (let i = 0; i < 100; i++) s.ctx.run();
+  assert.equal(s.counts.synced["road:w0"], 100, "the near wanderer is still synced on every run");
+  assert.ok(s.counts.queries <= 10 * 2, `${s.counts.queries} player queries in 10 full passes for 2 wanderers`);
+  assert.equal(s.counts.observed, 100 * 10, "every sync sees the 10 near players, not the far ones");
 });

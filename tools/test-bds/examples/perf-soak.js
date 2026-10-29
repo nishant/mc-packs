@@ -11,7 +11,9 @@
 // group, default 5), spread (blocks between far groups, default 240), commands (seconds between one
 // player's commands, default 45; 0 = none), water (players put in a pool, default 2), nether
 // (players in the Nether, default 2), hud (1: the Coordinates HUD on for everyone, for the native realm:hud_state
-// proof at 100 players, O6; run it with commands=0 so no /realm:hud toggles anyone off), probe (seconds between memory
+// proof at 100 players, O6; run it with commands=0 so no /realm:hud toggles anyone off), wanderers (with
+// wander_bp: this many wanderers made to appear next to every land group as the soak starts, default 0 = only the pack's own
+// rolls; for measuring Wanderers of the Wilds' nameplate labels on every run, not only when a roll happens), probe (seconds between memory
 // probes, default 0 = none: entity counts by type, scoreboard participants, structures and every pack's saved world
 // data (realm:diag_ping bytes; each pack's storage is its own, so the scenario can't read it directly),
 // logged and reported as `perf-probe`, for memory soaks with rss-soak.mjs; leave it off when profiling).
@@ -36,6 +38,7 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   const WATER = Math.min(N, Math.max(0, Number(a.water ?? 2)));
   const NETHER = Math.min(Math.max(0, N - WATER - 1), Math.max(0, Number(a.nether ?? 2)));
   const HUD = Number(a.hud ?? 0) > 0;
+  const WANDERERS = t.packs.includes("wander_bp") ? Math.max(0, Number(a.wanderers ?? 0)) : 0;
   const over = t.world.getDimension("overworld");
   /** realm:hud_state assembled by seq: the lists completed, their largest size and parts, the longest message. */
   const hudState = { messages: 0, longest: 0, lists: 0, largest: 0, parts: 0, last: /** @type {string[]} */ ([]), seq: /** @type {Map<unknown, { parts: number, got: Map<number, string[]> }>} */ (new Map()) };
@@ -228,6 +231,21 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
   };
 
   // The soak itself: one decision per player per second; commands staggered across players.
+  if (WANDERERS) {
+    // One player of each land group asks for them (the debug spawn skips the roll and the distance rules).
+    let asked = 0;
+    for (const g of groups) {
+      const s = plan.find((x) => x.g === g && x.kind === "land" && spawned[x.i]);
+      if (!s) continue;
+      for (let k = 0; k < WANDERERS; k++) {
+        t.system.sendScriptEvent("realm:wander_debug", JSON.stringify({ player: spawned[s.i].p.id, action: "spawn", stranger: true, hostile: false }));
+        asked++;
+        await t.wait(2);
+      }
+    }
+    await t.wait(20);
+    t.log(`wanderers: asked for ${asked} (${WANDERERS} a land group)`);
+  }
   const start = t.tick;
   let refills = 0;
   if (REFILL_EVERY) for (const s of players) if (s.kind === "land") { try { t.cmd(s.p, "/give @s firework_rocket 64"); } catch (e) { /* left already */ } }
