@@ -1041,9 +1041,8 @@ function clicked(player, kinds, wipe = false) {
   }
 }
 
-/** Observe live slots/cursor, never historical event payloads. @param {Player} player @returns {{ kinds: ButtonKind[], wipe: boolean }} */
-function observedButtons(player) {
-  const inv = invOf(player);
+/** Observe live slots/cursor, never historical event payloads. @param {Player} player @param {import("@minecraft/server").Container | undefined} [inv] @returns {{ kinds: ButtonKind[], wipe: boolean }} */
+function observedButtons(player, inv = invOf(player)) {
   if (!inv) return { kinds: [], wipe: false };
   /** @type {ButtonKind | undefined} */
   let onCursor;
@@ -1056,17 +1055,17 @@ function observedButtons(player) {
   return { kinds: missing, wipe };
 }
 
-/** @param {Player} player */
-function pollButtons(player) {
-  if (reconciling.has(player.id) || switching.has(player.id)) return;
-  const observed = observedButtons(player);
-  const request = queuedButtons.get(player.id) ?? observed;
+/** @param {Player} player @param {import("@minecraft/server").Container} [inv] its inventory, when the caller has it @param {string} [id] */
+function pollButtons(player, inv = undefined, id = player.id) {
+  if (reconciling.has(id) || switching.has(id)) return;
+  const observed = observedButtons(player, inv ?? invOf(player));
+  const request = queuedButtons.get(id) ?? observed;
   for (const kind of observed.kinds) if (!request.kinds.includes(kind)) request.kinds.push(kind);
-  queuedButtons.delete(player.id);
+  queuedButtons.delete(id);
   if (!request.kinds.length) return;
-  reconciling.add(player.id);
+  reconciling.add(id);
   try { clicked(player, request.kinds, request.wipe); }
-  finally { reconciling.delete(player.id); }
+  finally { reconciling.delete(id); }
 }
 
 // Event payloads may arrive several ticks after our writes, or after a newer gesture. They are wakeups,
@@ -1644,44 +1643,49 @@ export function refillFromPages(player, slot, want) {
   return { n, page };
 }
 
-/** @param {Player} player @param {boolean} withAutoStore */
-function tickPlayer(player, withAutoStore) {
-  if (!player.isValid || dead.has(player.id)) return;
+/**
+ * One look at a player. `id` is `player.id`, passed in so a look reads it from the game once, not a dozen times, and
+ * the page state is read once (it is a dynamic property parsed from JSON).
+ * @param {Player} player @param {boolean} withAutoStore @param {string} [id]
+ */
+function tickPlayer(player, withAutoStore, id = player.id) {
+  if (!player.isValid || dead.has(id)) return;
   const inv = invOf(player);
   if (!inv) return;
-  if (!inventoryReady(player)) {
-    if (!recoveryWarned.has(player.id)) {
-      recoveryWarned.add(player.id);
+  const state = stateOf(player);
+  if (state.pending) {
+    if (!recoveryWarned.has(id)) {
+      recoveryWarned.add(id);
       player.sendMessage("§cInventory pages are paused: a failed save needs operator recovery. Original inventory images are safely saved.");
     }
     return;
   }
-  recoveryWarned.delete(player.id);
-  ensureLayout(player);
+  recoveryWarned.delete(id);
+  if (state.layout !== 2) ensureLayout(player);
   const total = totalPages(player);
-  const attempt = lastEnforce.get(player.id);
-  if (lastTotal.get(player.id) !== total && (!attempt || attempt.total !== total || system.currentTick - attempt.tick >= 20)) {
-    lastEnforce.set(player.id, { total, tick: system.currentTick });
-    if (enforcePageCount(player)) lastTotal.set(player.id, total);
+  const attempt = lastEnforce.get(id);
+  if (lastTotal.get(id) !== total && (!attempt || attempt.total !== total || system.currentTick - attempt.tick >= 20)) {
+    lastEnforce.set(id, { total, tick: system.currentTick });
+    if (enforcePageCount(player)) lastTotal.set(id, total);
   }
   if (!buttonsWanted(player)) {
-    if (buttonState.get(player.id) !== false) {
+    if (buttonState.get(id) !== false) {
       removeButtons(player);
-      buttonState.set(player.id, false);
+      buttonState.set(id, false);
     }
     // Without buttons there is nothing to click, but auto-store still keeps the page from clogging.
-  } else if (buttonState.get(player.id) !== true) {
+  } else if (buttonState.get(id) !== true) {
     refreshButtons(player);
     sweepStrays(player, inv);
-    buttonState.set(player.id, true);
+    buttonState.set(id, true);
     return;
   } else {
-    pollButtons(player);
+    pollButtons(player, inv, id);
     if (withAutoStore) sweepStrays(player, inv);
   }
   if (total > 1 && withAutoStore) {
     if (getFor(player, "autoStore") !== false) autoStore(player);
-    else snapshots.delete(player.id); // what arrived while it was off is not new when it is turned back on
+    else snapshots.delete(id); // what arrived while it was off is not new when it is turned back on
   }
 }
 
@@ -1769,7 +1773,7 @@ function look(id, player, withAutoStore, now) {
   const wait = backoff.get(id);
   if (wait && now < wait.until) return;
   try {
-    tickPlayer(player, withAutoStore);
+    tickPlayer(player, withAutoStore, id);
     if (wait) backoff.delete(id);
   } catch (e) {
     const text = String(e);
