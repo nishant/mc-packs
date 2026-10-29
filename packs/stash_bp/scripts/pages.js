@@ -1701,43 +1701,106 @@ const WARN_TICKS = 1200;
  */
 const changedAt = new Map();
 const ACTIVE_TICKS = 20;
+/**
+ * The players looked at every beat: changed in the last ACTIVE_TICKS, or without their buttons yet (a new player, a
+ * respawn, a page count change). A beat walks only these and the quiet players whose turn it is, not everyone: with
+ * 40 online, walking all of them every beat was about 0.03 ms a tick before any player was looked at.
+ * @type {Map<string, Player>}
+ */
+const active = new Map();
+/** @param {Player} player */
+function touch(player) {
+  changedAt.set(player.id, system.currentTick);
+  active.set(player.id, player);
+}
 world.afterEvents.playerInventoryItemChange?.subscribe(({ player }) => {
-  if (player) changedAt.set(player.id, system.currentTick);
+  if (player) touch(player);
 });
-world.afterEvents.playerSpawn.subscribe(({ player }) => changedAt.set(player.id, system.currentTick));
-world.afterEvents.playerLeave.subscribe(({ playerId }) => changedAt.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  changedAt.delete(playerId);
+  active.delete(playerId);
+});
 // A new page count or button choice shows at once, not at the next quiet look.
 onChange((key, player) => {
-  const now = system.currentTick;
-  if (player) changedAt.set(player.id, now);
-  else for (const p of world.getAllPlayers()) changedAt.set(p.id, now);
+  if (player) touch(player);
+  else for (const p of online().values()) touch(p);
 });
 
 /** Beats (2 ticks each) between looks at a quiet player, and between a quiet player's page scans. */
 const QUIET_BEATS = 50;
 const QUIET_SCAN_BEATS = 250;
 
+/**
+ * The online players, kept from spawn and leave events and read from the game again every ROSTER_TICKS in case one was
+ * missed: reading every player each beat cost about 0.03 ms a tick with 40 online. Keyed by id, so a beat reads no
+ * player's id from the game. `order` numbers them for the quiet turns. @type {Map<string, Player>}
+ */
+const roster = new Map();
+/** @type {[string, Player][]} */
+let order = [];
+const ROSTER_TICKS = 100;
+let rosterAt = -Infinity;
+world.afterEvents.playerSpawn.subscribe(({ player }) => {
+  roster.set(player.id, player);
+  order = [...roster];
+  touch(player);
+});
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  roster.delete(playerId);
+  order = [...roster];
+});
+function online() {
+  const now = system.currentTick;
+  if (now - rosterAt >= ROSTER_TICKS || now < rosterAt) {
+    roster.clear();
+    for (const p of world.getAllPlayers()) {
+      roster.set(p.id, p);
+      // Someone here before this script loaded, or whose spawn was missed, has no buttons yet.
+      if (!buttonState.has(p.id)) active.set(p.id, p);
+    }
+    order = [...roster];
+    rosterAt = now;
+  }
+  return roster;
+}
+
+/** One look at a player, with the backoff after a failed one. @param {string} id @param {Player} player @param {boolean} withAutoStore @param {number} now */
+function look(id, player, withAutoStore, now) {
+  const wait = backoff.get(id);
+  if (wait && now < wait.until) return;
+  try {
+    tickPlayer(player, withAutoStore);
+    if (wait) backoff.delete(id);
+  } catch (e) {
+    const text = String(e);
+    const repeat = wait?.text === text && now - wait.logged < WARN_TICKS;
+    if (!repeat) console.warn(`[stash] ${text}`);
+    backoff.set(id, { until: now + RETRY_TICKS, text, logged: repeat && wait ? wait.logged : now });
+  }
+}
+
 let beat = 0;
 system.runInterval(() => {
   ++beat;
   const now = system.currentTick;
-  let i = 0;
-  for (const player of world.getAllPlayers()) {
-    const turn = (beat + i++) % QUIET_BEATS === 0;
-    const wait = backoff.get(player.id);
-    if (wait && now < wait.until) continue;
-    const active = now - (changedAt.get(player.id) ?? -Infinity) <= ACTIVE_TICKS || !buttonState.has(player.id);
-    if (!active && !turn) continue;
-    const withAutoStore = active ? beat % 5 === 0 : (beat + i - 1) % QUIET_SCAN_BEATS === 0;
-    try {
-      tickPlayer(player, withAutoStore);
-      if (wait) backoff.delete(player.id);
-    } catch (e) {
-      const text = String(e);
-      const repeat = wait?.text === text && now - wait.logged < WARN_TICKS;
-      if (!repeat) console.warn(`[stash] ${text}`);
-      backoff.set(player.id, { until: now + RETRY_TICKS, text, logged: repeat && wait ? wait.logged : now });
+  online();
+  for (const [id, player] of active) {
+    // Nothing to look at until they respawn (a death clears their buttons, which would make them look active).
+    if (dead.has(id) || !roster.has(id)) {
+      active.delete(id);
+      continue;
     }
+    if (now - (changedAt.get(id) ?? -Infinity) > ACTIVE_TICKS && buttonState.has(id)) {
+      active.delete(id);
+      continue;
+    }
+    look(id, player, beat % 5 === 0, now);
+  }
+  // The quiet players whose turn it is: player i is looked at when (beat + i) is a multiple of QUIET_BEATS.
+  for (let i = (QUIET_BEATS - (beat % QUIET_BEATS)) % QUIET_BEATS; i < order.length; i += QUIET_BEATS) {
+    const [id, player] = order[i];
+    if (active.has(id) || dead.has(id)) continue;
+    look(id, player, (beat + i) % QUIET_SCAN_BEATS === 0, now);
   }
 }, 2);
 
@@ -1757,6 +1820,7 @@ export function setOpPages(player, count) {
   if (enforcePageCount(player)) lastTotal.set(player.id, totalPages(player));
   else lastTotal.delete(player.id);
   buttonState.delete(player.id);
+  touch(player);
   return {
     ok: true,
     message:

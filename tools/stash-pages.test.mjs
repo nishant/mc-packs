@@ -42,6 +42,18 @@ const mc = {
   forms: [],
   formResponses: new Map(),
 };
+// Players come and go like on a server: a new list fires playerLeave for those gone and playerSpawn for those new
+// (pages.js keeps its roster of online players from these events).
+let onlineList = /** @type {any[]} */ ([]);
+Object.defineProperty(mc, "players", {
+  get: () => onlineList,
+  set(list) {
+    const was = onlineList;
+    onlineList = list;
+    for (const p of was) if (!list.includes(p)) fire("playerLeave", { playerId: p.id });
+    for (const p of list) if (!was.includes(p)) fire("playerSpawn", { player: p, initialSpawn: true });
+  },
+});
 globalThis.__mc = mc;
 
 const UNSTACKABLE = /pickaxe|helmet|shulker_box|potion|bundle/;
@@ -237,7 +249,7 @@ function makePlayer() {
     },
   };
   container.player = player;
-  mc.players.push(player);
+  mc.players = [...mc.players, player];
   return player;
 }
 
@@ -3513,4 +3525,32 @@ test("a snapshot sequence a crash rolled back steps past the snapshots still on 
   assert.equal(switchPage(p, 1), true);
   assert.equal(savedPage(p, 2).get(9).typeId, "minecraft:diamond");
   assert.ok(mc.worldProps.get("stash:snapshot_next") > next, "the sequence moved past what exists");
+});
+
+test("a beat walks only the players changing and the quiet ones whose turn it is, not everyone", () => {
+  // 40 settled players: each still gets its quiet look about once in 50 beats, but a beat no longer reads every
+  // player's id from the game (four reads a player a beat before, most of the loop's cost with 40 online).
+  const was = mc.players;
+  const crowd = [...Array(40)].map(() => joined());
+  advance(60);
+  let reads = 0;
+  for (const p of crowd) {
+    const id = p.id;
+    Object.defineProperty(p, "id", { configurable: true, get: () => (reads++, id) });
+  }
+  const looks = new Map(crowd.map((p) => [p, 0]));
+  const gets = new Map(crowd.map((p) => [p, p.getComponent]));
+  for (const p of crowd) {
+    const get = gets.get(p);
+    p.getComponent = (name) => (name === "minecraft:inventory" && looks.set(p, looks.get(p) + 1), get(name));
+  }
+  try {
+    advance(100); // 50 beats
+    const n = [...looks.values()];
+    assert.ok(n.every((k) => k >= 1), "every quiet player is still looked at");
+    assert.ok(reads < 40 * 50, `${reads} id reads in 50 beats for 40 quiet players`);
+  } finally {
+    for (const p of crowd) p.getComponent = gets.get(p);
+    mc.players = was;
+  }
 });
