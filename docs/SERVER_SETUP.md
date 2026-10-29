@@ -150,7 +150,23 @@ Measured with 40 simulated players, Large server took the whole bundle from 9.5 
 
 ## Performance
 
-### Latest measurements (October 2026)
+### Latest measurements (October 28, 2026)
+
+The post-release validation on GitHub's 4-core Linux runners (BDS 1.26, `perf-soak.js`, 15-minute steady window),
+for master on October 28, 2026:
+
+| Players | 67 packs run separately, ms a tick | Realm Bundle as one pack, ms a tick | Minimap |
+|---|---:|---:|---:|
+| 10 | 1.5 | 1.1 | 0.78 |
+| 40 | 2.5 | 1.7 | 0.93 |
+
+- **Within the budget at 40 players**: the whole bundle under 5 ms and the Minimap under 1 ms. The only packs over
+  the 0.15 ms typical-pack budget were Quick Stack & Sort (0.18) and Wanderers of the Wilds (0.16); the next release
+  brought them to about 0.13 and 0.03 to 0.10 in a local check. Several packs sit close to their line, and the same
+  code varies by about 20% from run to run.
+- The Realm Bundle as one pack (one script context) costs less than the same packs run separately.
+
+### Mid-October measurements
 
 The same test workload (simulated players walking, looking and running commands) on master before the October 2026
 fixes and after them, on a Windows server running BDS 1.26.52.3, over a 15-minute steady window (18,000 ticks). These
@@ -170,9 +186,8 @@ client FPS or all of the server's CPU. Every figure in this table and the two bu
 - **A separate, shorter run** (a 4-core Linux test machine, an earlier build of these fixes, 5-minute steady window):
   the Realm Bundle running as one pack took about 4.8 ms a tick at 10 players, under the goal. It is not the same
   setup as the table, so do not compare the two directly.
-- **Measurements cover 10 and 40 players only** (10 is this Realm's maximum; 40 shows how the packs scale). Not
-  measured yet: the Realm Bundle as one pack at 40 players. Servers with more than 40 players are not measured, so
-  measure your own with `/realm:diag` (below).
+- **Measurements cover 10 and 40 players only** (10 is this Realm's maximum; 40 shows how the packs scale).
+  Servers with more than 40 players are not measured, so measure your own with `/realm:diag` (below).
 - This Realm keeps the **Small Realm** defaults (10 players, usually 1-4 online). Hardware, workload and how many
   packs you run all change these numbers; on your own server, measure with `/realm:diag` (below).
 
@@ -193,8 +208,8 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
   0.6 to 1 ms, now wakes only for players who are building: 0.13 to 0.18 ms at 10 and 40 players (0.34 to 0.84 before).
   39 to 45 of the 67 behavior packs cost under 0.05 ms a tick, and 58 to 60 are within the 0.15 ms budget.
 - **The budget** the packs are held to: the whole bundle under 5 ms a tick at 40 players, a typical pack 0.15 ms or
-  less and the heaviest (the Minimap, the HUDs) 1 ms or less. Most packs are well under it; the bundle as a whole and
-  the Minimap are not there yet (see Known limits).
+  less and the heaviest (the Minimap, the HUDs) 1 ms or less. At the time of these runs the bundle as a whole and the
+  Minimap were over it; by October 28 both were under it (Latest measurements above).
 - Run to run, the same code measured 6.2 and 9.5 ms a tick at 40 players on that machine: read single numbers as
   rough.
 
@@ -241,7 +256,7 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 - **Measured with simulated players**, not real clients: no chunk sending, simple movement, no client packets. A
   real server spends more time per player outside the scripts, and a Realm's CPU differs from the test machine.
 - **Measured at 10 and 40 players only.** Larger servers are not measured. Coordinates HUD updates arrive in bounded parts (no cap at 100 players), but that is a code change, not a load test; the Minimap keep-alive and the story quest workload still need their 40-player measurements.
-- **At 40 players the packs are over their 5 ms goal:** about 8 ms a tick, the Minimap 3.7 ms of it against 1. That is open, not accepted: it leaves less room for other server work. See Performance above.
+- **At 40 players the packs are within their budget, with little room:** about 2.5 ms a tick (the Minimap 0.9 of its 1 ms), and a few packs close to 0.15 ms. A different workload (more building, more wanderers, more inventory traffic) can push one over. See Performance above.
 - **Ticking areas:** Bedrock allows 10 per world. Farm Loader's farms, Expeditions' dungeon resets (up to `slots`),
   Death Point's `/realm:death_back` and some story and town builds share them, as do any you add with `/tickingarea`.
 - **One cast:** there is one set of twelve townsfolk for the whole world; several towns share them. Each town also has its own mayor (Town Projects with Townsfolk, `townMayors`), one NPC per town.

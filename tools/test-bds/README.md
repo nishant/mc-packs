@@ -109,6 +109,9 @@ and jump, and run a few common commands for `seconds` (see its header for the ot
 For a memory soak (no `--profile`), `--arg probe=300` logs every 300 s what the world holds that could grow: entities
 by type, scoreboard participants, structures and every pack's saved world data (from `realm:diag_ping`), and ends
 with the change from the first probe to the last (`probe change ...`, also reported as `perf-probe`).
+To measure Wanderers of the Wilds' name labels on every run, `--arg wanderers=1` (with `wander_bp` installed) makes
+one wanderer appear next to every land group as the soak starts; without it (the gate) they appear only when the
+pack's own roll says so, so wander_bp's figure varies from run to run.
 
 ## Running every example (`suite.mjs`)
 
