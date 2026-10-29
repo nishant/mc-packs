@@ -44,14 +44,15 @@ export class Budget {
  * sorting of the whole list: with many players waiting on a small budget, the same few are picked every tick.
  * @template {{ id: string }} T
  * @param {readonly T[]} items @param {{ get(id: string): number | undefined }} lastAt @param {number} now @param {number} interval @param {number} each
+ * @param {(item: T) => string} [key] an item's id (a player's `id` is a native read: the caller may know it already)
  * @returns {T[]}
  */
-export function oldestDue(items, lastAt, now, interval, each) {
+export function oldestDue(items, lastAt, now, interval, each, key = (item) => item.id) {
   /** @type {{ item: T, at: number, i: number }[]} */
   const best = [];
   let due = 0;
   for (let i = 0; i < items.length; i++) {
-    const at = lastAt.get(items[i].id) ?? -Infinity;
+    const at = lastAt.get(key(items[i])) ?? -Infinity;
     if (now - at < interval) continue;
     due++;
     // Strictly older than the one it displaces, so an equal one that came earlier in the list stays ahead.

@@ -1,15 +1,11 @@
 {
   "notes": [
-    "Lighter with many players online: Expansive Inventory and Wanderers of the Wilds do less work every tick (the same behavior)."
+    "Lighter with many players online: the Minimap does less work every tick (the same behavior)."
   ],
   "packNotes": {
-    "stash_bp": {
-      "version": "1.9.2",
-      "notes": "Expansive Inventory does less work every tick with many players online: it keeps its own list of who is online instead of asking the game every 2 ticks, and skips players who are dead until they respawn."
-    },
-    "wander_bp": {
-      "version": "1.2.21",
-      "notes": "Wanderers' name labels cost less with many players nearby: between the once-a-second full checks, the labels near players reuse the players found then instead of asking the game again every 2 ticks."
+    "map_bp": {
+      "version": "1.5.2",
+      "notes": "The Minimap does less work every tick with many players online (the same behavior): it keeps its own list of who is online instead of asking the game every tick, reads each player's id once, skips choosing whose markers to update while their time is used up, and builds the compass strip's ticks and letters once per facing."
     }
   }
 }
