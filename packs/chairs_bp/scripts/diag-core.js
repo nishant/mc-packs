@@ -130,7 +130,7 @@ const inner = G.__harnessProfile ? (G.__realmDiagInner ??= new WeakMap()) : unde
 /** "file:line" of the first stack frame outside the diagnostics, the bundle's shared folder and the test harness. */
 function site() {
   for (const l of String(new Error().stack || "").split("\n")) {
-    if (!l.trim() || l.includes("diag-core.js") || l.includes("/diag.js") || l.includes("/_shared/") || l.includes("__harness_")) continue;
+    if (!l.trim() || l.includes("diag-core.js") || /(^|[\s(\/\\])diag\.js:/.test(l) || /(^|[\s(\/\\])_shared[\/\\]/.test(l) || l.includes("__harness_")) continue;
     const m = /\(([^()]*)\)\s*$/.exec(l) || /at (\S+)\s*$/.exec(l);
     if (m) return m[1];
   }

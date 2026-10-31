@@ -111,6 +111,7 @@ jobs:
           repository: nishant/hosting
           ref: master
           token: ${{ secrets.HOSTING_TOKEN }}
+          persist-credentials: false
           path: hosting
           fetch-depth: 1
       - uses: actions/setup-node@v4

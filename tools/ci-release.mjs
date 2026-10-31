@@ -62,17 +62,13 @@ export function parseReport(stdout) {
 }
 
 /**
- * How many versions archive-packs --prune moved to GitHub Releases: the sum of "archived A" over its per-pack lines
- * ("<slug>  uploaded U, archived A, kept K").
+ * How many versions archive-packs --prune moved to GitHub Releases: "archived A" on its last line
+ * ("total  uploaded U, archived A, kept K, X MB freed").
  * @param {string} stdout
  */
 export function parseArchive(stdout) {
-  let n = 0;
-  for (const line of stdout.split("\n")) {
-    const m = line.match(/^[a-z0-9-]+\s{2,}uploaded \d+, archived (\d+), kept \d+/);
-    if (m) n += Number(m[1]);
-  }
-  return n;
+  const m = stdout.match(/^total\s{2,}uploaded \d+, archived (\d+),/m);
+  return m ? Number(m[1]) : 0;
 }
 
 /**

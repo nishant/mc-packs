@@ -61,7 +61,7 @@ function site() {
   const stack = String(new Error().stack || "").split("\n");
   for (const l of stack) {
     // diag.js: the pack's own diagnostics wrapper (it hands the game its wrapper through these patched calls)
-    if (!l.trim() || l.includes("__harness_") || l.includes("diag-core.js") || l.includes("/diag.js") || l.includes("/_shared/") || /\(native\)\s*$/.test(l)) continue;
+    if (!l.trim() || l.includes("__harness_") || l.includes("diag-core.js") || /(^|[\s(\/\\])diag\.js:/.test(l) || /(^|[\s(\/\\])_shared[\/\\]/.test(l) || /\(native\)\s*$/.test(l)) continue;
     const m = /\(([^()]*)\)\s*$/.exec(l) || /at (\S+)\s*$/.exec(l);
     if (m) return m[1];
   }

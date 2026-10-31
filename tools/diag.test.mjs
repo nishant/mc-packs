@@ -338,3 +338,34 @@ test("two packs registered through two copies of the core share one state and bo
   mc.step(2);
   assert.deepEqual(pongs(mc).filter((p) => p.id === "both").map((p) => p.pack).sort(), ["a_bp", "b_bp"]);
 });
+
+test("F2: a frame in the bundle's _shared folder (no leading slash on BDS) is skipped, so a post-startup interval is billed to the calling pack", async () => {
+  const mc = fakeServer();
+  globalThis.__mcFake = mc;
+  delete globalThis.__realmDiag;
+  delete globalThis.__realmDiagWrapped;
+  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const { system } = mc;
+  await loadCopy(dir, "a_bp");
+  await loadCopy(dir, "b_bp");
+  mc.step(1); // startup is over: no pack is current
+  const RealError = globalThis.Error;
+  globalThis.Error = class extends RealError {
+    constructor(...a) {
+      super(...a);
+      this.stack = "Error\n    at f (_shared/spread.js:79:10)\n    at g (a_bp/diag.js:3:1)\n    at y (a_bp/main.js:5:1)";
+    }
+  };
+  try {
+    system.runInterval(() => {}, 1);
+  } finally {
+    globalThis.Error = RealError;
+  }
+  system.sendScriptEvent("realm:diag_ping", JSON.stringify({ id: "s1", ticks: 10 }));
+  mc.step(14);
+  const list = pongs(mc).filter((p) => p.id === "s1");
+  const a = list.find((p) => p.pack === "a_bp");
+  const b = list.find((p) => p.pack === "b_bp");
+  assert.ok(a.top.some((x) => x.k === "runInterval(1) @ a_bp/main.js:5:1"), JSON.stringify(a.top));
+  assert.equal(b.calls, 0, "b is not billed");
+});
