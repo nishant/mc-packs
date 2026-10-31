@@ -4,7 +4,9 @@
 //   node tools/ci-release.mjs --hosting <nishant/hosting checkout> [--from <mc-packs checkout>] [--no-merge] [--no-live]
 //
 // In <hosting>/minecraft it runs publish-packs (with the notes from release/notes.json that no published version has
-// yet), pack-docs, pack-docs' check and check-site realm; when anything under minecraft/ changed it commits that on a
+// yet), archive-packs --prune (pack versions older than the newest 5 whose GitHub Release asset is verified are removed
+// from hosting; the upload itself is the release workflow's separate `archive` job), pack-docs, pack-docs' check and
+// check-site realm; when anything under minecraft/ changed it commits that on a
 // new branch, opens a PR to master and merges it with a merge commit (gh, with GH_TOKEN; that merge is the deploy),
 // then checks out the merged master and runs check-live, which waits for the deploy before it asks for any new URL
 // (Cloudflare caches a 404). Nothing new to publish and an up-to-date realm page: no PR, check-live only. So a rerun,
@@ -60,13 +62,23 @@ export function parseReport(stdout) {
 }
 
 /**
+ * How many versions archive-packs --prune moved to GitHub Releases: "archived A" on its last line
+ * ("total  uploaded U, archived A, kept K, X MB freed").
+ * @param {string} stdout
+ */
+export function parseArchive(stdout) {
+  const m = stdout.match(/^total\s{2,}uploaded \d+, archived (\d+),/m);
+  return m ? Number(m[1]) : 0;
+}
+
+/**
  * The job summary, in Markdown.
- * @param {{ sourceSha?: string, rows: { slug: string, version: string, what: string }[], used: string[][], bundle?: string, resources?: string, pr?: string, merged?: boolean, changed: boolean, live?: string, failed?: { step: string, output: string } }} r
+ * @param {{ sourceSha?: string, rows: { slug: string, version: string, what: string }[], used: string[][], archive?: string, bundle?: string, resources?: string, pr?: string, merged?: boolean, changed: boolean, live?: string, failed?: { step: string, output: string } }} r
  */
 export function summaryMarkdown(r) {
   const fresh = r.rows.filter((x) => x.what !== "unchanged");
   const out = [`## Release${r.sourceSha ? ` of mc-packs ${r.sourceSha.slice(0, 7)}` : ""}`, ""];
-  if (r.failed) out.push(`**Failed at ${r.failed.step}.** Fix it and rerun this workflow (it is idempotent), or finish by hand with the hosting steps in CLAUDE.md.`, "", "```", r.failed.output.trim().split("\n").slice(-40).join("\n"), "```", "");
+  if (r.failed) out.push(`**Failed at ${r.failed.step}.** Fix the cause, then rerun it (Actions > release > Run workflow); the workflow is idempotent.`, "", "```", r.failed.output.trim().split("\n").slice(-40).join("\n"), "```", "");
   if (fresh.length) out.push(`**${fresh.length} new version${fresh.length === 1 ? "" : "s"} published:**`, "");
   else if (r.rows.length) out.push("Nothing new to publish (every pack's latest version is already on the site).", "");
   if (fresh.length) {
@@ -79,6 +91,7 @@ export function summaryMarkdown(r) {
     for (const [to, text] of r.used) out.push(`- ${to}: ${text}`);
     out.push("");
   }
+  if (r.archive) out.push(`Archive: ${r.archive}`, "");
   if (r.bundle || r.resources) out.push(`Realm Bundle **${r.bundle ?? "?"}**, Realm Resources **${r.resources ?? "?"}** (latest in packs.json).`, "");
   if (r.pr) out.push(`Hosting PR: ${r.pr}${r.merged ? " (merged: deploying)" : " (not merged)"}`, "");
   else if (!r.failed) out.push(r.changed ? "Hosting changes committed locally only (--no-merge)." : "The realm page was already up to date: no hosting PR.", "");
@@ -105,14 +118,16 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const hosting = resolve(opt.hosting);
   const mc = join(hosting, "minecraft");
   /** @param {string} cmd @param {string[]} a @param {string} cwd */
-  const run = (cmd, a, cwd) => {
+  const run = (cmd, a, cwd, env = process.env) => {
     console.log(`$ ${cmd} ${a.map(shellQuote).join(" ")}`);
-    const r = spawnSync(cmd, a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 28 });
+    const r = spawnSync(cmd, a, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 28 });
     const out = `${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? String(r.error) : ""}`;
     process.stdout.write(out);
     return { ok: r.status === 0, out, stdout: r.stdout ?? "" };
   };
   const node = (/** @type {string[]} */ ...a) => run(process.execPath, a, mc);
+  // The archive token only reads and deletes local files here: it needs read access to mc-packs releases.
+  const nodeAs = (/** @type {NodeJS.ProcessEnv} */ env, /** @type {string[]} */ ...a) => run(process.execPath, a, mc, env);
   const git = (/** @type {string[]} */ ...a) => run("git", a, hosting);
   /** @type {Parameters<typeof summaryMarkdown>[0]} */
   const report = { rows: [], used: [], changed: false };
@@ -163,6 +178,12 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const pub = step("publish-packs", node("tools/publish-packs.mjs", "--from", from, ...args));
   report.rows = parseReport(pub.stdout);
   latest();
+  if (existsSync(join(mc, "tools", "archive-packs.mjs"))) {
+    const arch = step("archive-packs --prune", nodeAs({ ...process.env, GH_TOKEN: process.env.ARCHIVE_READ_TOKEN || process.env.GH_TOKEN }, "tools/archive-packs.mjs", "--prune", "--keep", "5"));
+    const moved = parseArchive(arch.stdout);
+    report.archive = `${moved} version${moved === 1 ? "" : "s"} moved to GitHub Releases`;
+    latest();
+  } else report.archive = "skipped (no tools/archive-packs.mjs in hosting)";
   step("pack-docs", node("tools/pack-docs.mjs", "--from", from));
   step("pack-docs --check", node("tools/pack-docs.mjs", "--from", from, '--check'));
   step("check-site realm", node("tools/check-site.mjs", "realm"));

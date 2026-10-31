@@ -19,6 +19,7 @@ const mainSource = read("main.js").replace(/\r\n/g, "\n");
 const { createForget } = await import(srcDir && existsSync(`${srcDir}forget.js`) ? pathToFileURL(`${srcDir}forget.js`).href : new URL("forget.js", scripts).href);
 const gauntletSource = read("gauntlet.js");
 const diagSource = readFileSync(new URL("diag.js", scripts), "utf8");
+const diagCoreSource = readFileSync(new URL("diag-core.js", scripts), "utf8");
 
 function fakeServer() {
   let tick = 0;
@@ -119,8 +120,10 @@ async function setup({ ids, failDelete = [], keepAfterDelete = [], failList = fa
 
   const dir = mkdtempSync(join(tmpdir(), "o62-"));
   mkdirSync(join(dir, "expedition_bp"), { recursive: true });
-  const file = join(dir, "expedition_bp", `diag${n++}.js`);
-  writeFileSync(file, diagSource.replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;"));
+  const id = n++;
+  const file = join(dir, "expedition_bp", `diag${id}.js`);
+  writeFileSync(join(dir, "expedition_bp", `diag-core${id}.js`), diagCoreSource.replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;"));
+  writeFileSync(file, diagSource.replace("./diag-core.js", `./diag-core${id}.js`));
   await import(pathToFileURL(file).href);
   mc.step(1);
   mc.world.setDynamicProperty("expedition:stash_next", 5);

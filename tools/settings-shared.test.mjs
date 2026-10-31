@@ -5,44 +5,80 @@ import { runInNewContext } from "node:vm";
 
 const source = readFileSync(new URL("./settings-shared.js", import.meta.url), "utf8");
 
+/** The factory with its imports and export removed, so it can run in a fresh context that supplies world, Player and system. */
+const factory = source.replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, "");
+
 function fixture(defaultOn = true) {
   const worldProps = new Map();
   const writes = [];
   const playerProps = new Map();
-  const player = {
-    getDynamicProperty: (key) => playerProps.get(key),
+  class Player {
+    getDynamicProperty(key) {
+      return playerProps.get(key);
+    }
     setDynamicProperty(key, value) {
       writes.push({ key, value });
       if (value === undefined) playerProps.delete(key);
       else playerProps.set(key, value);
-    },
-  };
+    }
+  }
+  const player = new Player();
+  const handlers = [];
   const context = {
-    PREFIX: "stats",
-    BASE: { tickerDefaultOn: defaultOn },
-    OPTIONS: [
-      { key: "tickerDefaultOn", scope: "world", type: "bool" },
-      { key: "ticker", scope: "player", type: "bool", base: "tickerDefaultOn", sticky: true },
-      { key: "ordinary", scope: "player", type: "bool", base: "tickerDefaultOn" },
-      { key: "ownProperty", scope: "player", type: "bool", base: "tickerDefaultOn", prop: "stats:oldTicker", sticky: true },
-    ],
+    Player,
+    system: { sendScriptEvent() {} },
     world: {
       getDynamicProperty: (key) => worldProps.get(key),
       setDynamicProperty(key, value) {
         if (value === undefined) worldProps.delete(key);
         else worldProps.set(key, value);
       },
+      getEntity: () => undefined,
     },
     console,
+    handlers,
   };
-  const end = source.indexOf("// Realm Settings protocol");
-  assert(end > 0, "use the real shared preference code before the event protocol");
   runInNewContext(
-    source.slice(0, end).replace(/^export /gm, "") + "\nglobalThis.api = { getFor, setFor, set, reset, onChange };",
+    `${factory}
+globalThis.api = createSettings({
+  PACK: "stats_bp",
+  PREFIX: "stats",
+  TITLE: "Stats",
+  BASE: { tickerDefaultOn: ${defaultOn} },
+  OPTIONS: [
+    { key: "tickerDefaultOn", scope: "world", type: "bool" },
+    { key: "ticker", scope: "player", type: "bool", base: "tickerDefaultOn", sticky: true },
+    { key: "ordinary", scope: "player", type: "bool", base: "tickerDefaultOn" },
+    { key: "ownProperty", scope: "player", type: "bool", base: "tickerDefaultOn", prop: "stats:oldTicker", sticky: true },
+  ],
+  onScriptEvent: (ids, fn) => handlers.push({ ids, fn }),
+});`,
     context,
   );
-  return { api: context.api, player, playerProps, writes };
+  return { api: context.api, player, playerProps, writes, handlers, worldProps };
 }
+
+test("the factory returns the helper's exports and subscribes once to the settings events", () => {
+  const { api, handlers } = fixture(true);
+  assert.deepEqual(Object.keys(api).sort(), ["get", "getFor", "onChange", "reset", "set", "setFor"]);
+  assert.equal(handlers.length, 1);
+  assert.deepEqual([...handlers[0].ids], ["realm:cfg_ping", "realm:cfg_set", "realm:cfg_reset"]);
+});
+
+test("two calls of the factory keep independent state", () => {
+  const a = fixture(true);
+  const b = fixture(true);
+  const seen = [];
+  a.api.onChange((key) => seen.push(key));
+  assert.equal(a.api.set("tickerDefaultOn", false), undefined);
+  assert.equal(a.api.get("tickerDefaultOn"), false);
+  assert.equal(b.api.get("tickerDefaultOn"), true, "the other copy still has the config.js value");
+  assert.deepEqual(seen, ["tickerDefaultOn"]);
+  b.api.set("tickerDefaultOn", false);
+  assert.deepEqual(seen, ["tickerDefaultOn"], "listeners belong to one instance");
+  assert.equal(a.handlers.length, 1);
+  assert.equal(b.handlers.length, 1);
+});
 
 test("an explicit ticker on remains on after the realm default changes", () => {
   const { api, player, playerProps } = fixture(true);

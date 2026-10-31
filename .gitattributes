@@ -31,3 +31,6 @@ packs/**/*.mcfunction text eol=lf
 packs/**/*.material text eol=lf
 packs/**/*.txt text eol=lf
 tools/*-shared.js text eol=lf
+# The docs (published as the players' docs, read by help-catalog.mjs) and the workflows stay LF too.
+docs/**/*.md text eol=lf
+.github/** text eol=lf

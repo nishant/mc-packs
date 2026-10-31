@@ -54,11 +54,11 @@ const unsubscribe = sig.unsubscribe;
 /** @type {{ pack: string, file: string, ns: string }[]} */
 const seen = [];
 let unsubs = 0;
-// The first frame that is neither this file nor a pack's diag.js: scripts/<pack>/<file>.
+// The first frame that is neither this file nor a pack's diag.js or diag-core.js: scripts/<pack>/<file>.
 const who = () => {
   for (const line of String(new Error().stack ?? "").split("\\n")) {
     const m = /([A-Za-z0-9_]+_bp)[\\\\/]([A-Za-z0-9_.\\\\/-]+?\\.js)/.exec(line);
-    if (m && !/(^|[\\\\/])diag\\.js$/.test(m[2])) return { pack: m[1], file: m[2] };
+    if (m && !/(^|[\\\\/])diag(-core)?\\.js$/.test(m[2])) return { pack: m[1], file: m[2] };
   }
   return { pack: "?", file: "?" };
 };
@@ -87,7 +87,10 @@ sig.unsubscribe = function (cb, ...rest) {
 const probe = join(dest, "scripts", "probe_bp");
 mkdirSync(probe, { recursive: true });
 const shared = readFileSync(join(root, "tools", "diag-shared.js"), "utf8");
-writeFileSync(join(probe, "diag.js"), shared.replace('"__PACK__"', '"probe_bp"').replace('"__VERSION__"', '"0.0.1"').replace('"__NAME__"', '"Probe"'));
+writeFileSync(join(probe, "diag-core.js"), shared);
+writeFileSync(join(probe, "diag.js"), `import { registerPack } from "./diag-core.js";
+registerPack({ pack: "probe_bp", name: "Probe", version: "0.0.1", prefixes: [] });
+`);
 const routed = existsSync(join(root, "tools", "events-shared.js"));
 if (routed) cpSync(join(root, "tools", "events-shared.js"), join(probe, "script-events.js"));
 // Before O54 there is no router: the probe subscribes the way every pack did, one listener per handler.

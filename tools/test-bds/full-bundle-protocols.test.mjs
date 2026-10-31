@@ -292,6 +292,7 @@ test("subscriber frames skip diag and do not require a scripts folder", async ()
   const diagFirst = [
     "Error",
     "    at subscribe (afk_bp/diag.js:88:5)",
+    "    at subscribe (afk_bp/diag-core.js:88:5)",
     "    at chairs_bp/script-events.js:12:3",
     "    at chairs_bp/main.js:40:1",
   ].join("\n");

@@ -308,7 +308,7 @@ test("the pen's surplus (O78): a wanderer that came back after its stand-in was 
 });
 
 test("main.js: pen deaths are counted and the top-up runs only with a player near the pen for two checks", () => {
-  const main = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "..", "packs", "town_bp", "scripts", "main.js"), "utf8");
+  const main = fs.readFileSync(path.join(import.meta.dirname, "..", "packs", "town_bp", "scripts", "main.js"), "utf8");
   assert.match(main, /function penTick\(/);
   assert.match(main, /penTick\(players\)/, "called on the build check");
   assert.match(main, /penMissing\(/);

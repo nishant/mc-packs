@@ -1,11 +1,271 @@
 {
   "notes": [
-    "Lighter with many players online: the Minimap does less work every tick (the same behavior)."
+    "Smaller download: code shared by several features is now stored once in the Realm Bundle. No change in game."
   ],
   "packNotes": {
+    "admin_bp": {
+      "version": "1.6.15",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "afk_bp": {
+      "version": "1.3.14",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "atlas_bp": {
+      "version": "1.1.13",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "bounty_bp": {
+      "version": "1.3.11",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "build_bp": {
+      "version": "3.0.12",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "calendar_bp": {
+      "version": "1.0.22",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "caravan_bp": {
+      "version": "1.2.11",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "chairs_bp": {
+      "version": "1.3.15",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "claims_bp": {
+      "version": "1.5.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "cleanup_bp": {
+      "version": "1.2.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "climate_bp": {
+      "version": "1.0.12",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "cooking_bp": {
+      "version": "1.1.18",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "crowns_bp": {
+      "version": "1.1.13",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "death_bp": {
+      "version": "1.3.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "dolphin_bp": {
+      "version": "1.2.11",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "domt_bp": {
+      "version": "1.1.16",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "durability_bp": {
+      "version": "1.2.14",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "elite_bp": {
+      "version": "1.3.18",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "elytra_bp": {
+      "version": "1.3.23",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "expedition_bp": {
+      "version": "2.4.17",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "farm_bp": {
+      "version": "1.4.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "find_bp": {
+      "version": "1.4.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "fishing_bp": {
+      "version": "1.1.16",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "goals_bp": {
+      "version": "1.1.13",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "guard_bp": {
+      "version": "1.4.12",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "guilds_bp": {
+      "version": "1.1.15",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "harvest_bp": {
+      "version": "1.3.11",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "help_bp": {
+      "version": "1.1.87",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "hud_bp": {
+      "version": "1.3.12",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "journal_bp": {
+      "version": "1.1.13",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "leaves_bp": {
+      "version": "1.0.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "mail_bp": {
+      "version": "1.2.11",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
     "map_bp": {
-      "version": "1.5.2",
-      "notes": "The Minimap does less work every tick with many players online (the same behavior): it keeps its own list of who is online instead of asking the game every tick, reads each player's id once, skips choosing whose markers to update while their time is used up, and builds the compass strip's ticks and letters once per facing."
+      "version": "1.5.3",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "maps_bp": {
+      "version": "1.8.16",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "meteor_bp": {
+      "version": "1.2.13",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "milestones_bp": {
+      "version": "1.0.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "mobhp_bp": {
+      "version": "1.2.20",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "moon_bp": {
+      "version": "1.2.16",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "nick_bp": {
+      "version": "1.1.12",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "night_bp": {
+      "version": "1.1.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "npc_bp": {
+      "version": "1.9.1",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "party_bp": {
+      "version": "1.2.11",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "phantom_bp": {
+      "version": "1.2.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "platypus_bp": {
+      "version": "1.1.9",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "quests_bp": {
+      "version": "1.3.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "rain_bp": {
+      "version": "1.5.18",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "rainbow_bp": {
+      "version": "1.4.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "refill_bp": {
+      "version": "1.1.8",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "relics_bp": {
+      "version": "1.2.19",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "saga_bp": {
+      "version": "1.16.18",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "settings_bp": {
+      "version": "1.4.7",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "silly_bp": {
+      "version": "1.2.14",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "skills_bp": {
+      "version": "1.1.12",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "slots_bp": {
+      "version": "1.0.15",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "stash_bp": {
+      "version": "1.9.3",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "stats_bp": {
+      "version": "1.4.15",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "storm_bp": {
+      "version": "1.1.14",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "titles_bp": {
+      "version": "1.2.15",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "tornado_bp": {
+      "version": "1.2.13",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "town_bp": {
+      "version": "1.7.4",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "translucent_bp": {
+      "version": "1.0.9",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "wander_bp": {
+      "version": "1.2.22",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "waystone_bp": {
+      "version": "1.3.10",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "weather_bp": {
+      "version": "1.3.13",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "welcome_bp": {
+      "version": "1.5.14",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
+    },
+    "zones_bp": {
+      "version": "1.0.13",
+      "notes": "Smaller download: code shared with other packs is stored once in the Realm Bundle. No change in game."
     }
   }
 }

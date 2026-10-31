@@ -20,7 +20,7 @@ export function subscriberOf(stack = String(new Error().stack ?? "")) {
   for (const line of lines) {
     const normalized = line.replace(/\\/g, "/");
     const m = /([A-Za-z0-9_]+_bp)\/([A-Za-z0-9_./-]+?\.js)/.exec(normalized);
-    if (!m || skip.has(m[1]) || /(^|\/)diag\.js$/.test(m[2])) continue;
+    if (!m || skip.has(m[1]) || /(^|\/)diag(-core)?\.js$/.test(m[2])) continue;
     return { pack: m[1], file: m[2], trace: "" };
   }
   return { pack: "?", file: "?", trace: lines.slice(0, 6).join(" | ").slice(0, 240) };

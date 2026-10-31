@@ -1,11 +1,11 @@
 // Copies tools/diag-shared.js (pack diagnostics: script cost and saved data per pack, for /realm:diag) into
-// every behavior pack with scripts as scripts/diag.js, with that pack's folder and manifest header.version
-// filled in, and makes "./diag.js" the first import of each scripts/main.js. Packs never import each other,
-// so each keeps its own copy. A version bump changes the copy: run this after bumping (help-catalog.mjs and
+// every behavior pack with scripts as scripts/diag-core.js, writes each pack's three-line scripts/diag.js (its folder,
+// manifest name, header.version and prefixes), and makes "./diag.js" the first import of each scripts/main.js.
+// Packs never import each other, so each keeps its own copy of the core (the Realm Bundle stores it once). A version bump changes the copy: run this after bumping (help-catalog.mjs and
 // gen-news.mjs do it themselves for the packs they bump).
 //
 //   node tools/sync-diag.mjs            refresh every copy
-//   node tools/sync-diag.mjs --check    fail if a copy or an import is stale (part of npm run check)
+//   node tools/sync-diag.mjs --check    fail if a core, stub or import is stale (part of npm run check)
 import { syncDiag } from "./lib/diag-sync.mjs";
 
 const check = process.argv.includes("--check");

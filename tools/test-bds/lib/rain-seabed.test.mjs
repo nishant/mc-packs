@@ -292,7 +292,7 @@ async function run({ scenario, hook, hazards, patchRain }) {
   return { ok: outcome.ok && !t.failures.length, failed, logs: t.logs, env, ticks: env.game.tick };
 }
 
-const scenarioText = readFileSync(scenarioFile, "utf8");
+const scenarioText = readFileSync(scenarioFile, "utf8").replace(/\r\n/g, "\n");
 const HOOK = hookOf(scenarioText);
 const CURRENT = { scenario: scenarioText.replace(/^\/\/.*\n/gm, ""), hook: HOOK };
 const ORIGINAL = { scenario: ORIGINAL_SCENARIO, hook: ORIGINAL_HOOK };
