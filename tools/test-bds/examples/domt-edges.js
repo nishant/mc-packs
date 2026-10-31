@@ -78,7 +78,7 @@ export default async function (t) {
     form.answer(answer);
     return next;
   };
-  let w = await wildCount();
+  const w = await wildCount();
   t.check(w.n === 0, `wild cards start off (${w.n})`);
   let cards = await then(w.cards, "Enable every wild card");
   t.check(cards.buttons.some((b) => /15 of 15/.test(b)), "all 15 wild cards on");

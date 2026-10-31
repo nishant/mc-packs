@@ -355,7 +355,7 @@ test("one scanner wrapper delegates to a bounded independent planner, never rely
   assert.equal(scannerContext.featureEnvelope.tick, 20, "the real V2 envelope receives the game tick");
   assert.match(functionSource("scanFrame"), /if \(!planIdle\(idOf\(p\), now\)\) planFor\(p, now,\s*true\);/);
   const plan = { dim: { id: "minecraft:overworld" }, x: 0, z: 0, py: 64, at: 10 };
-  Object.defineProperty(plan, "player", { get() { assert.fail("idle admission may not read a native player handle"); } });
+  Object.defineProperty(plan, "player", { get() { assert.fail("idle admission may not read a native player handle"); return undefined; } });
   const view = { dim: "minecraft:overworld", x: 0, y: -40, z: 0 };
   const memo = { needAt: 10 };
   const sandbox = { scanPlans: new Map([["p", plan]]), views: new Map([["p", view]]), terrainBaseMemo: new Map([["p", memo]]) };

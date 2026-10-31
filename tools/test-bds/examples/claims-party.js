@@ -34,7 +34,7 @@ export default async function (t) {
     return dim.getBlock(where)?.typeId !== "minecraft:grass_block";
   };
   const claimMenu = async () => {
-    let f = t.waitForm(own, { timeout: 60 });
+    const f = t.waitForm(own, { timeout: 60 });
     t.cmd(own, "/realm:claim");
     (await f).answer("My claim");
     return await t.waitForm(own, { timeout: 60 });

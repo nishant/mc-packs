@@ -16,7 +16,7 @@ export default async function (t) {
   const bars = t.messages(ann, { since }).filter((m) => m.kind === "actionbar");
   t.log(`Ann's bar: ${JSON.stringify(bars.at(-1)?.text)}`);
   t.check(bars.length > 0 && bars.every((m) => m.pack === "hud_bp"), `only the Coordinates HUD writes Ann's bar (${[...new Set(bars.map((m) => m.pack))]})`);
-  t.check(bars.some((m) => /X -?\d+  Y -?\d+  Z -?\d+/.test(m.text.replace(/§./g, "")) && /\|  Bob .*hp/.test(m.text.replace(/§./g, ""))), "the coordinates and the party line in one line");
+  t.check(bars.some((m) => /X -?\d+ {2}Y -?\d+ {2}Z -?\d+/.test(m.text.replace(/§./g, "")) && /\| {2}Bob .*hp/.test(m.text.replace(/§./g, ""))), "the coordinates and the party line in one line");
   const bobBars = t.messages(bob, { since }).filter((m) => m.kind === "actionbar");
   t.check(bobBars.some((m) => m.pack === "party_bp" && /Ann/.test(m.text)), "without the Coordinates HUD, the Party HUD still uses the bar");
 }

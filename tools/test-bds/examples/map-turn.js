@@ -211,7 +211,7 @@ export default async function (t) {
   // What one realm:side message costs each other pack (side.js: JSON.parse and clean on ~250 bytes), timed here.
   const msg = JSON.stringify({ player: p.id, from: "map", slot: "top", text: `${g(1).repeat(25)}\n§f* Mara 120m  §7Hollow Vale`, ticks: 40, tick: t.tick });
   const clean = (text) => {
-    let s = String(text).split("§s§2§r").join("").replace(/[~\r]/g, "");
+    const s = String(text).split("§s§2§r").join("").replace(/[~\r]/g, "");
     let out = "";
     let b = 0;
     for (const ch of s) {

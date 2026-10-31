@@ -22,7 +22,7 @@ export default async function (t) {
   const Y = -60;
   p.teleport({ x: 0.5, y: Y, z: 0.5 });
   await t.wait(10);
-  let since = t.tick;
+  const since = t.tick;
   town("add", { name: "Pen" });
   await t.waitMessage(p, /Town Pen added/, { since, timeout: 60 });
   town("spot", { project: "garden", spot: { x: -12, y: Y, z: -12, f: 0 } });
