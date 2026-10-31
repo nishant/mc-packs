@@ -189,15 +189,19 @@ const uiUrl = dataUrl(`const u = globalThis.__statsUi; export const { ActionForm
 globalThis.__statsMc = server;
 globalThis.__statsUi = ui;
 
-const diagSrc = readFileSync(new URL("../packs/stats_bp/scripts/diag.js", import.meta.url), "utf8").replace(
-  'from "@minecraft/server"',
-  `from ${JSON.stringify(serverUrl)}`,
+const diagCoreUrl = dataUrl(
+  readFileSync(new URL("../packs/stats_bp/scripts/diag-core.js", import.meta.url), "utf8").replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`),
 );
+const diagSrc = readFileSync(new URL("../packs/stats_bp/scripts/diag.js", import.meta.url), "utf8").replace('from "./diag-core.js"', `from ${JSON.stringify(diagCoreUrl)}`);
 // One router for the whole pack: settings.js and main.js register their handlers in the same script-events.js, as in the game.
 const eventsUrl = dataUrl(readFileSync(new URL("../packs/stats_bp/scripts/script-events.js", import.meta.url), "utf8").replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`));
+const settingsCoreUrl = dataUrl(
+  readFileSync(new URL("../packs/stats_bp/scripts/settings-core.js", import.meta.url), "utf8").replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`),
+);
 const settingsUrl = dataUrl(
   readFileSync(new URL("../packs/stats_bp/scripts/settings.js", import.meta.url), "utf8")
     .replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`)
+    .replace('from "./settings-core.js"', `from ${JSON.stringify(settingsCoreUrl)}`)
     .replace('from "./script-events.js"', `from ${JSON.stringify(eventsUrl)}`)
     .replace('from "./config.js"', `from ${JSON.stringify(new URL("../packs/stats_bp/scripts/config.js", import.meta.url).href)}`)
         .replace('from "./stats.js"', `from ${JSON.stringify(new URL("../packs/stats_bp/scripts/stats.js", import.meta.url).href)}`),

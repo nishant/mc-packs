@@ -22,7 +22,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, posix, relative, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { walk, zip } from "./lib/zip.mjs";
 import { namespaceOf, registeredNames } from "./lib/commands.mjs";
@@ -255,6 +255,68 @@ for (const pack of selected) {
   }
 }
 
+/**
+ * Modules that have no module-level per-pack state and no relative imports, so one copy can serve every pack.
+ * Keep script-events.js, side.js and zones.js out: they hold per-pack state or import script-events.js.
+ */
+const SHARED = ["diag-core.js", "settings-core.js", "tether.js", "owed.js", "name-labels.js", "spread.js", "gossip.js", "spawn.js", "prune.js", "weather-plan.js"];
+/** Relative import specifiers: `from "./x.js"`, `import "./x.js"`, `import("./x.js")`. */
+const RELATIVE_IMPORT = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.{1,2}\/[^"'\n]*)\2/g;
+
+let dedupedModules = 0;
+let dedupedBytes = 0;
+if (kind === "behavior") {
+  // Group every pack's copy of an allowlisted module by content.
+  /** @type {Map<string, Map<string, string[]>>} module name → content hash → file paths */
+  const groups = new Map();
+  for (const [path, { data }] of files) {
+    const m = /^scripts\/[^/]+\/(?:.*\/)?([^/]+)$/.exec(path);
+    if (!m || !SHARED.includes(m[1])) continue;
+    const byHash = groups.get(m[1]) ?? new Map();
+    const hash = createHash("sha256").update(data).digest("hex");
+    byHash.set(hash, [...(byHash.get(hash) ?? []), path]);
+    groups.set(m[1], byHash);
+  }
+  /** @type {Map<string, string>} dropped file path → its shared path */
+  const dropped = new Map();
+  for (const [name, byHash] of groups) {
+    if (byHash.size > 1) {
+      const owners = [...byHash.values()].map((paths) => paths.map((p) => p.split("/")[1]).join("+")).join(" | ");
+      console.warn(`warning: ${name} differs between packs, so every copy stays in place (${owners}): run the sync tool for it`);
+      continue;
+    }
+    const [paths] = [...byHash.values()];
+    if (paths.length < 2) continue;
+    const data = /** @type {{ data: Buffer }} */ (files.get(paths[0])).data;
+    const code = data.toString("utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""); // an import named in a comment doesn't count
+    if (RELATIVE_IMPORT.test(code)) throw new Error(`${name} has a relative import, so it can't be shared: take it off SHARED in tools/bundle.mjs`);
+    RELATIVE_IMPORT.lastIndex = 0;
+    const shared = `scripts/_shared/${name}`;
+    files.set(shared, { data, from: "shared" });
+    for (const p of paths) {
+      files.delete(p);
+      dropped.set(p, shared);
+    }
+    dedupedModules++;
+    dedupedBytes += data.length * (paths.length - 1);
+  }
+  // Point every import of a dropped copy at the shared one.
+  if (dropped.size) {
+    for (const [path, entry] of files) {
+      if (!path.endsWith(".js") || path.startsWith("scripts/_shared/")) continue;
+      const dir = posix.dirname(path);
+      const text = entry.data.toString("utf8");
+      const next = text.replace(RELATIVE_IMPORT, (whole, lead, quote, spec) => {
+        const target = dropped.get(posix.join(dir, spec));
+        if (!target) return whole;
+        const rel = posix.relative(dir, target);
+        return `${lead}${quote}${rel.startsWith(".") ? rel : `./${rel}`}${quote}`;
+      });
+      if (next !== text) files.set(path, { data: Buffer.from(next), from: entry.from });
+    }
+  }
+}
+
 if (kind === "behavior") {
   if (files.has("scripts/main.js")) fail("a pack already has scripts/main.js at the bundle root");
   files.set("scripts/main.js", {
@@ -305,4 +367,5 @@ writeFileSync(out, zip([...files].map(([name, { data }]) => ({ name, data }))));
 
 console.log(`${relative(root, out)}  v${version.join(".")}  (${files.size} files)`);
 for (const p of selected) console.log(`  + ${p.folder.padEnd(16)} v${p.version.padEnd(7)} ${p.name}`);
+if (args.all) console.log(`  deduped ${dedupedModules} modules, saved ${Math.round(dedupedBytes / 1024)} KB`);
 console.log(`  deps: ${[...moduleDeps].map(([m, v]) => `${m}@${v}`).join(", ") || "none"}`);

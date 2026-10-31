@@ -1,7 +1,7 @@
 // Pack diagnostics for operators: script cost and saved data per pack, and removing a pack's saved data.
-// Synced into every behavior pack as scripts/diag.js by tools/sync-diag.mjs, with PACK, VERSION and NAME filled
-// in from the pack's folder and manifest header (version, name). Each pack's main.js imports "./diag.js" FIRST: ES
-// modules run in import order, so everything the pack's other modules hand to the game afterwards is wrapped.
+// Copied byte for byte into every behavior pack as scripts/diag-core.js by tools/sync-diag.mjs. Each pack also gets a
+// three-line scripts/diag.js that calls registerPack() with its folder, manifest name, version and world
+// prefixes. Each pack's main.js imports "./diag.js" FIRST: ES modules run in import order, so everything the pack's other modules hand to the game afterwards is wrapped.
 //
 // What it wraps (the same approach as tools/test-bds/lib/profile.js, which it runs inside of when present):
 // system.run / runTimeout / runInterval / runJob (each generator step), every world/system beforeEvents and
@@ -38,16 +38,10 @@
 //                                    A pack may register one cleanup for what it saves outside world properties (see forget());
 //                                    the answer is then {ok, removed, bytes, note?} or {ok: false, error}, still only one.
 // No listener of its own: the first realm: scriptEventReceive listener a pack subscribes carries the protocol
-// (diag.js subscribes one itself only if no pack did by the first tick, or after that one is unsubscribed).
+// (diag-core.js subscribes one itself only if no pack did by the first tick, or after that one is unsubscribed).
 // Time is Date.now() (Bedrock has no finer clock): one call reads 0 or 1 ms, sums over many calls are fair.
 // Time after an `await` inside an async callback is not counted (it runs outside the wrapper).
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
-
-const PACK = "__PACK__";
-const VERSION = "__VERSION__";
-const NAME = "__NAME__";
-/** @type {string[]} */
-const PREFIXES = [];
 
 const API = 1;
 const MAX_TICKS = 1200;
@@ -66,16 +60,23 @@ const MAX_TICKS = 1200;
 const G = /** @type {any} */ (globalThis);
 /** @type {State} */
 const S = G.__realmDiag ?? (G.__realmDiag = install());
-/** @type {Rec} */
-const REC = S.packs.get(PACK) ?? { pack: PACK, name: NAME, version: VERSION, ms: 0, calls: 0, cbs: new Map(), forgotten: false, warned: false };
-S.packs.set(PACK, REC);
-S.multi = S.packs.size > 1;
-for (const prefix of PREFIXES) {
-  const had = S.prefixOwner.get(prefix);
-  if (had === undefined) S.prefixOwner.set(prefix, REC);
-  else if (had !== REC) S.prefixOwner.set(prefix, null);
+/**
+ * Registers one pack with the diagnostics shared by every pack in this script context. Called once by the pack's
+ * own scripts/diag.js, which main.js imports first.
+ * @param {{ pack: string, name: string, version: string, prefixes?: string[] }} info
+ */
+export function registerPack({ pack, name, version, prefixes = [] }) {
+  /** @type {Rec} */
+  const REC = S.packs.get(pack) ?? { pack, name, version, ms: 0, calls: 0, cbs: new Map(), forgotten: false, warned: false };
+  S.packs.set(pack, REC);
+  S.multi = S.packs.size > 1;
+  for (const prefix of prefixes) {
+    const had = S.prefixOwner.get(prefix);
+    if (had === undefined) S.prefixOwner.set(prefix, REC);
+    else if (had !== REC) S.prefixOwner.set(prefix, null);
+  }
+  S.cur = REC; // the rest of this pack's modules evaluate next: what they hand over is this pack's
 }
-S.cur = REC; // the rest of this pack's modules evaluate next: what they hand over is this pack's
 
 /** @returns {State} */
 function install() {
@@ -107,7 +108,7 @@ function install() {
   }
   // Module evaluation is over by the first tick: from then on only a running callback says whose code runs.
   // By then a pack has normally subscribed a realm: listener that carries the protocol (see patchSignals);
-  // if none did, diag.js listens itself.
+  // if none did, diag-core.js listens itself.
   if (typeof st.orig.run === "function") {
     st.orig.run.call(system, () => {
       if (st.multi) st.cur = null;
@@ -126,10 +127,10 @@ const wrapped = G.__realmDiagWrapped ?? (G.__realmDiagWrapped = new WeakMap());
 /** Under the test harness profiler (tools/test-bds/lib/profile.js) only: wrapper -> the pack's function, for its labels. @type {WeakMap<Function, Function> | undefined} */
 const inner = G.__harnessProfile ? (G.__realmDiagInner ??= new WeakMap()) : undefined;
 
-/** "file:line" of the first stack frame outside this file and the test harness. */
+/** "file:line" of the first stack frame outside the diagnostics, the bundle's shared folder and the test harness. */
 function site() {
   for (const l of String(new Error().stack || "").split("\n")) {
-    if (!l.trim() || l.includes("diag.js") || l.includes("__harness_")) continue;
+    if (!l.trim() || l.includes("diag-core.js") || l.includes("/diag.js") || l.includes("/_shared/") || l.includes("__harness_")) continue;
     const m = /\(([^()]*)\)\s*$/.exec(l) || /at (\S+)\s*$/.exec(l);
     if (m) return m[1];
   }
@@ -299,7 +300,7 @@ function patchSignals(st, owner_, prefix) {
 /** Whether a scriptEventReceive subscription's options let realm: events through. @param {any} opts */
 const carries = (opts) => !opts || !Array.isArray(opts.namespaces) || opts.namespaces.includes("realm");
 
-/** diag.js's own listener, when no pack listener carries the protocol. Never timed. @param {State} st */
+/** diag-core.js's own listener, when no pack listener carries the protocol. Never timed. @param {State} st */
 function listen(st) {
   if (st.own || !st.ser) return;
   st.own = function diagListener(/** @type {any} */ ev) {

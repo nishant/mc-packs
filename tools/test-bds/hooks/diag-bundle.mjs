@@ -36,7 +36,10 @@ for (const f of folders) cpSync(join(root, "packs", f, "scripts"), join(dest, "s
 const probe = join(dest, "scripts", "probe_bp");
 mkdirSync(probe, { recursive: true });
 const shared = readFileSync(join(root, "tools", "diag-shared.js"), "utf8");
-writeFileSync(join(probe, "diag.js"), shared.replace('"__PACK__"', '"probe_bp"').replace('"__VERSION__"', '"0.0.1"').replace('"__NAME__"', '"Probe"').replace("const PREFIXES = [];", `const PREFIXES = ${JSON.stringify(declare)};`));
+writeFileSync(join(probe, "diag-core.js"), shared);
+writeFileSync(join(probe, "diag.js"), `import { registerPack } from "./diag-core.js";
+registerPack({ pack: "probe_bp", name: "Probe", version: "0.0.1", prefixes: ${JSON.stringify(declare)} });
+`);
 writeFileSync(
   join(probe, "main.js"),
   `import "./diag.js";

@@ -200,13 +200,6 @@ the bundle's name (`realm_bundle`), not the member's. `hooks/diag-bundle.mjs` st
 protocol. CI runs the smoke test after check and build (`.github/workflows/check.yml`, job `bds-smoke`, Ubuntu 24.04, BDS
 from minecraft.net cached by version, 25 minutes at most).
 
-## Releasing (`tools/release.mjs`)
-
-`node tools/release.mjs plan` prints the whole ship order from CLAUDE.md and changes nothing; `prepare`, `source`, `publish`
-and `live` run one phase with `--execute --state <file>` and refuse to start until the earlier phases are on record for the
-exact commit. It never uploads to the Realm, passes `--allow-dirty` or a force flag, merges with admin rights, or invents a
-native-test or review result (those are receipts: `{schema: "release-evidence-v1", kind, sourceSha, result: "pass", artifacts}`).
-
 ## Parallel runs, templates and crashes
 
 The first run for a seed (or `--flat`) generates the world template once. Several runs that need it at the same time take an

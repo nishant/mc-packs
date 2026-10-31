@@ -7,7 +7,7 @@ import { BDS_BIN } from "./server.mjs";
 import { setup } from "../setup.mjs";
 
 const harnessDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const workflow = fs.readFileSync(path.join(harnessDir, "..", "..", ".github", "workflows", "check.yml"), "utf8");
+const workflow = fs.readFileSync(path.join(harnessDir, "..", "..", ".github", "workflows", "check.yml"), "utf8").replace(/\r\n/g, "\n");
 
 function bdsDirFixture(t) {
   const cache = path.join(harnessDir, ".cache");
@@ -65,7 +65,7 @@ test("CI runs the Realm Bundle smoke test after check and build, bounded, on a s
   assert.match(smoke, /echo "BDS_DIR=\$RUNNER_TEMP\/bds"/, "BDS lives under the allocated runner's temp, not /home/user");
   assert.ok(smoke.indexOf("node tools/test-bds/setup.mjs") < smoke.indexOf("node tools/bundle.mjs --all"));
   assert.ok(smoke.indexOf("node tools/bundle.mjs --all") < smoke.indexOf("node tools/test-bds/run.mjs"));
-  const header = fs.readFileSync(path.join(harnessDir, "examples", "bundle-smoke.js"), "utf8").match(/node tools\/test-bds\/run\.mjs (.*)/)[1];
+  const header = fs.readFileSync(path.join(harnessDir, "examples", "bundle-smoke.js"), "utf8").replace(/\r\n/g, "\n").match(/node tools\/test-bds\/run\.mjs (.*)/)[1];
   const step = smoke.match(/node tools\/test-bds\/run\.mjs (.*)/)[1];
   assert.equal(step, header, "CI runs exactly the command in the scenario's header");
   assert.match(step, /--bundle dist\/realm_bundle\.mcpack/);

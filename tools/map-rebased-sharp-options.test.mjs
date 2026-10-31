@@ -5,6 +5,8 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { CONFIG } from '../packs/map_bp/scripts/config.js';
 const source=fs.readFileSync(new URL('../packs/map_bp/scripts/settings.js',import.meta.url),'utf8');
+const coreSource=fs.readFileSync(new URL('../packs/map_bp/scripts/settings-core.js',import.meta.url),'utf8');
+const strip=t=>t.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
 const main=fs.readFileSync(new URL('../packs/map_bp/scripts/main.js',import.meta.url),'utf8');
 const fn=n=>main.match(new RegExp('^function '+n+'\\([\\s\\S]*?^\\}','m'))[0];
 const RADAR_OFF_RESET_PROP='map:radarOffReset20261022';
@@ -12,9 +14,9 @@ function harness(){
   const sent=[],saved=new Map([['map:cfg',JSON.stringify({radarNorthUp:false,nativeTerrain:false,mobRadius:48,mobRadiusMax:48})]]);let handler;
   class Player {constructor(){this.id='p';this.props=new Map([['map:pref',JSON.stringify({showMobs:false,showTown:false,showHome:false,terrain:false,mobRadius:48,radarNorthUp:false})]]);}getDynamicProperty(k){return this.props.get(k);}setDynamicProperty(k,v){if(v===undefined)this.props.delete(k);else this.props.set(k,v);}sendMessage(){} }
   const player=new Player();const context={CONFIG:{...CONFIG},Player,world:{getDynamicProperty:k=>saved.get(k),setDynamicProperty:(k,v)=>saved.set(k,v),getEntity:id=>id===player.id?player:undefined},system:{sendScriptEvent:(id,text)=>sent.push([id,JSON.parse(text)])},onScriptEvent:(_ids,fn)=>{handler=fn;},console};
-  const api=vm.runInNewContext(source.replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'')+';({get,getFor,set,setFor,describe,OPTIONS})',context);return {api,player,sent,context,request:m=>handler({id:'realm:cfg_ping',message:JSON.stringify(m)})};
+  const api=vm.runInNewContext(strip(coreSource)+'\n'+strip(source).replace('onScriptEvent: onSettingsEvent','onScriptEvent')+';({get,getFor,set,setFor,OPTIONS})',context);return {api,player,sent,context,request:m=>handler({id:'realm:cfg_ping',message:JSON.stringify(m)})};
 }
-test('canonical shared settings tail is byte-identical to published1fd',()=>{const tail=source.slice(source.indexOf('// ---- Shared:'));assert.equal(crypto.createHash('sha256').update(tail).digest('hex'),'d915cd0b371c076aa0ff5ad159fba8e568f5a423b2fb4609c3606c03be8c03f2');});
+test('canonical shared settings tail is byte-identical to published1fd',()=>{const tail=source.slice(source.indexOf('// ---- Shared:'));assert.equal(crypto.createHash('sha256').update(tail).digest('hex'),'15c2274ca15d875f857032180caf8861f5649a4fcbf4a6044c41b911e2282317');});
 test('real options schema protocol lists the latest player bindings, exact world bounds and no internal fields',()=>{
   const h=harness();h.request({id:'schema',player:h.player.id});
   const packets=h.sent.filter(p=>p[0]==='realm:cfg_schema').map(p=>p[1]);assert.ok(packets.length);

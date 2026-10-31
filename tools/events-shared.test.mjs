@@ -102,16 +102,15 @@ async function loadRouter(dir, pack) {
   return import(pathToFileURL(file).href);
 }
 
-/** Loads diag-shared.js as one pack's diag.js. */
+/** Loads diag-shared.js as one pack's diag-core.js, registered the way its diag.js stub does. */
 async function loadDiag(dir, pack) {
-  const src = readFileSync(join(root, "tools", "diag-shared.js"), "utf8")
-    .replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;")
-    .replace('const PACK = "__PACK__";', `const PACK = ${JSON.stringify(pack)};`)
-    .replace('const VERSION = "__VERSION__";', 'const VERSION = "1.0.0";')
-    .replace('const NAME = "__NAME__";', `const NAME = ${JSON.stringify(pack.toUpperCase())};`);
+  const src = readFileSync(join(root, "tools", "diag-shared.js"), "utf8").replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;");
   mkdirSync(join(dir, pack), { recursive: true });
+  writeFileSync(join(dir, pack, "diag-core.js"), src);
   const file = join(dir, pack, "diag.js");
-  writeFileSync(file, src);
+  writeFileSync(file, `import { registerPack } from "./diag-core.js";
+registerPack({ pack: ${JSON.stringify(pack)}, name: ${JSON.stringify(pack.toUpperCase())}, version: "1.0.0", prefixes: [] });
+`);
   await import(pathToFileURL(file).href);
 }
 

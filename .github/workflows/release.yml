@@ -6,7 +6,13 @@
 # It needs the secret HOSTING_TOKEN (a fine-grained token with Contents and Pull requests read and write on
 # nishant/hosting; see "Releases from CI" in docs/WORKING.md). Without it the workflow only writes a summary saying
 # how to add it, and succeeds. It is idempotent: with nothing new to publish and an up-to-date realm page it opens no
-# PR and only runs check-live, so a rerun, or a run after a session published by hand, does no harm.
+# PR and only runs check-live, so a rerun does no harm. This workflow is the only release path: sessions never publish.
+#
+# Archiving old pack versions (only the newest 5 of each pack stay in hosting git; older ones become assets of the
+# packs-<slug> release on nishant/mc-packs) runs in two phases, so the token that can write mc-packs releases never runs
+# a package install: the `archive` job below uploads (GITHUB_TOKEN with contents: write, node built-ins and gh only), and
+# the `release` job's ci-release.mjs prunes (deletes hosting's local copies of versions whose asset is verified by size
+# and digest; it only needs read access, ARCHIVE_READ_TOKEN). So versions uploaded by one run are pruned by the next.
 name: release
 on:
   workflow_run:
@@ -43,7 +49,7 @@ jobs:
             echo "2. nishant/mc-packs > Settings > Secrets and variables > Actions > New repository secret: name \`HOSTING_TOKEN\`, the token as its value."
             echo "3. Actions > release > Run workflow (or merge the next change)."
             echo
-            echo "Until then, release by hand with the hosting steps in CLAUDE.md."
+            echo "Until then nothing is released: nothing publishes from a session, CI is the only release path."
           } >> "$GITHUB_STEP_SUMMARY"
   release:
     needs: token
@@ -84,7 +90,33 @@ jobs:
       - name: Release
         env:
           GH_TOKEN: ${{ secrets.HOSTING_TOKEN }}
+          ARCHIVE_READ_TOKEN: ${{ github.token }}
         run: |
           git -C hosting config user.name "mc-packs release"
           git -C hosting config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           node mc-packs/tools/ci-release.mjs --hosting hosting --from mc-packs
+  archive:
+    # Phase one of the archive: upload pack versions beyond the newest 5 to the packs-<slug> releases of this repo. It runs
+    # after `release`, which merged hosting's packs.json, and installs nothing: node built-ins and the gh CLI only.
+    needs: [token, release]
+    if: needs.token.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Check out nishant/hosting
+        uses: actions/checkout@v4
+        with:
+          repository: nishant/hosting
+          ref: master
+          token: ${{ secrets.HOSTING_TOKEN }}
+          path: hosting
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Upload older pack versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node hosting/minecraft/tools/archive-packs.mjs --upload --keep 5 --repo ${{ github.repository }}

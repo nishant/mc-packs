@@ -128,10 +128,10 @@ globalThis.__findMc = server;
 globalThis.__findUi = ui;
 globalThis.__findSettings = settings;
 
-const diagSrc = readFileSync(new URL("../packs/find_bp/scripts/diag.js", import.meta.url), "utf8").replace(
-  'from "@minecraft/server"',
-  `from ${JSON.stringify(serverUrl)}`,
+const diagCoreUrl = dataUrl(
+  readFileSync(new URL("../packs/find_bp/scripts/diag-core.js", import.meta.url), "utf8").replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`),
 );
+const diagSrc = readFileSync(new URL("../packs/find_bp/scripts/diag.js", import.meta.url), "utf8").replace('from "./diag-core.js"', `from ${JSON.stringify(diagCoreUrl)}`);
 const eventsSrc = readFileSync(new URL("../packs/find_bp/scripts/script-events.js", import.meta.url), "utf8").replace(
   'from "@minecraft/server"',
   `from ${JSON.stringify(serverUrl)}`,
