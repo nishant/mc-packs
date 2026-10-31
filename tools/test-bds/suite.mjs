@@ -188,7 +188,7 @@ function prepareOnce(argv) {
 }
 /** Builds a scenario's test copy by running its staged header recipe; the run command's --packs folder must exist after it. */
 function stageScenario(p) {
-  let detail = "";
+  const detail = "";
   try {
     bashPath ??= findBash();
     // A fresh folder every time, retries included: the hooks refuse to write over an earlier copy, and a retry must not

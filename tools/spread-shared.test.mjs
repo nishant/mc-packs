@@ -102,7 +102,7 @@ test("spreadPlayers: a visit never reads isValid (on a handle kept from an earli
   let reads = 0;
   for (let i = 0; i < 10; i++) {
     const p = { id: `p${i}`, valid: true };
-    Object.defineProperty(p, "isValid", { get: () => (reads++, p.valid), set: (v) => (p.valid = v) });
+    Object.defineProperty(p, "isValid", { get: () => (reads++, p.valid), set: (v) => { p.valid = v; } });
     g.players.push(p);
   }
   let visited = 0;

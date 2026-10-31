@@ -199,7 +199,7 @@ function relicPlayer(sim, name, helmet, reads) {
     if (id === "minecraft:equippable") return { getEquipment: (slot) => (slot === "Head" ? helmet : undefined), setEquipment() {} };
     return undefined;
   };
-  let y = 20;
+  const y = 20;
   Object.defineProperty(p, "location", { get: () => (reads.location++, { x: 0, y, z: 0 }) });
   Object.defineProperty(p, "dimension", { get: () => (reads.dimension++, { id: "minecraft:overworld" }) });
   return p;
@@ -590,7 +590,7 @@ test("elytra: the slipstream looks only at players seen gliding, not at everyone
   let sparks = 0;
   for (const p of [...walkers, glider]) {
     let gliding = false;
-    Object.defineProperty(p, "isGliding", { get: () => (p !== glider && reads.walkers++, gliding), set: (v) => (gliding = v), configurable: true });
+    Object.defineProperty(p, "isGliding", { get: () => (p !== glider && reads.walkers++, gliding), set: (v) => { gliding = v; }, configurable: true });
     p.isOnGround = true;
     p.location = { x: 0, y: 64, z: 0 };
     p.dimension = { id: "minecraft:overworld", spawnParticle: () => sparks++ };

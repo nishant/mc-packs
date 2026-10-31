@@ -637,6 +637,7 @@ function milestoneSession(record, milestones, valueOf = () => 0, titles = true) 
   const box = recorder();
   const send = box.system.sendScriptEvent;
   /** @type {any} */
+  // eslint-disable-next-line prefer-const -- assigned once, after the callback that reads it
   let api;
   box.system.sendScriptEvent = (id, payload) => {
     send(id, payload);

@@ -56,7 +56,7 @@ export default async function (t) {
   since = t.tick;
   await hit(cow, b);
   const mb = await t.waitUntil(() => boxes(b, since)[0], { timeout: 10, message: "Bob's box" });
-  t.check(/Cow  §f8\/10/.test(mb.subtitle), `Bob's box: ${mb.subtitle.slice(6, 40)}`);
+  t.check(/Cow {2}§f8\/10/.test(mb.subtitle), `Bob's box: ${mb.subtitle.slice(6, 40)}`);
   t.check(/^§f9\/10/.test(cow.nameTag), "Bob's hit (box) leaves Alice's name tag alone");
   await t.wait(45);
   t.check(cow.nameTag === "" && !tagged(cow), `name off after the hold: "${cow.nameTag}"`);
@@ -107,7 +107,7 @@ export default async function (t) {
   await hit(doomed, a, 50);
   const mk = await t.waitUntil(() => boxes(a, since)[0], { timeout: 10, message: "box for the killing blow" });
   t.world.afterEvents.entityDie.unsubscribe(sub);
-  t.check(/Chicken  §7defeated/.test(mk.subtitle), `killing blow box says defeated: ${mk.subtitle.slice(6, 40)}`);
+  t.check(/Chicken {2}§7defeated/.test(mk.subtitle), `killing blow box says defeated: ${mk.subtitle.slice(6, 40)}`);
   t.check(!/\d+\/\d+/.test(nameAtDeath), `no health name on the dying mob ("${nameAtDeath}")`);
 
   // A mob that unloads mid-display is untagged by entityLoad when it loads again; not tested here: on this
