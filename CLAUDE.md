@@ -6,11 +6,7 @@ Minecraft Bedrock packs for a Realm. Each folder in `packs/` is a self-contained
 
 ## Autonomy
 
-Nish (2026-10-26): "you have full autonomy to merge and deploy. Just make sure everything is always live when you're done… Claude sessions can build and merge and deploy as they see fit. Do not hold up development waiting for an answer from me unless absolutely 100% critically necessary."
-
-- Claude sessions build, commit, push, open and merge PRs, release and deploy on their own judgment, without asking Nish.
-- Work is done only when it is merged, released, deployed and confirmed live (the finishing steps under "Ship every change" below). Never leave CI, the release run or a deploy red: read the log, fix it and ship again.
-- Pick sensible defaults instead of asking. Stop for Nish only when it is critically necessary: credentials or account signups, or anything destructive to production data (the Realm's saved data included).
+Nish's standing rule: build, merge, release and deploy without asking; stop only for credentials, account signups, anything destructive to production data, and hosting's hard rules. The canonical text is "Autonomy" in [`global/CLAUDE.md`](https://github.com/nishant/skills/blob/master/global/CLAUDE.md) in `nishant/skills`. Done here means merged, released by the `release` workflow, deployed and confirmed live (the finishing steps under "Ship every change" below). The Realm's saved data counts as production data.
 
 ## Rules
 - **Ship every change; don't ask** (the Autonomy rule above): never ask whether to open a PR, merge, publish or deploy. Unless the request says otherwise, a change is done only when:
