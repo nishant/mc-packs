@@ -486,6 +486,7 @@ test("repeated profile changes keep the same bounded 128 physical page slots", (
 test("an adapter-triggered profile reset cannot complete an obsolete read or write", () => {
   for (const operation of ["get", "set"]) {
     const f = fixture(); seed(f); let reset = false, p;
+    // eslint-disable-next-line prefer-const -- p is used by the adapter below before this assignment
     p = new PreviewPersistence({
       get(k) { const raw = f.storage.get(k); if (reset && operation === "get") { reset = false; p.setProfile("material"); } return raw; },
       set(k, v) { f.storage.set(k, v); if (reset && operation === "set") { reset = false; p.setProfile("material"); } },

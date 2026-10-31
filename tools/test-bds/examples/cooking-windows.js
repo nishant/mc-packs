@@ -12,7 +12,7 @@ export default async function (t) {
   await ev("realm:sky_event", { kind: "meteor" });
   await ev("realm:sky_event", { kind: "meteor" });
   await t.wait(10);
-  let lines = kitchenLines();
+  const lines = kitchenLines();
   t.log(lines.map((m) => m.plain).join(" / "));
   t.check(lines.length === 2, `one line for the Harvest Moon and one for the stardust (${lines.length})`);
   await ev("realm:moon", { state: "blood" });

@@ -14,7 +14,7 @@ export default async function (t) {
     town("dump");
     return JSON.parse((await t.waitMessage(p, (x) => x.startsWith('{"town"'), { since, timeout: 60 })).plain);
   };
-  let since = t.tick;
+  const since = t.tick;
   town("add", { name: "Marks" });
   await t.waitMessage(p, /Town Marks added/, { since, timeout: 60 });
   let d;

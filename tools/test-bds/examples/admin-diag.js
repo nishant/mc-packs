@@ -90,7 +90,7 @@ export default async function (t) {
     form.answer(answer);
     return next;
   }
-  let shown = t.waitForm(op, { timeout: 200 });
+  const shown = t.waitForm(op, { timeout: 200 });
   t.assert(t.cmd(op, "/realm:diag 2").ok, "/realm:diag ran for the operator");
   await t.waitMessage(op, /Measuring every pack's script time for 2 s/, { pack: "admin_bp" });
   let list = await shown;

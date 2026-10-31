@@ -97,6 +97,7 @@ export default async function (t) {
   await t.waitUntil(() => of("realm:wander_state", (m) => m.player === p.id).length > 0, { timeout: 300, message: "saga sends realm:wander_state" });
 
   // --- A pilgrim Stranger: a villager in a cleric's look, protected, walking.
+  // eslint-disable-next-line prefer-const -- v is reassigned later, s1 is not
   let { m: s1, e: v } = await spawnFor(p, { archetype: "pilgrim", stranger: true });
   await t.wait(5);
   t.log("pilgrim:", s1.name, v.typeId, v.nameTag);
@@ -226,7 +227,7 @@ export default async function (t) {
   t.check(spy.typeId === "minecraft:villager_v2" && spy.matches({ families: ["fisherman"] }), "the sailor is a fisherman villager");
   p.teleport({ x: h.x + 2, y: h.y, z: h.z });
   await t.wait(10);
-  let since = t.tick;
+  const since = t.tick;
   wdebug({ player: p.id, action: "accuse", wid: h.wid });
   await t.waitUntil(() => of("realm:wander_turn", (m) => m.wid === h.wid, since).length > 0, { timeout: 60, message: "the sailor turns" });
   await t.waitUntil(() => ents(`wander:k:${h.wid}`).length === 0, { timeout: 40, message: "the villager is gone" });

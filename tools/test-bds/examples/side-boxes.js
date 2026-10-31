@@ -250,11 +250,11 @@ export default async function (t) {
   since = t.tick;
   await set("hud_bp", "where", "hotbar", a);
   await t.waitUntil(() => sides.find((s) => s.tick >= since && s.m.from === "hud" && s.m.text === ""), { timeout: 20, message: "the HUD leaves its box" });
-  await t.waitUntil(() => t.messages(a, { kind: "actionbar", pack: "hud_bp", since }).find((m) => /X -?\d+  Y -?\d+/.test(m.plain)), { timeout: 60, message: "the HUD on the hotbar" });
+  await t.waitUntil(() => t.messages(a, { kind: "actionbar", pack: "hud_bp", since }).find((m) => /X -?\d+ {2}Y -?\d+/.test(m.plain)), { timeout: 60, message: "the HUD on the hotbar" });
   await set("hud_bp", "where", "left4", a);
   since = t.tick;
   const h = await t.waitUntil(() => firstBoxBy(a, "hud_bp", since), { timeout: 40, message: "the HUD back in a box" });
-  t.check(/X -?\d+  Y -?\d+/.test(decode(h.subtitle).out.left4.replace(/§./g, "")), "HUD in left4");
+  t.check(/X -?\d+ {2}Y -?\d+/.test(decode(h.subtitle).out.left4.replace(/§./g, "")), "HUD in left4");
   t.check(sides.every((s) => JSON.stringify(s.m).length < 2048), "every realm:side under 2048");
   for (const pig of pigs) try { pig.remove(); } catch {}
 }

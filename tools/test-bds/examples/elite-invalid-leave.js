@@ -12,7 +12,7 @@ export default async function (t) {
     await t.wait(10);
   }
   // The same commands for a player who stays still work (the guard skips only the gone).
-  let since = t.tick;
+  const since = t.tick;
   t.assert(t.cmd(keep, "/realm:champions_near").ok, "/realm:champions_near ran for the player who stayed");
   const m = await t.waitMessage(keep, /within 64 blocks/, { timeout: 40, since });
   t.check(!!m, `the player who stayed got the list (${m?.plain})`);

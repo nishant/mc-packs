@@ -55,7 +55,7 @@ export default async function (t) {
   await t.waitUntil(() => of("realm:wander_state", (m) => m.player === p.id).length > 0, { timeout: 300, message: "saga sends realm:wander_state" });
 
   // A traveler Stranger: talk, accept the request.
-  let since = t.tick;
+  const since = t.tick;
   for (const yaw of [0, 90, 180, 270]) {
     p.teleport(p.location, { rotation: { x: 0, y: yaw } });
     await t.wait(2);
@@ -102,7 +102,7 @@ export default async function (t) {
   // Already invisible (a world saved that way): shows again within a second or two.
   if (z.isValid) z.remove();
   try {
-    t.server(`/effect @e[tag=\"wander:k:${s.wid}\"] invisibility 120 0 true`);
+    t.server(`/effect @e[tag="wander:k:${s.wid}"] invisibility 120 0 true`);
   } catch {}
   await t.wait(5);
   t.log(`after /effect: invisible ${!!tr.getEffect("invisibility")}`);

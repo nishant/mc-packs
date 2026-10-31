@@ -158,7 +158,7 @@ test("O27 review: a new claim starts with a last visit, and an owner standing in
   const w = await world({ claims: [] });
   w.ann.location = { x: 0, y: 64, z: 0 };
   w.sim.run("realm:claim", w.ann);
-  let f = await w.sim.nextForm();
+  const f = await w.sim.nextForm();
   w.sim.answer({ selection: f.form.buttons.findIndex((b) => /Claim/i.test(b)) });
   await w.sim.settle();
   while (w.sim.pending.length) w.sim.answer({ canceled: true });

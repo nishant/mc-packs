@@ -95,7 +95,7 @@ function solve(clue, from) {
   let deg;
   if (/bearing a little|a touch toward|leaning toward/.test(c)) {
     const a = ANGLE[cs[0]], b = ANGLE[cs[1]];
-    let diff = ((b - a + 540) % 360) - 180;
+    const diff = ((b - a + 540) % 360) - 180;
     deg = a + Math.sign(diff) * 22.5;
   } else if (/between|meets/.test(c)) {
     const va = vec(ANGLE[cs[0]], 1), vb = vec(ANGLE[cs[1]], 1);

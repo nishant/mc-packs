@@ -166,7 +166,7 @@ export default async function (t) {
   t.check(moon.length === 1 && moon[0].reason === "act5_lantern:long_night", `one Blood Moon request: ${JSON.stringify(requests.slice(n0))}`);
 
   // --- 5. The Listening Deep ------------------------------------------------------------------------
-  let got = await talk(p, "ida");
+  const got = await talk(p, "ida");
   t.check(got.some((o) => o.key === "start:listening_deep" && o.label.includes("The Listening Deep")), `Ida offers The Listening Deep: ${JSON.stringify(got)}`);
   debug(p, { action: "jump", story: "listening_deep", chapter: "gauntlet" });
   await t.wait(5);

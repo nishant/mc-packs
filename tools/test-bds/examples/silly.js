@@ -54,10 +54,10 @@ export default async function (t) {
   await cfg("maxPerItem", 2);
   await t.wait(5);
   // Remove one.
-  let f = t.waitForm(p);
+  const f = t.waitForm(p);
   t.cmd(p, "/realm:silly");
-  let menu = await f;
-  let g = t.waitForm(p);
+  const menu = await f;
+  const g = t.waitForm(p);
   menu.answer("Remove a silly enchant");
   const rm = await g;
   const victim = rm.buttons.find((b) => !/Hyper Jump|Back/.test(b));

@@ -29,7 +29,7 @@ export default async function (t) {
   t.log(`Ann stands on y ${ground} at ${home.x}, ${home.z}`);
   t.server("/time set 13000");
   await t.seconds(2);
-  let since = t.tick;
+  const since = t.tick;
   t.assert(t.cmd(ann, "/realm:moon_set blood").ok, "moon_set blood ran");
   await t.waitMessage(ann, /Blood Moon rises/, { since, timeout: 100 });
 

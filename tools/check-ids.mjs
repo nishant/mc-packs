@@ -264,7 +264,7 @@ for (const folder of folders) {
 }
 
 /** @type {Record<string, string[]>} */
-let allow = {};
+const allow = {};
 /** @type {Record<string, string>} */
 let reasons = {};
 try {

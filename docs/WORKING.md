@@ -182,3 +182,7 @@ One big feature session cost about $177 at API rates: 572M tokens, of which 561M
 - **Trim output:** `| tail`, `--quiet`, and `fields`/`minimal_output` on GitHub list calls.
 - **Split sessions at PR boundaries.** The three long sessions each covered 4-7 PRs. When a PR merges, put what's left (versions bumped, what still needs publishing) in its body and start the next piece of work in a new session that reads it, instead of carrying the whole build history.
 - Stop-hook "checkpoint" commits (21 here, 10 in hosting) mean a turn ran too long: give that work to subagents next time.
+
+## Lint backlog (tools/)
+
+`npm run lint` (ESLint, `eslint.config.mjs`) covers `tools/` only. At adoption (2026-10-31) two rules are warnings with pre-existing hits: `no-unused-vars` (109) and `no-empty` (115, mostly bare `catch {}`). Fix them gradually (an empty catch gets a comment saying why), then set both back to "error" in the config. Never edit `tools/*-shared.js` just for lint: they are synced into the packs.

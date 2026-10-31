@@ -58,7 +58,7 @@ test("a finished install is left alone: no download, nothing rewritten", (t) => 
 
 test("CI runs the Realm Bundle smoke test after check and build, bounded, on a supported OS", () => {
   const smoke = workflow.slice(workflow.indexOf("\n  bds-smoke:"));
-  assert.match(workflow, /\n  check:\n[\s\S]*npm run check\n[\s\S]*npm run build\n/, "the offline check and build job stays");
+  assert.match(workflow, /\n {2}check:\n[\s\S]*npm run check\n[\s\S]*npm run build\n/, "the offline check and build job stays");
   assert.match(smoke, /needs: check\n/);
   assert.match(smoke, /runs-on: ubuntu-24\.04/);
   assert.match(smoke, /timeout-minutes: 25\n/);

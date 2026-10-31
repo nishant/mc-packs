@@ -487,9 +487,9 @@ test("tied scores share a place in My stats and the leaderboard, as on the ticke
   assert.match(carl, /Blocks mined: 2 \(#3 of 3\)/, `Carl, below two tied players, is third: ${carl}`);
   const { STATS } = await import(new URL("../packs/stats_bp/scripts/stats.js", import.meta.url).href);
   const lb = (await open(many[2], 1, STATS.findIndex((st) => st.id === "mined"))).find((b) => /Carl/.test(b)) ?? "";
-  assert.match(lb, /1\. Ann  5/, `leaderboard: ${lb}`);
-  assert.match(lb, /1\. Bob  5/, `the leaderboard numbers tied scores alike: ${lb}`);
-  assert.match(lb, /3\. Carl  2/, `leaderboard: ${lb}`);
+  assert.match(lb, /1\. Ann {2}5/, `leaderboard: ${lb}`);
+  assert.match(lb, /1\. Bob {2}5/, `the leaderboard numbers tied scores alike: ${lb}`);
+  assert.match(lb, /3\. Carl {2}2/, `leaderboard: ${lb}`);
   restoreTicker();
 });
 
