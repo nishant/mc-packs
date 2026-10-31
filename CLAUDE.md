@@ -38,6 +38,7 @@ Nish's standing rule: build, merge, release and deploy without asking; stop only
 ```bash
 npm run check 2>&1 | tail -30   # every check (tsc, check-pipeline, ASCII, docs coverage, commands, stories, ids, script events, action bar, event guards, line endings, unit tests, settings/zones/side/diag/labels copies, catalogs, news, generated packs, versions last); stops at the first failure
 npm run test                    # the unit tests alone (tools/**/*.test.mjs)
+npm run lint                    # ESLint over tools/ only (packs are not linted; part of npm run check)
 npm run build 2>&1 | tail -3    # dist/<folder>.mcpack
 npm run bundle -- --all         # or --resources; --list [--json]; see the bundle-packs skill. Refreshes the Realm News release first
 npm run gen:rain                # or gen:sky, gen:translucent, gen:platypus, gen:build, gen:glyphs: regenerate a resource pack (rain sounds need ffmpeg with libvorbis; their --check in npm run check doesn't)
