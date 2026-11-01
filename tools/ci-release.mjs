@@ -15,7 +15,9 @@
 // deploy before it asks for any new URL (Cloudflare caches a 404). The assets must exist before the deploy, or it
 // could not fetch them.
 //
-// Without either flag it does everything in one go (open the PR, merge it, check-live), for manual runs. Nothing new to
+// Without either flag it does everything in one go (open the PR, merge it, check-live), for manual runs, but only while
+// hosting has no tools/fetch-packs.mjs: once it has, the new versions must be uploaded before the merge, so a change
+// to publish is refused in that mode (use the workflow, or --open-pr, upload, --merge-pr). Nothing new to
 // publish and an up-to-date realm page: no PR, check-live only (in --open-pr too, since there is nothing to merge). So
 // a rerun, or a run after a session already published by hand, does no harm. --no-merge stops after the commit (a dry
 // run of the hosting side: nothing is pushed); --no-live skips check-live.
@@ -206,12 +208,17 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   // Merge a PR (GitHub works out mergeability a moment after it opens: retry a few times before giving up), then make
   // this checkout the merged master, which check-live compares the live site with.
   const mergeAndCheckout = (/** @type {string} */ branch) => {
-    let merge = { ok: false, out: "", stdout: "" };
-    for (let i = 0; i < 6 && !merge.ok; i++) {
-      if (i) spawnSync("sleep", ["10"]);
-      merge = run("gh", ["pr", "merge", branch, "--merge"], hosting);
+    // A rerun after the merge itself succeeded (e.g. "Re-run failed jobs" after check-live failed): skip the merge.
+    const state = run("gh", ["pr", "view", branch, "--json", "state", "--jq", ".state"], hosting);
+    const alreadyMerged = state.ok && state.stdout.trim().split("\n").at(-1) === "MERGED";
+    if (!alreadyMerged) {
+      let merge = { ok: false, out: "", stdout: "" };
+      for (let i = 0; i < 6 && !merge.ok; i++) {
+        if (i) spawnSync("sleep", ["10"]);
+        merge = run("gh", ["pr", "merge", branch, "--merge"], hosting);
+      }
+      step("gh pr merge", merge);
     }
-    step("gh pr merge", merge);
     report.merged = true;
     step("git fetch", git("fetch", "-q", "origin", "master"));
     step("git checkout master", git("checkout", "-q", "--detach", "origin/master"));
@@ -287,6 +294,10 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
     step("git add", git("add", "-A", "minecraft"));
     step("git commit", git("commit", "-q", "-m", `${title}\n\nReleased by nishant/mc-packs' release workflow from ${report.sourceSha ?? "an unknown commit"}.`));
     if (opt["no-merge"]) finish(0);
+    // The deploy fetches new versions from the packs-<slug> releases, so merging before they are uploaded breaks it.
+    if (chosen.mode === "all" && existsSync(join(mc, "tools", "fetch-packs.mjs"))) {
+      step("all-in-one mode", { ok: false, out: "Refusing to open and merge the hosting PR without uploading the new pack versions first (the deploy would 404 on them). Run the release workflow, or run --open-pr, upload the new .mcpack files to their packs-<slug> releases, then --merge-pr <branch>." });
+    }
     step("git push", git("push", "-q", "-u", "origin", branch));
     const body = [`Published by the mc-packs release workflow from nishant/mc-packs@${report.sourceSha ?? "?"}. Merging deploys.`, "", ...fresh.map((x) => `- ${x.slug} ${x.version} (${x.what})`)].join("\n");
     const pr = step("gh pr create", run("gh", ["pr", "create", "--base", "master", "--head", branch, "--title", title, "--body", body], hosting));
