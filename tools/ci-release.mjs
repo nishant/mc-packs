@@ -1,17 +1,24 @@
 // The hosting half of a release, for CI (.github/workflows/release.yml): what CLAUDE.md's "Ship every change" steps 2-3
 // ask of a session, run from a checkout of master after its checks passed.
 //
-//   node tools/ci-release.mjs --hosting <nishant/hosting checkout> [--from <mc-packs checkout>] [--no-merge] [--no-live]
+//   node tools/ci-release.mjs --hosting <nishant/hosting checkout> [--from <mc-packs checkout>] [--open-pr | --merge-pr <branch>] [--no-merge] [--no-live]
 //
-// In <hosting>/minecraft it runs publish-packs (with the notes from release/notes.json that no published version has
-// yet), archive-packs --prune (pack versions older than the newest 5 whose GitHub Release asset is verified are removed
-// from hosting; the upload itself is the release workflow's separate `archive` job), pack-docs, pack-docs' check and
-// check-site realm; when anything under minecraft/ changed it commits that on a
-// new branch, opens a PR to master and merges it with a merge commit (gh, with GH_TOKEN; that merge is the deploy),
-// then checks out the merged master and runs check-live, which waits for the deploy before it asks for any new URL
-// (Cloudflare caches a 404). Nothing new to publish and an up-to-date realm page: no PR, check-live only. So a rerun,
-// or a run after a session already published by hand, does no harm. --no-merge stops after the commit (a dry run of
-// the hosting side: nothing is pushed); --no-live skips check-live.
+// In <hosting>/minecraft it runs fetch-packs (each pack's newest version onto disk, which publish-packs compares a new
+// build with), publish-packs (with the notes from release/notes.json that no published version has yet), archive-packs
+// --prune (adds `archive` URLs to packs.json entries past the newest 5), pack-docs, pack-docs' check and check-site
+// realm; when anything under minecraft/ changed it commits that on a new branch and opens a PR to master in hosting
+// (gh, with GH_TOKEN). Merging that PR is the deploy, and the deploy fetches the newest 5 versions of every pack from
+// the packs-<slug> releases of nishant/mc-packs. So the release workflow uses two modes, with its `upload` job between
+// them: --open-pr stops after `gh pr create` (it writes branch=<name> and pr=<url> to $GITHUB_OUTPUT, branch= empty when
+// nothing changed), the `upload` job puts every new .mcpack into its release and checks the newest 5 of each pack, and
+// only then --merge-pr <branch> merges that PR, checks out the merged master and runs check-live, which waits for the
+// deploy before it asks for any new URL (Cloudflare caches a 404). The assets must exist before the deploy, or it
+// could not fetch them.
+//
+// Without either flag it does everything in one go (open the PR, merge it, check-live), for manual runs. Nothing new to
+// publish and an up-to-date realm page: no PR, check-live only (in --open-pr too, since there is nothing to merge). So
+// a rerun, or a run after a session already published by hand, does no harm. --no-merge stops after the commit (a dry
+// run of the hosting side: nothing is pushed); --no-live skips check-live.
 //
 // It writes a Markdown report to $GITHUB_STEP_SUMMARY (or stdout) and exits non-zero on the first failing step.
 // What it never does: pass --allow-dirty, force anything, or upload to the Realm (the owner does that).
@@ -72,8 +79,42 @@ export function parseArchive(stdout) {
 }
 
 /**
+ * Which mode the flags ask for: "all" (neither flag), "open-pr" or "merge-pr" (with its branch). The two flags exclude
+ * each other, and --merge-pr needs a branch name.
+ * @param {{ "open-pr"?: boolean, "merge-pr"?: string }} opt
+ * @returns {{ mode: "all" | "open-pr" } | { mode: "merge-pr", branch: string } | { error: string }}
+ */
+export function modeOf(opt) {
+  const merge = opt["merge-pr"];
+  if (opt["open-pr"] && merge !== undefined) return { error: "--open-pr and --merge-pr exclude each other" };
+  if (merge !== undefined) return merge.trim() ? { mode: "merge-pr", branch: merge.trim() } : { error: "--merge-pr needs a branch name" };
+  return { mode: opt["open-pr"] ? "open-pr" : "all" };
+}
+
+/**
+ * The `key=value` lines the workflow reads from $GITHUB_OUTPUT. A value cannot span lines there, so only its first line
+ * is kept. Undefined values are left out.
+ * @param {Record<string, string | undefined>} outputs
+ */
+export function outputLines(outputs) {
+  return Object.entries(outputs).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${String(v).split("\n")[0].trim()}\n`).join("");
+}
+
+/**
+ * Write the outputs to the file $GITHUB_OUTPUT names, or print them when it is unset.
+ * @param {Record<string, string | undefined>} outputs
+ * @param {string | undefined} file
+ * @param {(text: string) => void} [print]
+ */
+export function writeOutputs(outputs, file, print = (t) => process.stdout.write(t)) {
+  const text = outputLines(outputs);
+  if (file) appendFileSync(file, text);
+  else print(text);
+}
+
+/**
  * The job summary, in Markdown.
- * @param {{ sourceSha?: string, rows: { slug: string, version: string, what: string }[], used: string[][], archive?: string, bundle?: string, resources?: string, pr?: string, merged?: boolean, changed: boolean, live?: string, failed?: { step: string, output: string } }} r
+ * @param {{ sourceSha?: string, rows: { slug: string, version: string, what: string }[], used: string[][], fetch?: string, archive?: string, bundle?: string, resources?: string, pr?: string, merged?: boolean, changed: boolean, live?: string, failed?: { step: string, output: string } }} r
  */
 export function summaryMarkdown(r) {
   const fresh = r.rows.filter((x) => x.what !== "unchanged");
@@ -91,9 +132,10 @@ export function summaryMarkdown(r) {
     for (const [to, text] of r.used) out.push(`- ${to}: ${text}`);
     out.push("");
   }
+  if (r.fetch) out.push(`fetch-packs: ${r.fetch}`, "");
   if (r.archive) out.push(`Archive: ${r.archive}`, "");
   if (r.bundle || r.resources) out.push(`Realm Bundle **${r.bundle ?? "?"}**, Realm Resources **${r.resources ?? "?"}** (latest in packs.json).`, "");
-  if (r.pr) out.push(`Hosting PR: ${r.pr}${r.merged ? " (merged: deploying)" : " (not merged)"}`, "");
+  if (r.pr) out.push(`Hosting PR: ${r.pr}${r.merged ? " (merged: deploying)" : " (open, not merged: the merge job merges it after the upload job)"}`, "");
   else if (!r.failed) out.push(r.changed ? "Hosting changes committed locally only (--no-merge)." : "The realm page was already up to date: no hosting PR.", "");
   if (r.live) out.push(`check-live: ${r.live}`, "");
   if (r.live?.startsWith("passed") && (r.bundle || r.resources)) out.push(`Site up to date: Realm Bundle ${r.bundle ?? "?"} and Realm Resources ${r.resources ?? "?"} are live at https://minecraft.nish.software/realm/.`, "");
@@ -109,9 +151,14 @@ export const shellQuote = (x) => (/[\s'"$`\\]/.test(x) ? `'${x.replaceAll("'", "
 
 // ---------- CLI ----------
 if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
-  const { values: opt } = parseArgs({ options: { hosting: { type: "string" }, from: { type: "string" }, "no-merge": { type: "boolean", default: false }, "no-live": { type: "boolean", default: false }, "live-wait": { type: "string", default: "900" } } });
+  const { values: opt } = parseArgs({ options: { hosting: { type: "string" }, from: { type: "string" }, "open-pr": { type: "boolean", default: false }, "merge-pr": { type: "string" }, "no-merge": { type: "boolean", default: false }, "no-live": { type: "boolean", default: false }, "live-wait": { type: "string", default: "900" } } });
   if (!opt.hosting) {
-    console.error("usage: node tools/ci-release.mjs --hosting <hosting checkout> [--from <mc-packs checkout>] [--no-merge] [--no-live]");
+    console.error("usage: node tools/ci-release.mjs --hosting <hosting checkout> [--from <mc-packs checkout>] [--open-pr | --merge-pr <branch>] [--no-merge] [--no-live]");
+    process.exit(2);
+  }
+  const chosen = modeOf(opt);
+  if ("error" in chosen) {
+    console.error(chosen.error);
     process.exit(2);
   }
   const from = resolve(opt.from ?? join(import.meta.dirname, ".."));
@@ -156,6 +203,41 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
     }
   };
 
+  // Merge a PR (GitHub works out mergeability a moment after it opens: retry a few times before giving up), then make
+  // this checkout the merged master, which check-live compares the live site with.
+  const mergeAndCheckout = (/** @type {string} */ branch) => {
+    let merge = { ok: false, out: "", stdout: "" };
+    for (let i = 0; i < 6 && !merge.ok; i++) {
+      if (i) spawnSync("sleep", ["10"]);
+      merge = run("gh", ["pr", "merge", branch, "--merge"], hosting);
+    }
+    step("gh pr merge", merge);
+    report.merged = true;
+    step("git fetch", git("fetch", "-q", "origin", "master"));
+    step("git checkout master", git("checkout", "-q", "--detach", "origin/master"));
+    latest();
+  };
+  // The live site (waits for the deploy on the hosting PC first).
+  const checkLive = () => {
+    if (opt["no-live"]) return;
+    const live = node("tools/check-live.mjs", "--wait", String(opt["live-wait"]));
+    report.live = live.ok ? "passed" : "FAILED";
+    if (!live.ok) {
+      report.failed = { step: "check-live", output: live.out };
+      finish(1);
+    }
+  };
+
+  // --merge-pr: the publish steps ran in the --open-pr job, and the upload job has put the assets where the deploy
+  // fetches them. Merge, then check the live site.
+  if (chosen.mode === "merge-pr") {
+    const view = run("gh", ["pr", "view", chosen.branch, "--json", "url", "--jq", ".url"], hosting);
+    report.pr = (view.ok && view.stdout.trim().split("\n").at(-1)) || chosen.branch;
+    mergeAndCheckout(chosen.branch);
+    checkLive();
+    finish(0);
+  }
+
   // 1. Notes: the lines no published version has yet.
   const notesPath = join(from, NOTES_FILE);
   let notesFile;
@@ -173,8 +255,13 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const { args, used } = publishArgs(notesFile, latest(), current);
   report.used = used;
 
-  // 2. Publish, then the realm page and its checks. pack-docs' check flag is spelled '--check' here on purpose: this
+  // 2. Put each pack's newest version on disk (hosting no longer tracks .mcpack files; publish-packs compares a new build
+  //    with it), publish, then the realm page and its checks. pack-docs' check flag is spelled '--check' here on purpose: this
   //    tool has no check mode of its own for check-pipeline to look for.
+  if (existsSync(join(mc, "tools", "fetch-packs.mjs"))) {
+    step("fetch-packs", node("tools/fetch-packs.mjs", "--keep", "1"));
+    report.fetch = "newest version of each pack fetched";
+  } else report.fetch = "skipped (no tools/fetch-packs.mjs in hosting)";
   const pub = step("publish-packs", node("tools/publish-packs.mjs", "--from", from, ...args));
   report.rows = parseReport(pub.stdout);
   latest();
@@ -204,28 +291,15 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
     const body = [`Published by the mc-packs release workflow from nishant/mc-packs@${report.sourceSha ?? "?"}. Merging deploys.`, "", ...fresh.map((x) => `- ${x.slug} ${x.version} (${x.what})`)].join("\n");
     const pr = step("gh pr create", run("gh", ["pr", "create", "--base", "master", "--head", branch, "--title", title, "--body", body], hosting));
     report.pr = pr.stdout.trim().split("\n").at(-1);
-    // GitHub works out mergeability a moment after the PR opens: retry a few times before giving up.
-    let merge = { ok: false, out: "", stdout: "" };
-    for (let i = 0; i < 6 && !merge.ok; i++) {
-      if (i) spawnSync("sleep", ["10"]);
-      merge = run("gh", ["pr", "merge", branch, "--merge"], hosting);
+    if (chosen.mode === "open-pr") {
+      // Merging waits for the upload job (see the header): hand the branch to the workflow.
+      writeOutputs({ branch, pr: report.pr }, process.env.GITHUB_OUTPUT);
+      finish(0);
     }
-    step("gh pr merge", merge);
-    report.merged = true;
-    // check-live compares the live site with this checkout: make it the merged master.
-    step("git fetch", git("fetch", "-q", "origin", "master"));
-    step("git checkout master", git("checkout", "-q", "--detach", "origin/master"));
-    latest();
-  }
+    mergeAndCheckout(branch);
+  } else if (chosen.mode === "open-pr") writeOutputs({ branch: "" }, process.env.GITHUB_OUTPUT);
 
-  // 4. The live site (waits for the deploy on the hosting PC first).
-  if (!opt["no-live"]) {
-    const live = node("tools/check-live.mjs", "--wait", String(opt["live-wait"]));
-    report.live = live.ok ? "passed" : "FAILED";
-    if (!live.ok) {
-      report.failed = { step: "check-live", output: live.out };
-      finish(1);
-    }
-  }
+  // 4. The live site.
+  checkLive();
   finish(0);
 }

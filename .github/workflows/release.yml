@@ -8,11 +8,17 @@
 # how to add it, and succeeds. It is idempotent: with nothing new to publish and an up-to-date realm page it opens no
 # PR and only runs check-live, so a rerun does no harm. This workflow is the only release path: sessions never publish.
 #
-# Archiving old pack versions (only the newest 5 of each pack stay in hosting git; older ones become assets of the
-# packs-<slug> release on nishant/mc-packs) runs in two phases, so the token that can write mc-packs releases never runs
-# a package install: the `archive` job below uploads (GITHUB_TOKEN with contents: write, node built-ins and gh only), and
-# the `release` job's ci-release.mjs prunes (deletes hosting's local copies of versions whose asset is verified by size
-# and digest; it only needs read access, ARCHIVE_READ_TOKEN). So versions uploaded by one run are pruned by the next.
+# Pack files are not committed to hosting. Every pack version is an asset of the packs-<slug> release of this repo, and
+# hosting's deploy fetches the newest 5 versions of each pack from there. So the assets must exist before the hosting PR
+# that lists a version merges, and the work is three jobs, so the token that can write this repo's releases never runs a
+# package install:
+#   release  builds, commits and opens the hosting PR (ci-release.mjs --open-pr) without merging it, and hands the new
+#            .mcpack files to the next job as the artifact `packs`;
+#   upload   (GITHUB_TOKEN with contents: write; node built-ins and gh only) uploads every .mcpack on disk that has no
+#            asset yet (archive-packs --upload --keep 0), then checks that the newest 5 versions of every pack have
+#            assets (--check). It always runs, even with no PR, so the first run after this shipped backfilled the
+#            versions that then existed only in hosting git;
+#   merge    merges the hosting PR (ci-release.mjs --merge-pr; that is the deploy) and runs check-live.
 name: release
 on:
   workflow_run:
@@ -56,6 +62,8 @@ jobs:
     if: needs.token.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      branch: ${{ steps.release.outputs.branch }}
     steps:
       - name: Check out mc-packs master
         uses: actions/checkout@v4
@@ -87,17 +95,30 @@ jobs:
         run: |
           npm install --no-save --no-package-lock --no-audit --no-fund
           npx playwright install --with-deps chromium
-      - name: Release
+      - name: Release (open the hosting PR, do not merge it)
+        id: release
         env:
           GH_TOKEN: ${{ secrets.HOSTING_TOKEN }}
           ARCHIVE_READ_TOKEN: ${{ github.token }}
         run: |
           git -C hosting config user.name "mc-packs release"
           git -C hosting config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          node mc-packs/tools/ci-release.mjs --hosting hosting --from mc-packs
-  archive:
-    # Phase one of the archive: upload pack versions beyond the newest 5 to the packs-<slug> releases of this repo. It runs
-    # after `release`, which merged hosting's packs.json, and installs nothing: node built-ins and the gh CLI only.
+          node mc-packs/tools/ci-release.mjs --hosting hosting --from mc-packs --open-pr
+      # The pack files on disk (fetched newest versions plus any new build) for the upload job. The only include pattern's
+      # fixed prefix is hosting/minecraft/site/packs, so the artifact keeps <slug>/<file> relative to it; the excluded
+      # latest.mcpack copies are not assets.
+      - name: Hand the pack files to the upload job
+        uses: actions/upload-artifact@v4
+        with:
+          name: packs
+          path: |
+            hosting/minecraft/site/packs/**/*.mcpack
+            !hosting/minecraft/site/packs/**/latest.mcpack
+          if-no-files-found: ignore
+          retention-days: 3
+  upload:
+    # Puts every pack version into its packs-<slug> release before the hosting PR can merge. It installs nothing: node
+    # built-ins and the gh CLI only.
     needs: [token, release]
     if: needs.token.outputs.ready == 'true'
     runs-on: ubuntu-latest
@@ -109,15 +130,67 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nishant/hosting
-          ref: master
+          ref: ${{ needs.release.outputs.branch || 'master' }}
           token: ${{ secrets.HOSTING_TOKEN }}
           persist-credentials: false
           path: hosting
           fetch-depth: 1
+      # No artifact when nothing was on disk.
+      - name: Download the pack files
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: packs
+          path: hosting/minecraft/site/packs
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Upload older pack versions
+      - name: Upload every pack version that has no asset yet
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node hosting/minecraft/tools/archive-packs.mjs --upload --keep 5 --repo ${{ github.repository }}
+        run: node hosting/minecraft/tools/archive-packs.mjs --upload --keep 0 --repo ${{ github.repository }}
+      - name: Check the newest 5 versions of every pack have assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node hosting/minecraft/tools/archive-packs.mjs --check --keep 5 --repo ${{ github.repository }}
+  merge:
+    # Merging the hosting PR is the deploy, so it waits for the upload job.
+    needs: [token, release, upload]
+    if: needs.release.outputs.branch != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out mc-packs master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          path: mc-packs
+          fetch-depth: 0
+      - name: Check out nishant/hosting
+        uses: actions/checkout@v4
+        with:
+          repository: nishant/hosting
+          ref: master
+          token: ${{ secrets.HOSTING_TOKEN }}
+          path: hosting
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mc-packs/package-lock.json
+      - name: Install the mc-packs tools
+        working-directory: mc-packs
+        run: npm ci
+      - name: Install the hosting tools
+        working-directory: hosting/minecraft
+        run: |
+          npm install --no-save --no-package-lock --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Merge the hosting PR and check the live site
+        env:
+          GH_TOKEN: ${{ secrets.HOSTING_TOKEN }}
+        run: |
+          git -C hosting config user.name "mc-packs release"
+          git -C hosting config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node mc-packs/tools/ci-release.mjs --hosting hosting --from mc-packs --merge-pr ${{ needs.release.outputs.branch }}
