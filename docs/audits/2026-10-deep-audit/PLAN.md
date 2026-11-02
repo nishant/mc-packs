@@ -330,7 +330,7 @@ Packs: titles_bp, nick_bp, welcome_bp, admin_bp.
 
 ### W9. Easy Building (build_bp, build_rp; suggested task 9)
 
-- [ ] **O46 (owner decision)** Easy Building is a port of Effortless Building v5.0 with no license or credit in the
+- [x] **O46 (owner decision; answered 2026-10-19, see docs/RELEASE_TODO.md)** Easy Building is a port of Effortless Building v5.0 with no license or credit in the
   pack. Ask the owner to confirm the upstream license and the credit wording, then add a credits file to the pack and
   a line in PACKS.md. Publish no wording the owner hasn't approved.
 - [ ] **O47** BlockPlacer has 16 `<color>_bed` cases (Java ids), but Bedrock has one `minecraft:bed` with a color
@@ -534,17 +534,19 @@ in W2.
 
 ## 5. Owner decisions (ask nishant; do not decide for him)
 
-- [ ] **O46** The Effortless Building credit and license (blocks W9's credit item).
-- [ ] **O63** Public release packaging: ship build_bp and translucent_bp outside the Realm Bundle; turn slots_bp off by
+All answered on 2026-10-19 (the owner answers are in OPEN.md); nothing here waits on the owner.
+
+- [x] **O46** (answered: no change now; the public-release item is in docs/RELEASE_TODO.md) The Effortless Building credit and license (blocks W9's credit item).
+- [x] **O63** (answered: keep every pack, two bundles, slots on) Public release packaging: ship build_bp and translucent_bp outside the Realm Bundle; turn slots_bp off by
   default for public servers; maybe merge harvest, leaves, durability, phantom and refill into one Quality of Life
   pack. The integration review recommends removing nothing.
-- [ ] **O64** Story finale rewards are above the bible's scale (kept as written for now): keep them or rescale?
-- [ ] **O65** Notes for the Realm:
+- [x] **O64** (answered: keep the four finale rewards) Story finale rewards are above the bible's scale (kept as written for now): keep them or rescale?
+- [x] **O65** (acknowledged) Notes for the Realm:
   - 3 Essentials+ tips disappear on a Realm that never saved its own tip list (`/realm:news_tips` adds them back).
   - The Parties migration can't be rolled back.
   - Existing operators see the setup reminder once.
   - Nickname protection for an offline gamertag starts at that player's next join.
-- [ ] **O66** Upload both new bundles (`realm-bundle-2026.1018.2238.mcpack`, `realm-resources-2026.1018.2238.mcpack`,
+- [x] **O66** (the owner uploads every release; standing practice) Upload both new bundles (`realm-bundle-2026.1018.2238.mcpack`, `realm-resources-2026.1018.2238.mcpack`,
   from https://mc.nish.software/realm/) to the Realm together, since diag.js and the shared copies changed in both.
   Then upload the bundles from each later publish.
 - [x] **O67 disposition:** close #84 and #86 unmerged, retain their branches, rebuild the outcomes in W6/O37 and
