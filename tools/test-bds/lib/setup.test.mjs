@@ -70,6 +70,6 @@ test("CI runs the Realm Bundle smoke test after check and build, bounded, on a s
   assert.equal(step, header, "CI runs exactly the command in the scenario's header");
   assert.match(step, /--bundle dist\/realm_bundle\.mcpack/);
   assert.match(smoke, /run: node tools\/test-bds\/run\.mjs[^\n]*\n\s+timeout-minutes: 10\n/);
-  assert.match(smoke, /if: always\(\)\n\s+uses: actions\/upload-artifact@v4/);
+  assert.match(smoke, /if: always\(\)\n\s+uses: actions\/upload-artifact@[0-9a-f]{40} # v4/);
   assert.doesNotMatch(workflow, /secrets\.|--allow-dirty|publish-packs|upload.*realm/i, "CI never publishes or uploads to the Realm");
 });

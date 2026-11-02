@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { modeOf, outputLines, parseArchive, summaryMarkdown, writeOutputs } from "./ci-release.mjs";
+import { mergeArgs, modeOf, outputLines, parseArchive, summaryMarkdown, writeOutputs } from "./ci-release.mjs";
 
 const base = { rows: [], used: [], changed: false };
 
@@ -63,4 +63,9 @@ test("the summary says whether the hosting PR is merged or waiting for the merge
   assert.match(summaryMarkdown({ ...base, changed: true, pr: "https://x/pull/1" }), /open, not merged: the merge job merges it after the upload job/);
   assert.match(summaryMarkdown({ ...base, changed: true, pr: "https://x/pull/1", merged: true }), /merged: deploying/);
   assert.match(summaryMarkdown({ ...base, fetch: "skipped (no tools/fetch-packs.mjs in hosting)" }), /^fetch-packs: skipped \(no tools\/fetch-packs\.mjs in hosting\)$/m);
+});
+
+test("mergeArgs makes a merge commit, pinned to the pushed head when it is known", () => {
+  assert.deepEqual(mergeArgs("release/x"), ["pr", "merge", "release/x", "--merge"]);
+  assert.deepEqual(mergeArgs("release/x", "abc123"), ["pr", "merge", "release/x", "--merge", "--match-head-commit", "abc123"]);
 });

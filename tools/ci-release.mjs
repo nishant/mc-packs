@@ -1,7 +1,7 @@
 // The hosting half of a release, for CI (.github/workflows/release.yml): what CLAUDE.md's "Ship every change" steps 2-3
 // ask of a session, run from a checkout of master after its checks passed.
 //
-//   node tools/ci-release.mjs --hosting <nishant/hosting checkout> [--from <mc-packs checkout>] [--open-pr | --merge-pr <branch>] [--no-merge] [--no-live]
+//   node tools/ci-release.mjs --hosting <nishant/hosting checkout> [--from <mc-packs checkout>] [--open-pr | --merge-pr <branch> [--sha <head>]] [--no-merge] [--no-live]
 //
 // In <hosting>/minecraft it runs fetch-packs (each pack's newest version onto disk, which publish-packs compares a new
 // build with), publish-packs (with the notes from release/notes.json that no published version has yet), archive-packs
@@ -9,9 +9,9 @@
 // realm; when anything under minecraft/ changed it commits that on a new branch and opens a PR to master in hosting
 // (gh, with GH_TOKEN). Merging that PR is the deploy, and the deploy fetches the newest 5 versions of every pack from
 // the packs-<slug> releases of nishant/mc-packs. So the release workflow uses two modes, with its `upload` job between
-// them: --open-pr stops after `gh pr create` (it writes branch=<name> and pr=<url> to $GITHUB_OUTPUT, branch= empty when
-// nothing changed), the `upload` job puts every new .mcpack into its release and checks the newest 5 of each pack, and
-// only then --merge-pr <branch> merges that PR, checks out the merged master and runs check-live, which waits for the
+// them: --open-pr stops after `gh pr create` (it writes branch=<name>, sha=<head> and pr=<url> to $GITHUB_OUTPUT, branch=
+// empty when nothing changed), the `upload` job puts every new .mcpack into its release and checks the newest 5 of each
+// pack, and only then --merge-pr <branch> merges that PR, checks out the merged master and runs check-live, which waits for the
 // deploy before it asks for any new URL (Cloudflare caches a 404). The assets must exist before the deploy, or it
 // could not fetch them.
 //
@@ -21,6 +21,10 @@
 // publish and an up-to-date realm page: no PR, check-live only (in --open-pr too, since there is nothing to merge). So
 // a rerun, or a run after a session already published by hand, does no harm. --no-merge stops after the commit (a dry
 // run of the hosting side: nothing is pushed); --no-live skips check-live.
+//
+// The merge is gated, because merging is the deploy: it waits for the hosting PR's own checks and merges only when every
+// one passed, and with --sha only while the PR's head is still the commit the release job pushed (a push to the branch
+// meanwhile stops it). A red check, or none reported within 5 minutes, fails the run without merging.
 //
 // It writes a Markdown report to $GITHUB_STEP_SUMMARY (or stdout) and exits non-zero on the first failing step.
 // What it never does: pass --allow-dirty, force anything, or upload to the Realm (the owner does that).
@@ -115,6 +119,15 @@ export function writeOutputs(outputs, file, print = (t) => process.stdout.write(
 }
 
 /**
+ * The `gh pr merge` arguments: a merge commit, pinned to the pushed head when it is known.
+ * @param {string} branch
+ * @param {string} [sha]
+ */
+export function mergeArgs(branch, sha) {
+  return ["pr", "merge", branch, "--merge", ...(sha ? ["--match-head-commit", sha] : [])];
+}
+
+/**
  * The job summary, in Markdown.
  * @param {{ sourceSha?: string, rows: { slug: string, version: string, what: string }[], used: string[][], fetch?: string, archive?: string, bundle?: string, resources?: string, pr?: string, merged?: boolean, changed: boolean, live?: string, failed?: { step: string, output: string } }} r
  */
@@ -153,9 +166,9 @@ export const shellQuote = (x) => (/[\s'"$`\\]/.test(x) ? `'${x.replaceAll("'", "
 
 // ---------- CLI ----------
 if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
-  const { values: opt } = parseArgs({ options: { hosting: { type: "string" }, from: { type: "string" }, "open-pr": { type: "boolean", default: false }, "merge-pr": { type: "string" }, "no-merge": { type: "boolean", default: false }, "no-live": { type: "boolean", default: false }, "live-wait": { type: "string", default: "900" } } });
+  const { values: opt } = parseArgs({ options: { hosting: { type: "string" }, from: { type: "string" }, "open-pr": { type: "boolean", default: false }, "merge-pr": { type: "string" }, sha: { type: "string" }, "no-merge": { type: "boolean", default: false }, "no-live": { type: "boolean", default: false }, "live-wait": { type: "string", default: "900" } } });
   if (!opt.hosting) {
-    console.error("usage: node tools/ci-release.mjs --hosting <hosting checkout> [--from <mc-packs checkout>] [--open-pr | --merge-pr <branch>] [--no-merge] [--no-live]");
+    console.error("usage: node tools/ci-release.mjs --hosting <hosting checkout> [--from <mc-packs checkout>] [--open-pr | --merge-pr <branch> [--sha <head>]] [--no-merge] [--no-live]");
     process.exit(2);
   }
   const chosen = modeOf(opt);
@@ -205,17 +218,28 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
     }
   };
 
-  // Merge a PR (GitHub works out mergeability a moment after it opens: retry a few times before giving up), then make
-  // this checkout the merged master, which check-live compares the live site with.
-  const mergeAndCheckout = (/** @type {string} */ branch) => {
+  // The gate (see the header): every check on the hosting PR passed. Checks register a moment after the PR opens, so
+  // "no checks reported" is retried for up to 5 minutes.
+  const waitForChecks = (/** @type {string} */ branch) => {
+    for (let i = 0; i < 20; i++) {
+      const r = run("gh", ["pr", "checks", branch, "--watch", "--fail-fast", "--interval", "30"], hosting);
+      if (r.ok || !/no checks reported/i.test(r.out)) return r;
+      spawnSync("sleep", ["15"]);
+    }
+    return { ok: false, out: "The hosting PR reported no checks within 5 minutes.", stdout: "" };
+  };
+  // Merge a PR once its checks passed (GitHub works out mergeability a moment after it opens: retry a few times before
+  // giving up), then make this checkout the merged master, which check-live compares the live site with.
+  const mergeAndCheckout = (/** @type {string} */ branch, /** @type {string | undefined} */ sha) => {
     // A rerun after the merge itself succeeded (e.g. "Re-run failed jobs" after check-live failed): skip the merge.
     const state = run("gh", ["pr", "view", branch, "--json", "state", "--jq", ".state"], hosting);
     const alreadyMerged = state.ok && state.stdout.trim().split("\n").at(-1) === "MERGED";
     if (!alreadyMerged) {
+      step("hosting PR checks", waitForChecks(branch));
       let merge = { ok: false, out: "", stdout: "" };
       for (let i = 0; i < 6 && !merge.ok; i++) {
         if (i) spawnSync("sleep", ["10"]);
-        merge = run("gh", ["pr", "merge", branch, "--merge"], hosting);
+        merge = run("gh", mergeArgs(branch, sha), hosting);
       }
       step("gh pr merge", merge);
     }
@@ -240,7 +264,7 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   if (chosen.mode === "merge-pr") {
     const view = run("gh", ["pr", "view", chosen.branch, "--json", "url", "--jq", ".url"], hosting);
     report.pr = (view.ok && view.stdout.trim().split("\n").at(-1)) || chosen.branch;
-    mergeAndCheckout(chosen.branch);
+    mergeAndCheckout(chosen.branch, opt.sha?.trim() || undefined);
     checkLive();
     finish(0);
   }
@@ -304,10 +328,11 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
     report.pr = pr.stdout.trim().split("\n").at(-1);
     if (chosen.mode === "open-pr") {
       // Merging waits for the upload job (see the header): hand the branch to the workflow.
-      writeOutputs({ branch, pr: report.pr }, process.env.GITHUB_OUTPUT);
+      const head = step("git rev-parse", git("rev-parse", "HEAD")).stdout.trim();
+      writeOutputs({ branch, sha: head, pr: report.pr }, process.env.GITHUB_OUTPUT);
       finish(0);
     }
-    mergeAndCheckout(branch);
+    mergeAndCheckout(branch, step("git rev-parse", git("rev-parse", "HEAD")).stdout.trim());
   } else if (chosen.mode === "open-pr") writeOutputs({ branch: "" }, process.env.GITHUB_OUTPUT);
 
   // 4. The live site.
