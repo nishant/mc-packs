@@ -302,7 +302,7 @@ test("the real pass draws again only when it found something new: a still player
   const sandbox = {
     prefsOf: () => ({ compass: true, radar: true, radius: 24, north: true, terrain: true }), get: () => true, lastSent, views, Date,
     gather: () => ({ markers: found, liveFolk: new Map() }), destination: () => undefined, arrival: () => undefined, arrived: new Map(),
-    regions: new Map(), line2: (r, d) => `${r}|${d}`, OVERWORLD: "minecraft:overworld", DIM_NAMES: {}, G: {}, cutWords: (t) => t, costMs: 0, costPlayers: 0,
+    regions: new Map(), line2: (r, d) => `${r}|${d}`, OVERWORLD: "minecraft:overworld", DIM_NAMES: {}, G: {}, cutWords: (t) => t, costMs: 0, costPlayers: 0, costPassBy: new Map(),
     side: { clear() {}, redraw() {} }, Math,
   };
   const pass = runInVm(`${helpers}\n${functionSource("pass")}\npass`, sandbox);
