@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mergeArgs, modeOf, outputLines, parseArchive, summaryMarkdown, writeOutputs } from "./ci-release.mjs";
+import { mergeArgs, mergeGate, modeOf, outputLines, parseArchive, summaryMarkdown, writeOutputs } from "./ci-release.mjs";
 
 const base = { rows: [], used: [], changed: false };
 
@@ -68,4 +68,11 @@ test("the summary says whether the hosting PR is merged or waiting for the merge
 test("mergeArgs makes a merge commit, pinned to the pushed head when it is known", () => {
   assert.deepEqual(mergeArgs("release/x"), ["pr", "merge", "release/x", "--merge"]);
   assert.deepEqual(mergeArgs("release/x", "abc123"), ["pr", "merge", "release/x", "--merge", "--match-head-commit", "abc123"]);
+});
+
+test("mergeGate merges only on CLEAN, waits while checks run, and stops on conflicts or a block", () => {
+  assert.equal(mergeGate("CLEAN"), "merge");
+  assert.equal(mergeGate("HAS_HOOKS"), "merge");
+  for (const s of ["UNSTABLE", "UNKNOWN", ""]) assert.equal(mergeGate(s), "wait", s);
+  for (const s of ["DIRTY", "BEHIND", "BLOCKED", "DRAFT"]) assert.equal(mergeGate(s), "stop", s);
 });

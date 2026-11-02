@@ -24,7 +24,8 @@
 //
 // The merge is gated, because merging is the deploy: it waits for the hosting PR's own checks and merges only when every
 // one passed, and with --sha only while the PR's head is still the commit the release job pushed (a push to the branch
-// meanwhile stops it). A red check, or none reported within 5 minutes, fails the run without merging.
+// meanwhile stops it). A red check, or none reported within 5 minutes, fails the run without merging. A token that can't
+// read check results (HOSTING_TOKEN is fine-grained) waits on the PR's merge state instead (mergeGate).
 //
 // It writes a Markdown report to $GITHUB_STEP_SUMMARY (or stdout) and exits non-zero on the first failing step.
 // What it never does: pass --allow-dirty, force anything, or upload to the Realm (the owner does that).
@@ -116,6 +117,20 @@ export function writeOutputs(outputs, file, print = (t) => process.stdout.write(
   const text = outputLines(outputs);
   if (file) appendFileSync(file, text);
   else print(text);
+}
+
+/**
+ * The merge gate read from the PR's mergeStateStatus, for a token that may not read check results (a fine-grained
+ * token can't be given the Checks permission, so `gh pr checks` is refused). GitHub works the checks into the state:
+ * CLEAN once every check passed, UNSTABLE while one is pending or after one failed (the two look the same here, so a
+ * failed check fails the run at the time limit), UNKNOWN while it is being worked out.
+ * @param {string} state
+ * @returns {"merge" | "wait" | "stop"}
+ */
+export function mergeGate(state) {
+  if (state === "CLEAN" || state === "HAS_HOOKS") return "merge";
+  if (state === "UNSTABLE" || state === "UNKNOWN" || state === "") return "wait";
+  return "stop"; // DIRTY (conflicts), BEHIND, BLOCKED, DRAFT
 }
 
 /**
@@ -223,10 +238,27 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   const waitForChecks = (/** @type {string} */ branch) => {
     for (let i = 0; i < 20; i++) {
       const r = run("gh", ["pr", "checks", branch, "--watch", "--fail-fast", "--interval", "30"], hosting);
+      if (/not accessible by personal access token/i.test(r.out)) return waitForMergeState(branch);
       if (r.ok || !/no checks reported/i.test(r.out)) return r;
       spawnSync("sleep", ["15"]);
     }
     return { ok: false, out: "The hosting PR reported no checks within 5 minutes.", stdout: "" };
+  };
+  // HOSTING_TOKEN is fine-grained, which can't read check results: the PR's merge state carries them (mergeGate). The
+  // release job opened the PR minutes before this job, so its checks have registered by the first read. Hosting's PR
+  // check takes about 15 minutes; a failed one leaves the state UNSTABLE until the 45-minute limit.
+  const waitForMergeState = (/** @type {string} */ branch) => {
+    let state = "";
+    for (let i = 0; i < 90; i++) {
+      if (i) spawnSync("sleep", ["30"]);
+      const r = run("gh", ["pr", "view", branch, "--json", "mergeStateStatus", "--jq", ".mergeStateStatus"], hosting);
+      if (!r.ok) return r;
+      state = r.stdout.trim().split("\n").at(-1) ?? "";
+      const gate = mergeGate(state);
+      if (gate === "merge") return { ok: true, out: `merge state ${state}`, stdout: "" };
+      if (gate === "stop") return { ok: false, out: `The hosting PR can't be merged (merge state ${state}).`, stdout: "" };
+    }
+    return { ok: false, out: `The hosting PR's checks didn't all pass within 45 minutes (merge state ${state}).`, stdout: "" };
   };
   // Merge a PR once its checks passed (GitHub works out mergeability a moment after it opens: retry a few times before
   // giving up), then make this checkout the merged master, which check-live compares the live site with.
