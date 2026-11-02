@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
-import { pathToFileURL } from "node:url";
 
 import { STORIES } from "../packs/saga_bp/scripts/stories.js";
 
@@ -70,7 +69,7 @@ test("a town set outside the overworld is ignored, absolute places and explicit 
 });
 
 test("town is a registered place; the 15 near-town steps and 7 town stories are exactly the ones anchored", async () => {
-  const stories = await import(pathToFileURL(new URL("packs/saga_bp/scripts/stories.js", root).pathname.replace(/^\/(\w:)/, "$1")).href);
+  const stories = await import(new URL("packs/saga_bp/scripts/stories.js", root).href);
   assert.ok("town" in stories.PLACES);
   const f = fixture();
   assert.deepEqual([...f.TOWN_STORIES].sort(), ["act2_choir", "fest_judge", "fest_speech", "heart_bram", "lost_lambs", "mayors_burden", "singing_forge"]);

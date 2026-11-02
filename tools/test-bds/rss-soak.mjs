@@ -8,6 +8,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** Median of numbers. @param {number[]} v */
 const median = (v) => {
@@ -153,7 +154,7 @@ async function main() {
   const opt = (k, d) => (own.includes(k) ? own[own.indexOf(k) + 1] : d);
   const every = Math.max(1, Number(opt("--every", 5)));
   const outFile = path.resolve(opt("--out", `rss-soak-${Date.now()}.json`));
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  const here = path.dirname(fileURLToPath(import.meta.url));
   const child = spawn(process.execPath, [path.join(here, "run.mjs"), ...runArgs], { stdio: "inherit" });
   const t0 = Date.now();
   /** @type {{ t: number, pid: number, rssMiB: number, hwmMiB: number | null }[]} */
@@ -181,4 +182,4 @@ async function main() {
   process.exit(code);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
