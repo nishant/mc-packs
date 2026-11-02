@@ -16,8 +16,8 @@
 // could not fetch them.
 //
 // Without either flag it does everything in one go (open the PR, merge it, check-live), for manual runs, but only while
-// hosting has no tools/fetch-packs.mjs: once it has, the new versions must be uploaded before the merge, so a change
-// to publish is refused in that mode (use the workflow, or --open-pr, upload, --merge-pr). Nothing new to
+// hosting has no tools/fetch-packs.mjs: once it has, the new versions must be uploaded before the merge, so a run
+// with new pack versions is refused in that mode (use the workflow, or --open-pr, upload, --merge-pr). Nothing new to
 // publish and an up-to-date realm page: no PR, check-live only (in --open-pr too, since there is nothing to merge). So
 // a rerun, or a run after a session already published by hand, does no harm. --no-merge stops after the commit (a dry
 // run of the hosting side: nothing is pushed); --no-live skips check-live.
@@ -295,7 +295,7 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
     step("git commit", git("commit", "-q", "-m", `${title}\n\nReleased by nishant/mc-packs' release workflow from ${report.sourceSha ?? "an unknown commit"}.`));
     if (opt["no-merge"]) finish(0);
     // The deploy fetches new versions from the packs-<slug> releases, so merging before they are uploaded breaks it.
-    if (chosen.mode === "all" && existsSync(join(mc, "tools", "fetch-packs.mjs"))) {
+    if (chosen.mode === "all" && fresh.length && existsSync(join(mc, "tools", "fetch-packs.mjs"))) {
       step("all-in-one mode", { ok: false, out: "Refusing to open and merge the hosting PR without uploading the new pack versions first (the deploy would 404 on them). Run the release workflow, or run --open-pr, upload the new .mcpack files to their packs-<slug> releases, then --merge-pr <branch>." });
     }
     step("git push", git("push", "-q", "-u", "origin", branch));
