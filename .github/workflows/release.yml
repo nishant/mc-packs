@@ -169,7 +169,7 @@ jobs:
     needs: [token, release, upload]
     if: needs.release.outputs.branch != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75 # up to 45 waiting on the hosting PR, then check-live
     steps:
       - name: Check out mc-packs master
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
