@@ -7,7 +7,7 @@
 // arrows on the radar, other online friends shown by default (showOthers) on the strip and as directional edge arrows
 // on the radar; Death Point, Waystones, Atlas and Townsfolk broadcasts and their pings; the HUD title (top and radar
 // slots decoded byte for byte as hud_rp cuts them); /realm:minimap and /realm:compass toggles; compass and radar
-// switched off clear the slots; the cost with 10 players.
+// switched off clear the slots; the cost with 10 players, and the passes fair when the pass budget runs out.
 //   node tools/test-bds/run.mjs --quiet --flat --only map_bp,npc_bp,death_bp,party_bp,wander_bp,saga_bp,atlas_bp,waystone_bp,mail_bp --scenario tools/test-bds/examples/map.js --timeout 900
 const MARK = "§s§2§r";
 const g = (n) => String.fromCodePoint(0xf300 + n);
@@ -438,37 +438,55 @@ export default async function (t) {
     m.addEffect("slowness", 2000, { amplifier: 255, showParticles: false });
   }
   await t.wait(20);
-  send("realm:map_debug", { player: p.id, action: "cost" });
-  await t.wait(200);
-  since = t.tick;
-  send("realm:map_debug", { player: p.id, action: "cost" });
-  await t.waitUntil(() => of("realm:map_state", () => true, since).length > 0, { timeout: 20 });
-  const c = of("realm:map_state", () => true, since).at(-1).cost;
+  /** One 200-tick cost window: the counters reset, then read. */
+  const costWindow = async () => {
+    send("realm:map_debug", { player: p.id, action: "cost" });
+    await t.wait(200);
+    since = t.tick;
+    send("realm:map_debug", { player: p.id, action: "cost" });
+    await t.waitUntil(() => of("realm:map_state", () => true, since).length > 0, { timeout: 20 });
+    return of("realm:map_state", () => true, since).at(-1).cost;
+  };
+  // The pass scheduler's promise: every player each interval while the pass budget lasts; once it runs out (a slow
+  // runner: 0.41 ms a player pass against high's 0.25 ms a tick, November 2026), the whole budget goes to passes that
+  // come less often but evenly. How many passes fit is the machine's, so the checks are on what the scheduler decides.
+  const fairPasses = (cost, label) => {
+    const budget = cost.passes * cost.passInterval * cost.passPerTick;
+    t.log(`${label}: ${cost.players} player passes over ${cost.passes} passes, ${cost.ms} of ${budget.toFixed(1)} ms of pass budget, ${cost.passFewest} to ${cost.passMost} passes a player`);
+    t.check(cost.players >= cost.passes * (crowd.length - 1) || cost.ms >= budget * 0.8, `${label}: every player passed each interval, or the pass budget spent`);
+    t.check(cost.passFewest >= 1 && cost.passMost - cost.passFewest <= 2, `${label}: passes even across players (${cost.passFewest} to ${cost.passMost})`);
+  };
+  const c = await costWindow();
   t.check(c.scanReads===0,"default-OFF compass crowd performs zero terrain sampling");
   const perPlayer = c.ms / Math.max(1, c.players);
   t.log(`draw: ${c.drawMs} ms of it`);
   t.log(`cost: ${c.ms} ms over ${c.passes} passes, ${c.players} player passes: ${perPlayer.toFixed(3)} ms per player pass, ${(c.ms / Math.max(1, c.passes)).toFixed(2)} ms per pass`);
-  t.check(c.players >= c.passes * 9, "every player drawn each pass");
+  fairPasses(c, "high");
   // A pass runs every 10 ticks, so 1 ms per player pass is 1 ms a tick for 10 players (the bar in WORKING.md).
   // Measured 0.57 to 0.62 on a 4-core container in October 2026, with the first Minimap too (0.5 was too tight).
   t.check(perPlayer < 1, `under 1 ms per player pass (${perPlayer.toFixed(3)})`);
+
+  // The same crowd at budgetLevel low: the pass budget runs out on any machine, as it does at high on a slow runner.
+  await mapBudget(t, "low");
+  fairPasses(await costWindow(), "low");
 }
 
 // The Minimap at budgetLevel high (scenarios can't import: pasted where needed).
-async function mapBudgetHigh(t) {
+const mapBudgetHigh = (t) => mapBudget(t, "high");
+async function mapBudget(t, level) {
   let ack;
   const sub = t.system.afterEvents.scriptEventReceive.subscribe(
     ({ id, message }) => {
       if (id !== "realm:cfg_ack") return;
       try {
         const m = JSON.parse(message);
-        if (m.id === "mapbudget") ack = m;
+        if (m.id === `mapbudget_${level}`) ack = m;
       } catch {}
     },
     { namespaces: ["realm"] },
   );
-  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "mapbudget", pack: "map_bp", key: "budgetLevel", value: "high" }));
-  await t.waitUntil(() => ack, { timeout: 60, message: "budgetLevel high was set" });
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `mapbudget_${level}`, pack: "map_bp", key: "budgetLevel", value: level }));
+  await t.waitUntil(() => ack, { timeout: 60, message: `budgetLevel ${level} was set` });
   t.system.afterEvents.scriptEventReceive.unsubscribe(sub);
-  t.assert(ack.ok, `budgetLevel high: ${ack.error ?? "ok"}`);
+  t.assert(ack.ok, `budgetLevel ${level}: ${ack.error ?? "ok"}`);
 }

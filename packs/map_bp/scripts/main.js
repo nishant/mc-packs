@@ -534,6 +534,8 @@ let costMs = 0;
 let drawMs = 0;
 let costPasses = 0;
 let costPlayers = 0;
+/** Player id -> their passes since the last cost read (realm:map_debug cost: whether the passes stay fair). @type {Map<string, number>} */
+const costPassBy = new Map();
 
 /** A live player's position, if they're online. @param {string} id @param {Player[]} all */
 const onlineById = (id, all) => all.find((p) => p.isValid && p.id === id);
@@ -1809,6 +1811,7 @@ function pass(player, all, seen, now) {
   views.set(idOf(player), view);
   costMs += Date.now() - t0;
   costPlayers++;
+  costPassBy.set(idOf(player), (costPassBy.get(idOf(player)) ?? 0) + 1);
 }
 
 /**
@@ -2233,7 +2236,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   if (roster.delete(playerId)) playersList = [...roster.values()];
   manualScans.cancel(playerId,"Player left",false);
   labPlans.delete(playerId); detailFootprints.delete(playerId);
-  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, retryAt, lastPose]) m.delete(playerId);
+  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, costPassBy, retryAt, lastPose]) m.delete(playerId);
   planNow.delete(playerId);
 });
 
@@ -2642,6 +2645,8 @@ function onEvent(id, m, source) {
         }, persistence: previewPersistence.stats() });
         return;
       }
+      // Per online player: with the pass budget spent, passes come less often but stay even (oldestDue).
+      const passCounts = playersNow().map((q) => costPassBy.get(idOf(q)) ?? 0);
       const preview = { ...previewCost, persistence: previewPersistence.stats(), coverage: player ? terrainBaseMemo.get(player.id)?.coverage : undefined };
       const surface = player ? terrain.store(player.dimension.id, undefined) : undefined;
       const state = {
@@ -2666,7 +2671,7 @@ function onEvent(id, m, source) {
             data: terrain.get(storeFor(player.id, player.dimension.id), s.x, s.z, s.resolution === PREVIEW ? PREVIEW : s.resolution === 1 ? 1 : COL) ?? null,
           })) : [],
         } : undefined,
-        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, keepSends, rebuilds: radarRebuilds, reuses: radarReuses, builds: radarBuilds, turnCheckMs, radarMs, readCost },
+        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, passPerTick: passBudget.perTick, passInterval: INTERVAL, passFewest: passCounts.length ? Math.min(...passCounts) : 0, passMost: passCounts.length ? Math.max(...passCounts) : 0, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, keepSends, rebuilds: radarRebuilds, reuses: radarReuses, builds: radarBuilds, turnCheckMs, radarMs, readCost },
         budgets: { draw: drawBudget.left, rebuild: rebuildBudget.left, pass: passBudget.left, scan: scanBudget.left },
         budgetLevel,
         perTick: BUDGETS.reduce((n, b) => n + b.perTick, 0),
@@ -2681,6 +2686,7 @@ function onEvent(id, m, source) {
         drawMs = 0;
         costPasses = 0;
         costPlayers = 0;
+        costPassBy.clear();
         turnMs = 0;
         turnTicks = 0;
         turnDraws = 0;

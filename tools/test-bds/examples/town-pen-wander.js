@@ -36,10 +36,13 @@ export default async function (t) {
   const count = (type, tagged) => dim.getEntities({ type }).filter((e) => !tagged || e.hasTag(TAG)).length;
   t.check(count("minecraft:sheep", true) === 2 && count("minecraft:chicken", true) === 2, "2 sheep and 2 chickens in the pen");
   // The player stays within 24 blocks of the pen (its checks run) and within 32 of the sheep (script-spawned animals
-  // despawn at random past 32 blocks from players: then they would really be gone).
+  // despawn at random past 32 blocks from players: then they would really be gone). Held in place: in 70 s a sheep
+  // grazing 25 blocks out can wander past 32 and despawn, which failed this check on validate (November 2026).
+  const hold = (e) => e.addEffect("slowness", 4000, { amplifier: 255, showParticles: false });
   p.teleport({ x: 10.5, y: Y, z: 30.5 });
   const sheep = dim.getEntities({ type: "minecraft:sheep", tags: [TAG] });
   sheep[0].teleport({ x: 10.5, y: Y, z: 55.5 });
+  hold(sheep[0]);
   t.log(`a sheep wandered 45 blocks from the pen (id ${sheep[0].id})`);
   // Two pen checks (each at most every 600 ticks once a player has been near for 600).
   await t.wait(1400);
@@ -54,6 +57,7 @@ export default async function (t) {
   const back = dim.getEntities({ type: "minecraft:sheep", location: { x: 12.5, y: Y, z: 56.5 }, maxDistance: 2 }).find((e) => e.id !== sheep[0].id);
   t.assert(back, "the third sheep is there");
   back.addTag(TAG);
+  hold(back);
   t.log(`a third pen sheep 43 blocks out (id ${back.id})`);
   await t.waitUntil(() => count("minecraft:sheep", true) === 2, { timeout: 1400, interval: 20, message: `the pen keeps 2 sheep (${count("minecraft:sheep", true)} tagged)` });
   const untagged = dim.getEntities({ type: "minecraft:sheep" }).filter((e) => !e.hasTag(TAG));
