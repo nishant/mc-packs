@@ -22,14 +22,14 @@ jobs:
       count: ${{ steps.plan.outputs.count }}
       perf: ${{ steps.plan.outputs.perf }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       # Scenario seconds from the latest post-release suite (validate.yml saves them), to balance the shards.
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: suite-times.json
           key: suite-times-${{ github.sha }}
@@ -83,7 +83,7 @@ jobs:
             node -e 'const p=require("./plan.json");console.log(`${p.reason}: **${p.scenarios.length}** scenario(s) in ${p.shards.length} shard(s)${p.packs.length?` (packs: ${p.packs.join(", ")})`:""}`)'
           } >> "$GITHUB_STEP_SUMMARY"
       # What this run carries as passed, and its base: the next push's run builds on it.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: scenarios-carried
           path: carried
@@ -101,7 +101,7 @@ jobs:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     name: scenarios ${{ matrix.shard.index }}/${{ matrix.shard.of }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/bds
@@ -110,7 +110,7 @@ jobs:
           FILTER: ${{ matrix.shard.filter }}
         run: node tools/test-bds/suite.mjs --jobs 2 --retry --filter "$FILTER" --json "$RUNNER_TEMP/suite.json"
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: scenarios-${{ matrix.shard.index }}
           path: |
@@ -125,7 +125,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/bds
@@ -150,7 +150,7 @@ jobs:
           fi
           node tools/test-bds/perf-compare.mjs --base "$T/base-1.json" --base "$T/base-2.json" --head "$T/head-1.json" --head "$T/head-2.json"
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: perf-check
           path: |

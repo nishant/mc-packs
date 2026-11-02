@@ -51,13 +51,13 @@ jobs:
       parallel: ${{ steps.plan.outputs.parallel }}
       base: ${{ steps.plan.outputs.base }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: suite-times.json
           key: suite-times-${{ github.sha }}
@@ -114,7 +114,7 @@ jobs:
       REPEAT: ${{ inputs.repeat || '1' }}
       BASE_SHA: ${{ needs.plan.outputs.base }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/bds
@@ -164,7 +164,7 @@ jobs:
               node tools/test-bds/suite.mjs --jobs 2 --retry --filter "$FILTER" --json "$OUT/suite.json" | tail -40 ;;
           esac
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: validate-${{ matrix.name }}
           path: ${{ runner.temp }}/out
@@ -177,11 +177,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: validate-*
           path: ${{ runner.temp }}/results
@@ -193,7 +193,7 @@ jobs:
         run: node tools/test-bds/validate-report.mjs --dir "$RUNNER_TEMP/results" --base "$BASE_SHA" --head "$GITHUB_SHA" --run "$RUN_URL" --out report.md --times suite-times.json
       - name: Keep the scenario seconds for pr-tests.yml's shards
         if: always() && hashFiles('suite-times.json') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: suite-times.json
           key: suite-times-${{ github.sha }}
