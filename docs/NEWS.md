@@ -7,6 +7,10 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## The Abandoned Mine says where to look
+
+- Into the Deep, The Abandoned Mine: the cave spider and deepslate steps now say they count anywhere. Clear any 10 cave spiders (mineshaft spawners are the easy place) and mine any 40 deepslate below y 0. The mine itself is a small dead end; you only need it for the miners' notes.
+
 ## No more missing last Choir fighter
 
 - At the Gray Ring (and other story fights at a place, like the Smugglers' Cove and the Sky Seal), the last mob could wander off or get stuck where nobody could reach it, and no new one came. Now a mob that nobody in the fight has been near (24 blocks) for 30 seconds is swapped for a fresh one in the area. Stay in the area and it comes to you.

@@ -155,8 +155,8 @@ export const STORIES = [
           "As you leave, Ida says one more thing without turning around.\n\n§eIda:§r If you hear singing down there, you come back up. That's not a suggestion.",
         ],
         objectives: [
-          { type: "defeat", label: "Clear 10 cave spiders from the mine", mobs: ["minecraft:cave_spider"], count: 10 },
-          { type: "mine", label: "Mine 40 deepslate to reach the sealed door", blocks: ["minecraft:deepslate"], count: 40 },
+          { type: "defeat", label: "Clear 10 cave spiders (any mineshaft)", mobs: ["minecraft:cave_spider"], count: 10 },
+          { type: "mine", label: "Mine 40 deepslate (anywhere below y 0)", blocks: ["minecraft:deepslate"], count: 40 },
           {
             type: "inspect",
             label: "Read the miners' last notes at the mine",

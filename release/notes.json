@@ -1,11 +1,11 @@
 {
   "notes": [
-    "Minimap: no change in game. Its operator cost readout (realm:map_debug) also says how evenly the passes went round, for the test that checks it."
+    "Into the Deep: The Abandoned Mine's steps now say what counts. Any 10 cave spiders and any 40 deepslate count, wherever you are; the mine itself is only for the miners' notes."
   ],
   "packNotes": {
-    "map_bp": {
-      "version": "1.5.4",
-      "notes": "No change in game: the realm:map_debug cost readout also gives the pass budget and the fewest and most passes a player got."
+    "saga_bp": {
+      "version": "1.16.19",
+      "notes": "The Abandoned Mine's cave spider and deepslate steps say they count anywhere (any mineshaft, anywhere below y 0) instead of pointing into the mine."
     }
   }
 }
