@@ -24,7 +24,7 @@
     "@minecraft/server": "2.1.0",
     "@minecraft/server-ui": "2.0.0",
     "@minecraft/vanilla-data": "1.26.52",
-    "@nish/ui": "npm:nish-ui@2.1.1",
+    "@nish/ui": "npm:nish-ui@3.0.0",
     "eslint": "^9.39.5",
     "globals": "^17.13.0",
     "typescript": "^5.9.0"
