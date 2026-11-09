@@ -28,12 +28,18 @@ const plans = [
   { name: "map", packs: ["map_bp"] },
   { name: "stash-loads", packs: ["stash_bp"], hooks: ["stash-loads.mjs"] },
   { name: "afk-tag", packs: ["afk_bp", "stats_bp"] },
+  { name: "limit-hook", packs: ["limit_bp"], hooks: ["limit_bp"] },
 ];
 
 test("select picks by pack, scenario file, hook; every-pack scenarios only for a pack change", () => {
   assert.deepEqual(select(plans, classify(["packs/stats_bp/scripts/main.js"])).scenarios, ["smoke", "afk-tag"]);
+  for (const f of ["tools/bundle.mjs", "tools/test-bds/full-bundle-protocols.mjs", "tools/test-bds/stash-persistence.mjs", "tools/test-bds/build-beds.mjs", ".github/actions/bds/action.yml", "tools/test-bds/perf-compare.mjs", "tools/lib/x.mjs", "tools/build.mjs"]) {
+    assert.deepEqual(select(plans, classify([f])).scenarios, plans.map((p) => p.name), `${f} is harness`);
+  }
   assert.deepEqual(select(plans, classify(["tools/test-bds/examples/map.js"])).scenarios, ["map"]);
   assert.deepEqual(select(plans, classify(["tools/test-bds/hooks/stash-loads.mjs"])).scenarios, ["stash-loads"]);
+  assert.deepEqual(select(plans, classify(["tools/test-bds/hooks/limit_bp/manifest.json"])).scenarios, ["limit-hook"], "a file in a hook folder picks the scenario naming the folder");
+  assert.deepEqual(select(plans, classify(["tools/test-bds/hooks/read-by-code.js"])).scenarios, plans.map((p) => p.name), "a hook no header names is harness");
   assert.deepEqual(select(plans, classify(["docs/NEWS.md", "README.md"])).scenarios, []);
   assert.deepEqual(select(plans, classify(["tools/test-bds/run.mjs"])).scenarios, plans.map((p) => p.name));
   assert.deepEqual(select(plans, classify([]), { all: true }).scenarios, plans.map((p) => p.name));

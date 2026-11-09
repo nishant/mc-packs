@@ -105,6 +105,8 @@ export const STORIES = [
         id: "lamp",
         title: "Lantern of the Deep",
         npc: "ida",
+        // The echo plays only once you are deep with the lamp.
+        sequential: true,
         intro: [
           `${I}The lamp needs depth. Below the deepslate line the stone is older than anything we have a name for. Go below forty under sea level. Hold the lamp. Wait. Listen.`,
           `${I}I don't know what it will show you. Echoes are not stories. They are just what was loud enough to stay. Could be a song. Could be a scream. Come back and tell me either way.`,
@@ -314,6 +316,8 @@ export const STORIES = [
         id: "seal",
         title: "The Stone Seal",
         npc: "ida",
+        // The seal's vision follows the defense, not the first visit.
+        sequential: true,
         intro: [
           `${I}Starwright seal. The thing they sang to sleep. If the Choir rings their broken note again when the Lantern comes, that is what wakes.\n\n${I}My lamp has one trick left. Hold it to the door and the seal drinks. Keep the room while it does.`,
           { text: `${R}I'm sending two wardens down after you with a spare pick and a lot of torches. Don't argue. You told me everything once, and it saved lives. That's an order. Mostly.`, when: { "act1_signs.act1:path": "!alone" } },

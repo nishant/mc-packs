@@ -1,74 +1,55 @@
 {
   "notes": [
-    "Camp barrels, wreck chests and watch bells come back after being broken, and camp and wreck loot is always three different things.",
-    "The Lantern Fair tells you when the carve-off is full, and /realm:crowns_give now works from NPC buttons.",
-    "Farm Loader allows 5 farms by default, Run Away discs stop at 200 jukeboxes, and the tornado burst sound plays again.",
-    "Easy Building is safer to share: Copy, Cut and modifiers stop at your block limit instead of freezing the server, and Cut, Paste, Air Build, modifier copies, Redo and Undo Destroy respect land claims and safe zones.",
-    "Easy Building no longer duplicates blocks: Cut skips bedrock and containers and its free paste ends when you undo it, survival palette builds use only the blocks you carry, and Destroy with Fortune drops one block per block."
+    "Story Questlines keeps an unreadable save aside instead of wiping it, finishes terrain that could not be put back once you are near, and no longer offers Old Words after the gift ending.",
+    "Only the player who locked a Silly Enchants librarian, or an operator, can change it, and Town Projects residents and named villagers are skipped.",
+    "Reset talents costs what your realm set, and ores, melons and pumpkins moved by a piston no longer count as fresh Guilds finds.",
+    "Titles an operator takes away stay gone, Sell fish counts only the plain fish you carry, and a sand or snow roof is no longer dry ground for Rain Extras.",
+    "The Minimap clears Arrived when it is off and calls its setting Mob range, and the Realm Configuration menu leaves optional players out by default."
   ],
   "packNotes": {
-    "build_bp": {
-      "version": "3.0.13",
-      "notes": "Copy, Cut, Array and Radial are capped at the block limit; Cut, Paste, Air Build, modifier copies, Redo and Undo Destroy respect land claims and safe zones; Cut follows the Destroy settings and skips unbreakable blocks and containers; undoing a Cut ends its free paste; survival palette builds charge per block type; Destroy with Fortune no longer multiplies drops; the anchor block can no longer copy a neighbor's block."
+    "saga_bp": {
+      "version": "1.16.20",
+      "notes": "A save that cannot be read is copied to saga:p_bak, damaged places are never overwritten, unfinished terrain restores wait for a player to come near, boss warnings and re-asks are spaced out, and Old Words is not offered after the gift ending."
     },
-    "build_rp": {
-      "version": "2.1.15",
-      "notes": "Messages for a copy over the block limit and a copy too big to save."
+    "admin_bp": {
+      "version": "1.6.16",
+      "notes": "Optional player lists start on (leave out), a form reads the players it showed, and Show a Title works with seconds but no subtitle."
     },
-    "atlas_bp": {
-      "version": "1.1.14",
-      "notes": "Camp barrels, wreck chests and watch bells come back after being broken, camp and wreck loot is always three different things, and the watch countdown no longer covers other action bar notes."
+    "skills_bp": {
+      "version": "1.1.13",
+      "notes": "The Reset talents price in the menu and the confirmation follows /realm:config."
     },
-    "bounty_bp": {
-      "version": "1.3.12",
-      "notes": "The bounty board ignores taps another pack already refused."
+    "guilds_bp": {
+      "version": "1.1.16",
+      "notes": "Ores, melons and pumpkins pushed by a piston count as placed, not as fresh finds."
     },
-    "calendar_bp": {
-      "version": "1.0.23",
-      "notes": "The Lantern Fair tells you when the carve-off is full."
+    "silly_bp": {
+      "version": "1.2.15",
+      "notes": "Only the player who locked a librarian, or an operator, can re-lock it, Town Projects residents and named villagers are skipped, and the test hook works from the server console only."
     },
-    "caravan_bp": {
-      "version": "1.2.12",
-      "notes": "Name labels are synced once per upkeep instead of twice."
+    "map_bp": {
+      "version": "1.5.5",
+      "notes": "Arrived clears when the Minimap is disabled, the scan cache cap comes back down after a scan, and the mob setting is named Mob range."
     },
-    "crowns_bp": {
-      "version": "1.1.14",
-      "notes": "The top list keeps names of recent players, and /realm:crowns_give works from NPC buttons."
+    "titles_bp": {
+      "version": "1.2.16",
+      "notes": "A built-in title or trail an operator takes away is not unlocked again."
     },
-    "domt_bp": {
+    "stash_bp": {
+      "version": "1.9.4",
+      "notes": "The help text says only the hotbar, armor and offhand are the same on every page."
+    },
+    "fishing_bp": {
       "version": "1.1.17",
-      "notes": "A failed far teleport brings you home, safe zones follow the shared protocol, and old unrestored card changes no longer pile up."
+      "notes": "Sell fish trims the basket to the plain fish you carry, keeping the cheapest."
     },
-    "dolphin_bp": {
-      "version": "1.2.12",
-      "notes": "Feeding a dolphin is skipped when another pack already refused the tap."
+    "rain_bp": {
+      "version": "1.5.19",
+      "notes": "A roof of sand, terracotta, snow or ice is not dry ground, and only natural ground ids count."
     },
-    "elite_bp": {
-      "version": "1.3.19",
-      "notes": "Stormcallers strike near the closest player."
-    },
-    "elytra_bp": {
-      "version": "1.3.24",
-      "notes": "Run Away discs stop at 200 jukeboxes per world, and the NOS Rocket no longer fires on a tap another pack refused."
-    },
-    "expedition_bp": {
-      "version": "2.4.18",
-      "notes": "Blocks refused inside a dungeon come back as the block you placed, an offline leader's sigil is kept in a parcel, uncollected parcels expire after 30 days, and Vitality says 4 hearts."
-    },
-    "farm_bp": {
-      "version": "1.4.11",
-      "notes": "Farm Loader allows 5 farms by default, leaving ticking areas for dungeons and other packs, and rejects names starting with realm_."
-    },
-    "find_bp": {
-      "version": "1.4.11",
-      "notes": "/realm:find shows your own partial matches when the only exact match is in a chest you can't see."
-    },
-    "tornado_bp": {
+    "meteor_bp": {
       "version": "1.2.14",
-      "notes": "The tornado burst sound plays again."
+      "notes": "An impact waits only for its own spot to load, and up to 5 retries cover unloaded alternate spots."
     }
-  },
-  "resourceNotes": [
-    "Easy Building Guides: new messages for a copy that is over the block limit or too big to save."
-  ]
+  }
 }

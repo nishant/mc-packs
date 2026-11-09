@@ -957,7 +957,7 @@ async function showHelp(player) {
       ? [
           `Your main inventory (slots 9 to 35) has §e${pages} pages§r of 24 slots; the hotbar is the same on every page. The top row's last three slots hold §e<§r (previous page), the current page/menu, and §e>§r (next page). Click one in your open inventory to switch.`,
           "§e/realm:inv§r opens the menu: every page and how full it is, a scan that finds the page holding an item, sort all pages or this page, quick stack, and your settings.",
-          "When a page is full, new stacks are stored on another page by themselves. Shulker boxes, bundles, potions, maps, banners and the like stay with you on every page.",
+          "When a page is full, new stacks are stored on another page by themselves. Only the hotbar, armor and offhand are the same on every page: keep a kit on the hotbar to have it on every page.",
           "§7Turn the buttons or auto-store off in /realm:prefs or the menu's settings. Operators: §e/realm:inv_pages <count>§r sets your own number of pages.",
         ].join("\n")
       : "§7Extra inventory pages are off: this realm uses the vanilla inventory (operators can raise the page count in /realm:config)."

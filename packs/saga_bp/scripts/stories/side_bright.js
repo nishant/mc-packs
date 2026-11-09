@@ -208,12 +208,11 @@ const LOST_LAMBS = {
         { type: "tend", label: "Bribe 3 pigs with carrots", mobs: ["minecraft:pig"], item: "minecraft:carrot", count: 3 },
         {
           type: "lead",
-          label: "Lead Turnip home before Bea finds him (5 minutes once he's tied)",
+          label: "Lead Turnip home to Wren's Meadow",
           mob: "minecraft:pig",
           name: "Turnip",
           spawnAt: { offset: { x: 220, z: -80 }, mark: "Carrot crumbs", radius: 6 },
           to: { place: "meadow", radius: 10 },
-          within: 300,
         },
       ],
       outro: [
@@ -223,7 +222,7 @@ const LOST_LAMBS = {
         `${W}She LIKES you. She never likes anybody. She threw a ladle at Mayor Bram once. A big ladle.`,
       ],
       reward: { levels: 3, crowns: 35, items: [{ item: "minecraft:carrot_on_a_stick", amount: 1 }, { item: "minecraft:golden_carrot", amount: 4 }] },
-      hint: "Use a carrot on any 3 pigs. Turnip waits about 230 blocks east of town (the tracker points to the carrot crumbs). Once he's on your lead you have 5 minutes to walk him back to Wren's Meadow, or he slips away and you try again.",
+      hint: "Use a carrot on any 3 pigs. Turnip waits about 230 blocks east of town (the tracker points to the carrot crumbs). Once he's on your lead, walk him back to Wren's Meadow before he wanders off.",
     },
     {
       id: "shed",

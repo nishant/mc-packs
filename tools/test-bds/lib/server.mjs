@@ -156,7 +156,7 @@ function takeLockFile(file, info, staleMs) {
 export async function reservePort({ token = `${process.pid}`, isFree = portPairFree, random = Math.random, tries = 400, fixed = null } = {}) {
   fs.mkdirSync(portsDir(), { recursive: true });
   if (fixed !== null && !(Number.isInteger(fixed) && fixed >= 1024 && fixed <= 65534)) throw new Error(`server-port ${fixed} must be an integer from 1024 to 65534 (the next port is also used)`);
-  let p = fixed ?? 20000 + 2 * Math.floor(random() * 19000);
+  let p = fixed ?? 20000 + 2 * Math.floor(random() * 10000);
   for (let i = 0; i < (fixed === null ? tries : 1); i++, p = p + 2 > 39998 ? 20000 : p + 2) {
     const a = path.join(portsDir(), `${p}.lock`), b = path.join(portsDir(), `${p + 1}.lock`);
     const info = { pid: process.pid, token, at: new Date().toISOString() };

@@ -960,6 +960,10 @@ const WANDERER_IDS = new Set(WANDERERS.map((w) => w.id));
 
 /** Champion tag -> time (ms) it may be asked for again. @type {Map<string, number>} */
 const championNext = new Map();
+/** Champion tag + player id -> time (ms) the warn line was last sent. @type {Map<string, number>} */
+const championWarned = new Map();
+/** Champion tag -> times asked for with nothing coming (after 2 quick re-asks it waits championRetrySeconds). @type {Map<string, number>} */
+const championAsks = new Map();
 /** Is this tag a story champion's (a story's, a favor's, or a wanderer encounter's)? @param {string} tag */
 export const isChampionTag = (tag) => championTags.has(tag) || WANDER_CHAMPION.test(tag);
 /** Champion tags the stories use. */
@@ -1073,6 +1077,7 @@ function championNear(player, obj) {
   watchAdds(champ.tag, dim, player);
   if ((championNext.get(champ.tag) ?? 0) > now) return;
   if (championAlive(champ.tag, dim)) {
+    championAsks.delete(champ.tag);
     championNext.set(champ.tag, now + 10000);
     return;
   }
@@ -1080,14 +1085,24 @@ function championNear(player, obj) {
   championNext.set(champ.tag, now + Number(get("championRetrySeconds")) * 1000);
   const viaPack = CHAMPION_MOBS.has(champ.mob);
   if (viaPack) send("realm:champion_spawn", { dim: dim.id, x: at.x, y: at.y, z: at.z, mob: champ.mob, trait: champ.trait, name: champ.name, tag: champ.tag, health: champ.health });
-  if (champ.warn) player.sendMessage(`§c[Story] ${champ.warn}`);
+  if (champ.warn) {
+    const key = `${champ.tag}|${player.id}`;
+    if (now - (championWarned.get(key) ?? 0) >= Number(get("championRetrySeconds")) * 1000) {
+      championWarned.set(key, now);
+      player.sendMessage(`§c[Story] ${champ.warn}`);
+    }
+  }
   const spawnAt = at;
   // No Champions pack (or a mob it can't make)? Spawn a tougher named mob ourselves, so the story can still be finished.
   system.runTimeout(() => {
     try {
       if (championAlive(champ.tag, dim)) return;
       // Nothing came: ask again in 5 seconds rather than after championRetrySeconds.
-      if (viaPack && get("championFallback") !== true) return void championNext.set(champ.tag, Date.now() + 5000);
+      if (viaPack && get("championFallback") !== true) {
+        const n = (championAsks.get(champ.tag) ?? 0) + 1;
+        championAsks.set(champ.tag, n);
+        return void championNext.set(champ.tag, Date.now() + (n < 3 ? 5000 : Number(get("championRetrySeconds")) * 1000));
+      }
       const mob = spawnFresh(dim, champ.mob, spawnAt);
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
@@ -1139,6 +1154,7 @@ function watchAdds(tag, dim, player) {
  * @param {string} tag @param {string[]} ids @param {Vector3 | undefined} at @param {string | undefined} dim
  */
 export function championSlain(tag, ids, at, dim) {
+  championAsks.delete(tag);
   /** @param {Objective} obj */
   const amountFor = (obj) => (obj.champion?.tag === tag ? 1 : 0);
   /** @type {Set<string>} */

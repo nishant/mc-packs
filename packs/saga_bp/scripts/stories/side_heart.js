@@ -323,7 +323,7 @@ const ELSIE = {
   kind: "heart",
   tones: ["warm", "mystery", "sad"],
   summary: "Elsie still remembers the old songs of her people. She has never sung them to anyone.",
-  requires: { stories: ["act3_deep"], flags: { "g:aff_elsie": ">=3" } },
+  requires: { stories: ["act3_deep"], flags: { "g:aff_elsie": ">=3", "g:ending": "!gift" } },
   chapters: [
     {
       id: "no_room",

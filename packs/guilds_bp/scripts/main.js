@@ -455,18 +455,39 @@ function ripe(perm) {
   }
 }
 
+/** @param {string} key */
+function markPlaced(key) {
+  const set = placed();
+  set.delete(key);
+  set.add(key);
+  while (set.size > PLACED_MEMORY) set.delete(/** @type {string} */ (set.values().next().value));
+  placedDirty = true;
+}
+
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
     const id = block.typeId;
     if (!ores.has(id) && !(crops.has(id) && crops.get(id)?.state === undefined)) return;
-    const key = spot(block.dimension.id, block.location);
-    const set = placed();
-    set.delete(key);
-    set.add(key);
-    if (set.size > PLACED_MEMORY) set.delete(/** @type {string} */ (set.values().next().value));
-    placedDirty = true;
+    markPlaced(spot(block.dimension.id, block.location));
   } catch (e) {
     console.warn(`[guilds] ${e}`);
+  }
+});
+
+// A piston pushing a pumpkin, melon or ore moves it: the new spot must not count as a fresh find.
+world.afterEvents.pistonActivate.subscribe(({ dimension, piston }) => {
+  try {
+    const locs = piston
+      .getAttachedBlocks()
+      .filter((b) => ores.has(b.typeId) || (crops.has(b.typeId) && crops.get(b.typeId)?.state === undefined))
+      .map((b) => b.location);
+    for (const l of locs) {
+      for (const [dx, dy, dz] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        markPlaced(spot(dimension.id, { x: l.x + dx, y: l.y + dy, z: l.z + dz }));
+      }
+    }
+  } catch (e) {
+    console.warn(`[guilds] piston: ${e}`);
   }
 });
 

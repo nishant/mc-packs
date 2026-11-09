@@ -39,7 +39,13 @@ const UPDATE_SECONDS = (RUN_TICKS * GROUPS) / 20; // how often each player is up
 const MAX_SPOTS = 8; // drip spots remembered per player
 const RESCAN_DISTANCE = 4; // forget a player's drip spots once they move this far (blocks)
 const MAX_HEADROOM = 24; // deeper underground than this, there's no rain to see
-const DRY_GROUND = /sand|terracotta|snow|ice/; // deserts and badlands get no rain; snowy places get snow
+// Natural ground where it doesn't rain: deserts and badlands get none, snowy places get snow. Exact ids (checked against
+// @minecraft/vanilla-data), so glazed terracotta, sandstone, stairs and slabs a player builds with never count.
+const COLORS = ["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"];
+const DRY_GROUND = new Set([
+  "minecraft:sand", "minecraft:red_sand", "minecraft:hardened_clay", ...COLORS.map((c) => `minecraft:${c}_terracotta`),
+  "minecraft:snow", "minecraft:snow_layer", "minecraft:powder_snow", "minecraft:ice", "minecraft:packed_ice", "minecraft:blue_ice",
+]);
 const WATERY = /water|kelp|seagrass|bubble_column/;
 const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }];
 
@@ -275,12 +281,15 @@ function leave(player, st) {
 }
 
 /**
- * Ground where it doesn't rain: sand, terracotta, snow or ice on top. getTopmostBlock skips water, so the sand under
- * a sea, a river or a pool is a seabed, where it rains: one more lookup, only for such ground below the feet.
+ * Ground where it doesn't rain: natural sand, terracotta, snow or ice on top (a beach in a rainy biome counts too).
+ * A roof of it over the player (two or more blocks above the feet) is not ground, so the player is indoors.
+ * getTopmostBlock skips water, so the sand under a sea, a river or a pool is a seabed, where it rains: one more
+ * lookup, only for such ground below the feet.
  * @param {import("@minecraft/server").Block} here @param {Vector3} feet
  */
 function dryGround(here, feet) {
-  if (!DRY_GROUND.test(here.typeId)) return false;
+  if (!DRY_GROUND.has(here.typeId)) return false;
+  if (here.location.y >= Math.floor(feet.y) + 2) return false; // a roof, not ground
   if (here.location.y >= Math.floor(feet.y)) return true;
   try {
     const up = here.above();

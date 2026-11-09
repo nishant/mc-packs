@@ -391,3 +391,38 @@ test("the committed story allowlist is specific and does not drop a category", (
   assert.equal(entries.some((e) => e.code === "partial-family" && e.reason.length < 20), false);
   assert.ok(codesSeen.size >= 1);
 });
+
+test("two different champions on one tag warn, naming both objectives; the same champion twice does not", () => {
+  const gnasher = { tag: "realm:saga:old_gnasher", mob: "minecraft:spider", name: "Old Gnasher" };
+  const other = { tag: "realm:saga:old_gnasher", mob: "minecraft:zombie", name: "Someone Else" };
+  const clash = audit({
+    stories: [
+      story({ id: "one", chapters: [chapter({ id: "a", objectives: [{ type: "defeat", label: "Defeat it", champion: gnasher }] })] }),
+      story({ id: "two", chapters: [chapter({ id: "b", objectives: [{ type: "defeat", label: "Defeat that", champion: other }] })] }),
+    ],
+  });
+  const hits = codes(clash, "champion-tag-shared");
+  assert.equal(hits.length, 1);
+  assert.match(hits[0].at, /two\/b/);
+  assert.match(hits[0].message, /one\/a/);
+  const same = audit({
+    stories: [
+      story({ id: "one", chapters: [chapter({ id: "a", objectives: [{ type: "defeat", label: "Defeat it", champion: gnasher }] })] }),
+      story({ id: "two", chapters: [chapter({ id: "b", objectives: [{ type: "defeat", label: "Defeat it again", champion: { ...gnasher } }] })] }),
+    ],
+  });
+  assert.equal(codes(same, "champion-tag-shared").length, 0);
+});
+
+test("within on a count of 1 warns; several, a template count and a race do not", () => {
+  const one = audit({ chapters: [chapter({ id: "t", objectives: [{ type: "defeat", label: "Catch the thief", within: 90 }] })] });
+  const hits = codes(one, "within-count");
+  assert.equal(hits.length, 1);
+  assert.match(hits[0].message, /count above 1/);
+  const talk = audit({ chapters: [chapter({ id: "t", objectives: [{ type: "talk", label: "Talk fast", npc: "tobin", within: 30 }] })] });
+  assert.equal(codes(talk, "within-count").length, 1);
+  const many = audit({ chapters: [chapter({ id: "t", objectives: [{ type: "defeat", label: "Kill 5", count: 5, within: 90 }] })] });
+  assert.equal(codes(many, "within-count").length, 0);
+  const tmpl = audit({ chapters: [chapter({ id: "t", objectives: [{ type: "collect", label: "Get some", count: "{count}", within: 90 }] })] });
+  assert.equal(codes(tmpl, "within-count").length, 0);
+});

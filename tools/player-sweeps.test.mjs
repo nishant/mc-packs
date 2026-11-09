@@ -1,7 +1,8 @@
 // O1 long tail (per-second player sweeps): the real main.js of each pack runs in the offline fake game
 // (tools/lib/pack-sim.mjs) with 40 players whose position reads are counted per tick. A sweep that visits every
-// player on one tick shows 40 players read on that tick. The sweeps run with one share (scripts/spread.js): spread
-// over the interval, each share worked on player handles read ticks before, whose isValid made the reads after it
+// player on one tick shows 40 players read on that tick; two bounds catch it: no player read twice on one tick, and
+// no tick visits all 40 (a bound a pack fails today is off at its test, with the numbers: MCP-160). The sweeps run
+// with one share (scripts/spread.js): spread over the interval, each share worked on player handles read ticks before, whose isValid made the reads after it
 // several times dearer on BDS 1.26 (+47% for these 9 packs at 40 players), so each player is still read at most once a
 // run. The counters the sweeps keep are checked to come out the same. Milliseconds need a native profile.
 //   node --test tools/player-sweeps.test.mjs
@@ -47,12 +48,32 @@ async function loadReal(sim, folder) {
   return import(pathToFileURL(path.join(dir, "main.js")).href);
 }
 
+/** Counts one read of `id` on `tick` in a Map<tick, Map<id, reads>>. */
+function bump(map, tick, id) {
+  let m = map.get(tick);
+  if (!m) map.set(tick, (m = new Map()));
+  m.set(id, (m.get(id) ?? 0) + 1);
+}
+/** The most distinct players read on one tick (a sweep that visited every player at once shows all of them). */
+const distinctMost = (map) => Math.max(0, ...[...map.values()].map((m) => m.size));
+/** The most reads of one player on one tick (a player read twice on one tick). */
+const repeatMost = (map) => Math.max(0, ...[...map.values()].flatMap((m) => [...m.values()]));
+/**
+ * The two bounds on a per-tick read map: `repeat` = nobody read twice on one tick, `spread` = no tick visited all n players.
+ * A bound is turned off (false) only where the pack's real sweep fails it today (MCP-160): the numbers are in the comment at the call.
+ */
+function assertSweepBounds(map, { repeat = true, spread = true, n = 40 } = {}) {
+  if (repeat) assert.ok(repeatMost(map) <= 1, `a player read twice on one tick, got ${repeatMost(map)} reads`);
+  if (spread) assert.ok(distinctMost(map) < n, `a sweep visited every player on one tick, got ${distinctMost(map)} of ${n}`);
+  assert.ok(distinctMost(map) <= n);
+}
+
 /**
  * `n` players that walk `speed` blocks per tick along x and count, per tick, which of them had their position read.
- * @returns {{ players: any[], perTick: Map<number, Set<string>>, maxPerTick: () => number }}
+ * @returns {{ players: any[], perTick: Map<number, Map<string, number>>, maxPerTick: () => number, maxRepeat: () => number }}
  */
 function walkers(sim, n, { speed = 0.2, dim = "minecraft:overworld" } = {}) {
-  /** @type {Map<number, Set<string>>} */
+  /** @type {Map<number, Map<string, number>>} */
   const perTick = new Map();
   const players = [];
   for (let i = 0; i < n; i++) {
@@ -62,8 +83,7 @@ function walkers(sim, n, { speed = 0.2, dim = "minecraft:overworld" } = {}) {
     Object.defineProperty(p, "location", {
       get() {
         const t = sim.game.tick;
-        if (!perTick.has(t)) perTick.set(t, new Set());
-        perTick.get(t).add(p.id);
+        bump(perTick, t, p.id);
         movedAt = t;
         return { x: base.x + speed * t, y: base.y, z: base.z };
       },
@@ -82,7 +102,7 @@ function walkers(sim, n, { speed = 0.2, dim = "minecraft:overworld" } = {}) {
     void movedAt;
     players.push(p);
   }
-  return { players, perTick, maxPerTick: () => Math.max(0, ...[...perTick.values()].map((s) => s.size)) };
+  return { players, perTick, maxPerTick: () => distinctMost(perTick), maxRepeat: () => repeatMost(perTick) };
 }
 
 test("atlas: the 2-second player loop reads each of 40 players once a run", async () => {
@@ -92,7 +112,8 @@ test("atlas: the 2-second player loop reads each of 40 players once a run", asyn
   sim.step(400);
   assert.ok(w.perTick.size > 0, "the loop ran");
   for (const p of w.players) assert.ok([...w.perTick.values()].some((s) => s.has(p.id)), `${p.name} was visited`);
-  assert.ok(w.maxPerTick() <= 40, `each player read at most once a run, got ${w.maxPerTick()} reads on one tick`);
+  // MCP-160, measured 2026-11-09: atlas reads some players twice on one tick (2) and one tick visits all 40; that bound is off until the pack is fixed.
+  assertSweepBounds(w.perTick, { repeat: false, spread: false });
 });
 
 test("quests: travel counts the same, 40 players read each run", async () => {
@@ -107,7 +128,8 @@ test("quests: travel counts the same, 40 players read each run", async () => {
     // 4 blocks a second for 20 seconds, less the first second (a start point) and up to 5 seconds not yet added
     assert.ok(day.q[0].p >= 56 && day.q[0].p <= 80, `${p.name} traveled ${day.q[0].p}`);
   }
-  assert.ok(w.maxPerTick() <= 40, `each player read at most once a run, got ${w.maxPerTick()} reads on one tick`);
+  // MCP-160, measured 2026-11-09: one tick visits all 40 players; that bound is off until the pack is fixed.
+  assertSweepBounds(w.perTick, { spread: false });
 });
 
 test("milestones: playtime and distance count the same spread over the second; AFK players aren't read; one objective lookup per stat a run", async () => {
@@ -129,7 +151,7 @@ test("milestones: playtime and distance count the same spread over the second; A
     assert.ok(r && r.c.travelled >= 30 && r.c.travelled <= 80, `${p.name} traveled ${r?.c?.travelled}`);
   }
   assert.ok(![...w.perTick.values()].some((s) => s.has(idle.id)), "an AFK player's position isn't read");
-  assert.ok(w.maxPerTick() <= 40, `each player read at most once a run, got ${w.maxPerTick()} reads on one tick`);
+  assertSweepBounds(w.perTick);
   // 20 check runs of 4 players and 8 milestones: 640 lookups when each check asks again, at most 8 a run when shared
   assert.ok(lookups <= 20 * 8, `objective lookups: ${lookups}`);
 });
@@ -151,7 +173,8 @@ test("titles: distance counts the same and saves once a minute, 40 players a run
     // 4 blocks a second, saved once a minute: at least 59 seconds' worth by 65 seconds
     assert.ok(r && r.s.d >= 4 * 50 && r.s.d <= 4 * 65, `${p.name} traveled ${r?.s?.d}`);
   }
-  assert.ok(w.maxPerTick() <= 40, `each player read at most once a run, got ${w.maxPerTick()} reads on one tick`);
+  // MCP-160, measured 2026-11-09: one tick visits all 40 players; that bound is off until the pack is fixed.
+  assertSweepBounds(w.perTick, { spread: false });
   const most = Math.max(...savesAt.values());
   assert.ok(most <= 40, `each player saved at most once a run, got ${most}`);
 });
@@ -182,7 +205,7 @@ test("guilds: travel counts the same spread over the second, saves spread over t
     assert.ok(prog && prog.b >= 75 && prog.b <= 140, `${p.name} traveled ${prog?.b}`);
   }
   assert.ok(![...w.perTick.values()].some((s) => s.has(idle.id)), "an AFK player's position isn't read");
-  assert.ok(w.maxPerTick() <= 40, `each player read at most once a run, got ${w.maxPerTick()} reads on one tick`);
+  assertSweepBounds(w.perTick);
   const most = Math.max(...savesAt.values());
   assert.ok(most <= 40, `each player saved at most once a run, got ${most}`);
 });
@@ -190,7 +213,7 @@ test("guilds: travel counts the same spread over the second, saves spread over t
 test("afk: idle players go AFK after afkMinutes as before, turning players don't, 40 read a run", async () => {
   const sim = createSim();
   const w = walkers(sim, 40);
-  /** @type {Map<number, Set<string>>} */
+  /** @type {Map<number, Map<string, number>>} */
   const rotAt = new Map();
   /** @type {Map<string, number>} */
   const inputs = new Map();
@@ -198,8 +221,7 @@ test("afk: idle players go AFK after afkMinutes as before, turning players don't
   for (const p of w.players) {
     p.getRotation = () => {
       const t = sim.game.tick;
-      if (!rotAt.has(t)) rotAt.set(t, new Set());
-      rotAt.get(t).add(p.id);
+      bump(rotAt, t, p.id);
       return p === turner ? { x: 0, y: t % 360 } : { x: 0, y: 0 };
     };
     p.inputInfo = { getMovementVector: () => (inputs.set(p.id, (inputs.get(p.id) ?? 0) + 1), { x: 0, y: 0 }) };
@@ -212,8 +234,8 @@ test("afk: idle players go AFK after afkMinutes as before, turning players don't
   // the Nicknames pack is told about each new AFK name tag
   const told = new Set(sim.game.sent.filter((e) => e.id === "realm:nametag").map((e) => JSON.parse(e.message).player));
   for (const p of w.players) assert.equal(told.has(p.id), p !== turner, `${p.name} realm:nametag`);
-  const most = Math.max(...[...rotAt.values()].map((s) => s.size));
-  assert.ok(most <= 40, `each player read at most once a run, got ${most}`);
+  // MCP-160, measured 2026-11-09: a player is read twice on one tick (2) and one tick visits all 40; that bound is off until the pack is fixed.
+  assertSweepBounds(rotAt, { repeat: false, spread: false });
   // turning already counts as active: the turning player's movement input isn't read
   assert.ok((inputs.get(turner.id) ?? 0) <= 1, `movement reads for a turning player: ${inputs.get(turner.id)} (only the first look, before there is a turn to compare)`);
   assert.ok((inputs.get(w.players[0].id) ?? 0) > 250, "an idle player's movement is read every second");
@@ -222,23 +244,22 @@ test("afk: idle players go AFK after afkMinutes as before, turning players don't
 test("nick: name tags are put right on realm:nametag at once and by a 5-second sweep", async () => {
   const sim = createSim();
   const w = walkers(sim, 40);
-  /** @type {Map<number, Set<string>>} */
+  /** @type {Map<number, Map<string, number>>} */
   const tagsAt = new Map();
   for (const [i, p] of w.players.entries()) {
     sim.props.set(`nick:p:${p.id}`, JSON.stringify({ n: `Nick${i}`, c: "a", g: p.name }));
     const getTags = p.getTags.bind(p);
     p.getTags = () => {
       const t = sim.game.tick;
-      if (!tagsAt.has(t)) tagsAt.set(t, new Set());
-      tagsAt.get(t).add(p.id);
+      bump(tagsAt, t, p.id);
       return getTags();
     };
   }
   await loadReal(sim, "nick_bp");
   sim.step(200);
   for (const [i, p] of w.players.entries()) assert.ok(p.nameTag.includes(`Nick${i}`), `${p.name}: ${p.nameTag}`);
-  const most = Math.max(...[...tagsAt.values()].map((s) => s.size));
-  assert.ok(most <= 40, `each player read at most once a run, got ${most}`);
+  // MCP-160, measured 2026-11-09: one tick visits all 40 players; that bound is off until the pack is fixed.
+  assertSweepBounds(tagsAt, { spread: false });
   // Something else changed a tag and said so: put right within a tick or two.
   const a = w.players[3];
   a.nameTag = "changed";
@@ -281,19 +302,18 @@ function tamedDolphin(owner) {
 
 /** Counts, per tick, which players had their riding component asked for; `mounts` maps a player to what they ride. */
 function countRiding(sim, players, mounts) {
-  /** @type {Map<number, Set<string>>} */
+  /** @type {Map<number, Map<string, number>>} */
   const at = new Map();
   for (const p of players) {
     p.getComponent = (id) => {
       if (id !== "minecraft:riding") return undefined;
       const t = sim.game.tick;
-      if (!at.has(t)) at.set(t, new Set());
-      at.get(t).add(p.id);
+      bump(at, t, p.id);
       const on = mounts.get(p);
       return on ? { entityRidingOn: on } : undefined;
     };
   }
-  return { at, total: () => [...at.values()].reduce((n, s) => n + s.size, 0), most: () => Math.max(0, ...[...at.values()].map((s) => s.size)) };
+  return { at, total: () => [...at.values()].reduce((n, m) => n + [...m.values()].reduce((a, b) => a + b, 0), 0) };
 }
 
 test("dolphin: without a loaded tamed dolphin nobody's ride is looked up; with one, 40 players every 5 ticks, and a ride without a tap is steered within 5 ticks", async () => {
@@ -321,9 +341,11 @@ test("dolphin: without a loaded tamed dolphin nobody's ride is looked up; with o
   const on = sim.game.tick;
   await sim.until(() => d.events.includes("realm:dolphin_ridden"), 20);
   assert.ok(d.events.includes("realm:dolphin_ridden"), "the ride was found");
-  assert.ok(c.most() <= 40, `each player looked up at most once a run, got ${c.most()}`);
+  // MCP-160, measured 2026-11-09: a ride is looked up twice on one tick (2) and one tick visits all 40; that bound is off until the pack is fixed.
+  assertSweepBounds(c.at, { repeat: false, spread: false });
   sim.step(40);
-  assert.ok(c.most() <= 40, `each player looked up at most once a run, got ${c.most()}`);
+  // MCP-160, measured 2026-11-09: same as above; that bound is off until the pack is fixed.
+  assertSweepBounds(c.at, { repeat: false, spread: false });
 });
 
 test("journal: a look reads the player's dimension id once and the world spawn once a round", async () => {
@@ -342,7 +364,8 @@ test("journal: a look reads the player's dimension id once and the world spawn o
   assert.ok(looks >= 40 * 9, `every player looked at every 4 seconds (${looks} looks)`);
   assert.ok(idReads <= looks, `dimension id reads ${idReads} for ${looks} looks`);
   assert.ok(spawns <= 11, `world spawn read ${spawns} times in 10 rounds`);
-  assert.ok(w.maxPerTick() <= 40, `each player read at most once a run, got ${w.maxPerTick()} reads on one tick`);
+  // MCP-160, measured 2026-11-09: one tick visits all 40 players; that bound is off until the pack is fixed.
+  assertSweepBounds(w.perTick, { spread: false });
 });
 
 test("guilds: placed blocks save within 30 seconds while share 0 is empty", async () => {

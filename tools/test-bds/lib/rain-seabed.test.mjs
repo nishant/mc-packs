@@ -340,7 +340,7 @@ test("a classifier that never settles fails before the storm, naming what Rain s
 
 test("a Rain that no longer calls sand dry ground is named before the storm, with what it and the scenario each read", async () => {
   const patchRain = (src) => {
-    const broken = src.replace("const DRY_GROUND = /sand|terracotta|snow|ice/;", "const DRY_GROUND = /terracotta|snow|ice/;");
+    const broken = src.replace('"minecraft:sand", "minecraft:red_sand", ', "");
     assert.notEqual(broken, src, "the production line this test breaks is still there");
     return broken;
   };

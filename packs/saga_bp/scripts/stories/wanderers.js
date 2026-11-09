@@ -320,7 +320,7 @@ const BRANNOCH = {
         `${BN}Mind the cold. She bites like winter. And if you hear her laugh, that's just the echo. Probably.`,
       ],
       objectives: [
-        { type: "defeat", label: "Defeat Old Gnasher at the Abandoned Mine", place: "old_mine", radius: 40, champion: { tag: "realm:saga:old_gnasher", mob: "minecraft:spider", name: "Old Gnasher", trait: "frostbound", health: 60, warn: "Something enormous unfolds its legs in the dark. Old Gnasher!", adds: { mobs: ["minecraft:cave_spider"], count: 4 } } },
+        { type: "defeat", label: "Defeat Old Gnasher at the Abandoned Mine", place: "old_mine", radius: 40, champion: { tag: "realm:saga:w_gnasher_spider", mob: "minecraft:spider", name: "Old Gnasher", trait: "frostbound", health: 60, warn: "Something enormous unfolds its legs in the dark. Old Gnasher!", adds: { mobs: ["minecraft:cave_spider"], count: 4 } } },
         { type: "collect", label: "Optional: gather 8 string from her lair", item: "minecraft:string", count: 8, optional: true, bonus: { levels: 1, crowns: 15 } },
       ],
       outro: [

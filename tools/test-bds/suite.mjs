@@ -365,7 +365,7 @@ await pool(runnable, JOBS, async (p) => {
 });
 
 if (args.retry) {
-  const again = runnable.filter((p) => ["fail", "timeout"].includes(results.get(p.name).result));
+  const again = runnable.filter((p) => !p.headerBug && ["fail", "timeout"].includes(results.get(p.name).result));
   if (again.length) console.log(`[suite] retrying ${again.length} alone`);
   for (const p of again) {
     const first = results.get(p.name);

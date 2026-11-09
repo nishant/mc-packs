@@ -164,3 +164,18 @@ test("O42: a pruned record's index entry goes, and the player can be indexed aga
   await sim.settle();
   assert.equal(sim.props.get("titles:n:gone"), "g1");
 });
+
+test("MCP-147: taking a built-in title or trail records it in x; giving it back clears x; an empty x is not written", async () => {
+  const sim = await world({ "titles:p:c1": record("Cy", ["Wanderer", "Explorer"], { r: ["leaves"] }) });
+  const op = sim.join("Op", { op: true });
+  sim.run("realm:titles_take", op, "Cy", "wanderer");
+  sim.run("realm:titles_take", op, "Cy", "Explorer");
+  sim.run("realm:titles_take", op, "Cy", "trail:leaves");
+  await sim.settle();
+  assert.deepEqual(saved(sim, "c1").x, ["wanderer", "trail:leaves"], "only built-ins are remembered");
+  sim.run("realm:titles_give", op, "Cy", "Wanderer");
+  sim.run("realm:titles_give", op, "Cy", "trail:leaves");
+  await sim.settle();
+  assert.equal("x" in saved(sim, "c1"), false, "an empty list is omitted");
+  assert.deepEqual(saved(sim, "c1").t, ["Wanderer"]);
+});

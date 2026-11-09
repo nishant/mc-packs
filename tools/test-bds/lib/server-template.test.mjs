@@ -156,7 +156,7 @@ test("reserves distinct port pairs for concurrent runs and reuses a dead run's r
   assert.ok(ports.every((p) => p % 2 === 0 && p >= 20000 && p < 40000));
   for (const r of taken) r.release();
   // The OS says the pair is busy: that port is skipped, the next one is used.
-  const busy = 20000 + 2 * Math.floor(0.5 * 19000);
+  const busy = 20000 + 2 * Math.floor(0.5 * 10000);
   const next = await server.reservePort({ random: sameSpot, isFree: async (p) => p !== busy });
   assert.equal(next.port, busy + 2);
   next.release();

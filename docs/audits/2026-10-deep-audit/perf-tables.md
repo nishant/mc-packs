@@ -1,3 +1,5 @@
+Historical tables, superseded by OPEN.md O1 and the newest perf-report issue.
+
 # Performance evidence
 
 ## Current matched audit: 10 and 40 players (2026-10-19)
@@ -14,7 +16,7 @@ Each accepted run retained every declared player through **900 steady game secon
 | 40 | 9.429222222222222 | 7.972722222222222 | Both full 900-second windows valid; numerical budget FAIL |
 | 100 | N/A | N/A | Master admission BLOCKED after two bounded attempts; candidate USER_DEFERRED before running, no partial-population timing substituted |
 
-**Open: over budget at 40 players.** An earlier version of this file said "Owner answer (2026-10-19): ACCEPTED_EXCEPTION"; the owner never gave that answer (FIXES F56). His actual answer (October 20): "it is what it is, if we can improve it go for it". So the miss is open, not accepted: keep the 5 ms goal and keep improving per W1/F46 wherever a measurement shows a gain. The measured total is about **15.45% lower**, but **does not meet under 5 ms/tick**. The unchanged canonical evaluator still returns failure. This is not a budget PASS, an increased threshold, or a waiver of individual-pack targets.
+**Over budget at 40 players on that run (since MET: see OPEN.md O1).** An earlier version of this file said "Owner answer (2026-10-19): ACCEPTED_EXCEPTION"; the owner never gave that answer (FIXES F56). His actual answer (October 20): "it is what it is, if we can improve it go for it". So the miss is open, not accepted: keep the 5 ms goal and keep improving per W1/F46 wherever a measurement shows a gain. The measured total is about **15.45% lower**, but **does not meet under 5 ms/tick**. The unchanged canonical evaluator still returns failure. This is not a budget PASS, an increased threshold, or a waiver of individual-pack targets.
 
 The individual failures at 40 players remain: Map **3.738 > 1**; Build **0.574222**, Stash **0.313889**, Silly **0.276**, Elytra **0.227944**, Saga **0.227**, Stats **0.212111**, Admin **0.183667**, Calendar **0.150444**, each greater than 0.15. Calendar is not rounded down into a pass. The current cadence/defaults remain; this Realm's capacity 10 / usual 1-4 players is context, not evidence of meeting the 40-player target. No further small safe O1 cut was identified in the bounded follow-up. That does not prove the target impossible, establish a mathematical time-budget floor, or separate JS from native read costs.
 

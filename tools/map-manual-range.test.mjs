@@ -20,6 +20,10 @@ test("384 is a world-block radius, with exact reservation admission and no extra
   assert.equal(c.job.total, count);
   assert.equal(c.job.spec.radius, 384);
   assert.equal(scanner.host.terrain.maxCols, count + 6000);
+  scanner.cancel(p.id);
+  scanner.synchronize(f.roster, 2);
+  assert.equal(scanner.host.terrain.maxCols, 6000, "maxCols returns to the normal value after a 384 scan ends");
+  scanner.start(p, 384, 1);
   assert.throws(() => scanner.start(f.roster[1], 128, 1), /capacity/);
   assert.equal(scanner.contexts.size, 1);
   assert.equal(nativeCalls(f), 0, "admission never performs native terrain work");
@@ -164,9 +168,8 @@ test("no manual jobs means no manual viewer-handle reads or retention churn, pre
   assert.equal(protections, 0);
   assert.equal(scanner.host.terrain.retained.size, 0);
   assert.ok(scanner.host.terrain.maxCols >= 48000, "forty ordinary viewers retain their existing headroom");
-  const highWater = scanner.host.terrain.maxCols;
   scanner.synchronize(f.roster.slice(0, 1), 101);
-  assert.equal(scanner.host.terrain.maxCols, highWater, "idle cleanup never shrinks the high-water cache limit");
+  assert.equal(scanner.host.terrain.maxCols, 6000, "the idle cap follows the current roster and shrinks");
 });
 
 test("active scans protect all ordinary viewers and final cancellation releases only manual pins once", () => {
@@ -177,11 +180,10 @@ test("active scans protect all ordinary viewers and final cancellation releases 
   for (const other of f.roster) assert.ok(scanner.host.terrain.retained.has("viewer:" + other.id));
   const store = scanner.contexts.get(p.id).plan.store;
   scanner.host.terrain.protect("unrelated", store, { x: 100, z: 100 }, 8);
-  const highWater = scanner.host.terrain.maxCols;
   scanner.cancel(p.id);
   assert.deepEqual([...scanner.host.terrain.retained.keys()], ["unrelated"]);
   scanner.synchronize(f.roster, 3);
-  assert.equal(scanner.host.terrain.maxCols, highWater);
+  assert.equal(scanner.host.terrain.maxCols, 6000, "the cap returns to normal after the scan ends");
   assert.deepEqual([...scanner.host.terrain.retained.keys()], ["unrelated"]);
 });
 

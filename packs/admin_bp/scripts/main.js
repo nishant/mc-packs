@@ -316,7 +316,7 @@ function paramForm(player, cmd, note) {
     } else if (p.type === "PlayerSelector" || kind === "player") {
       const names = onlineNames(player);
       const items = [...(opt ? ["(leave out)"] : []), ...names, ...(pre.everyone && p.type === "PlayerSelector" ? ["Everyone online (@a)"] : [])];
-      form.dropdown(label, items, { defaultValueIndex: opt ? 1 : 0 });
+      form.dropdown(label, items, { defaultValueIndex: 0 });
       const typed = p.type === "String";
       if (typed) form.textField("Or type a player name (offline players too)", "Steve");
       add(typed ? 2 : 1, ([i, text]) => {
@@ -394,6 +394,11 @@ async function openCommand(player, cmd, note, back, ran) {
       else args.push(out);
     }
     while (args.length && args.at(-1) === "") args.pop();
+    // Readers are pushed one per param in params order, so args[i] is cmd.params[i]. An optional text option
+    // left blank before a filled one becomes the empty token "" (Show a Title with seconds but no subtitle).
+    args.forEach((a, i) => {
+      if (a === "" && cmd.params[i]?.type === "String" && cmd.params[i]?.optional) args[i] = '""';
+    });
     const gap = args.findIndex((a) => a === "");
     if (!error && gap >= 0) error = `${paramLabel(cmd.params[gap])}: fill it in too, or clear the options after it.`;
     if (error) {

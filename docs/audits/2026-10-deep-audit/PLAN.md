@@ -1,3 +1,5 @@
+Closed historical plan. To ship, follow CLAUDE.md "Ship every change": merge, then the release workflow publishes and runs check-live; never publish from a session.
+
 # Follow-up plan: everything left open after the October 2026 deep audit
 
 This is the work plan for the agent that finishes what the deep audit (mc-packs PR #92, hosting PR #105) left open. It
@@ -59,15 +61,8 @@ decisions or the backlog. Finish every workstream, or record in `OPEN.md` why an
 8. **Finishing (every release).**
    1. `npm run check` and `npm run build` pass (CI runs both on the PR).
    2. Bump every changed pack, then `node tools/sync-diag.mjs`, then the catalogs (admin, help, gen-news) last.
-   3. PR to `master` and merge it with a merge commit.
-   4. In hosting `minecraft/`: run `publish-packs.mjs` with `--notes` and `--pack-notes <folder>="..."` for every
-      bumped pack, then `pack-docs.mjs` and `--check`, then `check-site.mjs realm` (plus `commands` when commands
-      changed).
-   5. PR and merge in hosting, then `check-live.mjs`.
-   6. Give the owner a summary with numbers, plus the new bundle files.
-
-   One integrated publish at the end beats a publish per workstream. Review before the first publish.
-9. **Mark items done in `OPEN.md`** (`O12 done in <sha>` or `O12 won't fix: <reason>`) in the same PR.
+   3. PR to `master`; ship per CLAUDE.md "Ship every change": merge, then the release workflow publishes and runs check-live; never publish from a session.
+9. **Delete finished entries from `OPEN.md`** in the same PR (never mark them done).
 
 ## 2. Order and parallelism
 

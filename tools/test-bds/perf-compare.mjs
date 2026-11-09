@@ -15,7 +15,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
-/** @typedef {{ valid: boolean, bundle: number | null, tps: number | null, packs: Map<string, number> }} Side */
+/** @typedef {{ valid: boolean, bundle: number | null, tps: number | null, packs: Map<string, number>, incomplete: Set<string> }} Side */
 
 /**
  * One player count from several suite --perf --json reports: valid when any report's soak was accepted; figures are
@@ -28,6 +28,8 @@ export function sideOf(reports, count) {
   const runs = reports.map((r) => r?.perf?.[count]).filter((x) => x && x.acceptance?.ok === true);
   /** @type {Map<string, number>} */
   const packs = new Map();
+  /** Pack names a run lists, with or without a finite steady figure. */
+  const listed = new Set();
   let bundle = null, tps = null;
   for (const run of runs) {
     const b = run.bundle?.steadyWindow?.avg;
@@ -35,11 +37,13 @@ export function sideOf(reports, count) {
     const t = run.server?.tps;
     if (Number.isFinite(t)) tps = tps === null ? t : Math.max(tps, t);
     for (const [pack, f] of Object.entries(run.packs ?? {})) {
+      listed.add(pack);
       const v = /** @type {any} */ (f)?.steady;
       if (Number.isFinite(v)) packs.set(pack, Math.min(packs.get(pack) ?? Infinity, v));
     }
   }
-  return { valid: runs.length > 0 && bundle !== null, bundle, tps, packs };
+  const incomplete = new Set([...listed].filter((n) => !packs.has(n)));
+  return { valid: runs.length > 0 && bundle !== null, bundle, tps, packs, incomplete };
 }
 
 /**
@@ -48,7 +52,10 @@ export function sideOf(reports, count) {
  * @param {{ rel?: number, abs?: number, packRel?: number, packAbs?: number }} [bars]
  */
 export function compare(base, head, { rel = 0.15, abs = 0.5, packRel = 0.5, packAbs = 0.1 } = {}) {
-  if (!base.valid || !head.valid) return { status: "invalid", regressions: [], rows: [] };
+  if (!base.valid || !head.valid) return { status: "invalid", regressions: [], rows: [], reason: "no accepted soak on a side" };
+  // A pack with a figure on one side that the other side lists without one is a gap, not 0 ms. A pack not listed at all is new or removed.
+  const gaps = [...new Set([...base.packs.keys(), ...head.packs.keys()])].filter((n) => (base.packs.has(n) && head.incomplete.has(n)) || (head.packs.has(n) && base.incomplete.has(n))).sort();
+  if (gaps.length) return { status: "invalid", regressions: [], rows: [], reason: `missing per-pack figure for ${gaps.join(", ")}` };
   const worse = (/** @type {number} */ b, /** @type {number} */ h, /** @type {number} */ r, /** @type {number} */ a) => h - b > a && h > b * (1 + r);
   const regressions = [];
   const rows = [];
@@ -63,7 +70,7 @@ export function compare(base, head, { rel = 0.15, abs = 0.5, packRel = 0.5, pack
     rows.push({ name, base: b, head: h, worse: w });
     if (w) regressions.push(`${name} ${b.toFixed(3)} -> ${h.toFixed(3)} ms/tick${b > 0 ? ` (+${(100 * (h / b - 1)).toFixed(0)}%)` : " (new)"}`);
   }
-  return { status: regressions.length ? "regression" : "ok", regressions, rows };
+  return { status: regressions.length ? "regression" : "ok", regressions, rows, reason: "" };
 }
 
 /** @param {string} count @param {Side} base @param {Side} head @param {ReturnType<typeof compare>} result @param {number} [top] */
@@ -72,6 +79,7 @@ export function markdown(count, base, head, result, top = 15) {
   const L = [`### ${/^\d+$/.test(count) ? `${count} players` : count}: ${result.status === "ok" ? "no regression" : result.status === "invalid" ? "INVALID (no accepted soak on a side)" : "REGRESSION"}`, ""];
   if (result.status === "invalid") {
     L.push(`base valid: ${base.valid}, head valid: ${head.valid}`, "");
+    if (result.reason) L.push(`Reason: ${result.reason}`, "");
     return L.join("\n");
   }
   L.push(`TPS base ${f(base.tps)} / head ${f(head.tps)}; steady soak window, lowest of the runs on each side.`, "");
