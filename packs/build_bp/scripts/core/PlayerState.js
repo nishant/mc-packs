@@ -16,6 +16,31 @@ function defaultModifiers() {
     };
 }
 
+/** Most copies an Array can make and the slice range of a Radial (the documented limits). */
+export const MAX_ARRAY_COUNT = 64;
+export const MIN_RADIAL_SLICES = 2;
+export const MAX_RADIAL_SLICES = 16;
+export const MAX_MODIFIER_RADIUS = 9999;
+const clampInt = (v, lo, hi, fallback) => {
+    const n = Math.trunc(Number(v));
+    return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : fallback;
+};
+/** Clamp the fields of an array modifier object in place (count 1..64) and return it. */
+export function clampArray(a) {
+    if ("count" in a) a.count = clampInt(a.count, 1, MAX_ARRAY_COUNT, 3);
+    return a;
+}
+/** Clamp the fields of a radial modifier object in place (slices 2..16, radius 1..9999) and return it. */
+export function clampRadial(r) {
+    if ("slices" in r) r.slices = clampInt(r.slices, MIN_RADIAL_SLICES, MAX_RADIAL_SLICES, 4);
+    if ("radius" in r) r.radius = clampInt(r.radius, 1, MAX_MODIFIER_RADIUS, 32);
+    return r;
+}
+function clampMirror(m) {
+    if ("radius" in m) m.radius = clampInt(m.radius, 1, MAX_MODIFIER_RADIUS, 32);
+    return m;
+}
+
 function loadModifiers(player) {
     try {
         const raw = player.getDynamicProperty(MODIFIER_KEY);
@@ -23,9 +48,9 @@ function loadModifiers(player) {
             const saved = JSON.parse(raw);
             const def   = defaultModifiers();
             return {
-                mirror: { ...def.mirror, ...(saved.mirror ?? {}) },
-                array:  { ...def.array,  ...(saved.array  ?? {}) },
-                radial: { ...def.radial, ...(saved.radial ?? {}) },
+                mirror: clampMirror({ ...def.mirror, ...(saved.mirror ?? {}) }),
+                array:  clampArray({ ...def.array,  ...(saved.array  ?? {}) }),
+                radial: clampRadial({ ...def.radial, ...(saved.radial ?? {}) }),
             };
         }
     } catch {}
@@ -123,9 +148,9 @@ export function getModifiers(player) {
 export function getMirrorState(player)  { return getModifiers(player).mirror; }
 export function getArrayState(player)   { return getModifiers(player).array; }
 export function getRadialState(player)  { return getModifiers(player).radial; }
-export function setMirrorState(player, updates)  { Object.assign(getMirrorState(player), updates);  saveModifiers(player); }
-export function setArrayState(player, updates)   { Object.assign(getArrayState(player),  updates);  saveModifiers(player); }
-export function setRadialState(player, updates)  { Object.assign(getRadialState(player), updates);  saveModifiers(player); }
+export function setMirrorState(player, updates)  { Object.assign(getMirrorState(player), clampMirror({ ...updates }));  saveModifiers(player); }
+export function setArrayState(player, updates)   { Object.assign(getArrayState(player),  clampArray({ ...updates }));  saveModifiers(player); }
+export function setRadialState(player, updates)  { Object.assign(getRadialState(player), clampRadial({ ...updates }));  saveModifiers(player); }
 export function anyModifierEnabled(player) {
     const m = getModifiers(player);
     return m.mirror.enabled || m.array.enabled || m.radial.enabled;

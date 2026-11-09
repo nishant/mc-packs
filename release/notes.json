@@ -1,11 +1,19 @@
 {
   "notes": [
-    "Into the Deep: The Abandoned Mine's steps now say what counts. Any 10 cave spiders and any 40 deepslate count, wherever you are; the mine itself is only for the miners' notes."
+    "Easy Building is safer to share: Copy, Cut and modifiers stop at your block limit instead of freezing the server, and Cut, Paste, Air Build, modifier copies, Redo and Undo Destroy respect land claims and safe zones.",
+    "Easy Building no longer duplicates blocks: Cut skips bedrock and containers and its free paste ends when you undo it, survival palette builds use only the blocks you carry, and Destroy with Fortune drops one block per block."
+  ],
+  "resourceNotes": [
+    "Easy Building Guides: new messages for a copy that is over the block limit or too big to save."
   ],
   "packNotes": {
-    "saga_bp": {
-      "version": "1.16.19",
-      "notes": "The Abandoned Mine's cave spider and deepslate steps say they count anywhere (any mineshaft, anywhere below y 0) instead of pointing into the mine."
+    "build_bp": {
+      "version": "3.0.13",
+      "notes": "Copy, Cut, Array and Radial are capped at the block limit; Cut, Paste, Air Build, modifier copies, Redo and Undo Destroy respect land claims and safe zones; Cut follows the Destroy settings and skips unbreakable blocks and containers; undoing a Cut ends its free paste; survival palette builds charge per block type; Destroy with Fortune no longer multiplies drops; the anchor block can no longer copy a neighbor's block."
+    },
+    "build_rp": {
+      "version": "2.1.15",
+      "notes": "Messages for a copy over the block limit and a copy too big to save."
     }
   }
 }

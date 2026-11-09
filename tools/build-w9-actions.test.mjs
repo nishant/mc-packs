@@ -82,7 +82,7 @@ function at(x, y, z) {
   return mc.world.getDimension("minecraft:overworld").getBlock({ x, y, z });
 }
 
-test("survival place of one bed charges one item and undo/redo keeps both halves", () => {
+test("survival place of one bed charges one item and undo/redo keeps both halves", async () => {
   const p = player("survival", [[0, new mc.ItemStack("minecraft:bed", 1)]]);
   const placed = placeBlocks(p, [{ x: 4, y: 64, z: 4 }], { x: 4, y: 64, z: 4 }, "minecraft:bed", { direction: 0 }, { immediate: true });
   assert.equal(placed, 2);
@@ -90,11 +90,11 @@ test("survival place of one bed charges one item and undo/redo keeps both halves
   assert.equal(at(4, 64, 4).typeId, "minecraft:bed");
   assert.equal(at(4, 64, 5).typeId, "minecraft:bed");
   assert.equal(at(4, 64, 5).permutation.getAllStates().head_piece_bit, true);
-  performUndo(p);
+  await performUndo(p);
   assert.equal(count(p, "minecraft:bed"), 1);
   assert.equal(at(4, 64, 4).typeId, "minecraft:air");
   assert.equal(at(4, 64, 5).typeId, "minecraft:air");
-  performRedo(p);
+  await performRedo(p);
   mc.flushIntervals();
   assert.equal(count(p, "minecraft:bed"), 0);
   assert.equal(at(4, 64, 4).typeId, "minecraft:bed");
@@ -157,7 +157,7 @@ test("live cap clamps the default and a saved player choice without raising the 
   assert.equal(late.getDynamicProperty("eb:maxBlocks"), 2000);
 });
 
-test("clipboard paste charges one bed and does not slice the pair off", () => {
+test("clipboard paste charges one bed and does not slice the pair off", async () => {
   const p = player("survival", [[0, new mc.ItemStack("minecraft:bed", 1)]]);
   setMaxBlocks(p, 2);
   getState(p).clipboard = {
@@ -169,7 +169,7 @@ test("clipboard paste charges one bed and does not slice the pair off", () => {
       { dx: 3, dy: 0, dz: 0, typeId: "minecraft:stone", permStates: {} },
     ],
   };
-  const n = executePaste(p, { x: 20, y: 64, z: 20 });
+  const n = await executePaste(p, { x: 20, y: 64, z: 20 });
   mc.flushIntervals();
   assert.equal(n, 2);
   assert.equal(count(p, "minecraft:bed"), 0);
@@ -179,7 +179,7 @@ test("clipboard paste charges one bed and does not slice the pair off", () => {
   const tight = player("survival", [[0, new mc.ItemStack("minecraft:bed", 1)]]);
   setMaxBlocks(tight, 1);
   getState(tight).clipboard = getState(p).clipboard;
-  const none = executePaste(tight, { x: 20, y: 64, z: 30 });
+  const none = await executePaste(tight, { x: 20, y: 64, z: 30 });
   mc.flushIntervals();
   assert.equal(none, 0);
   assert.equal(count(tight, "minecraft:bed"), 1);
@@ -189,7 +189,7 @@ test("clipboard paste charges one bed and does not slice the pair off", () => {
   const blocked = player("survival", [[0, new mc.ItemStack("minecraft:bed", 1)]]);
   setMaxBlocks(blocked, 2);
   getState(blocked).clipboard = getState(p).clipboard;
-  const dropped = executePaste(blocked, { x: 24, y: 64, z: 40 });
+  const dropped = await executePaste(blocked, { x: 24, y: 64, z: 40 });
   mc.flushIntervals();
   assert.equal(dropped, 0);
   assert.equal(count(blocked, "minecraft:bed"), 1);

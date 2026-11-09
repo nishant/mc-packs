@@ -6,7 +6,7 @@ import { t } from "../utils/Text.js";
 import { smallIcon, usesFloatingUI, showForm } from "../utils/CustomUI.js";
 import { openPanel } from "../core/EntityPanel.js";
 import { showHintOnce } from "../utils/Hints.js";
-import { captureClipboard, cutAndCapture } from "../core/Clipboard.js";
+import { captureClipboard, cutAndCapture, copyTooBig } from "../core/Clipboard.js";
 import { autoSaveToStore } from "../utils/ClipboardStore.js";
 import { lockActionBar } from "../utils/ActionBar.js";
 
@@ -62,7 +62,8 @@ export function loadClipboardSlot(player, slot) {
 export function saveClipboardCopy(player, slot) {
     const clipboard = loadSlot(player, slot);
     if (!clipboard) { player.sendMessage(t("eb.clipboard.load_failed")); return null; }
-    const saved = saveToFreeSlot(player, clipboard);
+    // A saved copy is a copy: only the cut itself pastes free, once. Copies of a cut slot are charged like any paste.
+    const saved = saveToFreeSlot(player, { ...clipboard, isCut: false, cutId: undefined });
     if (saved === null) {
         player.sendMessage(t("eb.clipboard.save_full"));
         return null;
@@ -164,13 +165,18 @@ export async function showCopyCutPrompt(player, corner1, corner2) {
     finishCopyCut(player, corner1, corner2, res.selection === 1);
 }
 
-export function finishCopyCut(player, corner1, corner2, isCut) {
+export async function finishCopyCut(player, corner1, corner2, isCut) {
+    if (copyTooBig(player, corner1, corner2)) return;
     const count = isCut
-        ? cutAndCapture(player, corner1, corner2)
+        ? await cutAndCapture(player, corner1, corner2)
         : captureClipboard(player, corner1, corner2);
+    if (!player.isValid) return;
 
     const clip = getState(player).clipboard;
-    if (count > 0 && clip) autoSaveToStore(player, clip);
+    if (count > 0 && clip && autoSaveToStore(player, clip) === null) {
+        lockActionBar(player.id, 2500);
+        player.sendMessage(t("eb.clipboard.too_big_to_save"));
+    }
 
     lockActionBar(player.id, 2500);
     player.onScreenDisplay.setActionBar(count > 0

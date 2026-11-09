@@ -7,6 +7,13 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Easy Building is safer to share
+
+- Copy and Cut stop at your block limit (50,000 by default) instead of freezing the server, and Array (up to 64 copies) and Radial (2 to 16 slices) never make more blocks than your limit.
+- Cut, Paste, Air Build, mirror, array and radial copies, Redo and undoing a destroy now skip other players' land claims and safe zones.
+- Cut follows the Destroy settings, never breaks bedrock or empties chests, and undoing a Cut ends its free paste.
+- Survival palette builds use only the blocks you carry of each kind, and Destroy with a Fortune tool drops one block per block.
+
 ## The Abandoned Mine says where to look
 
 - Into the Deep, The Abandoned Mine: the cave spider and deepslate steps now say they count anywhere. Clear any 10 cave spiders (mineshaft spawners are the easy place) and mine any 40 deepslate below y 0. The mine itself is a small dead end; you only need it for the miners' notes.
