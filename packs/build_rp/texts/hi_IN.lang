@@ -22,6 +22,8 @@ eb.tag.required=§c[EB] §rEffortless Building उपयोग करने क�
 eb.getbook.no_tag=§c[EB] §r/getbook उपयोग करने के लिए §e%1§r टैग चाहिए।
 
 eb.undo.nothing=§c[EB] पूर्ववत करने के लिए कुछ नहीं।
+eb.undo.built_over=§c[EB] §rCannot undo: some of those cells were built over since the cut.
+eb.clipboard.cut_too_big_to_keep=§c[EB] §rThat cut is too big to keep, so nothing was cut. Cut a smaller area.
 eb.undo.done=§a[EB] पूर्ववत §7- %1 ब्लॉक पुनर्स्थापित।
 eb.redo.nothing=§c[EB] दोबारा करने के लिए कुछ नहीं।
 eb.redo.done=§a[EB] दोबारा §7- %1 ब्लॉक रखे गए।
@@ -506,3 +508,5 @@ item.custom:inv_menu=Inventory Pages Menu
 item.custom:inv_menu.name=Inventory Pages Menu
 item.custom:inv_next=Next Inventory Page
 item.custom:inv_next.name=Next Inventory Page
+eb.bar.copy_too_big=§c[EB] §rSelection too big (%1 blocks, your limit is %2) - pick a smaller area
+eb.clipboard.too_big_to_save=§c[EB] §7That copy is too big to keep after you leave. It still works until then.

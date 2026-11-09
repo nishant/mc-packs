@@ -22,6 +22,8 @@ eb.tag.required=§c[EB] §rVocê precisa da tag §e%1§r para usar o Effortless 
 eb.getbook.no_tag=§c[EB] §rVocê precisa da tag §e%1§r para usar /getbook.
 
 eb.undo.nothing=§c[EB] Nada para desfazer.
+eb.undo.built_over=§c[EB] §rCannot undo: some of those cells were built over since the cut.
+eb.clipboard.cut_too_big_to_keep=§c[EB] §rThat cut is too big to keep, so nothing was cut. Cut a smaller area.
 eb.undo.done=§a[EB] Desfazer §7- %1 blocos restaurados.
 eb.redo.nothing=§c[EB] Nada para refazer.
 eb.redo.done=§a[EB] Refazer §7- %1 blocos colocados.
@@ -506,3 +508,5 @@ item.custom:inv_menu=Inventory Pages Menu
 item.custom:inv_menu.name=Inventory Pages Menu
 item.custom:inv_next=Next Inventory Page
 item.custom:inv_next.name=Next Inventory Page
+eb.bar.copy_too_big=§c[EB] §rSelection too big (%1 blocks, your limit is %2) - pick a smaller area
+eb.clipboard.too_big_to_save=§c[EB] §7That copy is too big to keep after you leave. It still works until then.

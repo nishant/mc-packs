@@ -23,7 +23,7 @@ import { startPanelLightCleanup } from "./core/PanelLight.js";
 import { startGuideBook, onTutorialBookUse, cleanupGuideBook, changeBookLanguage } from "./core/GuideBook.js";
 import { loadSlot, loadSlotMeta, AUTO_SLOT } from "./utils/ClipboardStore.js";
 import { getState, setMode, setAnchor, setSecondAnchor, clearAnchor, clearClipboard, removeState, addWaypoint, getWaypoints, anchoredPlayers, buildingPlayers } from "./core/PlayerState.js";
-import { executePaste } from "./core/Clipboard.js";
+import { executePaste, copyTooBig } from "./core/Clipboard.js";
 import { getModeHandler, MODE_LIST } from "./modes/ModeRegistry.js";
 import { placeBlocks, ALWAYS_REPLACEABLE, UNPLACEABLE } from "./core/BlockPlacer.js";
 import { destroyBlocks, isDiggingTool, canMineWithTool } from "./core/BlockDestroyer.js";
@@ -112,7 +112,7 @@ function command(registry, name, description, run) {
             }
             system.run(() => {
                 if (!source.isValid) return;
-                try { run(source); } catch (e) { console.warn(`[EB] ${e}`); }
+                try { Promise.resolve(run(source)).catch((e) => console.warn(`[EB] ${e}`)); } catch (e) { console.warn(`[EB] ${e}`); }
             });
             return { status: CustomCommandStatus.Success };
         }
@@ -213,7 +213,6 @@ export async function filterBuildPositions(player, positions, typeId, blockState
     return dropIncompleteBeds(filtered ?? []);
 }
 export async function placeAir(player, target, typeId, blockStates) {
-    if (!isBedType(typeId)) return placeBlocks(player, [target], target, typeId, blockStates, { immediate: true });
     const kept = await filterBuildPositions(player, [target], typeId, blockStates, false);
     if (!kept.length) return 0;
     return placeBlocks(player, kept, target, typeId, blockStates, { immediate: true });
@@ -391,8 +390,9 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
             if (Date.now() - (anchoredAtMs.get(player.id) ?? 0) < 200) return;
             anchoredAtMs.set(player.id, Date.now());
             lastInteractMs.set(player.id, Date.now());
-            system.run(() => {
-                const count = executePaste(player, facePos);
+            system.run(async () => {
+                const count = await executePaste(player, facePos);
+                if (!player.isValid) return;
                 if (count > 0) getState(player).lastPasteAt = Date.now();
                 player.onScreenDisplay.setActionBar(count > 0
                     ? t("eb.bar.pasted", count)
@@ -416,6 +416,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
 
         if (!state.secondAnchor) {
             if (Date.now() - (anchoredAtMs.get(player.id) ?? 0) < 200) return;
+            if (copyTooBig(player, state.anchor, { x: clickPos.x, y: state.anchor.y, z: clickPos.z })) return;
             setSecondAnchor(player, clickPos);
             anchoredAtMs.set(player.id, Date.now());
             lastInteractMs.set(player.id, Date.now());
@@ -427,6 +428,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
         if (Date.now() - (anchoredAtMs.get(player.id) ?? 0) < 200) return;
         const corner1 = { x: state.anchor.x,       y: state.anchor.y, z: state.anchor.z };
         const corner2 = { x: state.secondAnchor.x, y: clickPos.y,     z: state.secondAnchor.z };
+        if (copyTooBig(player, corner1, corner2)) return;
         clearAnchor(player);
         clearPreviewCache(player.id);
         anchoredAtMs.set(player.id, Date.now());
@@ -506,10 +508,15 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
     if (!state.anchor) {
         if (!item) return;
         if (!isValidBlock(item.typeId)) return;
-        const anchorPos = ALWAYS_REPLACEABLE.has(ev.block.typeId) ? loc : facePos;
-        let prevPerm;
-        try { prevPerm = player.dimension.getBlock(anchorPos)?.permutation; } catch { }
-        needsAnchorCapture.set(player.id, { facePos: anchorPos, blockTypeId: item.typeId, prevPerm });
+        // Vanilla may place into the clicked cell (any replaceable block, listed or not) or into the face cell:
+        // remember what both held and restore the one that really received the block.
+        const cells = [];
+        for (const pos of [loc, facePos]) {
+            let perm;
+            try { perm = player.dimension.getBlock(pos)?.permutation; } catch { }
+            cells.push({ x: pos.x, y: pos.y, z: pos.z, perm });
+        }
+        needsAnchorCapture.set(player.id, { blockTypeId: item.typeId, cells });
         anchoredAtMs.set(player.id, Date.now());
         return;
     }
@@ -609,8 +616,9 @@ world.afterEvents.itemUse.subscribe(ev => {
             lastInteractMs.set(player.id, Date.now());
             const airTarget = getTargetPos(player);
             if (!airTarget) return;
-            system.run(() => {
-                const count = executePaste(player, airTarget);
+            system.run(async () => {
+                const count = await executePaste(player, airTarget);
+                if (!player.isValid) return;
                 if (count > 0) getState(player).lastPasteAt = Date.now();
                 player.onScreenDisplay.setActionBar(count > 0
                     ? t("eb.bar.pasted", count)
@@ -635,6 +643,7 @@ world.afterEvents.itemUse.subscribe(ev => {
         }
 
         if (!state.secondAnchor) {
+            if (copyTooBig(player, state.anchor, { x: airPos.x, y: state.anchor.y, z: airPos.z })) return;
             setSecondAnchor(player, airPos);
             anchoredAtMs.set(player.id, Date.now());
             lastInteractMs.set(player.id, Date.now());
@@ -645,6 +654,7 @@ world.afterEvents.itemUse.subscribe(ev => {
 
         const airCorner1 = { x: state.anchor.x,       y: state.anchor.y, z: state.anchor.z };
         const airCorner2 = { x: state.secondAnchor.x, y: airPos.y,       z: state.secondAnchor.z };
+        if (copyTooBig(player, airCorner1, airCorner2)) return;
         clearAnchor(player);
         clearPreviewCache(player.id);
         anchoredAtMs.set(player.id, Date.now());
@@ -742,14 +752,22 @@ world.afterEvents.itemUse.subscribe(ev => {
     lastInteractMs.set(player.id, Date.now());
     confirmPlacement(player, target);
 });
+/** What the cell that really received the block held before: only a cell we recorded counts, never a neighbour's. */
+export function anchorPrevPerm(cells, where) {
+    const cell = cells?.find(c => c.x === where.x && c.y === where.y && c.z === where.z);
+    return cell?.perm;
+}
 world.afterEvents.playerPlaceBlock.subscribe(ev => {
     const player = ev.player;
     const info = needsAnchorCapture.get(player.id);
     if (!info) return;
     needsAnchorCapture.delete(player.id);
-    const { facePos, blockTypeId, prevPerm } = info;
+    const { blockTypeId, cells } = info;
     const block = ev.block;
     if (block.typeId !== blockTypeId) return;
+    const where = block.location;
+    const facePos = { x: where.x, y: where.y, z: where.z };
+    const prevPerm = anchorPrevPerm(cells, where);
     const states = block.permutation.getAllStates();
     if (isBedType(block.typeId)) {
         const partner = bedPartnerPos(block.location, states);

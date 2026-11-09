@@ -1,5 +1,5 @@
 // @ts-nocheck
-export function applyRadial(positions, cfg) {
+export function applyRadial(positions, cfg, cap = Infinity) {
     const { x: cx, z: cz, slices, radius, alternate } = cfg;
     if (slices <= 1) return positions;
     const r2 = radius * radius;
@@ -15,6 +15,7 @@ export function applyRadial(positions, cfg) {
 
     const TWO_PI = Math.PI * 2;
     for (const p of positions) {
+        if (result.length > cap) break;
         const dx = p.x - cx, dz = p.z - cz;
         if (dx * dx + dz * dz > r2) { add(p); continue; }
 

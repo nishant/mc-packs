@@ -4,6 +4,12 @@ import { applyMirror, getFlippedStates, mirrorCoord } from "../modifiers/MirrorM
 import { applyArray }  from "../modifiers/ArrayModifier.js";
 import { applyRadial } from "../modifiers/RadialMirrorModifier.js";
 import { rotateStates } from "../utils/BlockStates.js";
+import { getMaxBlocks } from "./Settings.js";
+
+/** Block cap: lists are built until one entry over it, so callers still see "over the limit". */
+function modifierCap(player) {
+    try { return getMaxBlocks(player); } catch { return 50_000; }
+}
 
 export function applyModifiers(player, positions) {
     if (!positions?.length) return positions;
@@ -12,12 +18,15 @@ export function applyModifiers(player, positions) {
     const array  = getArrayState(player);
     const radial = getRadialState(player);
 
+    const cap = modifierCap(player);
     let result = positions;
     if (mirror.enabled) result = applyMirror(result, mirror);
-    if (array.enabled)  result = applyArray(result, array);
-    if (radial.enabled) result = applyRadial(result, radial);
+    if (result.length > cap) result = result.slice(0, cap + 1);
+    if (array.enabled && result.length <= cap)  result = applyArray(result, array, cap);
+    if (radial.enabled && result.length <= cap) result = applyRadial(result, radial, cap);
 
     if (result === positions) return positions;
+    if (result.length > cap) result = result.slice(0, cap + 1);
 
     const seen = new Set();
     return result.filter(p => {
@@ -63,15 +72,21 @@ function mirrorEntries(entries, cfg) {
     return out;
 }
 
-function arrayEntries(entries, cfg) {
+function arrayEntries(entries, cfg, cap = Infinity) {
     const { ox, oy, oz, count } = cfg;
     if (count <= 0) return entries;
     const out = [...entries];
-    for (let c = 1; c <= count; c++) {
+    const seen = new Set(entries.map((e) => `${e.pos.x},${e.pos.y},${e.pos.z}`));
+    for (let c = 1; c <= count && seen.size <= cap; c++) {
         const dx = ox * c, dy = oy * c, dz = oz * c;
         for (const e of entries) {
+            if (seen.size > cap) return out;
+            const pos = { x: e.pos.x + dx, y: e.pos.y + dy, z: e.pos.z + dz };
+            const k = `${pos.x},${pos.y},${pos.z}`;
+            if (seen.has(k)) continue;
+            seen.add(k);
             out.push({
-                pos:        { x: e.pos.x + dx, y: e.pos.y + dy, z: e.pos.z + dz },
+                pos,
                 typeId:     e.typeId,
                 permStates: e.permStates,
             });
@@ -80,7 +95,7 @@ function arrayEntries(entries, cfg) {
     return out;
 }
 
-function radialEntries(entries, cfg) {
+function radialEntries(entries, cfg, cap = Infinity) {
     const { x: cx, z: cz, slices, radius, alternate } = cfg;
     if (slices <= 1) return entries;
     const r2   = radius * radius;
@@ -97,6 +112,7 @@ function radialEntries(entries, cfg) {
     const TWO_PI    = Math.PI * 2;
     const HALF_PI   = Math.PI / 2;
     for (const e of entries) {
+        if (out.length > cap) break;
         const p  = e.pos;
         const dx = p.x - cx, dz = p.z - cz;
         if (dx * dx + dz * dz > r2) { add(p, e.typeId, e.permStates); continue; }
@@ -129,10 +145,13 @@ export function applyModifiersToEntries(player, entries) {
     const radial = getRadialState(player);
     if (!mirror.enabled && !array.enabled && !radial.enabled) return entries;
 
+    const cap = modifierCap(player);
     let result = entries;
     if (mirror.enabled) result = mirrorEntries(result, mirror);
-    if (array.enabled)  result = arrayEntries(result, array);
-    if (radial.enabled) result = radialEntries(result, radial);
+    if (result.length > cap) result = result.slice(0, cap + 1);
+    if (array.enabled && result.length <= cap)  result = arrayEntries(result, array, cap);
+    if (radial.enabled && result.length <= cap) result = radialEntries(result, radial, cap);
+    if (result.length > cap) result = result.slice(0, cap + 1);
 
     const seen = new Set();
     return result.filter(e => {

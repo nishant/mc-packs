@@ -22,6 +22,8 @@ eb.tag.required=§c[EB] §rEffortless Buildingを使用するには §e%1§r タ
 eb.getbook.no_tag=§c[EB] §r/getbookを使用するには §e%1§r タグが必要です。
 
 eb.undo.nothing=§c[EB] 取り消すものがありません。
+eb.undo.built_over=§c[EB] §rCannot undo: some of those cells were built over since the cut.
+eb.clipboard.cut_too_big_to_keep=§c[EB] §rThat cut is too big to keep, so nothing was cut. Cut a smaller area.
 eb.undo.done=§a[EB] 取り消し §7- %1 ブロックが復元されました。
 eb.redo.nothing=§c[EB] やり直すものがありません。
 eb.redo.done=§a[EB] やり直し §7- %1 ブロックが設置されました。
@@ -506,3 +508,5 @@ item.custom:inv_menu=Inventory Pages Menu
 item.custom:inv_menu.name=Inventory Pages Menu
 item.custom:inv_next=Next Inventory Page
 item.custom:inv_next.name=Next Inventory Page
+eb.bar.copy_too_big=§c[EB] §rSelection too big (%1 blocks, your limit is %2) - pick a smaller area
+eb.clipboard.too_big_to_save=§c[EB] §7That copy is too big to keep after you leave. It still works until then.

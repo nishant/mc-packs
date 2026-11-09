@@ -285,7 +285,7 @@ export function getBlockDrop(block, hasSilkTouch, fortuneLevel) {
         case "minecraft:sea_lantern":                    return { typeId: "minecraft:prismarine_crystals", amount: rand(2, 3) };
         default: {
             try {
-                const native = block.getItemStack(fortuneLevel, hasSilkTouch);
+                const native = block.getItemStack(1);
                 if (native) return { typeId: native.typeId, amount: native.amount };
             } catch { }
             return { typeId, amount: 1 };

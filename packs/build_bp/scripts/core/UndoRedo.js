@@ -6,6 +6,12 @@ import { getUndoThreshold } from "./Settings.js";
 import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 import { lockActionBar } from "../utils/ActionBar.js";
+import { filterAllowedPositionsAsync } from "./Protection.js";
+import { getState } from "./PlayerState.js";
+import { dropCutSlots } from "../utils/ClipboardStore.js";
+import { ALWAYS_REPLACEABLE } from "./BlockPlacer.js";
+// Players whose undo or redo is waiting on the claims answer: a second one must not interleave.
+const busy = new Set();
 const MAX_HISTORY = 10;
 const UNDO_CHUNK_SIZE = 64;
 const tempStacks = {
@@ -168,7 +174,34 @@ function applyBlocks(dim, playerId, blocks) {
         if (idx >= blocks.length) system.clearRun(runId);
     }, 1);
 }
-export function performUndo(player) {
+function currentType(dim, c) {
+    try { return dim.getBlock({ x: c.x, y: c.y, z: c.z })?.typeId ?? null; } catch { return null; }
+}
+/** Keep the cells Land Claims and safe zones allow, in their original order (each entry keeps its own fields). */
+async function allowedCells(player, dim, cells) {
+    if (!cells.length) return [];
+    const allowed = await filterAllowedPositionsAsync(player, dim.id, cells, true);
+    const keep = new Set(allowed ?? []);
+    return cells.filter((c) => keep.has(c));
+}
+/** The undone cut is back in the world, so neither the clipboard nor a saved slot of it may paste for free any more. */
+function forgetUndoneCut(player, entry) {
+    if (!entry.isCutSource || entry.cutId === undefined) return;
+    try {
+        const state = getState(player);
+        if (state.clipboard?.isCut === true && state.clipboard.cutId === entry.cutId) state.clipboard = null;
+        dropCutSlots(player, entry.cutId);
+    } catch { }
+}
+export async function performUndo(player) {
+    if (busy.has(player.id)) return;
+    busy.add(player.id);
+    try { await undoOne(player); } finally { busy.delete(player.id); }
+}
+function pushBack(player, type, entry) {
+    try { routePush(player, type, entry); } catch { }
+}
+async function undoOne(player) {
     const entry = routePop(player, "undo");
     if (!entry) {
         lockActionBar(player.id, 1500);
@@ -177,9 +210,18 @@ export function performUndo(player) {
     }
     const dim = world.getDimension(entry.dim);
     let toApply = entry.bef ?? [];
-    if (entry.destroy && entry.survival && !isCreative(player) && entry.bef?.length) {
+    if (entry.destroy) {
+        // Put back only into cells that are still empty and that the player may build in.
+        const empty = toApply.filter((b) => {
+            const cur = currentType(dim, b);
+            return cur === null || ALWAYS_REPLACEABLE.has(cur);
+        });
+        toApply = await allowedCells(player, dim, empty);
+        if (!player.isValid) { pushBack(player, "undo", entry); return; }
+    }
+    if (entry.destroy && entry.survival && !isCreative(player) && toApply.length) {
         const needed = new Map();
-        for (const b of entry.bef) {
+        for (const b of toApply) {
             if (!itemUnits(b)) continue;
             const befId = unpack(b.t);
             needed.set(befId, (needed.get(befId) ?? 0) + 1);
@@ -214,14 +256,34 @@ export function performUndo(player) {
         for (const [tid, count] of refund) giveBlocks(player, tid, count);
         toApply = filteredBef;
     }
+    if (entry.isCutSource && entry.cutId !== undefined && toApply.length < (entry.bef?.length ?? 0)) {
+        // Some cut cells were built over: restoring only part of them while the cut can still paste would duplicate blocks.
+        let live = false;
+        try { const c = getState(player).clipboard; live = c?.isCut === true && c.cutId === entry.cutId; } catch { }
+        if (live) {
+            pushBack(player, "undo", entry);
+            lockActionBar(player.id, 2500);
+            player.sendMessage(t("eb.undo.built_over"));
+            return;
+        }
+    }
     applyBlocks(dim, player.id, toApply);
+    forgetUndoneCut(player, entry);
+    // Redoing a survival cut takes the blocks out again, so it refunds them like a destroy (and a later undo charges).
+    if (entry.isCutSource && entry.survival) entry.destroy = true;
+    if (!player.isValid) { pushBack(player, "redo", entry); return; }
     routePush(player, "redo", entry);
     const n = toApply.length;
     lockActionBar(player.id, 1500);
     player.onScreenDisplay.setActionBar(t("eb.undo.done", n));
     coachEvent(player, "undo");
 }
-export function performRedo(player) {
+export async function performRedo(player) {
+    if (busy.has(player.id)) return;
+    busy.add(player.id);
+    try { await redoOne(player); } finally { busy.delete(player.id); }
+}
+async function redoOne(player) {
     const entry = routePop(player, "redo");
     if (!entry) {
         lockActionBar(player.id, 1500);
@@ -229,19 +291,32 @@ export function performRedo(player) {
         return;
     }
     const dim = world.getDimension(entry.dim);
-    if (entry.destroy && entry.survival && !isCreative(player) && entry.bef?.length) {
+    // Redo writes only into cells that still hold what the undo left there, and that the player may build in.
+    const aft = entry.aft ?? [];
+    const same = [];
+    for (let i = 0; i < aft.length; i++) {
+        const b = entry.bef?.[i];
+        const cur = currentType(dim, aft[i]);
+        if (b && cur !== null && cur !== unpack(b.t)) continue;
+        same.push({ x: aft[i].x, y: aft[i].y, z: aft[i].z, _i: i });
+    }
+    const sel = (await allowedCells(player, dim, same)).map((c) => c._i);
+    if (!player.isValid) { pushBack(player, "redo", entry); return; }
+    const aftSel = sel.map((i) => aft[i]);
+    const befSel = sel.map((i) => entry.bef?.[i]);
+    if (entry.destroy && entry.survival && !isCreative(player) && befSel.length) {
         const refund = new Map();
-        for (const b of entry.bef) {
+        for (const b of befSel) {
             if (!itemUnits(b)) continue;
             const befId = unpack(b.t);
             refund.set(befId, (refund.get(befId) ?? 0) + 1);
         }
         for (const [tid, count] of refund) giveBlocks(player, tid, count);
-    } else if (entry.survival && !isCreative(player) && entry.aft?.length) {
+    } else if (entry.survival && !isCreative(player) && aftSel.length) {
         const needed = new Map();
-        for (let i = 0; i < entry.aft.length; i++) {
-            const a = entry.aft[i];
-            const b = entry.bef?.[i];
+        for (let i = 0; i < aftSel.length; i++) {
+            const a = aftSel[i];
+            const b = befSel[i];
             if (!itemUnits(a)) continue;
             const aftId = unpack(a.t);
             if (b && unpack(b.t) === aftId) continue;
@@ -256,9 +331,9 @@ export function performRedo(player) {
         }
         for (const [tid, count] of needed) removeBlocks(player, tid, count);
     }
-    applyBlocks(dim, player.id, entry.aft);
+    applyBlocks(dim, player.id, aftSel);
     routePush(player, "undo", entry);
-    const n = entry.aft.length;
+    const n = aftSel.length;
     lockActionBar(player.id, 1500);
     player.onScreenDisplay.setActionBar(t("eb.redo.done", n));
     coachEvent(player, "redo");

@@ -25,6 +25,8 @@ eb.tag.required=§c[EB] §rYou need the §e%1§r tag to use Effortless Building.
 eb.getbook.no_tag=§c[EB] §rYou need the §e%1§r tag to use /realm:build_book.
 
 eb.undo.nothing=§c[EB] Nothing to undo.
+eb.undo.built_over=§c[EB] §rCannot undo: some of those cells were built over since the cut.
+eb.clipboard.cut_too_big_to_keep=§c[EB] §rThat cut is too big to keep, so nothing was cut. Cut a smaller area.
 eb.undo.done=§a[EB] Undo §7- %1 blocks restored.
 eb.redo.nothing=§c[EB] Nothing to redo.
 eb.redo.done=§a[EB] Redo §7- %1 blocks placed.
@@ -488,3 +490,5 @@ item.custom:inv_menu=Inventory Pages Menu
 item.custom:inv_menu.name=Inventory Pages Menu
 item.custom:inv_next=Next Inventory Page
 item.custom:inv_next.name=Next Inventory Page
+eb.bar.copy_too_big=§c[EB] §rSelection too big (%1 blocks, your limit is %2) - pick a smaller area
+eb.clipboard.too_big_to_save=§c[EB] §7That copy is too big to keep after you leave. It still works until then.
