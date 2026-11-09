@@ -426,7 +426,7 @@ function normalize(query) {
 
 /**
  * @param {Player} player @param {string} q normalized query
- * @returns {Hit[]} exact item id matches if there are any, otherwise every id containing q; nearest first
+ * @returns {{ exact: Hit[], partial: Hit[] }} containers with the exact item id, and the rest that hold an id containing q; each nearest first
  */
 function matches(player, q) {
   const here = short(player.dimension.id);
@@ -447,8 +447,8 @@ function matches(player, q) {
     const dist = dim === here ? Math.hypot(x + 0.5 - px, y + 0.5 - py, z + 0.5 - pz) : Infinity;
     (items.length ? exact : partial).push({ key, dim, x, y, z, entry, items: loose, dist, known });
   }
-  const hits = exact.length ? exact : partial;
-  return hits.sort((a, b) => a.dist - b.dist || a.dim.localeCompare(b.dim) || b.entry.at - a.entry.at);
+  const byNear = (/** @type {Hit} */ a, /** @type {Hit} */ b) => a.dist - b.dist || a.dim.localeCompare(b.dim) || b.entry.at - a.entry.at;
+  return { exact: exact.sort(byNear), partial: partial.sort(byNear) };
 }
 
 /** Drops hits whose container is loaded and no longer there. @param {Hit[]} hits */
@@ -507,20 +507,28 @@ async function search(player, query) {
   await job(liveScan(player));
   if (!player.isValid) return;
   const maxResults = get("maxResults");
-  const all = matches(player, q);
-  // While the index is private, containers nobody here opened or placed are asked about too: the player may own them
-  // through a claim or a lock without ever having opened them.
-  const found = stillThere([...all.filter((h) => h.known).slice(0, maxResults * 2), ...all.filter((h) => !h.known).slice(0, MAX_UNKNOWN)]);
-  // Containers this player can't open (someone else's lock or claim) aren't shown to them.
-  const { closed, ours } = await closedSpots(player.id, found.map((h) => [`minecraft:${h.dim}`, h.x, h.y, h.z]));
-  if (!player.isValid) return;
-  const hits = found
-    .filter((h, i) => !closed.has(i) && (h.known || ours.has(i)))
-    .sort((a, b) => a.dist - b.dist || a.dim.localeCompare(b.dim) || b.entry.at - a.entry.at)
-    .slice(0, maxResults);
+  const { exact, partial } = matches(player, q);
+  // Exact hits first; partial ones only when no exact hit is visible to this player (a chest they can't see or open must not hide theirs).
+  /** @type {Hit[]} */
+  let hits = [];
+  let anyClosed = false;
+  for (const all of [exact, partial]) {
+    // While the index is private, containers nobody here opened or placed are asked about too: the player may own them
+    // through a claim or a lock without ever having opened them.
+    const found = stillThere([...all.filter((h) => h.known).slice(0, maxResults * 2), ...all.filter((h) => !h.known).slice(0, MAX_UNKNOWN)]);
+    // Containers this player can't open (someone else's lock or claim) aren't shown to them.
+    const { closed, ours } = await closedSpots(player.id, found.map((h) => [`minecraft:${h.dim}`, h.x, h.y, h.z]));
+    if (!player.isValid) return;
+    if (closed.size) anyClosed = true;
+    hits = found
+      .filter((h, i) => !closed.has(i) && (h.known || ours.has(i)))
+      .sort((a, b) => a.dist - b.dist || a.dim.localeCompare(b.dim) || b.entry.at - a.entry.at)
+      .slice(0, maxResults);
+    if (hits.length) break;
+  }
   if (!hits.length) {
     player.sendMessage(
-      closed.size
+      anyClosed
         ? `§7Only containers you can't open (locked, or in someone else's claim) have "${q}".`
         : get("privateIndex") === true
           ? `§7None of the containers you opened has "${q}". Containers are listed once you've opened them (the index is private on this realm).`

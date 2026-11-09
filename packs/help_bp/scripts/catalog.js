@@ -472,7 +472,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r stand in the middle of a farm, run §e/realm:farm§r and tap §eAdd a farm here§r: type a name and pick the radius (1 to 4 chunks). Or run §e/realm:farm_add <name> [radius]§r, for example §e/realm:farm_add kelp 2§r. The chunks within that many chunks of you stay loaded, and chat confirms §eFarm \"kelp\" stays loaded (radius 2 chunks, 3/10 used)§r.",
+        "text": "§lOperators:§r stand in the middle of a farm, run §e/realm:farm§r and tap §eAdd a farm here§r: type a name and pick the radius (1 to 4 chunks). Or run §e/realm:farm_add <name> [radius]§r, for example §e/realm:farm_add kelp 2§r. The chunks within that many chunks of you stay loaded, and chat confirms §eFarm \"kelp\" stays loaded (radius 2 chunks, 3/5 used)§r.",
         "ops": true
       },
       {
@@ -491,7 +491,7 @@ export const PACKS = [
         "usage": "/realm:farm_add <name> [radius]",
         "ops": true,
         "who": "Ops (everyone if §eeveryoneCanAdd§r)",
-        "text": "Adds a ticking area centered on you, §eradius§r 1-4 chunks (default 2, §edefaultRadius§r). Names use letters, digits, §e_§r and §e-§r, up to 24, and must be unique"
+        "text": "Adds a ticking area centered on you, §eradius§r 1-4 chunks (default 2, §edefaultRadius§r). Names use letters, digits, §e_§r and §e-§r, up to 24, can't start with §erealm_§r, and must be unique"
       },
       {
         "usage": "/realm:farm_remove <name>",
@@ -1319,7 +1319,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r the menu's §lGive Crowns§r (one player or everyone online), or §e/realm:crowns_give <player> <amount>§r, gives Crowns (a negative amount takes them). §e/realm:config§r -> §lCrowns§r sets the daily bonus, the starting balance, whether the market is open and whether §e/realm:crowns_market§r opens it anywhere. Prices are the §esell§r and §ebuy§r lists in §econfig.js§r.",
+        "text": "§lOperators:§r the menu's §lGive Crowns§r (one player or everyone online), or §e/realm:crowns_give <player> <amount>§r, gives Crowns (a negative amount takes them). §e/realm:config§r -> §lCrowns§r sets the daily bonus, the daily pay limit, the starting balance, whether the market is open and whether §e/realm:crowns_market§r opens it anywhere. Prices are the §esell§r and §ebuy§r lists in §econfig.js§r.",
         "ops": true
       }
     ],
@@ -1352,7 +1352,7 @@ export const PACKS = [
         "usage": "/realm:crowns_give <player> <amount>",
         "ops": false,
         "who": "Operators",
-        "text": "Gives Crowns to the players picked (§e@a§r works); a negative amount takes them, down to 0. A balance tops out at 2,147,483,647, so a give stops there (the reply says §e(the most a balance can hold)§r)"
+        "text": "Gives Crowns to the players picked (§e@a§r works); a negative amount takes them, down to 0. Works from command blocks and NPC dialogue buttons as well as from operators. A balance tops out at 2,147,483,647, so a give stops there (the reply says §e(the most a balance can hold)§r)"
       },
       {
         "usage": "/realm:crowns_audit",
@@ -1593,7 +1593,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Use it: tap a §lWayside Shrine§r's carved stone for its blessing (10 minutes, once a Realm day), tap a §lStarwright Tablet§r to read it, break a §lChoir Cairn§r's bell and beat its three keepers, open an §lAbandoned Camp§r's barrel or a §lSunken Wreck§r's sea chest, ring a §lFallen Watch Post§r's bell and hold the post for 60 seconds, mine the 12 bones of a §lFossil Dig§r, tap the amethyst stone by a §lStarglass Pool§r, or tap one of §lFenn's Survey Markers§r to read his note. Each pays its reward once per player.",
+        "text": "Use it: tap a §lWayside Shrine§r's carved stone for its blessing (10 minutes, once a Realm day), tap a §lStarwright Tablet§r to read it, break a §lChoir Cairn§r's bell and beat its three keepers, open an §lAbandoned Camp§r's barrel or a §lSunken Wreck§r's sea chest, ring a §lFallen Watch Post§r's bell and hold the post for 60 seconds (§ewatchSeconds§r, at least 10), mine the 12 bones of a §lFossil Dig§r, tap the amethyst stone by a §lStarglass Pool§r, or tap one of §lFenn's Survey Markers§r to read his note. Each pays its reward once per player.",
         "ops": false
       },
       {
@@ -1637,7 +1637,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Every finished activity pays 2 Festival Ribbons (default 2, §eactivityRibbons§r; the regatta 3, §eregattaRibbons§r) and 20 Crowns (default 20, §eactivityCrowns§r), up to 15 ribbons (default 15, §eribbonCap§r) and 250 Crowns (default 250, §ecrownCap§r) per festival. Ribbons are paper with lore: they stack and you can trade them.",
+        "text": "Every finished activity pays 2 Festival Ribbons (default 2, §eactivityRibbons§r; the regatta 3, §eregattaRibbons§r) and 20 Crowns (default 20, §eactivityCrowns§r), up to 15 ribbons (default 15, §eribbonCap§r) and 250 Crowns (default 250, §ecrownCap§r) per festival. Ribbons are paper with lore naming the festival and year: ribbons from the same festival stack, and you can trade them; the stall counts every ribbon you carry.",
         "ops": false
       },
       {
@@ -1815,7 +1815,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r the menu also has §lSpawn a champion§r (pick a trait and a mob, or leave them random), §lRemove champions near you§r and §lAura cost§r (how much time the aura takes). §e/realm:champions_spawn§r spawns one 3 blocks in front of you without the menu (add a trait, such as §e/realm:champions_spawn stormcaller§r, or leave it out for a random one). §e/realm:config§r -> §lChampions§r sets the chance, the Blood Moon multiplier, the most at once, night-only and open-sky-only, the alert radius, and the looks: §lChampion auras§r, §lAura puff interval (ticks)§r, §lChampion helmets§r and §lChampion arrival effect§r.",
+        "text": "§lOperators:§r the menu also has §lSpawn a champion§r (pick a trait and a mob, or leave them random), §lRemove champions near you§r and §lAura cost§r (how much time the aura takes). §e/realm:champions_spawn§r spawns one 3 blocks in front of you without the menu (add a trait, such as §e/realm:champions_spawn stormcaller§r, or leave it out for a random one). §e/realm:config§r -> §lChampions§r sets the chance, the Blood Moon multiplier, the most at once, champions per player online, the most in one area, whether champions come to players and their approach range and pace, night-only and open-sky-only, the alert radius, and the looks: §lChampion auras§r, §lAura puff interval (ticks)§r, §lChampion helmets§r and §lChampion arrival effect§r.",
         "ops": true
       }
     ],
@@ -2688,7 +2688,7 @@ export const PACKS = [
         "usage": "/realm:expedition_leave",
         "ops": false,
         "who": "Everyone",
-        "text": "Leave your expedition and go back to where you started it (also how to leave the treasure room early)  Also leaves your queued request."
+        "text": "Leave your expedition and go back to where you started it (also how to leave the treasure room early). Also leaves your queued request."
       },
       {
         "usage": "/realm:expedition_site [x] [z]",

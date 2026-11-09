@@ -342,13 +342,26 @@ function pdata(player) {
   return d;
 }
 
+/** Players told this session that their atlas is full. @type {Set<string>} */
+const fullTold = new Set();
+
 /** @param {Player} player */
 function savePdata(player) {
   const d = pcache.get(player.id);
   if (!d || !player.isValid) return;
-  const json = JSON.stringify(d);
+  let json = JSON.stringify(d);
+  if (json.length > SAVE_MAX) {
+    // Shed what costs least first: the tablet shown at an earned site is never needed again. Never drop `x` (rewards) or `p` (a missing site is found, and paid for, again).
+    const done = new Set(d.x);
+    for (const k of Object.keys(d.s)) if (done.has(k)) delete d.s[k];
+    json = JSON.stringify(d);
+  }
   if (json.length > SAVE_MAX) {
     console.warn(`[atlas] ${player.name}'s atlas is full (${json.length} characters): not saved`);
+    if (!fullTold.has(player.id)) {
+      fullTold.add(player.id);
+      player.sendMessage("§c[Atlas] Your atlas is full; new sites won't be remembered.");
+    }
     return;
   }
   try {
@@ -908,10 +921,13 @@ function earn(player, rec) {
   return true;
 }
 
-/** Fights and other timed things at sites. @typedef {{ id: number, kind: "cairn" | "watch" | "wreck", key: string, rec: Rec, player: string, start: number, spawned: number, killed: number, wave: number }} Fight */
+/** Fights and other timed things at sites. @typedef {{ id: number, kind: "cairn" | "watch" | "wreck", key: string, rec: Rec, player: string, start: number, spawned: number, killed: number, wave: number, shown?: number }} Fight */
 /** @type {Map<number, Fight>} */
 const fights = new Map();
-let fightNext = 1;
+// Seeded from the clock so ids from before a restart never match a running fight (a leftover mob would join it).
+let fightNext = (Date.now() % 1e9) * 8;
+/** How long a watch post is held, in seconds. */
+const watchSecs = () => Math.max(10, Number(CONFIG.watchSeconds) || 60);
 const fightAt = (/** @type {string} */ key) => [...fights.values()].find((f) => f.key === key);
 
 /** A player comes within findRange of a built site for the first time. @param {Player} player @param {Rec} rec */
@@ -922,7 +938,7 @@ function found(player, rec) {
   d.p.push(key);
   const kind = kindOf(rec);
   const region = regionOf(rec);
-  player.sendMessage(`§6[Atlas] Found: ${KIND_NAMES[kind]}${region ? ` (${region})` : ""}. §7${KIND_HINTS[kind]}`);
+  player.sendMessage(`§6[Atlas] Found: ${KIND_NAMES[kind]}${region ? ` (${region})` : ""}. §7${KIND_HINTS[kind].replace("{secs}", String(watchSecs()))}`);
   try {
     player.playSound("random.orb", { pitch: 0.8, volume: 0.6 });
   } catch {
@@ -982,10 +998,13 @@ function sendMapData(player) {
 /** When each site was last tidied for a player still to finish it. @type {Map<string, number>} */
 const tidied = new Map();
 
-/** Puts back a cairn's bell or a dig's bones for a player who hasn't done them yet. @param {Player} player @param {Rec} rec */
+/** The block at the heart of the sites that are used by it alone (put back when broken). */
+const HEART_BLOCK = /** @type {Record<string, string>} */ ({ cairn: "bell", watch: "bell", camp: "barrel", wreck: "chest" });
+
+/** Puts back a site's heart block (bell, barrel, chest) or a dig's bones for a player who hasn't done them yet. @param {Player} player @param {Rec} rec */
 function tidy(player, rec) {
   const kind = kindOf(rec);
-  if (kind !== "cairn" && kind !== "fossil") return;
+  if (kind !== "fossil" && !HEART_BLOCK[kind]) return;
   const key = keyOf(rec);
   if (pdata(player).x.includes(key) || fightAt(key)) return;
   const now = Date.now();
@@ -993,14 +1012,15 @@ function tidy(player, rec) {
   tidied.set(key, now);
   const dim = world.getDimension(OVERWORLD);
   const pf = PREFABS[kind];
-  const spots = kind === "cairn" ? [pf.heart] : (pf.bones ?? []);
-  const id = kind === "cairn" ? "bell" : "bone_block";
+  const spots = kind === "fossil" ? (pf.bones ?? []) : [pf.heart];
+  const id = HEART_BLOCK[kind] ?? "bone_block";
   for (const [dx, dy, dz] of spots) {
     const [rx, rz] = turn(dx, dz, rec.f);
     try {
       const b = dim.getBlock({ x: rec.x + rx, y: rec.y + dy, z: rec.z + rz });
       const p = perm(id, id === "bell" ? { attachment: "standing" } : undefined);
-      if (b && b.isAir && p) b.setPermutation(p);
+      // The wreck's chest sits in the sea: water counts as an empty spot there.
+      if (b && (b.isAir || (kind === "wreck" && b.typeId === "minecraft:water")) && p) b.setPermutation(p);
     } catch {
       // not loaded
     }
@@ -1159,12 +1179,19 @@ function eatDrops(at, item) {
 world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermutation }) => {
   if (!enabled() || player.dimension.id !== OVERWORLD) return;
   const id = brokenBlockPermutation.type.id;
-  if (id !== "minecraft:bell" && id !== "minecraft:bone_block") return;
+  if (id !== "minecraft:bell" && id !== "minecraft:bone_block" && id !== "minecraft:barrel" && id !== "minecraft:chest") return;
   try {
     const at = block.location;
+    if (id === "minecraft:barrel" || id === "minecraft:chest") {
+      const rec = siteAt(at, 0);
+      if (rec && kindOf(rec) === (id === "minecraft:barrel" ? "camp" : "wreck")) eatDrops(at, id);
+      return;
+    }
     if (id === "minecraft:bell") {
       const rec = siteAt(at, 0);
-      if (!rec || kindOf(rec) !== "cairn") return;
+      if (!rec) return;
+      if (kindOf(rec) === "watch") eatDrops(at, id);
+      if (kindOf(rec) !== "cairn") return;
       eatDrops(at, id);
       breakCairn(player, rec);
       return;
@@ -1239,7 +1266,9 @@ async function readTablet(player, rec) {
   const d = pdata(player);
   const key = keyOf(rec);
   let n = d.s[key];
-  if (typeof n !== "number" || n < 0 || n >= TABLETS.length) {
+  if ((typeof n !== "number" || n < 0 || n >= TABLETS.length) && d.x.includes(key)) {
+    n = hs(key) % TABLETS.length; // a finished site (its tablet entry was shed): show a fixed tablet, award nothing
+  } else if (typeof n !== "number" || n < 0 || n >= TABLETS.length) {
     n = TABLETS.findIndex((_, i) => !hasTablet(d, i));
     if (n < 0) n = hs(key) % TABLETS.length; // all 60 read: an old friend
     d.s[key] = n;
@@ -1326,15 +1355,16 @@ function loot(player, rec) {
   const kind = kindOf(rec);
   if (!earn(player, rec)) return;
   const table = LOOT[kind];
-  const total = table.reduce((n, t) => n + t[3], 0);
   /** @type {[string, number][]} */
   const got = [];
   let seed = hs(`${keyOf(rec)}|${player.name}`);
-  for (let k = 0; k < 3; k++) {
+  // Each pick leaves the pool, so a roll never repeats an item: always three things.
+  const pool = [...table];
+  for (let k = 0; k < 3 && pool.length; k++) {
     seed = h32(seed, k);
-    let roll = seed % total;
-    const t = table.find((e) => (roll -= e[3]) < 0) ?? table[0];
-    if (got.some((g) => g[0] === t[0])) continue;
+    let roll = seed % pool.reduce((n, t) => n + t[3], 0);
+    const idx = pool.findIndex((e) => (roll -= e[3]) < 0);
+    const t = pool.splice(idx < 0 ? 0 : idx, 1)[0];
     got.push([t[0], t[1] + (h32(seed, 7) % (t[2] - t[1] + 1))]);
   }
   giveItems(player, got);
@@ -1437,7 +1467,7 @@ function startWatch(player, rec) {
   if (fightAt(key)) return;
   const f = startFight(player, rec, "watch");
   if (!f) return;
-  player.sendMessage(`§c[Atlas] The alarm bell rings out. Hold the watch post for ${Number(CONFIG.watchSeconds) || 60} seconds!`);
+  player.sendMessage(`§c[Atlas] The alarm bell rings out. Hold the watch post for ${watchSecs()} seconds!`);
 }
 
 /** Removes a fight's mobs (with a puff). @param {Fight} f */
@@ -1496,14 +1526,22 @@ system.runInterval(() => {
         else if (age > 6000) endFight(f, false);
         continue;
       }
-      const secs = Math.max(10, Number(CONFIG.watchSeconds) || 60);
+      const secs = watchSecs();
       const wave = Math.min(WAVES.length - 1, Math.floor((age / 20 / secs) * WAVES.length));
       if (f.wave <= wave && f.wave < WAVES.length) {
         spawnMobs(f, WAVES[f.wave]);
         f.wave++;
       }
       if (age >= secs * 20) endFight(f, true);
-      else actionbar(p, `§eHold the watch post: ${Math.ceil(secs - age / 20)}s`);
+      else {
+        // Notes at the start and at 30, 10 and 5 seconds: a line redrawn every second would overwrite every other pack's bar.
+        const left = Math.ceil(secs - age / 20);
+        const mark = left <= 5 ? 5 : left <= 10 ? 10 : left <= 30 ? 30 : 99;
+        if (f.shown === undefined || mark < f.shown) {
+          f.shown = mark;
+          actionbar(p, `§eHold the watch post: ${left}s`);
+        }
+      }
     } catch (e) {
       console.warn(`[atlas] fight: ${e}`);
       endFight(f, false);

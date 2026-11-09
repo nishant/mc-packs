@@ -93,7 +93,7 @@ export function createSim() {
     run(name, player, ...args) {
       const c = sim.commands.get(name);
       if (!c) throw new Error(`no command ${name}`);
-      const out = c.cb({ initiator: player, sourceEntity: player }, ...args);
+      const out = c.cb({ initiator: player, sourceEntity: player, sourceType: "Entity" }, ...args);
       game.step(1);
       return out;
     },
@@ -208,6 +208,7 @@ function makeServer(sim) {
     system,
     world,
     Player: FakePlayer,
+    CustomCommandSource: { Block: "Block", Entity: "Entity", NPCDialogue: "NPCDialogue", Server: "Server" },
     CommandPermissionLevel: { Any: 0, GameDirectors: 1, Admin: 2, Host: 3, Owner: 4 },
     CustomCommandStatus: { Success: 0, Failure: 1 },
     CustomCommandParamType: { String: "String", Integer: "Integer", PlayerSelector: "PlayerSelector", Boolean: "Boolean", Float: "Float", Location: "Location", Enum: "Enum" },

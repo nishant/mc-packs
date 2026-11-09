@@ -5,6 +5,6 @@ export const CONFIG = {
   /** Radius in chunks when /realm:farm_add is given none (1–4). */
   defaultRadius: 2,
 
-  /** Most farms at once. Bedrock allows 10 ticking areas per world; the pack refuses before the game does. */
-  maxAreas: 10,
+  /** Most farms at once. Bedrock allows 10 ticking areas per world, shared with Expeditions (one per dungeon slot), Siege, Death Point, Town Houses and Easy Building; leave room for them. */
+  maxAreas: 5,
 };

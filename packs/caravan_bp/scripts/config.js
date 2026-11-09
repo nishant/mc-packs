@@ -60,7 +60,7 @@ export const CONFIG = {
   /** A trader turns to face the nearest player within this many blocks. 0 = never turn. */
   faceRange: 8,
 
-  /** A missing trader is spawned again once a player has been within this many blocks of its spot for a few seconds. */
+  /** A missing trader is spawned again once a player has been within this many blocks of its spot (plus 8) for a few seconds. */
   respawnRange: 24,
 
   /** How far `/realm:caravan_spot_remove` looks for a spot, in blocks. */

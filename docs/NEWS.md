@@ -7,6 +7,17 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Fixes across the Realm
+
+- Atlas: camp barrels, wreck chests and watch bells come back after being broken, camp and wreck loot is always three different things, and the watch countdown no longer covers other action bar notes.
+- Lantern Fair: you are told when the carve-off is full.
+- Crowns: the top list keeps names of recent players, and /realm:crowns_give works from NPC buttons.
+- Expeditions: blocks refused inside a dungeon come back as the block you placed, Vitality says 4 hearts, and uncollected parcels expire after 30 days.
+- Elytra: Run Away discs stop at 200 jukeboxes per world. The tornado burst sound plays again.
+- Farm Loader allows 5 farms by default and rejects names starting with realm_.
+- Chest Finder shows your own partial matches when the only exact match is in a chest you can't see.
+- Stormcallers strike near the closest player, and a failed far teleport from the Deck of Many Things brings you home.
+
 ## The Abandoned Mine says where to look
 
 - Into the Deep, The Abandoned Mine: the cave spider and deepslate steps now say they count anywhere. Clear any 10 cave spiders (mineshaft spawners are the easy place) and mine any 40 deepslate below y 0. The mine itself is a small dead end; you only need it for the miners' notes.

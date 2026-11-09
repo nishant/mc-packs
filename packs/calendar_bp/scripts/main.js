@@ -877,7 +877,10 @@ function enterCarveOff(player, block) {
   const fair = fairNow();
   const first = !fair.e[player.id];
   if (!first || Object.keys(fair.e).length < 60) fair.e[player.id] = [player.name.slice(0, 32), block.x, block.y, block.z];
-  else return;
+  else {
+    player.sendMessage("§7[Lantern Fair] The carve-off is full this festival (60 entries). Your pumpkin wasn't entered.");
+    return;
+  }
   writeJson(PROP_FAIR, fair);
   if (first) {
     player.sendMessage(`§6[Lantern Fair] Your pumpkin at ${block.x}, ${block.y}, ${block.z} is entered in the carve-off. Place another to move your entry. Votes in /realm:calendar.`);
@@ -1538,7 +1541,8 @@ function spawnChoir(dim, c, i, type, singer) {
     e.addTag(SIEGE_TAG);
     e.addTag(`realm:siege_${siege.id}`);
     e.addTag(`realm:siege_c${i}`);
-    // Named, so they don't despawn while the players are 32+ blocks away (the end of the siege removes them).
+    // Named to label the Singer and the Chanters. A name does not stop pillagers despawning: siegePresence brings back a circle's
+    // Chanters as players near it, and the end of the siege removes them.
     // A Singer looks like a champion (a red name; the Minimap's champion marker reads realm:siege_singer), so players
     // can find one that wandered off or spawned away from its circle.
     if (singer) {

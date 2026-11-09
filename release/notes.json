@@ -1,11 +1,22 @@
 {
   "notes": [
-    "Into the Deep: The Abandoned Mine's steps now say what counts. Any 10 cave spiders and any 40 deepslate count, wherever you are; the mine itself is only for the miners' notes."
+    "Camp barrels, wreck chests and watch bells come back after being broken, and camp and wreck loot is always three different things.",
+    "The Lantern Fair tells you when the carve-off is full, and /realm:crowns_give now works from NPC buttons.",
+    "Farm Loader allows 5 farms by default, Run Away discs stop at 200 jukeboxes, and the tornado burst sound plays again."
   ],
   "packNotes": {
-    "saga_bp": {
-      "version": "1.16.19",
-      "notes": "The Abandoned Mine's cave spider and deepslate steps say they count anywhere (any mineshaft, anywhere below y 0) instead of pointing into the mine."
-    }
+    "atlas_bp": { "version": "1.1.14", "notes": "Camp barrels, wreck chests and watch bells come back after being broken, camp and wreck loot is always three different things, and the watch countdown no longer covers other action bar notes." },
+    "bounty_bp": { "version": "1.3.12", "notes": "The bounty board ignores taps another pack already refused." },
+    "calendar_bp": { "version": "1.0.23", "notes": "The Lantern Fair tells you when the carve-off is full." },
+    "caravan_bp": { "version": "1.2.12", "notes": "Name labels are synced once per upkeep instead of twice." },
+    "crowns_bp": { "version": "1.1.14", "notes": "The top list keeps names of recent players, and /realm:crowns_give works from NPC buttons." },
+    "domt_bp": { "version": "1.1.17", "notes": "A failed far teleport brings you home, safe zones follow the shared protocol, and old unrestored card changes no longer pile up." },
+    "dolphin_bp": { "version": "1.2.12", "notes": "Feeding a dolphin is skipped when another pack already refused the tap." },
+    "elite_bp": { "version": "1.3.19", "notes": "Stormcallers strike near the closest player." },
+    "elytra_bp": { "version": "1.3.24", "notes": "Run Away discs stop at 200 jukeboxes per world, and the NOS Rocket no longer fires on a tap another pack refused." },
+    "expedition_bp": { "version": "2.4.18", "notes": "Blocks refused inside a dungeon come back as the block you placed, an offline leader's sigil is kept in a parcel, uncollected parcels expire after 30 days, and Vitality says 4 hearts." },
+    "farm_bp": { "version": "1.4.11", "notes": "Farm Loader allows 5 farms by default, leaving ticking areas for dungeons and other packs, and rejects names starting with realm_." },
+    "find_bp": { "version": "1.4.11", "notes": "/realm:find shows your own partial matches when the only exact match is in a chest you can't see." },
+    "tornado_bp": { "version": "1.2.14", "notes": "The tornado burst sound plays again." }
   }
 }

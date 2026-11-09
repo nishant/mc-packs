@@ -1,7 +1,7 @@
 // Small tools the cards use: safe teleports, gifts, spawns, safe zones and timed block restores.
 import { Dimension, Entity, EntityDamageCause, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
-import { onScriptEvent } from "./script-events.js";
 import { spawnFresh } from "./spawn.js";
+import { allZones, protectedBox } from "./zones.js";
 
 // ---------------------------------------------------------------------------
 // Basics
@@ -243,15 +243,19 @@ export const floor = (b) => !!b && !b.isAir && !b.isLiquid && !HARMFUL.test(b.ty
  * @param {Dimension} dim @param {number} x @param {number} y @param {number} z
  */
 export function standable(dim, x, y, z) {
-  const below = blockAt(dim, { x, y: y - 1, z });
-  const feet = blockAt(dim, { x, y, z });
-  const head = blockAt(dim, { x, y: y + 1, z });
-  if (!floor(below) || !open(feet) || !open(head)) return false;
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    const side = blockAt(dim, { x: x + dx, y, z: z + dz });
-    if (side && /lava|fire/.test(side.typeId)) return false;
+  try {
+    const below = blockAt(dim, { x, y: y - 1, z });
+    const feet = blockAt(dim, { x, y, z });
+    const head = blockAt(dim, { x, y: y + 1, z });
+    if (!floor(below) || !open(feet) || !open(head)) return false;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const side = blockAt(dim, { x: x + dx, y, z: z + dz });
+      if (side && /lava|fire/.test(side.typeId)) return false;
+    }
+    return true;
+  } catch {
+    return false; // a column that isn't ticking throws on the first property read
   }
-  return true;
 }
 
 /** Feet position near height `y` in this column (searching up to `dy` up and down), nearest first. @param {Dimension} dim @param {number} x @param {number} z @param {number} y @param {number} dy */
@@ -359,6 +363,11 @@ export async function farTeleport(p, dim, targets) {
   flying.add(p.id);
   try {
     return await hoverAndLand(p, dim, targets, home);
+  } catch (e) {
+    // Something threw on the way (an unloaded column): bring them home instead of leaving them in the sky.
+    console.warn(`[domt] far teleport: ${e}`);
+    if (p.isValid) attempt(() => p.teleport(home.at, { dimension: home.dim, keepVelocity: false }));
+    return undefined;
   } finally {
     flying.delete(p.id);
     // Still here (landed, or something threw on the way): never leave the property for a later respawn.
@@ -516,62 +525,16 @@ export function addCrowns(p, n) {
 }
 
 // ---------------------------------------------------------------------------
-// Safe zones (realm:zones protocol): no block changes inside any zone
+// Safe zones (realm:zones protocol, scripts/zones.js): no block changes inside any zone
 // ---------------------------------------------------------------------------
 
-/** @typedef {{ id: string, name?: string, dim: string, x: number, z: number, r: number, shape?: string }} Zone */
-
-/** @type {Map<string, Zone[]>} the latest full list per provider */
-const zonesBySrc = new Map();
-/** @type {Map<string, Zone[]>} parts still arriving */
-const incoming = new Map();
-
-/** @param {any} msg */
-function takeZones(msg) {
-  if (!msg || typeof msg !== "object" || typeof msg.src !== "string") return;
-  const parts = Number(msg.parts) || 0;
-  const part = Number(msg.part) || 1;
-  const list = Array.isArray(msg.zones) ? msg.zones.filter((/** @type {any} */ z) => z && typeof z.x === "number" && typeof z.z === "number" && typeof z.r === "number") : [];
-  if (parts <= 0 || (parts <= 1 && !list.length)) {
-    zonesBySrc.set(msg.src, []);
-    incoming.delete(msg.src);
-    return;
-  }
-  const buf = part <= 1 ? [] : incoming.get(msg.src) ?? [];
-  buf.push(...list);
-  if (part >= parts) {
-    zonesBySrc.set(msg.src, buf);
-    incoming.delete(msg.src);
-  } else incoming.set(msg.src, buf);
-}
-
-onScriptEvent(
-  "realm:zones",
-  ({ id, message }) => {
-    if (id !== "realm:zones") return;
-    try {
-      takeZones(JSON.parse(message));
-    } catch {
-      // malformed: ignore
-    }
-  },
-);
-system.runTimeout(() => attempt(() => system.sendScriptEvent("realm:zones_ping", "{}")), 120);
-
-/** Is any part of the square of half-size `pad` around (x, z) inside a safe zone? Every zone counts as its full square, to be safe. @param {string} dimId @param {number} x @param {number} z @param {number} [pad] */
+/** Is any part of the square of half-size `pad` around (x, z) inside a safe zone? @param {string} dimId @param {number} x @param {number} z @param {number} [pad] */
 export function inZone(dimId, x, z, pad = 0) {
-  for (const list of zonesBySrc.values()) {
-    for (const zone of list) {
-      if ((zone.dim ?? "minecraft:overworld") !== dimId) continue;
-      const reach = zone.r + pad;
-      if (Math.abs(x - zone.x) <= reach && Math.abs(z - zone.z) <= reach) return true;
-    }
-  }
-  return false;
+  return protectedBox(dimId, { x: x - pad, z: z - pad }, { x: x + pad, z: z + pad });
 }
 
 /** How many zones are known (for the test path and the odds page). */
-export const zoneCount = () => [...zonesBySrc.values()].reduce((n, l) => n + l.length, 0);
+export const zoneCount = () => allZones().length;
 
 // ---------------------------------------------------------------------------
 // Timed restores: block changes that undo themselves, saved so a restart doesn't lose them
@@ -587,25 +550,53 @@ export const zoneCount = () => [...zonesBySrc.values()].reduce((n, l) => n + l.l
  * @property {number[]} [sweep] [x1, y1, z1, x2, y2, z2, type index, back to type index]: also turn every such block in this box back (mycelium that spread)
  */
 
-const TASKS = "domt:tasks"; // world: JSON list of task ids
+const TASKS = "domt:tasks"; // world: JSON list of task index entries { id, dim, x, y, z, at } (older saves hold plain id strings)
+const MAX_TASKS = 64;
 const taskKey = (/** @type {string} */ id) => `domt:task:${id}`;
 
-/** @returns {string[]} */
-function taskIds() {
+/** @typedef {{ id: string, dim?: string, x?: number, y?: number, z?: number, at?: number }} TaskEntry */
+
+/** @returns {TaskEntry[]} */
+function taskIndex() {
   try {
     const raw = world.getDynamicProperty(TASKS);
     const v = typeof raw === "string" ? JSON.parse(raw) : [];
-    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+    if (!Array.isArray(v)) return [];
+    /** @type {TaskEntry[]} */
+    const out = [];
+    for (const e of v) {
+      if (typeof e === "string") out.push({ id: e });
+      else if (e && typeof e === "object" && typeof e.id === "string") out.push(e);
+    }
+    return out;
   } catch {
     return [];
   }
 }
 
+/** @param {TaskEntry[]} list */
+function writeIndex(list) {
+  world.setDynamicProperty(TASKS, list.length ? JSON.stringify(list) : undefined);
+}
+
+/** The small index entry for a task: where its first block is, so a task in an unloaded place is skipped without loading it. @param {RestoreTask} task @returns {TaskEntry} */
+function entryOf(task) {
+  const at = task.blocks[0] ?? task.sweep;
+  return at ? { id: task.id, dim: task.dim, x: at[0], y: at[1], z: at[2], at: task.at } : { id: task.id, dim: task.dim, at: task.at };
+}
+
 /** @param {RestoreTask} task */
 export function saveTask(task) {
   world.setDynamicProperty(taskKey(task.id), JSON.stringify(task));
-  const ids = taskIds();
-  if (!ids.includes(task.id)) world.setDynamicProperty(TASKS, JSON.stringify([...ids, task.id]));
+  const list = taskIndex().filter((e) => e.id !== task.id);
+  list.push(entryOf(task));
+  // Bounded: a task whose place never loads again must not grow the index for good. The oldest goes (its blocks stay as they are).
+  while (list.length > MAX_TASKS) {
+    const old = /** @type {TaskEntry} */ (list.shift());
+    world.setDynamicProperty(taskKey(old.id), undefined);
+    console.warn(`[domt] too many restores waiting: dropped ${old.id}`);
+  }
+  writeIndex(list);
 }
 
 /** @param {string} id @returns {RestoreTask | undefined} */
@@ -621,8 +612,7 @@ function loadTask(id) {
 /** @param {string} id */
 function dropTask(id) {
   world.setDynamicProperty(taskKey(id), undefined);
-  const ids = taskIds().filter((x) => x !== id);
-  world.setDynamicProperty(TASKS, ids.length ? JSON.stringify(ids) : undefined);
+  writeIndex(taskIndex().filter((e) => e.id !== id));
 }
 
 /** Restores a task's blocks. @param {RestoreTask} task @returns {boolean} false when a chunk isn't loaded (try later) */
@@ -648,14 +638,32 @@ function runTask(task) {
 /** Restores every task that is due (or, with `id`, that one now). @param {string} [id] @returns {number} how many were restored */
 export function restoreDue(id) {
   let n = 0;
-  for (const tid of taskIds()) {
+  const now = Date.now();
+  for (const entry of taskIndex()) {
+    const tid = entry.id;
     if (id && tid !== id) continue;
+    if (!id && entry.at !== undefined && entry.at > now) continue;
+    // Not due-and-loaded: skip without reading the task (a spore field or arena is several KB of JSON).
+    if (!id && entry.dim && typeof entry.x === "number" && typeof entry.y === "number" && typeof entry.z === "number") {
+      let loaded = false;
+      try {
+        loaded = !!blockAt(world.getDimension(entry.dim), { x: entry.x, y: entry.y, z: entry.z });
+      } catch {
+        loaded = false;
+      }
+      if (!loaded) continue;
+    }
     const task = loadTask(tid);
     if (!task) {
       dropTask(tid);
       continue;
     }
-    if (!id && task.at > Date.now()) continue;
+    if (entry.at === undefined) {
+      // An entry from before the index held coordinates: upgrade it.
+      const list = taskIndex().map((e) => (e.id === tid ? entryOf(task) : e));
+      writeIndex(list);
+    }
+    if (!id && task.at > now) continue;
     try {
       if (runTask(task)) {
         dropTask(tid);
@@ -669,7 +677,7 @@ export function restoreDue(id) {
 }
 
 /** Tasks waiting (for the operator page). */
-export const pendingTasks = () => taskIds().length;
+export const pendingTasks = () => taskIndex().length;
 
 system.runInterval(() => {
   try {

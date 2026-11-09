@@ -1,7 +1,7 @@
-// Atlas of the Realm: what each site looks like. Every prefab is drawn from non-directional blocks only,
-// so turning one (facing 0-3) only turns the x/z offsets. Offsets are from the origin: the ground block
-// (land sites) or the sea floor (the wreck); y 0 is that block's layer, y 1 the first layer above it.
-// Ids checked against @minecraft/vanilla-data (cobblestone stairs are `stone_stairs`, chains `iron_chain`).
+// Atlas of the Realm: what each site looks like. Turning a prefab (facing 0-3) turns only its x/z offsets;
+// directional blocks (bells, barrels, chests, campfires, the end rod) keep their default facing.
+// Offsets are from the origin: the ground block (land sites) or the sea floor (the wreck); y 0 is that
+// block's layer, y 1 the first layer above it. Ids checked against @minecraft/vanilla-data.
 
 /** @typedef {Record<string, string | number | boolean>} States */
 /** @typedef {[number, number, number, string, States?]} Entry  dx, dy, dz, block id (without minecraft:), states */
@@ -34,7 +34,7 @@ function square(r, mask) {
   return out;
 }
 
-/** Wayside Shrine: a little roofed stone with a candle and flowers. */
+/** Wayside Shrine: a little roofed stone with three candles and flowers. */
 function shrine() {
   /** @type {Entry[]} */
   const b = [];

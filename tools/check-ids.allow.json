@@ -35,11 +35,7 @@
   ],
   "packs/elite_bp/scripts/main.js": [
     "dead_bush",
-    "item_frame",
-    "note_block"
-  ],
-  "packs/elytra_bp/scripts/main.js": [
-    "mob.breeze.wind_burst"
+    "item_frame"
   ],
   "packs/journal_bp/scripts/config.js": [
     "lily_pad",
@@ -80,9 +76,6 @@
   "packs/storm_bp/scripts/main.js": [
     "item_frame"
   ],
-  "packs/tornado_bp/scripts/main.js": [
-    "mob.breeze.wind_burst"
-  ],
   "packs/waystone_bp/scripts/main.js": [
     "dead_bush"
   ],
@@ -104,8 +97,6 @@
     "packs/domt_bp/scripts/helpers.js|lily_pad": "Java name lily_pad in a block list or regex. Bedrock id is waterlily. Pack edit is outside W7. Not a universal prefix exception.",
     "packs/elite_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",
     "packs/elite_bp/scripts/main.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
-    "packs/elite_bp/scripts/main.js|note_block": "Java name note_block in a built-block regex. Bedrock id is noteblock, so the token never matches. W9/O49 owns the elite_bp copy; the other copies are the same classifier. Pack edit is outside W7.",
-    "packs/elytra_bp/scripts/main.js|mob.breeze.wind_burst": "Not in pinned bedrock-samples 1.26.50.4 sound_definitions. Nearest ids are breeze_wind_charge.burst and mob.breeze.shoot. elytra_bp and tornado_bp edits are outside W7.",
     "packs/journal_bp/scripts/config.js|lily_pad": "Java name lily_pad in a block list or regex. Bedrock id is waterlily. Pack edit is outside W7. Not a universal prefix exception.",
     "packs/journal_bp/scripts/config.js|stained_hardened_clay": "Java name stained_hardened_clay in a journal block list. Bedrock uses terracotta colors. Pack edit is outside W7.",
     "packs/journal_bp/scripts/main.js|glow_item_frame": "Java name glow_item_frame mapped to minecraft:glow_item_frame. Bedrock block id is glow_frame. Pack edit is outside W7.",
@@ -125,7 +116,6 @@
     "packs/saga_bp/scripts/places.js|note_block": "Java name note_block in a built-block regex. Bedrock id is noteblock, so the token never matches. W9/O49 owns the elite_bp copy; the other copies are the same classifier. Pack edit is outside W7.",
     "packs/saga_bp/scripts/prefabs.js|rooted_dirt": "Java name rooted_dirt in a block regex. Bedrock id is dirt_with_roots. Pack edit is outside W7. Not a universal prefix exception.",
     "packs/storm_bp/scripts/main.js|item_frame": "Java name item_frame in a classifier or entity list. Bedrock block id is frame, so this token matches nothing. Pack edit is outside W7. Not a universal prefix exception.",
-    "packs/tornado_bp/scripts/main.js|mob.breeze.wind_burst": "Not in pinned bedrock-samples 1.26.50.4 sound_definitions. Nearest ids are breeze_wind_charge.burst and mob.breeze.shoot. elytra_bp and tornado_bp edits are outside W7.",
     "packs/waystone_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception."
   }
 }

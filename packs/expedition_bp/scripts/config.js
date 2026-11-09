@@ -1,5 +1,5 @@
 export const CONFIG = {
-  /** New expeditions can start. Disabled: `/realm:expedition` only shows the leaderboards (a run in progress finishes). */
+  /** New expeditions can start. Disabled: starting a new expedition is refused (the menu says so); a run in progress still finishes. */
   enabled: true,
 
   /**
@@ -104,7 +104,7 @@ export const CONFIG = {
   /** Highest Nightmare tier (1 to 20). Clearing Hard unlocks tier 1, clearing tier N unlocks N + 1. */
   maxTier: 20,
 
-  /** From this Nightmare tier, rooms can be tall (15 to 30 blocks high) with balconies, and vertical shafts appear. */
+  /** From this Nightmare tier, rooms can be tall (14 to 30 blocks high) with balconies, and vertical shafts appear. */
   tallFromTier: 3,
 
   /** Players may place blocks in a dungeon (to pillar up, bridge or wall off) from this Nightmare tier. Removed after the run. */

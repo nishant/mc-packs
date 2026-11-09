@@ -259,3 +259,17 @@ test("O30 review: give rechecks the operator a tick later, and counts each targe
   assert.equal(w.bal(a), 0);
   assert.equal(w.ledger().length, n);
 });
+
+test("MCP-073: crowns_give from an NPC dialogue gives Crowns even though its initiator is not an operator; a non-operator player is refused", async () => {
+  const w = await world();
+  const clicker = w.sim.join("Cleo");
+  const a = w.sim.join("Ann");
+  const give = w.sim.commands.get("realm:crowns_give").cb;
+  give({ initiator: clicker, sourceType: "NPCDialogue" }, [a], 25);
+  w.sim.step(1);
+  assert.equal(w.bal(a), 25, "the NPC button paid out");
+  give({ initiator: clicker, sourceEntity: clicker, sourceType: "Entity" }, [a], 25);
+  w.sim.step(1);
+  assert.equal(w.bal(a), 25, "a non-operator player gives nothing");
+  assert.ok(clicker.messages.some((m) => String(m).includes("Only operators can give Crowns.")), "and is told why");
+});
