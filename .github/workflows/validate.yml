@@ -212,7 +212,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh label create perf-report --color 5319e7 --description "Post-release validation (validate.yml)" --force > /dev/null
-          gh issue create --title "Validation ${GITHUB_SHA::7} (${GITHUB_REF_NAME})" --body-file report.md --label perf-report
+          url=$(gh issue create --title "Validation ${GITHUB_SHA::7} (${GITHUB_REF_NAME})" --body-file report.md --label perf-report)
+          new=${url##*/}
+          # One open report per branch: close this branch's older perf-report issues, superseded by the new one.
+          gh issue list --label perf-report --state open --limit 200 --json number,title \
+            --jq ".[] | select(.number != ${new}) | select(.title | endswith(\"(${GITHUB_REF_NAME})\")) | .number" |
+            while read -r old; do gh issue close "$old" --comment "Superseded by #${new}." > /dev/null; done
       - name: Red when a scenario failed or a pair regressed
         if: always()
         run: test "${{ steps.report.outputs.status }}" = ok

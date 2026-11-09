@@ -6,7 +6,7 @@ import { getFlippedStates } from "../modifiers/MirrorModifier.js";
 import { isCreative, countBlocks, removeBlocks } from "../utils/InventoryUtils.js";
 import { ALWAYS_REPLACEABLE, UNPLACEABLE } from "./BlockPlacer.js";
 import { UNBREAKABLE, canMineWithTool, isDiggingTool, getBlockDrop } from "./BlockDestroyer.js";
-import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
+import { filterAllowedPositionsAsync, isBuildBlockedForPlayer } from "./Protection.js";
 import { ItemStack } from "@minecraft/server";
 
 let AIR_PERM = null;
@@ -80,13 +80,24 @@ function damageTool(player, count) {
     } catch {}
 }
 
+/**
+ * The modifier copies of a hand-placed or hand-broken block, minus the cells safe zones and Land Claims protect.
+ * Index 0 stays the block the player really touched (vanilla already checked it); the rest are filtered.
+ */
+export async function copiesAllowed(player, dim, origin) {
+    const all = applyModifiers(player, [{ x: origin.x, y: origin.y, z: origin.z }]);
+    if (!all || all.length <= 1) return all ?? [];
+    const rest = await filterAllowedPositionsAsync(player, dim.id, all.slice(1), false);
+    return [all[0], ...rest];
+}
+
 const pendingPlacements = new Map();
 
 const pendingBreaks = new Map();
 
 export function startVanillaModifierHook() {
 
-    world.afterEvents.playerPlaceBlock.subscribe(ev => {
+    world.afterEvents.playerPlaceBlock.subscribe(async ev => {
         const { block, player } = ev;
         if (!anyModifierEnabled(player)) return;
         if (getState(player).mode !== "disable") return;
@@ -101,8 +112,8 @@ export function startVanillaModifierHook() {
         const dim      = player.dimension;
         const creative = isCreative(player);
 
-        const positions = filterSafeZonePositions(player, dim.id, applyModifiers(player, [{ x: origin.x, y: origin.y, z: origin.z }]), false);
-        if (positions.length <= 1) return;
+        const positions = await copiesAllowed(player, dim, origin);
+        if (positions.length <= 1 || !player.isValid) return;
 
         const radialEnabled = getRadialState(player).enabled;
         const playerPendingBreaks = radialEnabled ? pendingBreaks.get(player.id) : null;
@@ -174,7 +185,7 @@ export function startVanillaModifierHook() {
         }
     });
 
-    world.afterEvents.playerBreakBlock.subscribe(ev => {
+    world.afterEvents.playerBreakBlock.subscribe(async ev => {
         const { block, player, itemStackBeforeBreak } = ev;
         if (!anyModifierEnabled(player)) return;
         if (getState(player).mode !== "disable") return;
@@ -199,8 +210,8 @@ export function startVanillaModifierHook() {
 
         const lootMgr = world.getLootTableManager?.() ?? null;
 
-        const positions = filterSafeZonePositions(player, dim.id, applyModifiers(player, [{ x: origin.x, y: origin.y, z: origin.z }]), false);
-        if (positions.length <= 1) return;
+        const positions = await copiesAllowed(player, dim, origin);
+        if (positions.length <= 1 || !player.isValid) return;
 
         if (getRadialState(player).enabled) {
             const playerPending = pendingPlacements.get(player.id);

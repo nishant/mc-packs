@@ -10,7 +10,7 @@ import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern }
 import { getPlacementStatesFromAir } from "../modes/AirBuildMode.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
 import { lockActionBar } from "../utils/ActionBar.js";
-import { expandBeds, isBedType, directionFromStates, directionFromYaw, trimPlacement, placementItemCount, keepBedHalvesTogether, dropIncompleteBeds } from "./beds.js";
+import { expandBeds, isBedType, directionFromStates, directionFromYaw, trimPlacement, placementItemCount, keepBedHalvesTogether, dropIncompleteBeds, trimPlacementByType } from "./beds.js";
 export const UNPLACEABLE = new Set([
     "minecraft:undyed_shulker_box",
 ]);
@@ -79,15 +79,17 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
     };
     const palette      = getPaletteBlocks(player);
     const distribution = getDistributionMode(player);
+    const typeByKey    = new Map();
     let assignments    = palette ? assignPalette(palette, toPlace, distribution) : null;
     if (assignments) {
         assignments = assignments.filter(a => !UNPLACEABLE.has(a.typeId));
         toPlace     = assignments.map(a => a.pos);
+        for (const a of assignments) typeByKey.set(`${a.pos.x},${a.pos.y},${a.pos.z}`, a.typeId);
     }
     const alreadyExpanded = toPlace.some(p => p._bedGroup != null);
     if (alreadyExpanded) {
         toPlace = trimPlacement(dropIncompleteBeds(toPlace), cap).positions;
-        if (assignments) assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeId }));
+        if (assignments) assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeByKey.get(`${p.x},${p.y},${p.z}`) ?? typeId }));
     } else if (bedBuild || (assignments && assignments.some(a => isBedType(a.typeId)))) {
         let yaw = 0;
         try { yaw = player.getRotation().y; } catch { yaw = 0; }
@@ -105,7 +107,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
         const expanded = expandBeds(entries, canPlaceBed);
         const trimmed = trimPlacement(expanded.positions, cap);
         toPlace = trimmed.positions;
-        if (assignments) assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeId }));
+        if (assignments) assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeByKey.get(`${p.x},${p.y},${p.z}`) ?? typeId }));
     }
     if (!creative) {
         if (assignments) {
@@ -122,17 +124,17 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                 player.sendMessage(t("eb.place.no_palette_blocks"));
                 return 0;
             }
-            if (totalAvailable < placementItemCount(toPlace)) {
-                player.sendMessage(t("eb.place.limited_palette_blocks", totalAvailable));
-                toPlace = trimPlacement(toPlace, undefined, totalAvailable).positions;
-                assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeId }));
+            const have = new Map();
+            for (const t of needed.keys()) have.set(t, countBlocks(player, t));
+            const typeMap = new Map(assignments.map(a => [a.pos, a.typeId]));
+            const trimmed = trimPlacementByType(toPlace, e => typeMap.get(e) ?? e.typeId ?? typeId, have);
+            if (trimmed.positions.length < toPlace.length) {
+                player.sendMessage(t("eb.place.limited_palette_blocks", placementItemCount(trimmed.positions)));
+                toPlace = trimmed.positions;
+                assignments = toPlace.map(p => ({ pos: p, typeId: typeMap.get(p) ?? p.typeId ?? typeId }));
             }
-            const finalNeeded = new Map();
-            for (const a of assignments) {
-                if (a.pos?._bedHead) continue;
-                finalNeeded.set(a.typeId, (finalNeeded.get(a.typeId) ?? 0) + 1);
-            }
-            for (const [t, count] of finalNeeded) {
+            if (toPlace.length === 0) return 0;
+            for (const [t, count] of trimmed.charged) {
                 removeBlocks(player, t, count);
             }
         } else {

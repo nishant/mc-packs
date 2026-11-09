@@ -437,3 +437,45 @@ export function keepBedHalvesTogether(positions) {
     }
     return out;
 }
+
+/**
+ * Keep placements the player can pay for, per block type. A bed's two halves stay together and cost their
+ * `_bedItems` (default 1, the head 0) of the foot's type. A group that does not fit is skipped, later ones still
+ * get their turn. `have` maps type id to items owned. Returns the kept positions and what each type is charged.
+ * @param {Array<any>} entries
+ * @param {(entry: any) => string} typeOf
+ * @param {Map<string, number>} have
+ */
+export function trimPlacementByType(entries, typeOf, have) {
+    const left = new Map(have);
+    /** @type {Map<number | string, any[]>} */
+    const groups = new Map();
+    const order = [];
+    let n = 0;
+    for (const entry of entries) {
+        const id = entry._bedGroup ?? `s${n++}`;
+        let group = groups.get(id);
+        if (!group) { group = []; groups.set(id, group); order.push(id); }
+        group.push(entry);
+    }
+    const kept = [];
+    /** @type {Map<string, number>} */
+    const charged = new Map();
+    for (const id of order) {
+        const g = groups.get(id) ?? [];
+        const cost = new Map();
+        for (const e of g) {
+            const units = e._bedHead ? 0 : (e._bedItems ?? 1);
+            if (units > 0) cost.set(typeOf(e), (cost.get(typeOf(e)) ?? 0) + units);
+        }
+        let ok = true;
+        for (const [t, c] of cost) if ((left.get(t) ?? 0) < c) { ok = false; break; }
+        if (!ok) continue;
+        for (const [t, c] of cost) {
+            left.set(t, (left.get(t) ?? 0) - c);
+            charged.set(t, (charged.get(t) ?? 0) + c);
+        }
+        kept.push(...g);
+    }
+    return { positions: kept, charged };
+}

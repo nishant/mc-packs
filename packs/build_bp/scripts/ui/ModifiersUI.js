@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
-import { getMirrorState, getArrayState, getRadialState, setMirrorState, setArrayState, setRadialState } from "../core/PlayerState.js";
+import { getMirrorState, getArrayState, getRadialState, setMirrorState, setArrayState, setRadialState, MAX_ARRAY_COUNT, MIN_RADIAL_SLICES, MAX_RADIAL_SLICES, MAX_MODIFIER_RADIUS } from "../core/PlayerState.js";
 import { t } from "../utils/Text.js";
 import { smallIcon, usesFloatingUI, showForm } from "../utils/CustomUI.js";
 import { showHintOnce } from "../utils/Hints.js";
@@ -197,7 +197,7 @@ export async function showMirrorConfigUI(player) {
         const x      = parseIntOr(xStr,   m.x);
         const y      = parseIntOr(yStr,   m.y);
         const z      = parseIntOr(zStr,   m.z);
-        const radius = Math.max(1, parseIntOr(radStr, m.radius));
+        const radius = Math.max(1, Math.min(MAX_MODIFIER_RADIUS, parseIntOr(radStr, m.radius)));
         setMirrorState(player, { x, y, z, radius });
     }
     if (usesFloatingUI(player) && openPanel(player, "mirror_config")) return;
@@ -218,7 +218,7 @@ export async function showArrayConfigUI(player) {
         const ox    = parseIntOr(oxStr,    a.ox);
         const oy    = parseIntOr(oyStr,    a.oy);
         const oz    = parseIntOr(ozStr,    a.oz);
-        const count = Math.max(1, parseIntOr(countStr, a.count));
+        const count = Math.max(1, Math.min(MAX_ARRAY_COUNT, parseIntOr(countStr, a.count)));
         setArrayState(player, { ox, oy, oz, count });
     }
     if (usesFloatingUI(player) && openPanel(player, "array_config")) return;
@@ -239,8 +239,8 @@ export async function showRadialConfigUI(player) {
         const [xStr, zStr, slicesStr, radStr, alternate] = res.formValues;
         const x      = parseIntOr(xStr,      r.x);
         const z      = parseIntOr(zStr,      r.z);
-        const slices = Math.max(2, parseIntOr(slicesStr, r.slices));
-        const radius = Math.max(1, parseIntOr(radStr,    r.radius));
+        const slices = Math.max(MIN_RADIAL_SLICES, Math.min(MAX_RADIAL_SLICES, parseIntOr(slicesStr, r.slices)));
+        const radius = Math.max(1, Math.min(MAX_MODIFIER_RADIUS, parseIntOr(radStr,    r.radius)));
         setRadialState(player, { x, z, slices, radius, alternate: Boolean(alternate) });
     }
     if (usesFloatingUI(player) && openPanel(player, "radial_config")) return;

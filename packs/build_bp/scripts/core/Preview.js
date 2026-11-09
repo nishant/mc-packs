@@ -23,7 +23,7 @@ import { isActionBarLocked, steadyBar } from "../utils/ActionBar.js";
 import { showHintOnce } from "../utils/Hints.js";
 import { recordTick, tpsText } from "../utils/Tps.js";
 import { getAirBuildTarget } from "../modes/AirBuildMode.js";
-import { yawToFacingIndex, getRotatedEntries } from "./Clipboard.js";
+import { yawToFacingIndex, getRotatedEntries, boxVolume } from "./Clipboard.js";
 import { applyModifiers, applyModifiersToEntries, getModifierCacheKey } from "./ModifierPipeline.js";
 import { aimingAtPanel } from "./EntityPanel.js";
 import { aimingAtCoach } from "./Coach.js";
@@ -574,12 +574,19 @@ export function startPreviewLoop() {
                             z1 = Math.min(anchor.z, target.z); z2 = Math.max(anchor.z, target.z);
                         }
                         const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-                        const blockCount = (dx + 1) * (dy + 1) * (dz + 1);
+                        // Same clamped y range Copy uses, so the "over your limit" warning matches what Copy accepts.
+                        const blockCount = boxVolume(player.dimension.id, { x: x1, y: y1, z: z1 }, { x: x2, y: y2, z: z2 });
                         const dims    = [dx + 1, dy + 1, dz + 1].filter(d => d > 1);
                         const dimStr  = dims.length ? dims.join("x") : "1";
                         let preview;
+                        // A far-off corner must never build a particle for every cell of the box: past the copy limit
+                        // (which Copy refuses anyway) only the box edges are sampled.
+                        const copyLimitBlocks = getMaxBlocks(player);
+                        const copyTooLarge = blockCount > copyLimitBlocks;
                         if (useCornerOutline) {
                             preview = bboxCorners(x1, x2, y1, y2, z1, z2);
+                        } else if (copyTooLarge) {
+                            preview = sampledBoxEdges(x1, x2, y1, y2, z1, z2);
                         } else {
                             const positions = [];
                             for (let x = x1; x <= x2; x++)
@@ -589,7 +596,7 @@ export function startPreviewLoop() {
                             preview = useOutline ? wireframePositions(positions) : adaptiveParticles(wireframePositions(positions));
                         }
                         const actionBar = rawtext(
-                            { text: `§f${blockCount} blocks §7(${dimStr})\n` },
+                            { text: `${copyTooLarge ? "§c" : "§f"}${blockCount} blocks §7(${dimStr})${copyTooLarge ? ` §c- over your limit of ${copyLimitBlocks}` : ""}\n` },
                             t(hasSecondAnchor ? "eb.preview.copy_step3" : "eb.preview.copy_step2"),
                         );
                         previewCache.set(player.id, { key: cacheKey, preview, particleId, actionBar });

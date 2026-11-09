@@ -1,16 +1,17 @@
 // @ts-nocheck
-import { BlockPermutation } from "@minecraft/server";
+import { BlockPermutation, system } from "@minecraft/server";
 import { getState } from "./PlayerState.js";
 import { isCreative, countBlocks, removeBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
-import { getMaxBlocks, getUndoThreshold, getReplaceBlocks } from "./Settings.js";
+import { getMaxBlocks, getUndoThreshold, getReplaceBlocks, getAllowDestroy, getDestroyCreativeOnly } from "./Settings.js";
 import { captureSnapshot, recordSnapshot } from "./UndoRedo.js";
 import { enqueue } from "./PlacementQueue.js";
 import { ALWAYS_REPLACEABLE, UNPLACEABLE } from "./BlockPlacer.js";
 import { rotateStates } from "../utils/BlockStates.js";
 import { applyModifiersToEntries } from "./ModifierPipeline.js";
-import { deleteSlot } from "../utils/ClipboardStore.js";
-import { filterSafeZonePositions, inSafeZoneAt, isBuildBlockedForPlayer } from "./Protection.js";
+import { deleteSlot, fitsInSlot } from "../utils/ClipboardStore.js";
+import { filterAllowedPositionsAsync, inSafeZoneAt, isBuildBlockedForPlayer } from "./Protection.js";
+import { UNBREAKABLE } from "./BlockDestroyer.js";
 import { bedPartnerPos, chargeUnits, dropIncompleteBeds, isBedType } from "./beds.js";
 import { isOp } from "../utils/Permissions.js";
 import { get } from "../settings.js";
@@ -81,14 +82,53 @@ export function getRotatedEntries(clipboard, origin, pasteFacingIdx) {
     });
 }
 
-export function captureClipboard(player, corner1, corner2) {
-    const dim = player.dimension;
-    const dimId = dim.id;
+function dimYRange(dimId) {
     const yMin = dimId === "minecraft:nether" || dimId === "minecraft:the_end" ? 0 : -64;
     const yMax = dimId === "minecraft:nether" ? 127 : dimId === "minecraft:the_end" ? 255 : 319;
-    const x1 = Math.min(corner1.x, corner2.x), x2 = Math.max(corner1.x, corner2.x);
-    const y1 = Math.max(yMin, Math.min(corner1.y, corner2.y)), y2 = Math.min(yMax, Math.max(corner1.y, corner2.y));
-    const z1 = Math.min(corner1.z, corner2.z), z2 = Math.max(corner1.z, corner2.z);
+    return { yMin, yMax };
+}
+
+/** The box both corners span, with y clamped to the dimension (what capture and cut really read). */
+export function boxBounds(dimId, corner1, corner2) {
+    const { yMin, yMax } = dimYRange(dimId);
+    return {
+        x1: Math.min(corner1.x, corner2.x), x2: Math.max(corner1.x, corner2.x),
+        y1: Math.max(yMin, Math.min(corner1.y, corner2.y)), y2: Math.min(yMax, Math.max(corner1.y, corner2.y)),
+        z1: Math.min(corner1.z, corner2.z), z2: Math.max(corner1.z, corner2.z),
+    };
+}
+
+export function boxVolume(dimId, corner1, corner2) {
+    const b = boxBounds(dimId, corner1, corner2);
+    return Math.max(0, b.x2 - b.x1 + 1) * Math.max(0, b.y2 - b.y1 + 1) * Math.max(0, b.z2 - b.z1 + 1);
+}
+
+/** A copy or cut may read at most the player's block limit (getMaxBlocks) cells: a paste is trimmed to it anyway. */
+export function copyLimit(player) {
+    return getMaxBlocks(player);
+}
+
+/** True (and tells the player on the action bar) when the box is over the copy limit. */
+export function copyTooBig(player, corner1, corner2, notify = true) {
+    const vol = boxVolume(player.dimension.id, corner1, corner2);
+    const cap = copyLimit(player);
+    if (vol <= cap) return false;
+    if (notify) {
+        // Often called from a before event, where the action bar is read-only.
+        system.run(() => {
+            try {
+                lockActionBar(player.id, 2500);
+                player.onScreenDisplay.setActionBar(t("eb.bar.copy_too_big", vol, cap));
+            } catch { }
+        });
+    }
+    return true;
+}
+
+export function captureClipboard(player, corner1, corner2) {
+    const dim = player.dimension;
+    if (boxVolume(dim.id, corner1, corner2) > copyLimit(player)) return 0;
+    const { x1, x2, y1, y2, z1, z2 } = boxBounds(dim.id, corner1, corner2);
     const blocks = [];
     for (let x = x1; x <= x2; x++)
         for (let y = y1; y <= y2; y++)
@@ -115,12 +155,17 @@ export function captureClipboard(player, corner1, corner2) {
     return blocks.length;
 }
 
-export function cutAndCapture(player, corner1, corner2) {
+function hasInventory(block) {
+    try { return !!block.getComponent("minecraft:inventory"); } catch { return false; }
+}
+
+export async function cutAndCapture(player, corner1, corner2) {
     if (isBuildBlockedForPlayer(player, true)) return 0;
+    if (!getAllowDestroy()) { try { player.sendMessage(t("eb.destroy.disabled")); } catch { } return 0; }
+    if (getDestroyCreativeOnly() && !isCreative(player)) { try { player.sendMessage(t("eb.destroy.creative_only")); } catch { } return 0; }
     const dim = player.dimension;
+    const { x1, y1, z1, x2, z2 } = boxBounds(dim.id, corner1, corner2);
     if (!isOp(player) && get("safeZonesOperatorsOnly") === true) {
-        const x1 = Math.min(corner1.x, corner2.x), x2 = Math.max(corner1.x, corner2.x);
-        const z1 = Math.min(corner1.z, corner2.z), z2 = Math.max(corner1.z, corner2.z);
         for (let x = x1; x <= x2; x++) {
             for (let z = z1; z <= z2; z++) {
                 const zHit = inSafeZoneAt(dim.id, x, z);
@@ -136,27 +181,61 @@ export function cutAndCapture(player, corner1, corner2) {
     const state     = getState(player);
     const clipboard = state.clipboard;
     const creative  = isCreative(player);
+
+    // Bedrock, spawners and the like stay put, and so do containers in survival (the clipboard keeps no contents).
+    const asked = [];
+    for (const b of clipboard.blocks) {
+        if (UNBREAKABLE.has(b.typeId)) continue;
+        const pos = { x: x1 + b.dx, y: y1 + b.dy, z: z1 + b.dz };
+        if (!creative) {
+            try {
+                const block = dim.getBlock(pos);
+                if (block && hasInventory(block)) continue;
+            } catch { }
+        }
+        asked.push({ ...pos, _b: b });
+    }
+    // Land Claims: cells in someone else's claim are neither cut nor copied.
+    const allowed = await filterAllowedPositionsAsync(player, dim.id, asked, true);
+    if (!player.isValid || state.clipboard !== clipboard) return 0;
+    const cutPositions = [];
+    const cutBlocks = [];
+    for (const a of allowed ?? []) {
+        try {
+            const block = dim.getBlock(a);
+            if (!block || block.typeId !== a._b.typeId) continue;
+        } catch { continue; }
+        cutPositions.push({ x: a.x, y: a.y, z: a.z });
+        cutBlocks.push(a._b);
+    }
+    if (!cutBlocks.length) { state.clipboard = null; return 0; }
+    // A survival cut destroys the source blocks: it must be savable, or leaving would lose them for good.
+    if (!creative && !fitsInSlot(cutBlocks)) {
+        state.clipboard = null;
+        try { player.sendMessage(t("eb.clipboard.cut_too_big_to_keep")); } catch { }
+        return 0;
+    }
+    clipboard.blocks = cutBlocks;
     clipboard.isCut = !creative;
-    const x1  = Math.min(corner1.x, corner2.x);
-    const y1  = Math.min(corner1.y, corner2.y);
-    const z1  = Math.min(corner1.z, corner2.z);
-    const cutPositions = clipboard.blocks.map(b => ({ x: x1 + b.dx, y: y1 + b.dy, z: z1 + b.dz }));
+    clipboard.cutId = clipboard.version;
     const undoThreshold = getUndoThreshold(player);
     const snapshot = captureSnapshot(dim, cutPositions, "minecraft:air", {}, null, undoThreshold);
     if (snapshot) {
         snapshot.isCutSource = true;
+        snapshot.survival = !creative;
+        snapshot.cutId = clipboard.cutId;
         recordSnapshot(player, snapshot);
     }
-    for (const b of clipboard.blocks) {
+    for (const pos of cutPositions) {
         try {
-            const block = dim.getBlock({ x: x1 + b.dx, y: y1 + b.dy, z: z1 + b.dz });
+            const block = dim.getBlock(pos);
             if (block && !block.isAir) block.setType("minecraft:air");
         } catch { }
     }
-    return count;
+    return cutBlocks.length;
 }
 
-export function executePaste(player, origin) {
+export async function executePaste(player, origin) {
     if (isBuildBlockedForPlayer(player, true)) return 0;
     const state = getState(player);
     if (!state.clipboard?.blocks?.length) return 0;
@@ -169,18 +248,21 @@ export function executePaste(player, origin) {
 
     const replaceBlocks = creative && getReplaceBlocks(player);
 
-    const dimId         = dim.id;
-    const yMin          = dimId === "minecraft:nether" || dimId === "minecraft:the_end" ? 0 : -64;
-    const yMax          = dimId === "minecraft:nether" ? 127 : dimId === "minecraft:the_end" ? 255 : 319;
-    let entries = filterSafeZonePositions(
+    const { yMin, yMax } = dimYRange(dim.id);
+    // Safe zones and Land Claims, like every other way of building.
+    const allowedEntries = await filterAllowedPositionsAsync(
         player,
         dim.id,
         applyModifiersToEntries(player, getRotatedEntries(clipboard, origin, pasteFacing)),
         true
-    )
+    );
+    // The claims answer can take a few ticks: the player or the clipboard may be gone by now.
+    if (!player.isValid || getState(player).clipboard !== clipboard) return 0;
+    let entries = allowedEntries
         .filter(e => {
             if (e.pos.y < yMin || e.pos.y > yMax) return false;
             if (UNPLACEABLE.has(e.typeId)) return false;
+            if (!creative && UNBREAKABLE.has(e.typeId)) return false;
             try {
                 const block = dim.getBlock(e.pos);
                 if (!block) return true;

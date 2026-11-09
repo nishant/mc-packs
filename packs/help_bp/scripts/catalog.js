@@ -2803,7 +2803,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lModifiers§r (§e/realm:build_modifiers§r or Sneak + left-click with the Building Book): enable §lMirror§r (X, Y, Z axes, odd/even center, radius), §lArray§r (offset X/Y/Z and copy count), and/or §lRadial§r (2 to 16 slices around a center, optional alternate slice mirroring). Colored guide planes mark your active mirror and radial axes, and modifiers also copy single blocks you place or break by hand when build mode is §eDisable§r.",
+        "text": "§lModifiers§r (§e/realm:build_modifiers§r or Sneak + left-click with the Building Book): enable §lMirror§r (X, Y, Z axes, odd/even center, radius), §lArray§r (offset X/Y/Z and copy count, 1 to 64), and/or §lRadial§r (2 to 16 slices around a center, optional alternate slice mirroring). Modifiers never make more blocks than your block limit; a build that would is flagged as over the limit. Colored guide planes mark your active mirror and radial axes, and modifiers also copy single blocks you place or break by hand when build mode is §eDisable§r.",
         "ops": false
       },
       {
@@ -2811,7 +2811,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lCopy, Cut and Paste:§r select §lCopy / Paste§r mode. Right-click corner 1, corner 2, and height (corner 3) to open the §lCopy / Cut§r prompt. Once copied or cut, aim to preview the rotated bounding box (or full ghost preview) and right-click to paste; §lSneak + right-click§r clears the clipboard to select a new region. Manage saved slots in §e/realm:build_clipboard§r.",
+        "text": "§lCopy, Cut and Paste:§r select §lCopy / Paste§r mode. Right-click corner 1, corner 2, and height (corner 3) to open the §lCopy / Cut§r prompt. Once copied or cut, aim to preview the rotated bounding box (or full ghost preview) and right-click to paste; §lSneak + right-click§r clears the clipboard to select a new region. Manage saved slots in §e/realm:build_clipboard§r. A selection can hold at most your block limit (§emaxBlocks§r, default 50,000) cells: a bigger box is refused with a message and the selection stays at the previous step, and a copy too big to save is not kept after you leave. Cut follows the Destroy settings (§eallowDestroy§r, §edestroyCreativeOnly§r) and skips bedrock, spawners and other unbreakable blocks, containers such as chests (in survival) and protected cells. In survival, a Cut bigger than one saved slot (about 13,000 blocks) is refused and nothing is cut. Undoing a Cut ends its free paste and gives the blocks back if you redo it; it is refused while some of the cut cells are built over. Paste, Cut, Air Build, modifier copies, Redo and undoing a destroy all skip protected cells (other players' land claims, and safe zones for non-operators).",
         "ops": false
       },
       {
