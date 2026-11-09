@@ -574,7 +574,7 @@ function pull(t, dim) {
         if (d <= captureR) {
           state = { startTick: now, angle: Math.atan2(dz, dx) };
           t.spinning.set(p.id, state);
-          p.playSound("mob.breeze.wind_burst", { location: l, volume: 0.75, pitch: 0.85 });
+          p.playSound("breeze_wind_charge.burst", { location: l, volume: 0.75, pitch: 0.85 });
         } else {
           // Outer suction zone: pull the player inward toward the funnel with a counterclockwise swirl
           if (t.frame % 2 === 0) {

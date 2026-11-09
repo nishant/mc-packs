@@ -8,14 +8,19 @@ import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 
-for (const folder of ["wander_bp", "caravan_bp"]) {
+for (const [folder, event, getter] of [
+  ["wander_bp", "playerInteractWithEntity", "target"],
+  ["caravan_bp", "playerInteractWithEntity", "target"],
+  ["dolphin_bp", "playerInteractWithEntity", "target"],
+  ["bounty_bp", "playerInteractWithBlock", "block"],
+]) {
   test(`${folder}: a tap another pack canceled is ignored`, () => {
     const text = fs.readFileSync(path.join(import.meta.dirname, "..", "packs", folder, "scripts", "main.js"), "utf8");
     const source = ts.createSourceFile("main.js", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     /** @type {import("typescript").ArrowFunction | undefined} */
     let callback;
     const visit = (/** @type {import("typescript").Node} */ node) => {
-      if (ts.isCallExpression(node) && node.expression.getText(source) === "world.beforeEvents.playerInteractWithEntity.subscribe") {
+      if (ts.isCallExpression(node) && node.expression.getText(source) === `world.beforeEvents.${event}.subscribe`) {
         const first = node.arguments[0];
         if (first && ts.isArrowFunction(first)) callback = first;
       }
@@ -32,7 +37,7 @@ for (const folder of ["wander_bp", "caravan_bp"]) {
       get player() {
         throw new Error("read the player of a canceled tap");
       },
-      get target() {
+      get [getter]() {
         throw new Error("read the target of a canceled tap");
       },
     };

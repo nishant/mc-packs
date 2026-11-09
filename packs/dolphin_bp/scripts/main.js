@@ -275,6 +275,7 @@ function fed(player, target, slot, type, before) {
 // Feeding: remember the fish stack before the interaction, and look again a tick later. If the game
 // didn't use up a fish itself (its own feeding has a cooldown), this pack takes one.
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return;
   const { player, target, itemStack } = ev;
   if (target.typeId !== DOLPHIN || !itemStack || !FISH.has(itemStack.typeId)) return;
   const slot = player.selectedSlotIndex;

@@ -19,7 +19,7 @@ export const CONFIG = {
   /** Allow using NOS Rockets (custom:nos_rocket) while gliding with an elytra. */
   nosEnabled: true,
 
-  /** NOS Rocket boost multiplier relative to normal firework baseline (3.0 to 4.0). */
+  /** NOS Rocket boost multiplier relative to normal firework baseline (1 to 6 in /realm:config). */
   nosMultiplier: 3.5,
 
   /** Normal firework rocket impulse baseline in blocks/tick. */

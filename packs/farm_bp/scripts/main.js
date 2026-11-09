@@ -16,7 +16,7 @@ const PROP_AREAS = "farm:areas"; // world: JSON Farm[] (the game keeps the ticki
 
 const MIN_RADIUS = 1;
 const MAX_RADIUS = 4;
-const NAME_RE = /^[A-Za-z0-9_-]{1,24}$/;
+const NAME_RE = /^(?!realm_)[A-Za-z0-9_-]{1,24}$/i; // not realm_*: Expeditions owns the ticking areas named realm_exp_<slot>
 const EDIT_LEVEL = CONFIG.everyoneCanAdd ? CommandPermissionLevel.Any : CommandPermissionLevel.GameDirectors;
 
 /** @typedef {{ name: string, dim: string, x: number, z: number, radius: number, by: string, at: number }} Farm */
@@ -138,7 +138,7 @@ async function addForm(player) {
   // Labels may or may not take a place in formValues: the name is the string, the radius the number.
   const name = String(res.formValues.find((v) => typeof v === "string") ?? "").trim();
   const radius = Number(res.formValues.find((v) => typeof v === "number") ?? get("defaultRadius"));
-  if (!NAME_RE.test(name)) player.sendMessage("§cFarm names use letters, digits, _ and - (up to 24).");
+  if (!NAME_RE.test(name)) player.sendMessage("§cFarm names use letters, digits, _ and - (up to 24) and can't start with realm_.");
   else addFarm(player, name, radius);
   return openMenu(player);
 }
@@ -238,7 +238,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       const player = originPlayer(origin);
       if (!player) return notPlayer;
       if (!NAME_RE.test(name)) {
-        return { status: CustomCommandStatus.Failure, message: "Farm names use letters, digits, _ and - (up to 24)." };
+        return { status: CustomCommandStatus.Failure, message: "Farm names use letters, digits, _ and - (up to 24) and can't start with realm_." };
       }
       const r = radius ?? get("defaultRadius");
       if (r < MIN_RADIUS || r > MAX_RADIUS) {

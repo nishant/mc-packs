@@ -131,21 +131,12 @@ function clampFlightVelocity(v, maxSpeed) {
 }
 
 /**
- * Applies target velocity to a gliding player, trying applyImpulse first and falling back to applyKnockback.
+ * Applies target velocity to a gliding player with applyKnockback (applyImpulse throws on players).
  * @param {Player} player
- * @param {{ x: number, y: number, z: number }} currentVelocity
  * @param {{ x: number, y: number, z: number }} newVelocity
  */
-function applyPropulsion(player, currentVelocity, newVelocity) {
-  try {
-    player.applyImpulse({
-      x: newVelocity.x - currentVelocity.x,
-      y: newVelocity.y - currentVelocity.y,
-      z: newVelocity.z - currentVelocity.z,
-    });
-  } catch {
-    player.applyKnockback({ x: newVelocity.x, z: newVelocity.z }, newVelocity.y);
-  }
+function applyPropulsion(player, newVelocity) {
+  player.applyKnockback({ x: newVelocity.x, z: newVelocity.z }, newVelocity.y);
 }
 
 /**
@@ -278,7 +269,7 @@ function playNosAudio(player) {
     if (!player.isValid || !player.isGliding) return;
     try {
       player.playSound("firework.launch", { volume: 0.5, pitch: 0.85 });
-      player.playSound("mob.breeze.wind_burst", { volume: 0.47, pitch: 1.2 });
+      player.playSound("breeze_wind_charge.burst", { volume: 0.47, pitch: 1.2 });
     } catch {
       // ignore audio error
     }
@@ -335,7 +326,7 @@ function triggerNosRocket(player) {
     },
     maxSpeed
   );
-  applyPropulsion(player, currentVelocity, spoolInitial);
+  applyPropulsion(player, spoolInitial);
   spawnNosParticles(player, forward, "spool");
 
   const spoolTicks = 11;
@@ -357,6 +348,7 @@ function triggerNosRocket(player) {
 
 // Guard against accidental block interaction consumption when holding custom:nos_rocket while gliding.
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
+  if (event.cancel) return; // another pack refused the tap
   if (event.itemStack?.typeId !== NOS_ROCKET) return;
   if (get("nosEnabled") === false) return;
   const player = event.player;
@@ -399,9 +391,17 @@ function makeRunAwayDisc() {
   return stack;
 }
 
+/** Most jukeboxes kept (about 37 characters each, so the saved list stays far under the 32 KB limit). */
+const MAX_JUKEBOXES = 200;
+
 function saveJukeboxes() {
   try {
-    world.setDynamicProperty(PROP_JUKEBOXES, JSON.stringify([...activeJukeboxes.keys()]));
+    const json = JSON.stringify([...activeJukeboxes.keys()]);
+    if (json.length > 30000) {
+      console.warn("[elytra] jukebox list too long to save");
+      return;
+    }
+    world.setDynamicProperty(PROP_JUKEBOXES, json);
   } catch (e) {
     console.warn(`[elytra] ${e}`);
   }
@@ -412,6 +412,7 @@ system.run(() => {
   try {
     const raw = world.getDynamicProperty(PROP_JUKEBOXES);
     const keys = typeof raw === "string" ? JSON.parse(raw) : [];
+    // Every saved key loads: the disc is virtual, so this list is its only record (MAX_JUKEBOXES limits new inserts only).
     for (const key of Array.isArray(keys) ? keys : []) {
       const [dimId, x, y, z] = String(key).split("|");
       if (dimId && [x, y, z].every((n) => Number.isFinite(Number(n)))) {
@@ -475,6 +476,10 @@ function announceDisc(player, text) {
 /** @param {Player} player @param {import("@minecraft/server").Block} block */
 function insertDisc(player, block) {
   const key = `${block.dimension.id}|${block.location.x}|${block.location.y}|${block.location.z}`;
+  if (!activeJukeboxes.has(key) && activeJukeboxes.size >= MAX_JUKEBOXES) {
+    announceDisc(player, "§cToo many jukeboxes are playing Run Away on this world.");
+    return;
+  }
   const rp = block.getComponent("minecraft:record_player");
   if (rp?.getRecord()) rp.ejectRecord();
   if (!consumeRunAwayDisc(player)) return;
@@ -602,7 +607,7 @@ system.runInterval(() => {
           },
           burst.maxSpeed
         );
-        applyPropulsion(player, currentVelocity, nextVel);
+        applyPropulsion(player, nextVel);
         spawnNosParticles(player, forward, "spool");
       } else if (burst.tick <= burst.boostEndTick) {
         // Stage 2: quick kick up to peak speed, then hold it against Elytra drag
@@ -623,7 +628,7 @@ system.runInterval(() => {
           },
           burst.maxSpeed
         );
-        applyPropulsion(player, currentVelocity, nextVel);
+        applyPropulsion(player, nextVel);
         spawnNosParticles(player, forward, "boost");
       } else {
         // Stage 3: slow momentum taper, countering Elytra air drag every tick, with wastegate flutter
@@ -646,7 +651,7 @@ system.runInterval(() => {
           },
           burst.maxSpeed
         );
-        applyPropulsion(player, currentVelocity, nextVel);
+        applyPropulsion(player, nextVel);
         if (taperTick <= 28 && taperTick % 3 === 1) {
           spawnNosParticles(player, forward, "flutter");
         } else if (taperTick > 28 && taperTick % 6 === 0) {

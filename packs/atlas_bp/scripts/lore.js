@@ -48,7 +48,7 @@ export const KIND_HINTS = {
   camp: "Open the barrel: someone left in a hurry.",
   hermit: "Someone lives out here. Wanderers sometimes stop by.",
   wreck: "Open the chest in the hull, if the drowned let you.",
-  watch: "Ring the bell to call the attack, then hold the post for 60 seconds.",
+  watch: "Ring the bell to call the attack, then hold the post for {secs} seconds.",
   fossil: "Mine the 12 bone blocks in the pit.",
   pool: "Tap the amethyst by the water: star-dust settles here.",
   survey: "Tap the post to read Fenn's note.",

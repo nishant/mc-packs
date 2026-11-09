@@ -223,6 +223,7 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
 
 // Tapping a board opens it. An operator sneaking in creative mode uses the lectern normally.
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return;
   const { player, block, isFirstEvent } = ev;
   if (block.typeId !== LECTERN) return;
   const board = boardAt(block.dimension.id, block.location);

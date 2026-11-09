@@ -517,7 +517,6 @@ function crowdedAround(infos, dim, at, limit) {
 /** Makes a natural spawn a champion if every rule allows it. @param {Entity} e */
 function convert(e) {
   if (!e.isValid || e.hasTag(CHAMP) || e.hasTag(SPLIT)) return;
-  if (loaded >= get("maxAlive")) return;
   if (loaded >= aliveCap(get("maxAlive"), get("maxAlivePerPlayer"), world.getAllPlayers().length)) return;
   if (get("nightOnly") === true && !night()) return;
   const at = e.location;
@@ -674,7 +673,7 @@ function storm(champ) {
   if (now < due) return;
   nextStrike.set(champ.id, now + Math.round(rand(s.minSeconds, s.maxSeconds) * 20));
   const dim = champ.dimension;
-  const target = dim.getPlayers({ location: champ.location, maxDistance: s.range }).filter(targetable)[0];
+  const target = dim.getPlayers({ location: champ.location, maxDistance: s.range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], closest: 1 }).filter(targetable)[0];
   if (!target) return;
   const angle = Math.random() * Math.PI * 2;
   const r = rand(1.5, 3);
@@ -1524,7 +1523,7 @@ function costForm(player) {
   const body = [
     `Champions loaded: ${loaded} (${live.size} tracked for the aura)`,
     `Aura: ${get("looks.aura") === true ? "Enabled" : "Disabled"}, a puff every ${get("looks.auraTicks")} ticks`,
-    runs ? `Since the world started: ${runs} aura runs, ${puffs} champion puffs, ${ms} ms in all (${(ms / runs).toFixed(3)} ms a run)` : "No aura runs yet (they only run while a champion has a player within 64 blocks).",
+    runs ? `Since the server started: ${runs} aura runs, ${puffs} champion puffs, ${ms} ms in all (${(ms / runs).toFixed(3)} ms a run)` : "No aura runs yet (they run while a champion is loaded; only champions with a player within 64 blocks puff).",
   ].join("\n");
   return page(player, "Aura cost", body);
 }

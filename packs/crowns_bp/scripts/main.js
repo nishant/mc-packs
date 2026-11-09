@@ -2,6 +2,7 @@ import "./diag.js";
 import {
   CommandPermissionLevel,
   CustomCommandParamType,
+  CustomCommandSource,
   CustomCommandStatus,
   ItemStack,
   Player,
@@ -12,6 +13,7 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { loadNames, lookupName, rememberInCache } from "./names.js";
 import { onScriptEvent } from "./script-events.js";
 import { addPaid, appendEntry, paidOn, parseLedger, utcDay as dayOf } from "./ledger.js";
 
@@ -22,10 +24,10 @@ import { addPaid, appendEntry, paidOn, parseLedger, utcDay as dayOf } from "./le
 const OBJECTIVE = "crowns";
 const PROP_JOINED = "crowns:joined"; // player: true once the starting balance was given
 const PROP_BONUS = "crowns:bonus"; // player: UTC day number of the last daily bonus
-const PROP_NAMES = "crowns:names"; // world: JSON { scoreboard id: player name }, for the top list while they're offline
+const PROP_NAMES = "crowns:names"; // world: JSON { "s<scoreboard id>": player name }, for the top list while they're offline
 const PROP_LEDGER = "crowns:ledger"; // world: the last 200 pays and gives (ledger.js)
 const PROP_PAID = "crowns:paid"; // player: JSON [UTC day number, Crowns sent that day] for the daily pay limit
-const MAX_NAMES = 800; // keeps the names property far below the 32,000 character limit
+const MAX_NAMES = 800; // entries; names.js also trims by size to stay under the 32,000 character limit
 const JOIN_DELAY = 200; // ticks after joining before the bonus note, so it isn't lost under the join popups
 const BUY_MAX = 16; // lots one purchase can buy
 const DAY = 86400000;
@@ -105,7 +107,7 @@ function namesCache() {
   try {
     const raw = world.getDynamicProperty(PROP_NAMES);
     const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
-    names = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    names = loadNames(parsed);
   } catch {
     names = {};
   }
@@ -116,14 +118,10 @@ function namesCache() {
 function rememberName(player) {
   const sid = player.scoreboardIdentity?.id;
   if (sid === undefined) return;
-  const cache = namesCache();
-  if (cache[sid] === player.name) return;
-  delete cache[sid]; // re-added last, so the trim below drops the longest-unseen first
-  cache[sid] = player.name;
-  const keys = Object.keys(cache);
-  for (const k of keys.slice(0, Math.max(0, keys.length - MAX_NAMES))) delete cache[k];
+  const json = rememberInCache(namesCache(), sid, player.name, MAX_NAMES);
+  if (json === undefined) return;
   try {
-    world.setDynamicProperty(PROP_NAMES, JSON.stringify(cache));
+    world.setDynamicProperty(PROP_NAMES, json);
   } catch (e) {
     console.warn(`[crowns] names: ${e}`);
   }
@@ -131,7 +129,7 @@ function rememberName(player) {
 
 /** @param {import("@minecraft/server").ScoreboardIdentity} who */
 function nameOf(who) {
-  const cached = namesCache()[String(who.id)];
+  const cached = lookupName(namesCache(), who.id);
   if (cached) return cached;
   let shown = "";
   try {
@@ -423,7 +421,11 @@ function pay(sender, targets, amount) {
 
 /** @param {Player | undefined} op @param {Player[]} targets @param {number} amount */
 function give(op, targets, amount) {
-  if (op && (!op.isValid || !isOp(op))) return; // the command runs a tick later: still an operator?
+  if (op && (!op.isValid || !isOp(op))) {
+    // the command runs a tick later: still an operator?
+    if (op.isValid) op.sendMessage("§cOnly operators can give Crowns.");
+    return;
+  }
   const seenIds = new Set();
   const valid = (targets ?? []).filter((p) => p.isValid && !seenIds.has(p.id) && seenIds.add(p.id));
   /** @param {string} m */
@@ -777,7 +779,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       ],
     },
     (origin, /** @type {Player[]} */ targets, /** @type {number} */ amount) => {
-      const op = playerOf(origin);
+      // An NPC dialogue button's initiator is the player who clicked it, not an operator: only a player running the command is checked.
+      const op = origin.sourceType === CustomCommandSource.Entity ? playerOf(origin) : undefined;
       later(() => give(op, targets, amount));
       return { status: CustomCommandStatus.Success };
     },

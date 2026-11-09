@@ -105,7 +105,7 @@ const metal = (L) => (L >= 17 ? "netherite" : L >= 10 ? "diamond" : "iron");
 
 /** Every boon. Weights by rarity: common 10, rare 5, epic 2. @type {Boon[]} */
 export const BOONS = [
-  { id: "vigor", name: "Vitality", rarity: "common", desc: "2 extra hearts for the rest of the run", effects: [["health_boost", 1]] },
+  { id: "vigor", name: "Vitality", rarity: "common", desc: "4 extra hearts for the rest of the run", effects: [["health_boost", 1]] },
   { id: "swift", name: "Swiftness", rarity: "common", desc: "Speed for the rest of the run", effects: [["speed", 0]] },
   { id: "ironskin", name: "Iron Skin", rarity: "common", desc: "Resistance for the rest of the run", effects: [["resistance", 0]] },
   { id: "might", name: "Might", rarity: "common", desc: "Strength for the rest of the run", effects: [["strength", 0]] },
@@ -863,7 +863,7 @@ const PARCELS = "expedition:parcels:"; // + player id. world: JSON Parcel[]
 const PARCEL_NEXT = "expedition:parcel_next"; // world: the next parcel number
 const PARCEL_TAG = "realm:exp_parcel";
 
-/** @typedef {{ id: string, tag: string, k: string, c?: number, placed?: boolean, seen?: boolean, at?: { x: number, y: number, z: number, d: string } }} Parcel k: what it holds ("spoils", "dropped"); c: its carts */
+/** @typedef {{ id: string, tag: string, k: string, c?: number, t?: number, placed?: boolean, seen?: boolean, at?: { x: number, y: number, z: number, d: string } }} Parcel k: what it holds ("spoils", "dropped", "sigil"); c: its carts; t: when it was made (ms; older than PARCEL_DAYS days is swept) */
 
 /** @param {string} owner @returns {Parcel[]} */
 function parcelsOf(owner) {
@@ -878,6 +878,51 @@ function parcelsOf(owner) {
 /** @param {string} owner @param {Parcel[]} list */
 function setParcels(owner, list) {
   world.setDynamicProperty(PARCELS + owner, list.length ? JSON.stringify(list) : undefined);
+}
+
+const PARCEL_DAYS = 30;
+
+/**
+ * Splits a player's parcels into those to keep and those older than `PARCEL_DAYS` days. A parcel without `t` (made
+ * before it was recorded) is stamped with `now` and kept, so it expires 30 days from the first sweep.
+ * @param {Parcel[]} list @param {number} now @returns {{ keep: Parcel[], gone: Parcel[], stamped: boolean }}
+ */
+function splitParcels(list, now) {
+  /** @type {Parcel[]} */
+  const keep = [];
+  /** @type {Parcel[]} */
+  const gone = [];
+  let stamped = false;
+  for (const pc of list) {
+    if (typeof pc.t !== "number") {
+      keep.push({ ...pc, t: now });
+      stamped = true;
+    } else if (now - pc.t > PARCEL_DAYS * 86400000) gone.push(pc);
+    else keep.push(pc);
+  }
+  return { keep, gone, stamped };
+}
+
+/**
+ * On world load: forgets parcels nobody collected in 30 days (their saved structure goes too), so players who never
+ * come back leave nothing behind. A parcel whose structure can't be deleted is kept and tried at the next load.
+ */
+export function expireParcels() {
+  const now = Date.now();
+  for (const key of world.getDynamicPropertyIds()) {
+    if (!key.startsWith(PARCELS)) continue;
+    const owner = key.slice(PARCELS.length);
+    try {
+      const { keep, gone, stamped } = splitParcels(parcelsOf(owner), now);
+      for (const pc of gone) {
+        if (forgetStructure(pc.id)) clearMark(pc.tag);
+        else keep.push(pc);
+      }
+      if (stamped || gone.length) setParcels(owner, keep);
+    } catch (e) {
+      console.warn(`[expedition] parcel sweep ${owner}: ${e}`);
+    }
+  }
 }
 
 /** Does this player have items waiting in a parcel? @param {string} owner */
@@ -913,7 +958,7 @@ export function saveParcel(owner, kind, items, dim, at) {
     world.structureManager.delete(id);
     world.structureManager.createFromWorld(id, dim, { x: at.x, y: at.y, z: at.z }, { x: at.x, y: at.y + 1, z: at.z }, { includeBlocks: false, includeEntities: true, saveMode: StructureSaveMode.World });
     if (!world.structureManager.get(id)) throw new Error("structure not saved");
-    setParcels(owner, [...parcelsOf(owner), { id, tag, k: kind, c: carts.length }]);
+    setParcels(owner, [...parcelsOf(owner), { id, tag, k: kind, c: carts.length, t: Date.now() }]);
     return true;
   } catch (e) {
     console.warn(`[expedition] parcel: ${e}`);

@@ -582,7 +582,6 @@ function auditAll() {
       console.warn(`[caravan] audit: ${e}`);
     }
   }
-  updateLabels();
 }
 
 // ---------------------------------------------------------------------------
@@ -780,7 +779,6 @@ function upkeep() {
       broadcast(`§6The merchant caravan leaves in ${duration(visit.until - now)}. §7Last chance to trade at ${visit.spot.name}.`);
     }
     keepCaravan(visit);
-    updateLabels();
     return;
   }
   if (get("enabled") !== true || !world.getAllPlayers().length) return;

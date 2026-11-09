@@ -18,7 +18,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, dropStrayCart, forgetStructures, giveKit, handingOver, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, setSaving, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, dropStrayCart, forgetStructures, giveKit, handingOver, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, setSaving, spawnFresh, stashOf, stripRunGear, expireParcels } from "./gauntlet.js";
 import { createForget } from "./forget.js";
 import { createQueue } from "./queue.js";
 import { get } from "./settings.js";
@@ -101,7 +101,8 @@ const ELITE_MOBS = new Set(["minecraft:zombie", "minecraft:husk", "minecraft:dro
 const ARMORED = new Set(["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:skeleton", "minecraft:stray", "minecraft:wither_skeleton", "minecraft:zombie_villager_v2", "minecraft:bogged"]);
 const ARMOR = ["", "chainmail", "iron", "diamond", "netherite"];
 /** Blocks players may never place in a dungeon (they'd be lost, blow up, or push the bars and puzzles aside): pop back out like before. */
-const NO_PLACE = new Set(["minecraft:tnt", "minecraft:respawn_anchor", "minecraft:bed", "minecraft:end_crystal", "minecraft:lava", "minecraft:piston", "minecraft:sticky_piston"]);
+const TWO_TALL = new Set(["minecraft:tall_grass", "minecraft:large_fern", "minecraft:sunflower", "minecraft:lilac", "minecraft:rose_bush", "minecraft:peony", "minecraft:pitcher_plant", "minecraft:small_dripleaf_block"]);
+const NO_PLACE =new Set(["minecraft:tnt", "minecraft:respawn_anchor", "minecraft:bed", "minecraft:lava", "minecraft:piston", "minecraft:sticky_piston"]);
 /** Shrine blessings: id, name, what it does. */
 const BLESSINGS = [
   { id: "vigor", name: "Vigor", desc: "Extra hearts for the rest of the run", effect: "health_boost", amp: 1 },
@@ -119,8 +120,8 @@ const BLESSINGS = [
 /** @typedef {ReturnType<typeof scaleFor>} Scale */
 /**
  * @typedef {{ id: number, slot: number, dungeon: string, seed: number, x: number, z: number, y: number, leader: string, phase: string,
- *   l?: number, g?: number, c?: number, h?: number, pt?: string[], to?: string[], ch?: number[][] }} RunRecord
- * l: level; g, c, h: the box's grid, cell size and height above the floor (missing in records from before tiers); pt: block types players placed;
+ *   l?: number, g?: number, c?: number, h?: number, to?: string[], ch?: number[][] }} RunRecord
+ * l: level; g, c, h: the box's grid, cell size and height above the floor (missing in records from before tiers);
  * to, ch: while the treasure room is open, the players still in the run and the treasure chests (x, y, z), so a restart
  * hands what's left in them to those players before the box is reset
  */
@@ -137,7 +138,7 @@ const BLESSINGS = [
  *   phase: "gathering" | "building" | "active" | "finishing" | "resetting", started: number, deadline: number, limitMin: number,
  *   room: number, roomActive: boolean, wave: number, waves: number, mobs: Entity[], extra: Entity[], nextWaveAt: number, awaitUntil: number,
  *   bossId?: string, bossGone: number, bossHalf: boolean, nextAddsAt: number, finishAt: number, clearMs: number, checked: boolean,
- *   puz: Map<number, PuzState>, elems: Map<string, Elem>, placed: Set<string>, placedTypes: Set<string>, placedAny: Set<string>, breakable: Set<string>,
+ *   puz: Map<number, PuzState>, elems: Map<string, Elem>, placed: Set<string>, placedAny: Set<string>, breakable: Set<string>,
  *   shrine: { bless: typeof BLESSINGS[number], curse: string | undefined }, cursed: boolean, fortune: boolean, sigil: boolean, sigilItem?: ItemStack,
  *   hazards: Hazard[], fires: { x: number, y: number, z: number, until: number }[], timers: Record<string, number>, trapNext: number,
  *   strays: Map<string, number>, long: boolean, loadout: boolean, boons: Map<string, string[]>, finishCap: number,
@@ -1178,7 +1179,14 @@ function refundSigil(run) {
   if (!it) return;
   const p = online(run.leaderId);
   if (!p) {
-    dropped.set(run.leaderId, [...(dropped.get(run.leaderId) ?? []), it]);
+    // Kept in a parcel so a restart before they rejoin loses nothing; in memory only if the parcel can't be made.
+    let failed = true;
+    try {
+      failed = parcelUp(run.o, "sigil", new Map([[run.leaderId, [it]]])).length > 0;
+    } catch (e) {
+      console.warn(`[expedition] sigil parcel: ${e}`);
+    }
+    if (failed) dropped.set(run.leaderId, [...(dropped.get(run.leaderId) ?? []), it]);
     return;
   }
   try {
@@ -1240,7 +1248,6 @@ const recordOf = (run) => ({
   g: run.lay.grid,
   c: run.lay.cell,
   h: run.top,
-  pt: [...run.placedTypes],
   ...(run.phase === "finishing" ? { to: [...run.members.keys()], ch: spoilChests(run).map((v) => [v.x, v.y, v.z]) } : {}),
 });
 /** @param {Run} run */
@@ -1343,13 +1350,15 @@ function freeSlot() {
 /**
  * Shows a form, retrying while the player has chat or another screen open, until `deadline` (a tick).
  * @template {ActionFormData | MessageFormData | ModalFormData} F
- * @param {Player} player @param {F} form @param {number} [deadline]
+ * @param {Player} player @param {F} form @param {number} [deadline] @param {(on: boolean) => void} [shown] told when the form goes on screen and when it's answered
  * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
-async function show(player, form, deadline = Infinity) {
+async function show(player, form, deadline = Infinity, shown) {
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid || system.currentTick > deadline) return undefined;
+    shown?.(true);
     const res = /** @type {any} */ (await form.show(player));
+    shown?.(false);
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await sleep(20);
   }
@@ -1371,13 +1380,14 @@ async function ask(p, leader, d, L, affixes, g) {
     .button1("Join")
     .button2("Not this time");
   let answered = false;
-  const answer = show(p, form, deadline).then((res) => {
+  let onScreen = false; // our question is actually showing (not still waiting out UserBusy)
+  const answer = show(p, form, deadline, (on) => (onScreen = on)).then((res) => {
     answered = true;
     return !!res && !res.canceled && res.selection === 0;
   });
   const timeout = sleep(ticks).then(() => {
     try {
-      if (!answered && p.isValid) uiManager.closeAllForms(p); // only our question, still open
+      if (!answered && onScreen && p.isValid) uiManager.closeAllForms(p); // only our question, still open
     } catch {
       // gone
     }
@@ -1469,7 +1479,6 @@ async function start(leader, d, L, affixes, sigilLine, g, fromQueue = false) {
     puz: new Map(),
     elems: new Map(),
     placed: new Set(),
-    placedTypes: new Set(),
     placedAny: new Set(),
     breakable: new Set(d.decor?.breakable ? [d.decor.block] : []),
     shrine: { bless: BLESSINGS[Math.floor(r() * BLESSINGS.length)], curse: curseAffix(affixes, r) },
@@ -1898,6 +1907,7 @@ function homecoming(p, tries = 30) {
         const full = got.spilled ? " Some are at your feet: your inventory is full." : "";
         if (got.kinds.has("dropped")) p.sendMessage(`§aThe items you dropped in the dungeon are back with you.${full}`);
         if (got.kinds.has("spoils")) p.sendMessage(`§aThe treasure left in the chests came back with you.${full}`);
+        if (got.kinds.has("sigil")) p.sendMessage(`§aYour Nightmare Sigil was given back.${full}`);
       }
       if (!p.isValid) return;
       stripRunGear(p); // kit gear that was dropped dying and given back
@@ -3794,6 +3804,27 @@ world.beforeEvents.playerBreakBlock.subscribe((ev) => {
   });
 });
 
+/**
+ * Takes a refused block back out and gives the player the block they placed (not its loot-table drop: glass, ice, glowstone
+ * and ender chests need Silk Touch). Containers and doors still break with `destroy` so contents and both halves drop.
+ * @param {Player} player @param {import("@minecraft/server").Block} block @param {boolean} container
+ */
+function popOut(player, block, container) {
+  const destroy = () => block.dimension.runCommand(`setblock ${block.x} ${block.y} ${block.z} air destroy`);
+  const type = block.typeId;
+  if (container || type.endsWith("_door") || type.endsWith("_bed") || TWO_TALL.has(type)) return destroy();
+  let it;
+  try {
+    it = block.getItemStack(1, true);
+  } catch {
+    it = undefined;
+  }
+  if (!it) return destroy();
+  block.setType("minecraft:air");
+  const rest = player.getComponent("minecraft:inventory")?.container?.addItem(it);
+  if (rest) player.dimension.spawnItem(rest, player.location);
+}
+
 // Blocks placed in it pop back out as items (with their contents, for a shulker box), unless the run allows
 // building: then they stay until the dungeon is filled in (but never containers, TNT or beds).
 world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
@@ -3807,13 +3838,9 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
     if (run && canBuild(run) && run.members.has(player.id) && !container && !NO_PLACE.has(type) && !type.endsWith("_bed")) {
       run.placed.add(key3(block.location));
       run.placedAny.add(type);
-      if (!run.placedTypes.has(type) && !blockLists().replaceable.includes(type)) {
-        run.placedTypes.add(type);
-        saveRun(run);
-      }
       return;
     }
-    block.dimension.runCommand(`setblock ${block.x} ${block.y} ${block.z} air destroy`);
+    popOut(player, block, container);
     actionbar(player, run && canBuild(run) ? "§7That block can't be placed in the dungeon." : "§7Blocks placed in the dungeon pop back out.");
   } catch (e) {
     console.warn(`[expedition] place: ${e}`);
@@ -3876,6 +3903,11 @@ world.afterEvents.worldLoad.subscribe(() => {
     loadQueue();
   } catch (e) {
     console.warn(`[expedition] line: ${e}`);
+  }
+  try {
+    expireParcels();
+  } catch (e) {
+    console.warn(`[expedition] parcel sweep: ${e}`);
   }
   try {
     migrateBest();

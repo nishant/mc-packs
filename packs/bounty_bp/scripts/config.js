@@ -61,7 +61,7 @@ export const CONFIG = {
 
   /**
    * Cull bounties the board picks from: defeat `count` of the listed `mobs`, all players together.
-   * Keep each `id` unique.
+   * `id` is only a name for the entry (it is not read).
    */
   culls: [
     { id: "zombies", label: "Defeat 40 zombies", count: 40, mobs: ["minecraft:zombie", "minecraft:husk", "minecraft:zombie_villager_v2"] },
