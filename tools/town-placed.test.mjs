@@ -68,5 +68,28 @@ test("main.js: natural kinds and wild plants placed inside a town are marked, an
   // Wild plants too: a flower bed looks like wild ground to the scan, and builds and paths would remove it (F40 review).
   assert.match(handler.slice(0, 600), /!NATURAL\.has\(block\.typeId\) && !WILD\.has\(block\.typeId\)/, "and wild plants");
   assert.match(main, /"realm:blocks_placed"/);
+  assert.match(main, /m\.natural !== true\) return/, "boxes without natural: true are ignored");
   assert.match(main, /town:pl:/);
+});
+
+test("reportPlaced: a large plank paste sends no natural boxes (so no town fills up), a dirt paste does", async () => {
+  const sent = [];
+  const dir = path.join(import.meta.dirname, "..", "packs", "build_bp", "scripts", "utils");
+  const url = (src) => `data:text/javascript;base64,${Buffer.from(src).toString("base64")}`;
+  const stub = url(`export const system = { sendScriptEvent: (id, m) => globalThis.__sent.push(JSON.parse(m)), runInterval: (f) => { globalThis.__timers.push(f); return 1; }, clearRun() {} };`);
+  const boxes = url(fs.readFileSync(path.join(dir, "placed-boxes.js"), "utf8"));
+  const kinds = url(fs.readFileSync(path.join(dir, "natural-kinds.js"), "utf8"));
+  const src = fs.readFileSync(path.join(dir, "PlacedReport.js"), "utf8").replace("@minecraft/server", stub).replace("./placed-boxes.js", boxes).replace("./natural-kinds.js", kinds);
+  globalThis.__sent = sent;
+  globalThis.__timers = [];
+  const { reportPlaced } = await import(url(src));
+  const flush = () => { for (let i = 0; i < 400; i++) for (const f of globalThis.__timers) f(); };
+  const grid = (n) => Array.from({ length: n }, (_, i) => ({ x: i % 64, y: Math.floor(i / 4096), z: Math.floor(i / 64) % 64 }));
+  reportPlaced("minecraft:overworld", grid(4096), () => "minecraft:oak_planks");
+  flush();
+  assert.ok(sent.length > 0 && sent.every((m) => m.natural !== true), "plank boxes are never flagged natural: a town ignores them, its plf stays 0");
+  sent.length = 0;
+  reportPlaced("minecraft:overworld", grid(100), () => "minecraft:dirt");
+  flush();
+  assert.ok(sent.some((m) => m.natural === true));
 });

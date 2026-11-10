@@ -6,6 +6,7 @@ import { t } from "../utils/Text.js";
 import { getMaxBlocks, getUndoThreshold, getReplaceBlocks, getAllowDestroy, getDestroyCreativeOnly } from "./Settings.js";
 import { captureSnapshot, recordSnapshot } from "./UndoRedo.js";
 import { enqueue } from "./PlacementQueue.js";
+import { reportPlaced } from "../utils/PlacedReport.js";
 import { ALWAYS_REPLACEABLE, UNPLACEABLE } from "./BlockPlacer.js";
 import { rotateStates } from "../utils/BlockStates.js";
 import { applyModifiersToEntries } from "./ModifierPipeline.js";
@@ -342,6 +343,7 @@ export async function executePaste(player, origin) {
         for (const [tid, count] of consumed) removeBlocks(player, tid, count);
     }
 
+    reportPlaced(dim.id, entries.map((e) => ({ ...e.pos, typeId: e.typeId })), (p) => p.typeId);
     recordSnapshot(player, snapshot);
 
     if (isCut && !creative) {

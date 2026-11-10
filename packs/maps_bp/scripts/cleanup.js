@@ -73,6 +73,8 @@ export function kindOf(b) {
   }
 }
 
+let seq = Math.floor(Math.random() * 1296); // makes two records in one millisecond differ
+
 /**
  * Records blocks a hunt is about to place (or just placed). Returns the record id, to keep on the hunt.
  * @param {{ dim: string, owner: string, hunt: string, what: "mark" | "chest" }} at
@@ -89,7 +91,7 @@ export function record(at, list) {
     return i;
   };
   const blocks = list.map((b) => [b.x, b.y, b.z, index({ t: b.placed }), index(b.orig)]);
-  const id = `${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+  const id = `${Date.now().toString(36)}${(seq++).toString(36)}`;
   save({ id, ...at, due: 0, types, blocks });
   return id;
 }
@@ -132,25 +134,38 @@ function restore(r) {
       return false;
     }
   }
-  // Bottom up, so a two-block plant gets its lower half first.
-  const order = r.blocks.map((b, i) => i).sort((a, b) => r.blocks[a][1] - r.blocks[b][1]);
-  for (const i of order) {
-    const [, , , placed, orig] = r.blocks[i];
-    const b = at[i];
-    const want = r.types[placed]?.t;
-    const was = r.types[orig];
-    if (!want || !was) continue;
-    const still = want === ANY_WOOL ? b.typeId.endsWith("_wool") : b.typeId === want;
-    if (!still) continue; // a player changed it: theirs now
-    if (r.what === "chest") {
-      const inv = b.getComponent("minecraft:inventory")?.container;
+  /** Does block i still hold what the pack placed (a block a player changed is theirs now)? */
+  const holds = (/** @type {number} */ i) => {
+    const want = r.types[r.blocks[i][3]]?.t;
+    return !!want && (want === ANY_WOOL ? at[i].typeId.endsWith("_wool") : at[i].typeId === want);
+  };
+  if (r.what === "chest") {
+    for (let i = 0; i < r.blocks.length; i++) {
+      if (!holds(i)) continue;
+      const inv = at[i].getComponent("minecraft:inventory")?.container;
       if (inv && inv.emptySlotsCount < inv.size) return now > r.due + CHEST_KEEP; // treasure still in it: never destroyed
     }
+  }
+  // Pass 1, top down: clear every block still holding what was placed, so a lantern goes before the cairn under it
+  // and nothing drops (setType, never destroy). Pass 2, bottom up: write the originals, a two-block plant's lower half first.
+  const top = r.blocks.map((b, i) => i).sort((p, q) => r.blocks[q][1] - r.blocks[p][1]);
+  const keep = new Set(top.filter((i) => holds(i) && r.types[r.blocks[i][4]]));
+  for (const i of top) {
+    if (!keep.has(i)) continue;
     try {
-      b.setPermutation(BlockPermutation.resolve(was.t, was.s));
+      at[i].setType("minecraft:air");
+    } catch (e) {
+      console.warn(`[maps] restore ${r.id}: ${e}`);
+    }
+  }
+  for (const i of top.reverse()) {
+    if (!keep.has(i)) continue;
+    const was = r.types[r.blocks[i][4]];
+    try {
+      at[i].setPermutation(BlockPermutation.resolve(was.t, was.s));
     } catch {
       try {
-        b.setType(was.t);
+        at[i].setType(was.t);
       } catch (e) {
         console.warn(`[maps] restore ${r.id}: ${e}`);
       }

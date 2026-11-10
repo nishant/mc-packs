@@ -596,7 +596,7 @@ function roll(player, opts = {}) {
   const deep = player.dimension.id === NETHER || (ar === "miner" && player.location.y < 0);
   let spot = findSpot(player, deep);
   if (spot && hostile === "sailor" && !opts.force && !waterNear(player.dimension, spot)) {
-    // A lost sailor stands by water: try again, else a plain traveler comes instead.
+    // A lost sailor stands by water: try again, else a friendly Stranger of the same kind comes instead.
     spot = findSpot(player, deep);
     if (spot && !waterNear(player.dimension, spot)) hostile = undefined;
   }
@@ -1168,7 +1168,6 @@ async function tapped(player, ent) {
       return;
     }
     if (accuse && res.selection === offers.length) {
-      busy.delete(player.id);
       await accuseForm(player, wid);
     }
   } finally {
@@ -1566,7 +1565,7 @@ async function menu(player) {
   const mineNow = Object.values(live).find((l) => l.o === player.id);
   const lines = [];
   if (get("enabled") !== true) lines.push("§cWanderers are paused by an operator.§r", "");
-  lines.push("Out past the town lamps (300 blocks from spawn, 160 from any town, claim or safe zone) you'll meet people on the road. Walk up and tap them.");
+  lines.push(`Out past the town lamps (${Math.round(Number(get("spawnDistance")))} blocks from spawn, ${Math.round(Number(get("zoneDistance")))} from any town, claim or safe zone) you'll meet people on the road. Walk up and tap them.`);
   if (getFor(player, "meet") !== true) lines.push("", "§7You've chosen not to meet wanderers (Meet wanderers in /realm:prefs).");
   if (mineNow) lines.push("", `§fOn the road for you now: §e${mineNow.n}§r (${Math.floor(mineNow.x)}, ${Math.floor(mineNow.z)})`);
   const known = NAMED.filter((n) => st?.ch[n.id] && st.ch[n.id] !== "n");

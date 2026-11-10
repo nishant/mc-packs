@@ -1555,7 +1555,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§e/realm:wander§r lists the Recurring Wanderers you know and where their camps are, and who's on the road for you now. Don't want to meet anyone? Disable §lMeet wanderers§r in §e/realm:prefs§r.",
+        "text": "§e/realm:wander§r lists the Recurring Wanderers you know and where their camps are, and who's on the road for you now. Don't want to meet anyone? Disable §lMeet wanderers§r in §e/realm:prefs§r. It states the realm's real distances. Tapping an accuse button twice no longer opens two accuse forms.",
         "ops": false
       },
       {
@@ -3297,7 +3297,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:moon§r has §lMake tonight a Blood Moon§r, §la Harvest Moon§r and §lan ordinary moon§r; §e/realm:moon_set <blood|harvest|normal>§r does the same from chat. Either makes tonight a Blood Moon, a Harvest Moon or an ordinary night: at once if it's night, else at dusk. §e/realm:config§r -> §lBlood Moon & Harvest Moon§r sets the chances, the monster waves, the survivor reward and the Harvest Moon's growth speed. Add Realm Skies under §lResource Packs§r for the red and gold skies and the motes.",
+        "text": "§lOperators:§r §e/realm:moon§r has §lMake tonight a Blood Moon§r, §la Harvest Moon§r and §lan ordinary moon§r; §e/realm:moon_set <blood|harvest|normal>§r does the same from chat. Either makes tonight a Blood Moon, a Harvest Moon or an ordinary night: at once if it's night, else at dusk. §e/realm:config§r -> §lBlood Moon & Harvest Moon§r sets the chances, the monster waves, the survivor reward and the Harvest Moon's growth speed. Add Realm Skies under §lResource Packs§r for the red and gold skies and the motes. Choosing an ordinary moon during the day before a full moon now sticks, and Blood Moon mobs are always new entities.",
         "ops": true
       }
     ],

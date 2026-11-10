@@ -1,55 +1,111 @@
 {
   "notes": [
-    "Story Questlines keeps an unreadable save aside instead of wiping it, finishes terrain that could not be put back once you are near, and no longer offers Old Words after the gift ending.",
-    "Only the player who locked a Silly Enchants librarian, or an operator, can change it, and Town Projects residents and named villagers are skipped.",
-    "Reset talents costs what your realm set, and ores, melons and pumpkins moved by a piston no longer count as fresh Guilds finds.",
-    "Titles an operator takes away stay gone, Sell fish counts only the plain fish you carry, and a sand or snow roof is no longer dry ground for Rain Extras.",
-    "The Minimap clears Arrived when it is off and calls its setting Mob range, and the Realm Configuration menu leaves optional players out by default."
+    "Blocks you build with the Building Book no longer earn Skills XP, Guilds reputation or Daily Quest progress when broken, and towns leave them alone.",
+    "Land Claims pop back out pistons and slime or honey blocks placed beside someone else's claim, and break pistons that move blocks into or out of one afterwards (the move is not undone).",
+    "Town Projects no longer duplicate lecterns, barrels or smokers when a spot is removed or rebuilt, and a Treasure Map cairn's lantern no longer drops as a free item.",
+    "Many packs now recognize dead bushes, lily pads, item frames, note blocks and rooted dirt, so the Minimap draws them properly.",
+    "A creative player no longer gives party mates Defeat progress, Wanderers state real distances, and choosing an ordinary moon before a full moon sticks."
   ],
   "packNotes": {
-    "saga_bp": {
-      "version": "1.16.20",
-      "notes": "A save that cannot be read is copied to saga:p_bak, damaged places are never overwritten, unfinished terrain restores wait for a player to come near, boss warnings and re-asks are spaced out, and Old Words is not offered after the gift ending."
-    },
-    "admin_bp": {
-      "version": "1.6.16",
-      "notes": "Optional player lists start on (leave out), a form reads the players it showed, and Show a Title works with seconds but no subtitle."
+    "build_bp": {
+      "version": "3.0.14",
+      "notes": "Every Building Book build, paste and undo or redo reports its blocks with realm:blocks_placed, so towns leave them alone and Skills, Guilds and Daily Quests give nothing for breaking them."
     },
     "skills_bp": {
-      "version": "1.1.13",
-      "notes": "The Reset talents price in the menu and the confirmation follows /realm:config."
+      "version": "1.1.14",
+      "notes": "Listens to realm:blocks_placed and remembers up to 500 boxes in skills:pbox, so blocks broken inside a book-built box give no XP."
     },
     "guilds_bp": {
-      "version": "1.1.16",
-      "notes": "Ores, melons and pumpkins pushed by a piston count as placed, not as fresh finds."
+      "version": "1.1.17",
+      "notes": "Listens to realm:blocks_placed and remembers up to 500 boxes in guilds:pbox, so blocks broken inside a book-built box give no reputation or extra drop."
     },
-    "silly_bp": {
-      "version": "1.2.15",
-      "notes": "Only the player who locked a librarian, or an operator, can re-lock it, Town Projects residents and named villagers are skipped, and the test hook works from the server console only."
+    "quests_bp": {
+      "version": "1.3.11",
+      "notes": "Book-built blocks give no quest progress (quests:pbox), a creative killer no longer gives party mates Defeat progress, and daily picks use a fair shuffle."
+    },
+    "claims_bp": {
+      "version": "1.5.11",
+      "notes": "A piston, sticky piston, slime block or honey block placed within 2 blocks of someone else's claim pops back out, and a piston outside a claim that moves blocks into or out of it breaks a moment later (the move itself is not undone)."
+    },
+    "town_bp": {
+      "version": "1.7.5",
+      "notes": "Remove spot and Rebuild drop a job block's contents but not the block itself, and menus in a dimension with no towns say No towns in this dimension."
+    },
+    "maps_bp": {
+      "version": "1.8.17",
+      "notes": "Cleanup takes a marker down from the top so a cairn's lantern no longer drops, and cleanup record ids cannot collide."
+    },
+    "atlas_bp": {
+      "version": "1.1.15",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "bounty_bp": {
+      "version": "1.3.13",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "calendar_bp": {
+      "version": "1.0.24",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "climate_bp": {
+      "version": "1.0.13",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "domt_bp": {
+      "version": "1.1.18",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "elite_bp": {
+      "version": "1.3.20",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "journal_bp": {
+      "version": "1.1.14",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
     },
     "map_bp": {
-      "version": "1.5.5",
-      "notes": "Arrived clears when the Minimap is disabled, the scan cache cap comes back down after a scan, and the mob setting is named Mob range."
-    },
-    "titles_bp": {
-      "version": "1.2.16",
-      "notes": "A built-in title or trail an operator takes away is not unlocked again."
-    },
-    "stash_bp": {
-      "version": "1.9.4",
-      "notes": "The help text says only the hotbar, armor and offhand are the same on every page."
-    },
-    "fishing_bp": {
-      "version": "1.1.17",
-      "notes": "Sell fish trims the basket to the plain fish you carry, keeping the cheapest."
-    },
-    "rain_bp": {
-      "version": "1.5.19",
-      "notes": "A roof of sand, terracotta, snow or ice is not dry ground, and only natural ground ids count."
+      "version": "1.5.6",
+      "notes": "Draws dead bushes as plants and lily pads as swamp, and recognizes the other newer block names."
     },
     "meteor_bp": {
-      "version": "1.2.14",
-      "notes": "An impact waits only for its own spot to load, and up to 5 retries cover unloaded alternate spots."
+      "version": "1.2.15",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "npc_bp": {
+      "version": "1.9.2",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "rainbow_bp": {
+      "version": "1.4.11",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "saga_bp": {
+      "version": "1.16.21",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "storm_bp": {
+      "version": "1.1.15",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "waystone_bp": {
+      "version": "1.3.11",
+      "notes": "Recognizes dead bushes, lily pads, item frames, note blocks and rooted dirt."
+    },
+    "wander_bp": {
+      "version": "1.2.23",
+      "notes": "/realm:wander states the realm's real distances, and tapping twice no longer opens two accuse forms."
+    },
+    "moon_bp": {
+      "version": "1.2.17",
+      "notes": "Choosing an ordinary moon during the day before a full moon now sticks, and Blood Moon mobs are always new entities."
+    },
+    "news_bp": {
+      "version": "1.7.103",
+      "notes": "Shows the Build safe, claims tighter notes once after the update."
+    },
+    "help_bp": {
+      "version": "1.1.91",
+      "notes": "The help catalog is refreshed for this round of changes."
     }
   }
 }

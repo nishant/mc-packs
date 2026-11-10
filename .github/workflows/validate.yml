@@ -36,9 +36,7 @@ on:
       repeat:
         description: "Scenario pairs per entry, alternating the order (1-3)"
         default: "1"
-permissions:
-  contents: read
-  issues: write
+permissions: { contents: read }
 concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: false
@@ -74,6 +72,8 @@ jobs:
           const q = process.env.QUICK === "1";
           const s = (long) => (q ? 60 : long);
           const specs = (process.env.SCENARIOS || "").split(";").map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean);
+          // The name is a dispatch input that reaches job names and artifact names: letters, digits, _ . - only.
+          for (const spec of specs) if (!/^[A-Za-z0-9_.-]+$/.test(spec.split(" ")[0])) throw new Error(`Bad scenario name in "${spec}": use only letters, digits, _ . -`);
           const jobs = specs.length
             ? specs.map((spec, i) => ({ name: `scenario-${i + 1}-${spec.split(" ")[0]}`, kind: "scenario", spec }))
             : [
@@ -124,9 +124,11 @@ jobs:
           git worktree add "$RUNNER_TEMP/base" "$BASE_SHA"
           ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/base/node_modules"
       - name: Run ${{ matrix.name }}
+        env:
+          NAME: ${{ matrix.name }}
         run: |
           OUT="$RUNNER_TEMP/out"; mkdir -p "$OUT"
-          echo "${{ matrix.name }}" > "$OUT/name.txt"
+          echo "$NAME" > "$OUT/name.txt"
           head="$GITHUB_WORKSPACE" base="$RUNNER_TEMP/base"
           rss() { # bedrock_server's VmRSS (kB) every 10 s into $1 until the job step ends
             while sleep 10; do pid=$(pgrep -x bedrock_server | head -1); [ -n "$pid" ] && echo "$(date +%s) $(awk '/VmRSS/{print $2}' /proc/$pid/status 2>/dev/null)" >> "$1"; done
@@ -185,6 +187,7 @@ jobs:
     if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions: { contents: read, issues: write }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -220,4 +223,6 @@ jobs:
             while read -r old; do gh issue close "$old" --comment "Superseded by #${new}." > /dev/null; done
       - name: Red when a scenario failed or a pair regressed
         if: always()
-        run: test "${{ steps.report.outputs.status }}" = ok
+        env:
+          STATUS: ${{ steps.report.outputs.status }}
+        run: test "$STATUS" = ok

@@ -301,17 +301,37 @@ test("a bed or door goes in whole or not at all: a block in the way of one half 
   assert.equal(out.skipped, 2);
 });
 
-test("taking a build away breaks a container that holds items (and a lectern) so its contents drop, never lost", () => {
+test("taking a build away drops a container's contents but never the job block itself", () => {
   const w = fakeWorld(() => 64);
   const fns = load(w);
   const commands = [];
-  const dim = { ...w.dim, runCommand: (c) => commands.push(c) };
-  const block = (typeId, inv) => ({ typeId, location: { x: 1, y: 65, z: 2 }, getComponent: (k) => (k === "minecraft:inventory" ? inv : undefined) });
-  fns.spill(dim, block("minecraft:barrel", { container: { size: 27, emptySlotsCount: 26 } }));
+  const spawned = [];
+  const dim = { ...w.dim, runCommand: (c) => commands.push(c), spawnItem: (item, at) => spawned.push([item, at]) };
+  const types = [];
+  const block = (typeId, inv) => ({
+    typeId,
+    location: { x: 1, y: 65, z: 2 },
+    getComponent: (k) => (k === "minecraft:inventory" ? inv : undefined),
+    setType: (t) => types.push(t),
+  });
+  const slots = ["bread", undefined, "map"];
+  const full = { container: { size: 3, get emptySlotsCount() { return slots.filter((x) => !x).length; }, getItem: (i) => slots[i], setItem: (i, v) => (slots[i] = v) } };
+  fns.spill(dim, block("minecraft:barrel", full));
+  assert.deepEqual(spawned.map((x) => x[0]), ["bread", "map"], "each non-empty slot drops");
+  assert.equal(JSON.stringify(spawned[0][1]), JSON.stringify({ x: 1.5, y: 65.5, z: 2.5 }));
+  assert.deepEqual(slots, [undefined, undefined, undefined], "slots cleared");
+  assert.deepEqual(types, ["minecraft:air"]);
   fns.spill(dim, block("minecraft:barrel", { container: { size: 27, emptySlotsCount: 27 } }));
-  fns.spill(dim, block("minecraft:lectern", undefined));
   fns.spill(dim, block("minecraft:oak_planks", undefined));
-  assert.deepEqual(commands, ["setblock 1 65 2 air destroy", "setblock 1 65 2 air destroy"], "the full barrel and the lectern; not the empty barrel or planks");
+  assert.equal(spawned.length, 2);
+  assert.deepEqual(commands, [], "a container is never broken with a destroy setblock (it would drop the job block itself)");
+  // A lectern is broken like a player does (its book drops) and only the dropped lectern item is removed.
+  const removed = [];
+  const item = (id) => ({ getComponent: () => ({ itemStack: { typeId: id } }), remove: () => removed.push(id) });
+  const lecternDim = { ...dim, getEntities: () => [item("minecraft:lectern"), item("minecraft:written_book")] };
+  fns.spill(lecternDim, block("minecraft:lectern", undefined));
+  assert.deepEqual(commands, ["setblock 1 65 2 air destroy"]);
+  assert.deepEqual(removed, ["minecraft:lectern"], "the book stays");
 });
 
 test("a resumed build leaves alone the blocks players placed since its check (mine), cut, fill and design alike", () => {

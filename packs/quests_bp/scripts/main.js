@@ -64,7 +64,11 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 /** Picks the day's quests: different kinds first, then any. @returns {Progress[]} */
 function roll() {
   const n = Math.min(get("questsPerDay"), pool.size);
-  const shuffled = [...pool.values()].sort(() => Math.random() - 0.5);
+  const shuffled = [...pool.values()];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   /** @type {Quest[]} */
   const picked = [];
   for (const q of shuffled) if (picked.length < n && !picked.some((p) => p.kind === q.kind)) picked.push(q);
@@ -233,6 +237,71 @@ const placed = new Set();
 /** @param {string} dim @param {import("@minecraft/server").Vector3} p */
 const spot = (dim, p) => `${dim}:${p.x},${p.y},${p.z}`;
 
+// Boxes other packs built or pasted (Easy Building sends realm:blocks_placed): a block inside one counts as placed.
+// At most 500, oldest dropped first; one world property (quests:pbox) of "dim|x1,y1,z1,x2,y2,z2" joined by ";".
+const PBOX_PROP = "quests:pbox";
+const PBOX_MAX = 500;
+const PBOX_SIDE = 64;
+/** @type {Array<{ d: string, b: number[] }> | undefined} */
+let pboxes;
+let pboxDirty = false;
+
+function boxes() {
+  if (pboxes) return pboxes;
+  pboxes = [];
+  try {
+    const raw = world.getDynamicProperty(PBOX_PROP);
+    if (typeof raw === "string") {
+      for (const e of raw.split(";")) {
+        const [d, c] = e.split("|");
+        const b = (c ?? "").split(",").map(Number);
+        if (d && b.length === 6 && b.every(Number.isFinite)) pboxes.push({ d, b });
+      }
+    }
+  } catch (e) {
+    console.warn(`[quests] placed boxes: ${e}`);
+  }
+  return pboxes;
+}
+
+function savePboxes() {
+  if (!pboxDirty || !pboxes) return;
+  try {
+    world.setDynamicProperty(PBOX_PROP, pboxes.map((e) => `${e.d}|${e.b.join(",")}`).join(";") || undefined);
+    pboxDirty = false;
+  } catch (e) {
+    console.warn(`[quests] saving placed boxes: ${e}`);
+  }
+}
+system.runInterval(savePboxes, 600);
+
+onScriptEvent("realm:blocks_placed", ({ id, message }) => {
+  if (id !== "realm:blocks_placed") return;
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m !== "object" || typeof m.dim !== "string" || !m.dim) return;
+    const r = Array.isArray(m.box) ? m.box.map(Number) : [m.x1, m.y1, m.z1, m.x2, m.y2, m.z2].map(Number);
+    if (r.length !== 6 || !r.every(Number.isFinite)) return;
+    const b = [Math.floor(Math.min(r[0], r[3])), Math.floor(Math.min(r[1], r[4])), Math.floor(Math.min(r[2], r[5])), Math.floor(Math.max(r[0], r[3])), Math.floor(Math.max(r[1], r[4])), Math.floor(Math.max(r[2], r[5]))];
+    if (b[3] - b[0] + 1 > PBOX_SIDE || b[4] - b[1] + 1 > PBOX_SIDE || b[5] - b[2] + 1 > PBOX_SIDE) return;
+    const list = boxes();
+    list.push({ d: m.dim.includes(":") ? m.dim : `minecraft:${m.dim}`, b });
+    while (list.length > PBOX_MAX) list.shift();
+    pboxDirty = true;
+  } catch {
+    // not ours
+  }
+});
+
+/** Is this spot inside a box another pack built? @param {string} dimId @param {number} x @param {number} y @param {number} z */
+function inPlacedBox(dimId, x, y, z) {
+  const px = Math.floor(x);
+  const py = Math.floor(y);
+  const pz = Math.floor(z);
+  for (const { d, b } of boxes()) if (d === dimId && px >= b[0] && px <= b[3] && py >= b[1] && py <= b[4] && pz >= b[2] && pz <= b[5]) return true;
+  return false;
+}
+
 world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
   try {
     const key = spot(block.dimension.id, block.location);
@@ -261,7 +330,7 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
   try {
     const id = brokenBlockPermutation.type.id;
     const key = spot(block.dimension.id, block.location);
-    const wasPlaced = placed.delete(key);
+    const wasPlaced = placed.delete(key) || inPlacedBox(block.dimension.id, block.location.x, block.location.y, block.location.z);
     if (!wasPlaced) progress(player, "mine", id);
     // Planting seeds is a block place too, so a grown crop counts even where it was planted lately;
     // a melon or pumpkin (no growth state) a player placed doesn't.
@@ -315,6 +384,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   if (!(killer instanceof Player) || deadEntity instanceof Player) return;
   try {
     progress(killer, "kill", deadEntity.typeId);
+    if (!active(killer)) return;
     for (const mate of partyMatesNear(killer)) progress(mate, "kill", deadEntity.typeId);
   } catch (e) {
     console.warn(`[quests] ${e}`);

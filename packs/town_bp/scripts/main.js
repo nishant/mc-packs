@@ -822,16 +822,41 @@ function restoreGround(dim, st, box, cells) {
 
 /**
  * Before a build's own block is taken away (Remove spot, Relocate, Rebuild): a container with something in it (a
- * stall's or a house's barrel, a smoker, a brewing stand) or a lectern (it may hold a book) is broken the way a player
- * breaks it, so what it holds drops on the ground instead of being lost.
+ * stall's or a house's barrel, a smoker, a brewing stand) drops what it holds on the ground instead of losing it, but
+ * the job block itself does not drop (the build puts its own back). A lectern is broken the way a player breaks it
+ * (its book drops), and only the dropped lectern item is removed, because @minecraft/server 2.1.0 cannot read its book.
  * @param {Dimension} dim @param {import("@minecraft/server").Block} b
  */
 function spill(dim, b) {
   try {
+    if (b.typeId === "minecraft:lectern") {
+      const { x, y, z } = b.location;
+      const center = { x: x + 0.5, y: y + 0.5, z: z + 0.5 };
+      dim.runCommand(`setblock ${x} ${y} ${z} air destroy`);
+      const sweep = () => {
+        try {
+          for (const e of dim.getEntities({ type: "minecraft:item", location: center, maxDistance: 1.5 })) {
+            if (/** @type {any} */ (e.getComponent("minecraft:item"))?.itemStack?.typeId === "minecraft:lectern") e.remove();
+          }
+        } catch {
+          // not loaded
+        }
+      };
+      sweep();
+      system.runTimeout(sweep, 1);
+      return;
+    }
     const c = /** @type {import("@minecraft/server").BlockInventoryComponent | undefined} */ (b.getComponent("minecraft:inventory"))?.container;
-    if (!(c && c.emptySlotsCount < c.size) && b.typeId !== "minecraft:lectern") return;
+    if (!(c && c.emptySlotsCount < c.size)) return;
     const { x, y, z } = b.location;
-    dim.runCommand(`setblock ${x} ${y} ${z} air destroy`);
+    const center = { x: x + 0.5, y: y + 0.5, z: z + 0.5 };
+    for (let i = 0; i < c.size; i++) {
+      const item = c.getItem(i);
+      if (!item) continue;
+      dim.spawnItem(item, center);
+      c.setItem(i, undefined);
+    }
+    b.setType("minecraft:air");
   } catch {
     // no inventory (most blocks), or not loaded
   }
@@ -1252,7 +1277,11 @@ async function townList(player) {
 async function townStats(player) {
   const t = nearestTown(player);
   if (!t) {
-    player.sendMessage(`§7No towns yet.${isOp(player) ? " Stand in the middle of one and run /realm:town_add <name>." : ""}`);
+    player.sendMessage(
+      allTowns().size > 0
+        ? "§7No towns in this dimension. Open /realm:town and pick Other towns to see the rest."
+        : `§7No towns yet.${isOp(player) ? " Stand in the middle of one and run /realm:town_add <name>." : ""}`,
+    );
     return;
   }
   await townMenu(player, t.id, canDeliverIn(player, t));
@@ -1274,6 +1303,7 @@ async function mainMenu(player) {
   const lines = [];
   if (here) lines.push(`You're in §l${here.n}§r: ${levelName(here.lvl)}, level ${here.lvl} of ${MAX_LEVEL}.`);
   else if (near) lines.push(`The nearest town is §l${near.n}§r, ${Math.round(Math.hypot(player.location.x - near.x, player.location.z - near.z))} blocks away.`);
+  else if (allTowns().size > 0) lines.push("No towns in this dimension. Other towns lists the rest.");
   else lines.push(`There are no towns yet.${op ? " Stand in the middle of one and add it." : ""}`);
   if (op && here) lines.push(`§7Protect from world events: ${isProtected(here) ? "§aEnabled" : "§cDisabled"}`);
   if (op && here?.nos?.length) lines.push(`§eNo good spot was found for ${here.nos.map((id) => byId.get(id)?.name ?? id).join(", ")}: set one (Set a project spot) or try Find spots again.`);
@@ -2814,9 +2844,11 @@ function clearLife(t, id, leftOnly = false) {
     // its dimension isn't there: later
   }
   if (!leftOnly) delete w[id];
+  const before = JSON.stringify(w);
   delete w[old];
   if (left[0].length || left[1].length) w[old] = [packCells(left[0], t.x, t.z), packCells(left[1], t.x, t.z)];
-  saveLife(t, w);
+  // Leftovers in an unloaded area come back unchanged every tick: save only when something changed.
+  if (!leftOnly || JSON.stringify(w) !== before) saveLife(t, w);
 }
 
 /** Rects as inclusive columns. @param {import("./sites.js").Rect} r @param {number} x @param {number} z */
@@ -2988,7 +3020,7 @@ function layPosts(t, dim, posts) {
 // Placed blocks (placed.js): natural-kind blocks players place in a town look like the ground, so the town keeps
 // their 4 x 4 x 4 cells in "town:pl:<town>:0" and ":1" (saved at most every 10 s) and never levels there. Other packs
 // that place natural blocks by script report boxes with realm:blocks_placed { dim, box: [x1, y1, z1, x2, y2, z2] }
-// (or x1..z2 as fields).
+// (or x1..z2 as fields) and natural: true (boxes without it are for other packs and ignored here).
 // ---------------------------------------------------------------------------
 
 const PLACED_PREFIX = "town:pl:";
@@ -3043,6 +3075,7 @@ onScriptEvent("realm:blocks_placed", ({ id, message }) => {
   try {
     const m = JSON.parse(message);
     if (!m || typeof m !== "object") return;
+    if (m.natural !== true) return; // only boxes of natural-kind blocks and wild plants; man-made blocks look built already
     const b = Array.isArray(m.box) ? m.box.map(Number) : [m.x1, m.y1, m.z1, m.x2, m.y2, m.z2].map(Number);
     if (b.length !== 6 || !b.every(Number.isFinite)) return;
     const dim = dimId(m.dim);

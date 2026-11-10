@@ -39,9 +39,9 @@ const SPOT_RADIUS = 12;
 const SCAN = 4; // the build scan covers 9 x 9 columns (4 each way), from the surface - 4 to + 4
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const PLANT =
-  /^minecraft:(short_grass|tall_grass|fern|large_fern|dead_bush|bush|firefly_bush|dandelion|poppy|blue_orchid|allium|azure_bluet|(red|orange|white|pink)_tulip|oxeye_daisy|cornflower|lily_of_the_valley|sunflower|lilac|rose_bush|peony|pink_petals|wildflowers|leaf_litter|short_dry_grass|tall_dry_grass|snow_layer)$/;
+  /^minecraft:(short_grass|tall_grass|fern|large_fern|deadbush|bush|firefly_bush|dandelion|poppy|blue_orchid|allium|azure_bluet|(red|orange|white|pink)_tulip|oxeye_daisy|cornflower|lily_of_the_valley|sunflower|lilac|rose_bush|peony|pink_petals|wildflowers|leaf_litter|short_dry_grass|tall_dry_grass|snow_layer)$/;
 // Ground the chest may stand on.
-const GROUND = /^minecraft:(grass_block|dirt|coarse_dirt|podzol|mycelium|rooted_dirt|dirt_with_roots|mud|clay|gravel|sand|red_sand|sandstone|red_sandstone|stone|granite|diorite|andesite|tuff|calcite|moss_block|snow|terracotta|(white|orange|yellow|brown|red|light_gray)_terracotta)$/;
+const GROUND = /^minecraft:(grass_block|dirt|coarse_dirt|podzol|mycelium|dirt_with_roots|dirt_with_roots|mud|clay|gravel|sand|red_sand|sandstone|red_sandstone|stone|granite|diorite|andesite|tuff|calcite|moss_block|snow|terracotta|(white|orange|yellow|brown|red|light_gray)_terracotta)$/;
 // Player-made blocks: the chest never goes where the scan finds one of these.
 const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone_wire|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|waxed_|copper_block|quartz_block|purpur|lamp|cauldron|crafter|beehive|_head$|_skull$|pot$|terracotta|(iron|gold|diamond|emerald|lapis|redstone|coal|netherite|amethyst)_block|raw_/;

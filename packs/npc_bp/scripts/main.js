@@ -348,7 +348,7 @@ function loaded(dim, at) {
 
 /** Blocks an NPC stands in, not on (plants, torches, signs, carpets, rails, doors...). */
 const PASSABLE =
-  /(^|:|_)(air|short_grass|tall_grass|fern|large_fern|dead_bush|bush|seagrass|kelp|vine|vines|sapling|propagule|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|rose|lilac|peony|sunflower|petals|leaf_litter|torchflower|pitcher_plant|crimson_roots|warped_roots|hanging_roots|sprouts|fungus|mushroom|wheat|carrots|potatoes|beetroot|sweet_berry_bush|torch|candle|sign|banner|carpet|rail|button|lever|pressure_plate|tripwire|tripwire_hook|redstone_wire|string|ladder|cobweb|door|trapdoor|fence_gate|coral_fan|coral|glow_lichen|deadbush|fire|light_block(_\d+)?|structure_void|scaffolding|snow_layer)$/;
+  /(^|:|_)(air|short_grass|tall_grass|fern|large_fern|deadbush|bush|seagrass|kelp|vine|vines|sapling|propagule|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|rose|lilac|peony|sunflower|petals|leaf_litter|torchflower|pitcher_plant|crimson_roots|warped_roots|hanging_roots|sprouts|fungus|mushroom|wheat|carrots|potatoes|beetroot|sweet_berry_bush|torch|candle|sign|banner|carpet|rail|button|lever|pressure_plate|tripwire|tripwire_hook|redstone_wire|string|ladder|cobweb|door|trapdoor|fence_gate|coral_fan|coral|glow_lichen|deadbush|fire|light_block(_\d+)?|structure_void|scaffolding|snow_layer)$/;
 
 /** Height of a block's top above its base (1 for a full block; slabs, paths, beds... less). @param {import("@minecraft/server").Block} b */
 function heightOf(b) {
@@ -358,7 +358,7 @@ function heightOf(b) {
     return half === "top" ? 1 : 0.5;
   }
   if (/_stairs$/.test(id)) return b.permutation.getState("upside_down_bit") === true ? 1 : 0.5;
-  if (/grass_path|dirt_path|farmland/.test(id)) return 0.9375;
+  if (/grass_path|grass_path|farmland/.test(id)) return 0.9375;
   if (/(^|:|_)bed$/.test(id)) return 0.5625;
   if (/chest$|soul_sand|(^|:)mud$/.test(id)) return 0.875;
   return 1;

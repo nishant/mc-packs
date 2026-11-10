@@ -593,7 +593,7 @@ function championHit(champ, victim, damage) {
 
 /** Blocks players make and nature doesn't (terracotta only when glazed: plain terracotta is natural in badlands). */
 const BUILT =
-  /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|noteblock|scaffolding|ladder|stairs|slab|brick|polished|item_frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate/;
+  /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|noteblock|scaffolding|ladder|stairs|slab|brick|polished|frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate/;
 
 /**
  * Is there anything player-made in the 9 x 9 columns around (x, z), from the surface down 4?
@@ -731,7 +731,7 @@ system.runInterval(() => {
 const STEP_TICKS = 5;
 /** Blocks a mob walks through (air aside): plants, snow layers, carpets, torches, rails, buttons... */
 const WALK_THROUGH =
-  /^minecraft:(short_grass|tall_grass|fern|large_fern|deadbush|dead_bush|bush|firefly_bush|short_dry_grass|tall_dry_grass|leaf_litter|snow_layer|.*_carpet|.*sapling|.*flower|poppy|dandelion|.*tulip|blue_orchid|allium|azure_bluet|oxeye_daisy|cornflower|lily_of_the_valley|wither_rose|pink_petals|rose_bush|lilac|peony|sunflower|vine|glow_lichen|.*torch|.*rail|redstone_wire|.*_button|.*pressure_plate|lever|tripwire)$/;
+  /^minecraft:(short_grass|tall_grass|fern|large_fern|deadbush|bush|firefly_bush|short_dry_grass|tall_dry_grass|leaf_litter|snow_layer|.*_carpet|.*sapling|.*flower|poppy|dandelion|.*tulip|blue_orchid|allium|azure_bluet|oxeye_daisy|cornflower|lily_of_the_valley|wither_rose|pink_petals|rose_bush|lilac|peony|sunflower|vine|glow_lichen|.*torch|.*rail|redstone_wire|.*_button|.*pressure_plate|lever|tripwire)$/;
 /** Ground it never steps onto: what mobs can't climb over, what burns or pricks, and fluids. */
 const NO_STEP_ON = /fence|wall|_gate|magma|campfire|fire|cactus|sweet_berry|powder_snow|lava|water|scaffolding|pointed_dripstone/;
 
