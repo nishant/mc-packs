@@ -9,7 +9,7 @@ import { onScriptEvent } from "./script-events.js";
 
 // World properties:
 //   "meteor:night"   JSON { n: day number, at: time of day of tonight's warning, or -1 for none }
-//   "meteor:impacts" JSON [{ id, x, z, y?, state, found?, lands? }], the last 5 meteors, newest last.
+//   "meteor:impacts" JSON [{ id, x, z, y?, state, found?, lands?, waits? }], the last 5 meteors, newest last.
 //                    state: "falling" (warned, not landed), "pending" (landed, crater not made yet: no one
 //                    was near), "made" (crater made), "none" (no safe spot for a crater near it), "burst" (blew
 //                    apart in the sky over a safe zone). burst: the safe zone's name while it falls toward one
@@ -49,7 +49,7 @@ const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|copper|waxed_|quartz|purpur|terracotta|_block$|bars|tinted|lamp|cauldron|crafter|target|bee_nest|beehive|_head$|_skull$|pot$/;
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
-/** @typedef {{ id: number, x: number, z: number, y?: number, state: "falling" | "pending" | "made" | "none" | "burst", found?: string, lands?: number, burst?: string, sky?: boolean, moved?: boolean }} Impact */
+/** @typedef {{ id: number, x: number, z: number, y?: number, state: "falling" | "pending" | "made" | "none" | "burst", found?: string, lands?: number, burst?: string, sky?: boolean, moved?: boolean, waits?: number }} Impact */
 /** @typedef {{ impact: Impact, landsAt: number, streaked: boolean, vel: Vector3, y: number }} Fall */
 
 /** @type {Fall | undefined} the meteor on its way down */
@@ -547,6 +547,8 @@ function* makeCrater(impact) {
     const out = { ok: false, y: 0, unloaded: false };
     let x = impact.x, z = impact.z;
     yield* checkSpot(dim, x, z, out);
+    const centerUnloaded = out.unloaded; // only the impact spot itself is worth waiting for
+    out.unloaded = false;
     for (let i = 0; i < ALTERNATES && !out.ok; i++) {
       const angle = Math.random() * Math.PI * 2;
       const d = rand(6, ALTERNATE_RADIUS);
@@ -554,7 +556,12 @@ function* makeCrater(impact) {
       z = Math.floor(impact.z + Math.sin(angle) * d);
       yield* checkSpot(dim, x, z, out);
     }
-    if (!out.ok && out.unloaded) return; // part of it isn't loaded yet: stays "pending", tried again when someone is near
+    if (!out.ok && centerUnloaded) return; // the impact spot isn't loaded yet: stays "pending", tried again when someone is near
+    if (!out.ok && out.unloaded && (impact.waits ?? 0) < 5) {
+      // an alternate spot isn't loaded: wait a few more tries, then go on as rejected
+      impact.waits = (impact.waits ?? 0) + 1;
+      return;
+    }
     if (!out.ok && !impact.moved && craterInZone(impact.x, impact.z)) {
       // A safe zone was added where it fell: the crater goes just outside it (once), when a player comes near there.
       const there = steer(impact.x, impact.z);

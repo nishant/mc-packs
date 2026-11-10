@@ -80,6 +80,8 @@ import { PACK, hash, itemName, npcName, send, strangerNames } from "./util.js";
  */
 
 export const PROP_PLAYER = "saga:p";
+/** A copy of a save that could not be read, kept so an operator can recover it (never overwritten). */
+export const PROP_PLAYER_BAK = "saga:p_bak";
 const SAVE_LIMIT = 30000; // dynamic property strings hold up to 32767 characters
 
 // ---------------------------------------------------------------------------
@@ -253,6 +255,8 @@ export function pickTemplate(saga, wv, player) {
 const cache = new Map();
 /** Players whose progress changed since the last save. @type {Map<string, Player>} */
 const dirty = new Map();
+/** Ids whose last save failed (warned once, not every flush). @type {Set<string>} */
+const tooBig = new Set();
 /** Bumped when a player's chapters or flags change, so cached entries are rebuilt. @type {Map<string, number>} */
 const versions = new Map();
 
@@ -277,8 +281,10 @@ export function sagaOf(player) {
   // A player who already left (an operator's menu outlived them): their property can't be read, and caching an
   // empty save under their id would hide their progress when they come back (forget() ran when they left).
   if (!player.isValid) return { s: {} };
+  let raw;
+  let bad = false;
   try {
-    const raw = player.getDynamicProperty(PROP_PLAYER);
+    raw = player.getDynamicProperty(PROP_PLAYER);
     const parsed = typeof raw === "string" ? JSON.parse(raw) : undefined;
     if (isObj(parsed) && isObj(parsed.s)) {
       saga = /** @type {Saga} */ (parsed);
@@ -292,9 +298,16 @@ export function sagaOf(player) {
       if (saga.tr !== undefined && typeof saga.tr !== "string") delete saga.tr;
       if (saga.ut !== undefined && (!Array.isArray(saga.ut) || saga.ut.some((x) => typeof x !== "string"))) delete saga.ut;
       if (saga.wv !== undefined && (!isObj(saga.wv) || typeof saga.wv.w !== "string" || !isObj(saga.wv.at))) delete saga.wv;
-    }
+    } else if (typeof raw === "string" && raw.length > 0) bad = true;
   } catch {
-    console.warn(`[saga] ${PROP_PLAYER} of ${player.name} is corrupt; starting over`);
+    bad = true;
+  }
+  if (bad) {
+    try {
+      if (typeof raw === "string" && player.getDynamicProperty(PROP_PLAYER_BAK) === undefined) player.setDynamicProperty(PROP_PLAYER_BAK, raw);
+    } catch {}
+    console.warn(`[saga] ${PROP_PLAYER} of ${player.name} is corrupt; starting over (the old save was kept in ${PROP_PLAYER_BAK})`);
+    saga = undefined;
   }
   saga ??= { s: {} };
   cache.set(player.id, saga);
@@ -386,15 +399,27 @@ export function invalidate(id) {
 /** @param {string} id */
 export function flush(id) {
   const player = dirty.get(id);
-  dirty.delete(id);
   const saga = cache.get(id);
-  if (!player || !saga || !player.isValid) return;
+  if (!player || !saga || !player.isValid) {
+    dirty.delete(id);
+    return;
+  }
+  let json = "";
   try {
-    const json = trimSave(saga);
+    json = trimSave(saga);
     if (byteLength(json) > SAVE_LIMIT) console.warn(`[saga] ${player.name}'s progress is ${byteLength(json)} bytes; it may not save`);
     player.setDynamicProperty(PROP_PLAYER, json);
+    dirty.delete(id);
+    tooBig.delete(id);
   } catch (e) {
-    console.warn(`[saga] save: ${e}`);
+    // Stays in dirty, so the next flush tries again; the warning and the chat line go out once per player.
+    if (!tooBig.has(id)) {
+      tooBig.add(id);
+      console.warn(`[saga] save: ${e}`);
+      try {
+        if (byteLength(json) > SAVE_LIMIT) player.sendMessage("§c[Story] Your story progress is too big to save. Tell an operator.");
+      } catch {}
+    }
   }
 }
 
@@ -406,6 +431,7 @@ export function flushAll() {
 export function forget(id) {
   cache.delete(id);
   dirty.delete(id);
+  tooBig.delete(id);
   entryCache.delete(id);
   invalidate(id);
 }

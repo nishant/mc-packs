@@ -7,6 +7,16 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Safer stories, fairer trades
+
+- Story Questlines: a story save that can't be read is copied aside instead of being wiped, places are never rewritten over a damaged list, and terrain that couldn't be put back finishes when someone comes near. Boss warnings show once a while, and Old Words isn't offered after the gift ending.
+- Silly Enchants: only the player who locked a librarian (or an operator) can change it, and Town Projects residents and named villagers are skipped.
+- Skills: Reset talents costs what the realm set. Guilds: ores, melons and pumpkins moved by a piston don't count as fresh finds.
+- Titles: a built-in title or trail an operator takes away stays gone. Stash: the help says which slots are the same on every page.
+- Fishing: Sell fish only counts the plain fish you carry. Rain Extras: a sand or snow roof over your head no longer counts as dry ground.
+- Meteors wait only for their own spot to load. Minimap: Arrived clears when the Minimap is off, and the Mob range setting is named for what it does (the radar always shows 36 blocks).
+- Operators: the Realm Configuration menu leaves optional players out by default and sends the right player after a join or leave, and Show a Title works without a subtitle.
+
 ## Fixes across the Realm
 
 - Atlas: camp barrels, wreck chests and watch bells come back after being broken, camp and wreck loot is always three different things, and the watch countdown no longer covers other action bar notes.

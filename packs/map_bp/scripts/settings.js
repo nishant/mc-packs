@@ -15,7 +15,7 @@ const OPTIONS = [
   { key: "radarDefault", type: "bool", scope: "world", label: "Radar for new players", help: "What players start with; each can change it in /realm:prefs" },
   { key: "radarTerrain", type: "bool", scope: "world", label: "Terrain colors on radar (realm default)", help: "Colors empty cells by the land, water, roads and caves around you" },
   { key: "showMobs", type: "bool", scope: "world", label: "Show mobs (realm default)" },
-  { key: "mobRadius", type: "int", scope: "world", min: 8, max: 48, step: 4, label: "Mob and radar range (realm default, blocks)" },
+  { key: "mobRadius", type: "int", scope: "world", min: 8, max: 48, step: 4, label: "Mob range (realm default, blocks)" },
   { key: "mobRadiusMax", type: "int", scope: "world", min: 8, max: 48, step: 4, label: "Largest mob range players may pick (blocks)", help: "Caps each player's own range: a larger range costs more" },
   { key: "maxMobs", type: "int", scope: "world", min: 1, max: 16, label: "Mobs drawn at most (the nearest)" },
   { key: "showTown", type: "bool", scope: "world", label: "Show the nearest town (realm default)", help: "A house on the strip and radar (needs Town Projects)" },
@@ -33,7 +33,7 @@ const OPTIONS = [
   { key: "showMobs", type: "bool", scope: "player", lock: [["enabled", false]], base: "showMobs", label: "Show mobs on my minimap", help: "Red dots, and red arrows at the strip's edges for mobs behind you" },
   { key: "showTown", type: "bool", scope: "player", lock: [["enabled", false]], base: "showTown", label: "Show the nearest town", help: "A house on the strip and radar (needs Town Projects)" },
   { key: "showHome", type: "bool", scope: "player", lock: [["enabled", false]], base: "showHome", label: "Show my bed", help: "A bed on the strip and radar where you respawn" },
-  { key: "mobRadius", type: "int", scope: "player", lock: [["enabled", false]], base: "mobRadius", min: 8, max: 48, step: 4, label: "My mob and radar range (blocks)", help: "No more than the realm's largest range" },
+  { key: "mobRadius", type: "int", scope: "player", lock: [["enabled", false]], base: "mobRadius", min: 8, max: 48, step: 4, label: "My mob range (blocks)", help: "No more than the realm's largest range" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

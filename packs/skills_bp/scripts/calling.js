@@ -65,6 +65,8 @@ export function init(a) {
 }
 
 const C = () => CONFIG.callings;
+/** Crowns a talent reset costs: the /realm:config setting, else the config.js default. */
+const respecCost = () => Math.max(0, Math.floor(Number(get("callings.respecCost")) || 0));
 const on = () => get("callings.enabled") === true;
 /** @type {Map<string, Calling>} */
 const byId = new Map(CONFIG.callings.list.map((c) => [c.id, c]));
@@ -971,7 +973,7 @@ async function showTalents(player, atShrine) {
     return showTalents(player, atShrine);
   }
   const rank = st.t[t.id] ?? 0;
-  const ok = await confirm(player, `§l${t.name}`, `Spend a talent point on ${t.name} (rank ${rank + 1} of ${t.v.length})?\n\n${talentText(t, rank + 1)}\n\n§7Taking points back later costs ${C().respecCost} Crowns.`, "Spend");
+  const ok = await confirm(player, `§l${t.name}`, `Spend a talent point on ${t.name} (rank ${rank + 1} of ${t.v.length})?\n\n${talentText(t, rank + 1)}\n\n§7Taking points back later costs ${respecCost()} Crowns.`, "Spend");
   if (ok && player.isValid && !cantSpend(player, calling, t) && stateOf(player).c === calling.id) {
     st.t[t.id] = rank + 1;
     save(player, st);
@@ -984,7 +986,7 @@ async function showTalents(player, atShrine) {
 /** Takes back every talent point for `respecCost` Crowns. @param {Player} player @param {boolean} atShrine */
 async function respec(player, atShrine) {
   const st = stateOf(player);
-  const cost = Math.max(0, Math.floor(C().respecCost));
+  const cost = respecCost();
   if (!spent(st)) return showMenu(player, atShrine);
   const ok = await confirm(player, "§lReset talents", `Take back all ${spent(st)} talent points to spend them again? It costs ${cost} Crowns (you have ${crownsOf(player)}).`, "Reset");
   if (!ok || !player.isValid) return showMenu(player, atShrine);
@@ -1034,7 +1036,7 @@ export async function showMenu(player, atShrine = false) {
     if (!api.active(player)) body.push("§7Talents and the Sigil don't work in creative or spectator mode.");
     actions.push({ label: `Talents\n§8${points - spent(st) > 0 ? `${points - spent(st)} point${points - spent(st) === 1 ? "" : "s"} to spend` : "Your tree"}`, run: () => showTalents(player, atShrine) });
     if (!hasSigil(player)) actions.push({ label: "Get a Calling Sigil\n§8You don't carry one", run: () => (giveSigil(player), showMenu(player, atShrine)) });
-    if (spent(st) > 0) actions.push({ label: `Reset talents\n§8${C().respecCost} Crowns`, run: () => respec(player, atShrine) });
+    if (spent(st) > 0) actions.push({ label: `Reset talents\n§8${respecCost()} Crowns`, run: () => respec(player, atShrine) });
     const left = daysLeft(st);
     if (canChooseHere(atShrine)) {
       for (const c of CONFIG.callings.list) {

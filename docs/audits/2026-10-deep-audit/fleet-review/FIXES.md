@@ -1,6 +1,8 @@
+Closed historical plan. To ship, follow CLAUDE.md "Ship every change": merge, then the release workflow publishes and runs check-live; never publish from a session.
+
 # Fix list after reviewing msftMyt's plan branch (for a Claude session, after that release ships)
 
-**Campaign status (October 21):** shipped in releases #107, #115, #117, #118, #119, #121, #124, #125, #127 the final records PR (O81) and the final check (F76: no stash_bp regression, the `--flat` soak pool fixed); still open, each per the owner's F56 answer ("it is what it is, if we can improve it go for it"): O1 (map_bp 2.1 ms/tick at 40 players against its 1 ms goal), O3 (npc label loop and elite night, changes within noise), O10 (the build preview), F70 (partly done through those), F71 and O11-O16 (waiting on the owner's devices) and O46 (the Easy Building license credit, a `docs/RELEASE_TODO.md` item per the owner's answer, for before a public release).
+**Campaign status (October 21):** shipped in releases #107, #115, #117, #118, #119, #121, #124, #125, #127 the final records PR (O81) and the final check (F76: no stash_bp regression, the `--flat` soak pool fixed); still open (O1 is MET, see below), each per the owner's F56 answer ("it is what it is, if we can improve it go for it"): O3 (npc label loop and elite night, changes within noise), O10 (the build preview), F70 (partly done through those), F71 and O11-O16 (waiting on the owner's devices) and O46 (the Easy Building license credit, a `docs/RELEASE_TODO.md` item per the owner's answer, for before a public release). O1 status: MET (newest perf-report, nishant/mc-packs#203, ee246a1, CI runner: map_bp 0.954 ms/tick and the whole bundle 2.872 summed / 1.852 as one Realm Bundle at 40 players; see OPEN.md).
 
 The branch `msftmyt-deep-audit-fleet-integration` (reviewed at commit `aef10dc`, 207 commits ahead of master
 `7eb5f72`) implements `../PLAN.md`. Two independent read-only reviews of it are in this folder. This file lists every
@@ -41,13 +43,9 @@ Run this only after msftMyt's release of that branch is merged to `master` and p
 4. **Re-review the fixes.** Have an independent reviewer go over the fix diff only, then measure again (same soaks)
    and rerun the full suite. Nothing may regress from step 2. Every measured perf claim needs before and after
    numbers.
-5. **Ship** per CLAUDE.md:
-   - check, build, PR, merge
-   - publish-packs, pack-docs, check-live
-   - final summary ends with one line saying the site is up to date with Realm Bundle X / Realm Resources Y
-   - the owner uploads the bundles to the Realm, so do not remind him
+5. **Ship** per CLAUDE.md "Ship every change": merge, then the release workflow publishes and runs check-live; never publish from a session.
 
-   Mark each F-item done (with the sha) or won't fix (with a reason) in this file.
+   
 
 Severity order:
 1. F1-F4, the blockers and highs
@@ -104,7 +102,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
 ### New items from the re-review
 
-- [x] DONE (14b6158, 303bb12): every ACCEPTED_EXCEPTION is replaced with the owner's answer; the 40-player miss is recorded as open with the 5 ms goal. (Owner answer, October 20: "it is what it is, if we can improve it go for it". Replace ACCEPTED_EXCEPTION with that wording, keep the 5 ms budget as the goal, and keep improving per W1/F46 where measurements show a gain.) **F56 (high, owner decision, docs) An "owner-accepted 40-player shortfall" the owner never gave** (N1).
+- [x] DONE (14b6158, 303bb12): every ACCEPTED_EXCEPTION is replaced with the owner's answer; the 40-player miss was recorded as open with the 5 ms goal (since MET, see OPEN.md O1). (Owner answer, October 20: "it is what it is, if we can improve it go for it". Replace ACCEPTED_EXCEPTION with that wording, keep the 5 ms budget as the goal, and keep improving per W1/F46 where measurements show a gain.) **F56 (high, owner decision, docs) An "owner-accepted 40-player shortfall" the owner never gave** (N1).
   - Where: PACKS.md about :6678, SERVER_SETUP.md :164 and :232, WORKING.md :116, OPEN.md :15, perf-tables.md :17.
   - They say "Owner answer (2026-10-19): ACCEPTED_EXCEPTION" for the 40-player whole-bundle miss (7.97 ms/tick
     against 5). None of the owner's recorded answers says this.
@@ -157,7 +155,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - [x] DONE (atlas: 86a28e4, d074d47, 6c96787, bd653ab; wander: 9f5b835; wander-walk: 8a56f9e, 58b4851, b6f227c, b50c8ba): harness ticking-area removal and scenario races (atlas), unloaded camp chunk (wander), a lightning witch bug and fixture deaths (wander-walk); all three pass on the merged tree, no assertion weakened. **F69 (high) Root-cause the 3 failing scenarios at 8aa5cf06:** atlas, wander-walk and wander (above). Run them
   alone first to rule out load. Fix the pack or the scenario, without weakening what it checks.
 
-- [ ] PARTLY DONE (group 3 + ship3, October 21): W1 measured at 10 and 40 and worked: O5, O6, O9 and O19 DONE, O7 DONE scoped, O2 and O10 PARTLY DONE, O1 and O3 OPEN with numbers, O4 waits on validate.yml's memory A/B (F74); dispositions in `../OPEN.md`. Remaining: the map_bp redesign (O1), silly_bp (O2), the night champion count and the npc label loop (O3, O10), O47/O48 (group 2), O11-O16 (F71). **F70 (high, scope) Finish the plan items that are still open in `../OPEN.md`, not only the F-items.**
+- [ ] PARTLY DONE (group 3 + ship3, October 21): W1 measured at 10 and 40 and worked: O5, O6, O9 and O19 DONE, O7 DONE scoped, O2 and O10 PARTLY DONE, O1 (since MET, see OPEN.md) and O3 OPEN with numbers, O4 waits on validate.yml's memory A/B (F74); dispositions in `../OPEN.md`. Remaining: silly_bp (O2, done since), the night champion count and the npc label loop (O3, O10), O47/O48 (group 2), O11-O16 (F71). **F70 (high, scope) Finish the plan items that are still open in `../OPEN.md`, not only the F-items.**
   - #96 marked several plan items WON'T FIX or DONE without the work (F58): O1, O2, O4, O5, O10-O15, O19, O47 and
     O48. Others are marked DONE although open F-items cover them: O3, O7, O17, O71.
   - After F58 re-marks them honestly, implement every one that is still open, as `../PLAN.md` describes:
@@ -302,7 +300,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 - ship3: the group 3 failures of expedition-nether-carts (3 in 13, two "Your stored items couldn't be found") are explained by the Nether floor flake master fixed in 19bca74d (the fill placed nothing on a slow runner, so the runner and the carts put down at their feet fell into the lava sea: burned carts are "seen, gone" and O19 rightly refused a second copy, but the record was cleared while the structure was still saved). On the merged tree: expedition-nether-carts 10/10 before the safety change and 15/15 after, expedition-carts-partial 15/15, expedition-carts-window 15/15 (BDS 1.26.52.3, 2 jobs), so O19 is kept, not reverted.
 - ship3: parcels made from now on tag their carts `realm:exp_parcel_part_<k>` like stash carts, so a parcel's parts can be told apart too; an older parcel whose carts are gone keeps O19's rule (never put down again).
 - ship3: the "couldn't be found" message now says why ("their storage carts were broken or emptied before they came back to you") and still asks the player to tell an operator.
-- ship3: map_bp stays about 4.2 ms at 40 players and is recorded open (O1, F46), per the owner's F56 answer; not changed in this release.
+- ship3: map_bp stayed about 4.2 ms at 40 players in that release (O1, F46; since MET, 0.954 ms in #203).
 - group 4: F28 was merged into F24's queue.js rather than reverting F24's module: the saved line (`saveQueue`, `loadQueue`, `queueLeft`, `queueRejoined`, `PROP_QUEUE`) lives in `createQueue` with `readJson`, `writeJson` and `dungeonById` as deps; main.js keeps the playerSpawn/playerLeave/worldLoad hooks, and the tests import the shipped module.
 - group 4: F28 drops a leader who left from the line 10 seconds later (QUEUE_GONE) instead of on the leave, so a server stop's disconnects don't empty it; such a leader stays in line up to about 15 s, and the start loop skips offline leaders. After a restart a leader has 5 minutes to come back.
 - group 4: F29 records a tamer only when exactly one player can account for the taming (one watch per animal and player); two players feeding the same animal in the same window record nobody (the pet stays locked, as before). Pets tamed before the update have no record and stay locked in others' claims.
@@ -347,7 +345,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
 
 ## Blockers and highs
 
-- [x] (FIXED on master in 4a9e3b85 (unit probe passes; still add a BDS scenario)) **F1 (blocker, item loss) stash_bp: "Fill earlier pages" deletes slot-locked stacks.**
+- [ ] (fix is on master, 4a9e3b85, guarded only by the unit test `tools/stash-pages.test.mjs`; the BDS scenario is still to be written: a `lock_in_slot` stack on the shown page, Fill earlier pages, assert amount, lock, slot and page census unchanged; listed in OPEN.md) **F1 (blocker, item loss) stash_bp: "Fill earlier pages" deletes slot-locked stacks.**
   - Code: `scripts/pages.js` around :1343 and :1385-1390.
   - Trigger: a `lock_in_slot` stack sits in a storage slot of the page being shown, the player uses Fill earlier
     pages, and any other stack moves. Slot-locked records get `n = Number.MAX_SAFE_INTEGER` so nothing merges into
@@ -562,7 +560,7 @@ are above the published ones. Every `diag.js` VERSION matches its manifest.
     - spread players over the second
     - skip players whose bar is held by another pack (the actionbar protocol)
   - Re-measure at 10 and 40 players.
-- [ ] PARTLY DONE (perf-tail, PR #121: silly_bp 0c6e1e84 0.165 / 0.161 -> 0.110 / 0.101 ms/tick at 40, done; elite night 4d870867 within noise, see OPEN O3; Expedition build steps f96e23c4 22-30 -> 9-17 ms, see OPEN O10; npc labels measured, no gain, reverted 1ecf250c; map_bp O1 still open; map-redesign, map_bp 1.3.11: 4.425 -> 2.055 ms/tick at 40 and 2.838 -> 1.533 at 10, still over 1, O1). Earlier: (group 3: 6a439ead, a250925b, d2530c33, 9ba983c, ec6fa11, 01e59ad and the workstream commits in `campaign-reports/g3.md`; shipped in the ship3 PR): at 40 players, steady window, before 7aa0cce vs after: elytra 0.280 -> 0.157, saga 0.209 -> 0.179, silly 0.382 -> 0.192, admin 0.131 -> 0.130, wander and the WS3 set 0.215 -> 0.205; the one-context Realm Bundle 8.004 -> 7.108 ms (10 players: 4.941 -> 3.981). Remaining: map_bp 4.185 against 1 (O1; owner F56: improve where measured, a perf/map-redesign workstream follows) and silly_bp 0.192; build_bp, stash_bp and stats_bp are group 2's. **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
+- [ ] PARTLY DONE (perf-tail, PR #121: silly_bp 0c6e1e84 0.165 / 0.161 -> 0.110 / 0.101 ms/tick at 40, done; elite night 4d870867 within noise, see OPEN O3; Expedition build steps f96e23c4 22-30 -> 9-17 ms, see OPEN O10; npc labels measured, no gain, reverted 1ecf250c; map-redesign, map_bp 1.3.11: 4.425 -> 2.055 ms/tick at 40 and 2.838 -> 1.533 at 10; O1 is now MET: map_bp 0.954 ms/tick at 40 in #203). Earlier: (group 3: 6a439ead, a250925b, d2530c33, 9ba983c, ec6fa11, 01e59ad and the workstream commits in `campaign-reports/g3.md`; shipped in the ship3 PR): at 40 players, steady window, before 7aa0cce vs after: elytra 0.280 -> 0.157, saga 0.209 -> 0.179, silly 0.382 -> 0.192, admin 0.131 -> 0.130, wander and the WS3 set 0.215 -> 0.205; the one-context Realm Bundle 8.004 -> 7.108 ms (10 players: 4.941 -> 3.981). Remaining then: map_bp 4.185 against 1 (O1, since MET: 0.954 in #203) and silly_bp 0.192; build_bp, stash_bp and stats_bp are group 2's. **F46 (info) Packs over budget on the branch, for W1 follow-up** (steady window at 40 players):
   - map_bp 3.6-3.8 ms against its 1 ms budget
   - build_bp 0.73-0.78
   - stash_bp 0.53-0.57

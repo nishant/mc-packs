@@ -12,7 +12,7 @@ const PROP_WEATHER = "fishing:weather"; // world: overworld weather from the las
 const PROP_RAIN_END = "fishing:rainEnd"; // world: when rain last stopped (ms), for `afterRain` species
 const PROP_LOG = "fishing:log"; // player: JSON { [speciesId]: [count, best cm] }
 const PROP_RECORDS = "fishing:records"; // world: JSON { [speciesId]: [cm, name, player id, ms] }
-const PROP_BASKET = "fishing:basket"; // player: JSON Record<string, [string, number][]> item typeId -> [[speciesId, sizeCm], ...]
+const PROP_BASKET = "fishing:basket"; // player: JSON Record<string, [string, number][]> item typeId -> [[speciesId, sizeCm], ...]; entries are trimmed to the plain fish carried (the cheapest are kept) when Sell fish opens
 const PROP_TOURNEY = "fishing:tourney"; // world: JSON of the running tournament (see Tourney)
 const PROP_TMETA = "fishing:tmeta"; // world: JSON { last, warned }: the scheduled starts already handled
 // Prizes for players who were offline: one world property per player, "fishing:owed:<player id>" = [crowns, note, quest id], plus the index "fishing:owed_idx" (owed.js).
@@ -1000,6 +1000,24 @@ function fishFor(player) {
   if (!inv) return out;
   const bonus = 1 + tobinOffOf(player) / 100;
   const basket = basketOf(player);
+  // Basket entries outlive the fish (eaten, cooked, dropped): keep only as many as the plain fish on hand, the cheapest ones.
+  /** @type {Map<string, number>} */
+  const onHand = new Map();
+  for (let slot = 0; slot < inv.size; slot++) {
+    const st = inv.getItem(slot);
+    if (!st || !FISH_ITEMS.has(st.typeId) || st.nameTag || st.getLore().length > 0 || readFish(st)) continue;
+    onHand.set(st.typeId, (onHand.get(st.typeId) ?? 0) + st.amount);
+  }
+  let trimmed = false;
+  for (const item of Object.keys(basket)) {
+    const list = basket[item];
+    const count = onHand.get(item) ?? 0;
+    if (list.length <= count) continue;
+    if (count === 0) delete basket[item];
+    else basket[item] = bestFirst(list).slice(list.length - count);
+    trimmed = true;
+  }
+  if (trimmed) saveBasket(player, basket);
   /** @type {Map<string, number>} */
   const used = new Map(); // basket entries already given to an earlier stack of the same item
   for (let slot = 0; slot < inv.size; slot++) {

@@ -62,17 +62,18 @@ export default async function (t) {
   t.check(bodies(seen).includes("the dark has him"), "intro reads g:hollis = lost");
   await t.waitMessage(p, /Have a soul lantern/, { since: t.tick, timeout: 100 });
 
-  // Vesna rises at once (the objectives count together) and talks; pick the mercy choice.
+  // The objectives are in order: the lantern, the call at the Fen after dark, and only then Vesna rises and talks.
+  p.giveItem(new t.mc.ItemStack("minecraft:soul_lantern", 1), true);
+  await t.waitMessage(p, /soul lantern to call her with: done/i, { timeout: 100 });
+  t.server("/time set 14000");
+  await t.waitMessage(p, /Call Vesna's name over the water at Hollow Fen after dark: done/i, { timeout: 1400 });
+
+  // Vesna rises after the call and talks; pick the mercy choice.
   seen = await pages(p, (f) => f.buttons.find((b) => /loosen/i.test(b)) ?? 0, 600);
   t.check(bodies(seen).includes("You called. I came."), "Vesna's first page");
   t.check(seen[seen.length - 1].buttons.length === 2, `two choices: ${seen[seen.length - 1].buttons}`);
   await pages(p, "OK");
   await t.waitMessage(p, /Face Vesna when she rises: done/i, { since: t.tick, timeout: 100 });
-
-  p.giveItem(new t.mc.ItemStack("minecraft:soul_lantern", 1), true);
-  await t.waitMessage(p, /soul lantern to call her with: done/i, { timeout: 100 });
-  t.server("/time set 14000");
-  await t.waitMessage(p, /Call Vesna's name over the water at Hollow Fen after dark: done/i, { timeout: 1400 });
 
   // Report to Moss: the outro reads the meet's choice and the one button sets g:fen and counts the ally.
   got = await talk(p, "moss");

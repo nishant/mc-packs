@@ -24,7 +24,11 @@ const ROOT = path.resolve(HERE, "..", "..");
 const ALL = "*";
 /** Custom runners (suite.mjs SPECIAL) and the packs they install. Any other runner counts as every pack. */
 const RUNNER_PACKS = { "build-beds.mjs": ["build_bp", "build_rp"], "stash-persistence.mjs": ["stash_bp"] };
-const HARNESS = [/^tools\/test-bds\/(lib|testpack)\//, /^tools\/test-bds\/(run|suite|setup)\.mjs$/, /^package(-lock)?\.json$/];
+const HARNESS = [
+  /^tools\/test-bds\/(lib|testpack)\//, /^tools\/test-bds\/(run|suite|setup)\.mjs$/, /^package(-lock)?\.json$/,
+  // Every runner and tool at the top of test-bds (classify skips *.test.mjs), the bundle and build scripts, and the CI action.
+  /^tools\/test-bds\/[^/]+\.mjs$/, /^tools\/(bundle|build)\.mjs$/, /^tools\/lib\//, /^\.github\/actions\/bds\//,
+];
 const DEFAULT_SECONDS = 60;
 
 /**
@@ -57,7 +61,7 @@ export function classify(files) {
     if (pack) packs.add(pack[1]);
     const ex = /^tools\/test-bds\/examples\/([^/]+)\.js$/.exec(f);
     if (ex) scenarios.add(ex[1]);
-    const hook = /^tools\/test-bds\/hooks\/([^/]+)$/.exec(f);
+    const hook = /^tools\/test-bds\/hooks\/([^/]+)/.exec(f);
     if (hook) hooks.add(hook[1]);
     if (HARNESS.some((r) => r.test(f))) harness = true;
   }
@@ -72,6 +76,10 @@ export function classify(files) {
  */
 export function select(plans, change, { all = false } = {}) {
   if (all || change.harness) return { reason: all ? "every scenario (--all)" : "the harness changed: every scenario", scenarios: plans.map((p) => p.name) };
+  // A hook no scenario header names is read by code (hooks/build-bed-pipeline.js, hooks/saga-starfall-state.js): treat it as harness.
+  const named = new Set(plans.flatMap((p) => p.hooks ?? []));
+  const unnamed = [...change.hooks].filter((h) => !named.has(h));
+  if (unnamed.length) return { reason: `hook(s) no scenario header names (${unnamed.join(", ")}): every scenario`, scenarios: plans.map((p) => p.name) };
   const picked = plans.filter((p) =>
     change.scenarios.has(p.name) ||
     (p.hooks ?? []).some((h) => change.hooks.has(h)) ||

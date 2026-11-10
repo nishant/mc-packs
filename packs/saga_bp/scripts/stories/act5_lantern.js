@@ -235,6 +235,8 @@ export const STORIES = [
         title: "The Witch Who Must Come",
         npc: "moss",
         when: { "g:vesna": "bound" },
+        // Vesna rises only after the lantern and the call.
+        sequential: true,
         intro: [
           `§eMoss§r is standing at the graveyard gate with a soul lantern in each hand, which is not how he usually holds a conversation.\n\n${MO}You bound her. Vesna. Sank her name in the Fen with the Mother's heart, and she told you: when you call, she comes. She hasn't got a choice. You made sure of that.`,
           `${MO}Well. Tomorrow night the sky falls, and Reyes wants every singer she can get on those rocks. So somebody has to go and call. I'd rather it was you. I'd rather it was nobody. It's you.`,
@@ -502,6 +504,8 @@ export const STORIES = [
         id: "gate",
         title: "Through the Gate",
         npc: "sol",
+        // The vision at the Gate follows the stealth or fight, not the first visit.
+        sequential: true,
         intro: [
           `§eSol§r has his spyglass trained on the hills, not the sky, for the first time in his life.\n\n${S}The Lantern is at Vega's shoulder. When it crosses Deneb it will stand straight over the Sky Seal. That is the moment. Between now and then, someone must walk into the door it is shining through.`,
           `${S}The Hollow Gate. I can see it from here: a black mouth with sculk for lips and soul fire for teeth. The last circle of the Gray Choir kneels around it, humming the broken note, waiting for their Herald to rise.`,

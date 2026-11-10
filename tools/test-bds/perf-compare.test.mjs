@@ -33,3 +33,20 @@ test("an invalid side is never a pass or a regression", () => {
   assert.equal(r.status, "invalid");
   assert.match(markdown("10", base, sideOf([], "10"), r), /INVALID/);
 });
+
+test("a pack the head lists without a figure is invalid, not 0 ms; a pack new on head is compared as before", () => {
+  const base = sideOf([report(6, { map_bp: 3, cheap_bp: 0.02 })], "10");
+  const gap = report(6, { cheap_bp: 0.02 });
+  gap.perf["10"].packs.map_bp = { whole: 3 }; // listed, but no steady figure
+  const head = sideOf([gap], "10");
+  assert.deepEqual([...head.incomplete], ["map_bp"]);
+  const r = compare(base, head);
+  assert.equal(r.status, "invalid");
+  assert.match(r.reason, /missing per-pack figure for map_bp/);
+  assert.match(markdown("10", base, head, r), /INVALID[\s\S]*missing per-pack figure for map_bp/);
+  // The gap on the base side counts too.
+  assert.equal(compare(head, base).status, "invalid");
+  // A pack absent from the head entirely (removed) or new on it keeps today's behavior.
+  assert.equal(compare(base, sideOf([report(6, { cheap_bp: 0.02 })], "10")).status, "ok");
+  assert.equal(compare(base, sideOf([report(6, { map_bp: 3, cheap_bp: 0.02, new_bp: 0.3 })], "10")).regressions[0], "new_bp 0.000 -> 0.300 ms/tick (new)");
+});

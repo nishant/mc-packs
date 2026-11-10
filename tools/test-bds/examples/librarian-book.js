@@ -54,19 +54,16 @@ export default async function (t) {
     return total;
   };
 
-  const interact = (entity) => {
+  const interact = async (entity) => {
     p.lookAtEntity(entity);
     p.interactWithEntity(entity);
-    t.system.sendScriptEvent(
-      "realm:silly_villager_interact",
-      JSON.stringify({ player: p.id, target: entity.id }),
-    );
+    await t.console(`scriptevent realm:silly_villager_interact ${JSON.stringify({ player: p.id, target: entity.id })}`);
   };
 
   // 1. Right-click villager with Mending I Enchanted Book -> conversion popup & chat prompt.
   let since = t.tick;
   const convertFormPromise = t.waitForm(p, { timeout: 100 });
-  interact(villager);
+  await interact(villager);
   await t.waitMessage(p, /Convert this villager into a Novice Librarian locked to.*Mending I/i, { since, timeout: 60 });
   const convertForm = await convertFormPromise;
   t.check(convertForm.title.includes("Convert to Novice Librarian"), `conversion popup title: ${convertForm.title}`);
@@ -82,7 +79,7 @@ export default async function (t) {
   // 2. Right-click locked Librarian again -> trade 1x Mending I for 10 Emeralds + 1 Book.
   since = t.tick;
   const tradeFormPromise = t.waitForm(p, { timeout: 100 });
-  interact(villager);
+  await interact(villager);
   const tradeForm = await tradeFormPromise;
   t.check(tradeForm.title.includes("Mending I"), `trade popup title: ${tradeForm.title}`);
   tradeForm.answer("Trade 1x Mending I");

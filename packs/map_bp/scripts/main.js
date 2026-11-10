@@ -1774,7 +1774,7 @@ function pass(player, all, seen, now) {
   const showRadar = on && pr.radar;
   if (!showCompass && !showRadar) {
     hidePlayerHud(player);
-    if (on) arrival(player, destination(player, all, new Map()));
+    arrival(player, destination(player, all, new Map()));
     return;
   }
   const t0 = Date.now();

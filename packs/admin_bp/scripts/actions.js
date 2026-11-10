@@ -68,16 +68,22 @@ const RULES = [
   ["mobGriefing", "Mobs change blocks (creepers, endermen)"],
 ];
 
+/** The player list each operator's open form shows, so the read matches what was on screen (players can join or leave meanwhile). @type {Map<string, string[]>} */
+const shownNames = new Map();
+
 /** @param {ModalFormData} form @param {Player} me @param {string} label @param {boolean} [everyone] */
 function playerDropdown(form, me, label, everyone = false) {
   const names = playerNames(me);
-  form.dropdown(label, everyone ? [...names, EVERYONE] : names, { defaultValueIndex: 0 });
-  return everyone ? [...names, EVERYONE] : names;
+  const list = everyone ? [...names, EVERYONE] : names;
+  shownNames.set(me.id, list);
+  form.dropdown(label, list, { defaultValueIndex: 0 });
+  return list;
 }
 
 /** @param {Player} me @param {unknown} i @param {boolean} [everyone] */
 const pickName = (me, i, everyone = false) => {
-  const names = everyone ? [...playerNames(me), EVERYONE] : playerNames(me);
+  const names = shownNames.get(me.id) ?? (everyone ? [...playerNames(me), EVERYONE] : playerNames(me));
+  shownNames.delete(me.id);
   return names[Number(i) || 0] ?? me.name;
 };
 
@@ -168,12 +174,15 @@ export const ACTIONS = [
     help: "Pick any online player (nearest first) and go to where they are, in their dimension.",
     form(me) {
       const names = otherNames(me);
+      shownNames.set(me.id, names);
       return new ModalFormData()
         .title("Teleport me to a player")
         .dropdown(`Player (${names.length} online besides you)`, names.length ? names : ["(nobody else is online)"], { defaultValueIndex: 0 });
     },
     read: (me, [p]) => {
-      const name = otherNames(me)[Number(p) || 0];
+      const list = shownNames.get(me.id) ?? otherNames(me);
+      shownNames.delete(me.id);
+      const name = list[Number(p) || 0];
       return name ? { player: name } : "Nobody else is online.";
     },
     run(me, v) {

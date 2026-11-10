@@ -101,7 +101,7 @@ With Claude, `/bundle-packs` asks which packs to include (**All packs** is the f
 ## Development
 
 ```bash
-npm run check     # type-check against @minecraft/server 2.1.0 / server-ui 2.0.0; ASCII game text, docs/PACKS.md complete, realm: commands, stories, game ids, script events, action bar requests, unit tests, settings.js / zones.js / side.js / diag.js / name-labels.js copies, help and admin catalogs, news, generated resource packs, version bumps (last)
+npm run check     # type-check against @minecraft/server 2.1.0 / server-ui 2.0.0 (not build_bp yet: Easy Building's scripts are `// @ts-nocheck`); ASCII game text, docs/PACKS.md complete, realm: commands, stories, game ids, script events, action bar requests, unit tests, settings.js / zones.js / side.js / diag.js / name-labels.js copies, help and admin catalogs, news, generated resource packs, version bumps (last)
 npm run test      # the unit tests alone (tools/**/*.test.mjs, about 1 s)
 npm run gen:rain  # regenerate Realistic Rain's textures, fogs and sounds (sounds need ffmpeg)
 npm run gen:sky   # regenerate Realm Skies
@@ -121,7 +121,7 @@ npm run bundle    # merge packs into one (--list [--json], --all, --resources, -
 | `tools/gen-rain/` | Generates `rain_rp` from Mojang's vanilla files in `tools/gen-rain/vanilla/` and the realm owner's rain and thunder recordings (`recordings.json`; the originals go in the git-ignored `tools/gen-rain/sources/`) (`npm run gen:rain`); `npm run check` fails if its textures, fogs, client biomes or sounds are stale (`sounds-lock.json` lets the sounds check run without ffmpeg). `renders.mjs` and `sounds.mjs --audition docs/media/rain` make the rain packs' pictures and sound clips; `png.mjs` is the PNG reader and writer the generators share |
 | `tools/gen-sky/` | Generates `sky_rp` (Realm Skies: the particles and fogs of the weather, sky and trail packs) from code, no source files (`npm run gen:sky`); `npm run check` fails if `sky_rp` is stale |
 | `tools/gen-translucent/` | Generates `translucent_rp` from Mojang's vanilla files in `tools/gen-translucent/vanilla/` (`npm run gen:translucent`); `npm run check` fails if any of its files are stale |
-| `tools/gen-glyphs/` | Generates the Minimap's icon font `hud_rp/font/glyph_F3.png`, the names of its characters `packs/map_bp/scripts/glyphs.js` and the render `docs/media/map/map-hud.png` from code (`npm run gen:glyphs`); `npm run check` fails if any is stale |
+| `tools/gen-glyphs/` | Generates the Minimap's icon font `hud_rp/font/glyph_F1.png` to `glyph_F8.png`, the names of its characters `packs/map_bp/scripts/glyphs.js` and the render `docs/media/map/map-hud.png` from code (`npm run gen:glyphs`); `npm run check` fails if any is stale |
 | `docs/media/` | Pictures and sound clips shown in `docs/PACKS.md` (`### See and hear it`) and on the realm page |
 | `tools/check-docs.mjs` | Fails if a pack, its `### How to use`, a command or a config option is missing from the docs |
 | `tools/check-commands.mjs` | Fails if a command or enum isn't in the `realm:` namespace, or two share a name |

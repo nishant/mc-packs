@@ -219,6 +219,8 @@ export const STORIES = [
         id: "keeper",
         title: "The Keeper Who Doesn't Sleep",
         npc: "hollis",
+        // The vision follows the vigil, not the first visit.
+        sequential: true,
         intro: [
           `§eBrother Hollis§r is young, and he looks old tonight. There are gray hollows under his eyes and wax on his sleeves.\n\n${H}Forgive me. I don't mean to trouble you. Sol said you were... good with strange things. I'm not sure I'm a strange thing. I hope I'm only tired.`,
           `${H}It's the candles in the old chapel. I light them every evening, the way old Brother Tam did before me, and someone before him. And every night, at the same hour, they go out. All at once. As if someone leaned over and blew.`,
@@ -387,6 +389,8 @@ export const STORIES = [
         title: "The Inn Remembers",
         npc: "bea",
         end: "elsie",
+        // Elsie's trunk vision waits until the chest is delivered.
+        sequential: true,
         intro: [
           `§eBea§r is gutting fish with a violence the fish did not earn.\n\n${BE}You! Good. Sit. No, don't sit, stir that. I've got a pot boiling over and a boss who's gone quiet as a cold oven, and I don't like either one.`,
           `${BE}Last night some loudmouth at the bar starts in on the Long Storm. Ghost stories, drowned men, the bell. And Elsie, who laughs at everything, who'd laugh at her own funeral if the food was good, puts down the tray and walks out. Didn't come back till dawn.`,

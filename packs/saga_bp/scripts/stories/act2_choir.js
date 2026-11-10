@@ -393,15 +393,14 @@ export const STORIES = [
           { type: "deliver", label: "Bring Ida 6 iron ingots to bar the forge", npc: "ida", item: "minecraft:iron_ingot", count: 6 },
           {
             type: "defeat",
-            label: "Catch the thief before he escapes (90 seconds)",
+            label: "Catch the thief at the forge",
             count: 1,
             night: true,
-            within: 90,
             champion: {
               tag: "realm:saga:choir_thief",
               mob: "minecraft:pillager",
               name: "Hush, the Choir's Thief",
-              warn: "Glass breaks somewhere near the forge. A shape in gray darts into the dark. Ninety seconds before he's gone.",
+              warn: "Glass breaks somewhere near the forge. A shape in gray darts into the dark.",
               health: 20,
             },
           },
@@ -424,7 +423,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "miners", amount: 10 }],
-        hint: "Bring Ida 6 iron ingots first. The thief comes at night near you: once he appears you have 90 seconds to bring him down. A bow helps; he runs.",
+        hint: "Bring Ida 6 iron ingots first. The thief comes at night near you: once he appears, bring him down before he slips away. A bow helps; he runs.",
       },
 
       // 6. Hollis's Confession
@@ -705,6 +704,8 @@ export const STORIES = [
         id: "ring_burns",
         title: "The Gray Ring Burns",
         npc: "reyes",
+        // The bell and the Cantor come after the Choir fight, not on first arrival.
+        sequential: true,
         intro: [
           `${R}The ledger gave us their numbers. Hollis's night gave us their timing. The whole Choir will be at the Gray Ring tomorrow, rehearsing for the Lantern. Every last gray hood in one place.`,
           { text: `${R}My wardens march at dusk. Twelve of us, every sword I've got and some I borrowed. You lead the charge. I want you in front because you've earned it, and because you're harder to kill than my recruits.`, when: WARDENS },
@@ -807,6 +808,8 @@ export const STORIES = [
         id: "mayor",
         title: "What the Mayor Knew",
         npc: "bram",
+        // The sealed order is read after Tobin has talked.
+        sequential: true,
         intro: [
           `§eMayor Bram§r has a locked writing desk on his table and a crowbar in his hand. He has clearly never used a crowbar.\n\n${B}My father's desk. He made me promise never to open it. I was nine. I've kept that promise forty years. I'm done keeping it.`,
           `${B}The cooper. The widow by the mill. People I've shaken hands with every market day. They wanted the world to end, and I gave them prizes for their pumpkins.`,

@@ -13,7 +13,7 @@ import { spreadPlayers } from "./spread.js";
 // pack shows it under the name. Trails are particles from the Realm Skies resource pack: without it
 // installed they just don't show.
 
-/** @typedef {{ n: string, t: string[], r: string[], tr: string, s: { d: number, n: number, w: number }, ls: number }} Data gamertag, titles, trails, chosen trail ("" = none), stats: distance, night seconds, storm seconds, last seen (ms; 0 = not yet known) */
+/** @typedef {{ n: string, t: string[], r: string[], tr: string, s: { d: number, n: number, w: number }, ls: number, x: string[] }} Data gamertag, titles, trails, chosen trail ("" = none), stats: distance, night seconds, storm seconds, last seen (ms; 0 = not yet known), x = revoked built-ins (lowercase title, or "trail:<id>") that the loop must not unlock again */
 
 const KEY_PREFIX = "titles:p:";
 const PROP_WEATHER = "titles:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -75,13 +75,14 @@ function parse(v) {
   const strings = (/** @type {any} */ a) => (Array.isArray(a) ? a.filter((x) => typeof x === "string") : []);
   const num = (/** @type {any} */ x) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : 0);
   return {
-    ...unknownFields(v, ["n", "t", "r", "tr", "s", "ls"]),
+    ...unknownFields(v, ["n", "t", "r", "tr", "s", "ls", "x"]),
     n: typeof v?.n === "string" ? v.n : "",
     t: strings(v?.t),
     r: strings(v?.r).filter((r) => TRAILS[r]),
     tr: typeof v?.tr === "string" && TRAILS[v.tr] ? v.tr : "",
     s: { d: num(v?.s?.d), n: num(v?.s?.n), w: num(v?.s?.w) },
     ls: num(v?.ls),
+    x: strings(v?.x),
   };
 }
 
@@ -99,13 +100,19 @@ function dataOf(id) {
   return d;
 }
 
+/** An empty revoked list is not written. @param {any} rec */
+function withoutEmptyX(rec) {
+  if (Array.isArray(rec.x) && rec.x.length === 0) delete rec.x;
+  return rec;
+}
+
 /** @param {string} id */
 function save(id) {
   const d = cache.get(id);
   if (!d) return;
   dirty.delete(id);
   try {
-    world.setDynamicProperty(KEY_PREFIX + id, JSON.stringify(savedForm({ ...d, s: { d: Math.floor(d.s.d), n: Math.floor(d.s.n), w: Math.floor(d.s.w) } })));
+    world.setDynamicProperty(KEY_PREFIX + id, JSON.stringify(savedForm(withoutEmptyX({ ...d, s: { d: Math.floor(d.s.d), n: Math.floor(d.s.n), w: Math.floor(d.s.w) } }))));
     if (d.n) indexName(id, d.n, false);
   } catch (e) {
     console.warn(`[titles] save: ${e}`);
@@ -405,8 +412,8 @@ function countSecond(player, saving) {
     dirty.add(player.id);
     for (const b of CONFIG.builtins) {
       if (statOf(d, b.stat) < b.amount) continue;
-      unlockTitle(player.id, b.title, player.name);
-      if (b.trail) unlockTrail(player.id, b.trail, player.name); // also when the title came first from an operator
+      if (!d.x.includes(cleanTitle(b.title).toLowerCase())) unlockTitle(player.id, b.title, player.name); // an operator took it: not again
+      if (b.trail && !d.x.includes(`trail:${b.trail}`)) unlockTrail(player.id, b.trail, player.name); // also when the title came first from an operator
     }
     if (saving) save(player.id);
   } catch (e) {
@@ -671,6 +678,7 @@ function take(op, who, what) {
     if (!trail) return op.sendMessage(`§cTrails: ${Object.keys(TRAILS).map((k) => `trail:${k}`).join(", ")}`);
     if (!d.r.includes(trail)) return op.sendMessage(`§7${target.name} doesn't have the ${TRAILS[trail].name} trail.`);
     d.r = d.r.filter((r) => r !== trail);
+    if (CONFIG.builtins.some((b) => b.trail === trail) && !d.x.includes(`trail:${trail}`)) d.x.push(`trail:${trail}`);
     if (d.tr === trail) d.tr = "";
     save(target.id);
     return op.sendMessage(`§aTook the ${TRAILS[trail].name} trail from ${target.name}.`);
@@ -680,6 +688,9 @@ function take(op, who, what) {
   const at = d.t.findIndex((x) => x.toLowerCase() === title.toLowerCase());
   if (at < 0) return op.sendMessage(`§7${target.name} doesn't have the title ${title}.`);
   const [gone] = d.t.splice(at, 1);
+  const lower = cleanTitle(gone).toLowerCase();
+  const builtin = CONFIG.builtins.find((b) => cleanTitle(b.title).toLowerCase() === lower);
+  if (builtin && !d.x.includes(lower)) d.x.push(lower);
   save(target.id);
   const player = online(target.id);
   if (player && gone && worn(player).toLowerCase() === gone.toLowerCase()) wear(player, "");
@@ -694,11 +705,15 @@ function give(op, who, what) {
   if (/^trail:/i.test(t)) {
     const trail = trailId(t);
     if (!trail) return op.sendMessage(`§cTrails: ${Object.keys(TRAILS).map((k) => `trail:${k}`).join(", ")}`);
+    const xd = dataOf(target.id);
+    xd.x = xd.x.filter((e) => e !== `trail:${trail}`);
     const isNew = unlockTrail(target.id, trail, target.name);
     return op.sendMessage(isNew ? `§aGave ${target.name} the ${TRAILS[trail].name} trail.` : `§7${target.name} already has the ${TRAILS[trail].name} trail.`);
   }
   const title = cleanTitle(t);
   if (!title) return op.sendMessage("§cA title needs letters (plain text, no color codes).");
+  const gd = dataOf(target.id);
+  gd.x = gd.x.filter((e) => e !== title.toLowerCase());
   const isNew = unlockTitle(target.id, title, target.name);
   op.sendMessage(isNew ? `§aGave ${target.name} the title ${title}.` : `§7${target.name} already has the title ${title}.`);
 }

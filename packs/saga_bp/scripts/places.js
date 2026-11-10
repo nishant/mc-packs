@@ -57,15 +57,24 @@ const BUILT =
 
 /** @type {Record<string, SavedPlace> | undefined} */
 let places;
+/** The last read of saga:places failed (corrupt, or the world isn't loaded): never write over it. */
+let placesBroken = false;
+/** @type {unknown} */
+let placesRaw;
+let brokenWarned = false;
 
 /** @returns {Record<string, SavedPlace>} */
 export function placesOf() {
   if (places) return places;
+  let raw;
   try {
-    const raw = world.getDynamicProperty(PROP_PLACES);
+    raw = world.getDynamicProperty(PROP_PLACES);
     const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
     places = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    placesBroken = false;
   } catch {
+    placesBroken = true;
+    if (typeof raw === "string") placesRaw = raw;
     return {}; // world not loaded yet, or corrupt: try again next time
   }
   return /** @type {Record<string, SavedPlace>} */ (places);
@@ -77,6 +86,16 @@ export function placesOf() {
  */
 export function setPlace(name, rec) {
   const old = placesOf()[name];
+  if (placesBroken) {
+    try {
+      if (typeof placesRaw === "string" && placesRaw.length > 0 && world.getDynamicProperty("saga:places_bak") === undefined) world.setDynamicProperty("saga:places_bak", placesRaw);
+    } catch {}
+    if (!brokenWarned) {
+      brokenWarned = true;
+      console.warn("[saga] saga:places can't be read; not overwriting it (a copy is in saga:places_bak)");
+    }
+    return;
+  }
   const next = { ...placesOf() };
   if (rec) next[name] = rec;
   else delete next[name];
@@ -375,25 +394,116 @@ function restore(rec) {
   const dim = world.getDimension(rec.dim);
   const sm = world.structureManager;
   let ok = true;
+  /** @type {Array<[string, number, number, number, string, number]>} */
+  const pending = [];
   for (const [id, x, y, z] of rec.s) {
     try {
       sm.place(id, dim, { x, y, z }, { includeEntities: false });
       const loaded = !!dim.getBlock({ x, y, z });
       // Deleting at once could drop a placement queued for an unloaded chunk: wait, and keep it if still unloaded.
-      if (loaded)
-        system.runTimeout(() => {
-          try {
-            sm.delete(id);
-          } catch {
-            // already gone
-          }
-        }, 40);
+      if (loaded) deleteLater(id);
+      else {
+        ok = false;
+        pending.push([id, x, y, z, rec.dim, 1]);
+      }
     } catch (e) {
       ok = false;
+      pending.push([id, x, y, z, rec.dim, 0]);
       console.warn(`[saga] restore ${id}: ${e}`);
     }
   }
+  if (pending.length) addPending(pending);
   return ok;
+}
+
+const PROP_RESTORE = "saga:restore";
+const MAX_PENDING = 200;
+
+/** @param {string} id */
+function deleteLater(id) {
+  system.runTimeout(() => {
+    try {
+      world.structureManager.delete(id);
+    } catch {
+      // already gone
+    }
+  }, 40);
+}
+
+/** @returns {Array<[string, number, number, number, string, number]>} */
+function readPending() {
+  try {
+    const raw = world.getDynamicProperty(PROP_RESTORE);
+    const list = typeof raw === "string" ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((e) => Array.isArray(e) && typeof e[0] === "string" && typeof e[4] === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** @param {Array<unknown>} list */
+function writePending(list) {
+  try {
+    world.setDynamicProperty(PROP_RESTORE, list.length ? JSON.stringify(list) : undefined);
+  } catch (e) {
+    console.warn(`[saga] ${PROP_RESTORE}: ${e}`);
+  }
+}
+
+/** @param {Array<[string, number, number, number, string, number]>} add */
+function addPending(add) {
+  const list = readPending().concat(add);
+  if (list.length > MAX_PENDING) {
+    console.warn(`[saga] ${PROP_RESTORE} is over ${MAX_PENDING} entries; dropping the oldest ${list.length - MAX_PENDING}`);
+    list.splice(0, list.length - MAX_PENDING);
+  }
+  writePending(list);
+}
+
+/** Finishes terrain restores that threw or hit unloaded chunks, once a player is near. */
+export function retryRestores() {
+  const list = readPending();
+  if (!list.length) return;
+  const range = Number(get("buildRange")) || 64;
+  const players = world.getAllPlayers();
+  const sm = world.structureManager;
+  let changed = false;
+  const keep = [];
+  for (const e of list) {
+    const [id, x, y, z, dimId, queued] = e;
+    const near = players.some((p) => p.dimension.id === dimId && Math.hypot(p.location.x - x, p.location.z - z) <= range);
+    if (!near) {
+      keep.push(e);
+      continue;
+    }
+    try {
+      const dim = world.getDimension(dimId);
+      if (queued === 1) {
+        if (!dim.getBlock({ x, y, z })) {
+          keep.push(e);
+          continue;
+        }
+        try {
+          sm.delete(id);
+        } catch {
+          // already gone
+        }
+      } else {
+        sm.place(id, dim, { x, y, z }, { includeEntities: false });
+        if (!dim.getBlock({ x, y, z })) {
+          keep.push([id, x, y, z, dimId, 1]);
+          changed = true;
+          continue;
+        }
+        deleteLater(id);
+      }
+      changed = true;
+    } catch (err) {
+      keep.push(e);
+      console.warn(`[saga] restore retry ${id}: ${err}`);
+    }
+  }
+  if (changed) writePending(keep);
 }
 
 /** The ground under a footprint box where a footing may go (undefined when the prefab has none). @param {string} name @param {{ min: Vector3, max: Vector3 }} box */
@@ -782,6 +892,11 @@ export function campUpkeep(days) {
 
 /** Every 2 seconds: picked places with a player close enough get built. */
 export function autoTick() {
+  try {
+    retryRestores();
+  } catch (e) {
+    console.warn(`[saga] retryRestores: ${e}`);
+  }
   const all = placesOf();
   const range = Number(get("buildRange")) || 64;
   const now = Date.now();
@@ -952,8 +1067,8 @@ export function setHere(player, name) {
   }
   const old = placesOf()[name];
   if (old?.b) {
-    restore(old);
-    player.sendMessage(`§7[Story] The old ${placeLabel(name)} building was removed and its terrain put back.`);
+    if (restore(old)) player.sendMessage(`§7[Story] The old ${placeLabel(name)} building was removed and its terrain put back.`);
+    else player.sendMessage(`§7[Story] The old ${placeLabel(name)} building will be taken down and its terrain put back when a player is near it.`);
   }
   const l = player.location;
   const rec = { dim: player.dimension.id, x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z), by: player.name };

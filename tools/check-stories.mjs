@@ -893,6 +893,29 @@ export function auditStoryRules(input, options = {}) {
     return (drops[b] ?? []).some((x) => bareId(x) === want);
   };
 
+  /** A `within` timer starts on the first of several, so a count of 1 can never beat it wrongly. @param {any} o @param {string} at */
+  const withinCount = (o, at) => {
+    if (o.within === undefined || o.race !== undefined) return;
+    if (typeof o.count === "string") return;
+    // Mirrors data.js target(): these types count to a fixed number, the rest to `count` (default 1).
+    if (["survive", "vigil", "inspect", "defend", "ride"].includes(o.type)) return;
+    const fixedOne = ["talk", "reach", "meet", "stealth", "escort", "follow", "answer", "sleep", "vision", "wear", "wait"].includes(o.type);
+    const n = fixedOne ? 1 : Math.max(1, Number(o.count ?? 1));
+    if (n <= 1) add("within-count", at, "within needs a count above 1: the timer starts on the first of several");
+  };
+
+  /** Champion tag -> the first objective's champion (mob, name) and where. @type {Map<string, { key: string, at: string }>} */
+  const tagOwners = new Map();
+  /** Two different champions on one tag are one mob to the engine. @param {any} o @param {string} at */
+  const champTag = (o, at) => {
+    const c = o.champion;
+    if (!c?.tag) return;
+    const key = `${c.mob}|${c.name}`;
+    const first = tagOwners.get(c.tag);
+    if (!first) return void tagOwners.set(c.tag, { key, at });
+    if (first.key !== key) add("champion-tag-shared", at, `champion "${c.name}" (${c.mob}) shares tag ${c.tag} with a different champion at ${first.at}`);
+  };
+
   for (const story of stories) {
     const kind = story.kind ?? "side";
     const chapters = story.chapters ?? [];
@@ -907,6 +930,8 @@ export function auditStoryRules(input, options = {}) {
         reusedName(o, at);
         reusedWanderer(o, at, story);
         packGate(o, chapter, story, at);
+        withinCount(o, at);
+        champTag(o, at);
         if (o.champion?.trait && !traits.has(o.champion.trait)) add("unknown-trait", at, `champion trait "${o.champion.trait}" is not one of ${[...traits].join(", ")}`);
         if (o.bonus) rewardScale(o.bonus, `${at} bonus`, kind, ci, chapters.length);
         if (["collect", "deliver", "mine"].includes(o.type) && !(o.type === "mine" && !o.place)) {
@@ -930,6 +955,13 @@ export function auditStoryRules(input, options = {}) {
       });
     });
   }
+  for (const fv of input.favors ?? []) if (fv.objective) {
+    champTag(fv.objective, `favor ${fv.id}`);
+  }
+  for (const t of input.templates ?? []) (t.objectives ?? []).forEach((/** @type {any} */ o, /** @type {number} */ i) => {
+    champTag(o, `wander template ${t.id} objective ${i + 1}`);
+    withinCount(o, `wander template ${t.id} objective ${i + 1}`);
+  });
   for (const t of input.templates ?? []) rewardScale(t.reward, `wander template ${t.id}`, "one-off", 0, 1);
   return { findings };
 }
@@ -989,6 +1021,7 @@ export async function liveContentFindings(root, loaded) {
     prefabs,
     drops: DEFAULT_DROPS,
     templates: loaded.WANDER_TEMPLATES,
+    favors: loaded.FAVORS,
   }).findings;
   return { findings: findings.map((f) => ({ ...f, message: `${locateStory(root, f.at)}: ${f.message}` })) };
 }

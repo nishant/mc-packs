@@ -55,7 +55,7 @@ export const WANDER_TEMPLATES = [
     label: "A Message for the Inn",
     archetypes: ["traveler", "pilgrim"],
     guild: "wayfarers",
-    requires: { flags: { "pack:npc_bp": "on" } },
+    requires: { flags: { "pack:npc_bp": "on", "g:ending": "!gift" } },
     intro: [`${N}I'm bound for the town, slow as I am. Elsie at the inn will want a room ready, and I'd hate to arrive to a full house.`, `${N}Tell her {name} is coming, would you? You'll be there long before me.`],
     objectives: [{ type: "talk", label: "Tell Elsie at the inn that {name} is coming", npc: "elsie" }],
     outro: [`${N}You told her? Then I'll have a bed tonight, or tomorrow. Bless you.`],

@@ -15,6 +15,20 @@ test("uses native file paths for the harness directory", () => {
   assert.equal(server.HERE, harnessDir);
 });
 
+test("reservePort's random start stays inside 20000-39998", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ports-range-"));
+  const previous = process.env.BDS_HARNESS_CACHE;
+  process.env.BDS_HARNESS_CACHE = dir;
+  t.after(() => {
+    if (previous === undefined) delete process.env.BDS_HARNESS_CACHE;
+    else process.env.BDS_HARNESS_CACHE = previous;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const r = await server.reservePort({ random: () => 0.999, isFree: async () => true });
+  assert.ok(r.port <= 39998 && r.port >= 20000 && r.port % 2 === 0, String(r.port));
+  r.release();
+});
+
 test("selects the platform binary and download", () => {
   assert.equal(server.IS_WIN, isWin);
   assert.equal(server.BDS_BIN, binary);

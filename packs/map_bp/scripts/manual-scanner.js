@@ -61,10 +61,10 @@ export class ManualScanner {
     this.capacity(normal);
     this.send(p,`Started fixed-origin radius ${radius} world blocks (${2*radius} across; ${job.total} canonical 2-block samples). Loaded terrain only; unloaded columns count unavailable. Shared RAM, not restart-safe.`);
   }
-  /** Preserve the normal cache's high-water limit; all reservations still fit the one global cap. @param {number} normal */
+  /** The cap follows the active scans (reservations plus normal headroom) and shrinks when they end; all reservations still fit the one global cap. @param {number} normal */
   capacity(normal) {
     const reserved=[...this.contexts.values()].reduce((n,c)=>n+c.job.total,0);
-    this.host.terrain.maxCols=Math.min(this.host.terrain.maxTotalCols,Math.max(this.host.terrain.maxCols,6000,Math.min(48000,normal),reserved+normal));
+    this.host.terrain.maxCols=Math.min(this.host.terrain.maxTotalCols,Math.max(6000,Math.min(48000,normal),reserved+normal));
   }
   /** Release only this scanner's temporary normal-viewer pins, once after the final job. */
   clearViewerPins() {for(const owner of this.viewerPins)this.host.terrain.unprotect(owner);this.viewerPins.clear();}
@@ -94,7 +94,7 @@ export class ManualScanner {
       this.clearViewerPins();
       // No per-player handles/settings or store iteration when manual scanning is idle.
       // Counting the supplied roster conservatively preserves 40-viewer normal headroom.
-      this.host.terrain.maxCols=Math.min(this.host.terrain.maxTotalCols,Math.max(this.host.terrain.maxCols,6000,Math.min(48000,players.length*1200)));
+      this.host.terrain.maxCols=Math.min(this.host.terrain.maxTotalCols,Math.max(6000,Math.min(48000,players.length*1200)));
       return;
     }
     const online=new Map(players.map(p=>[p.id,p]));this.clearViewerPins();let viewers=0;

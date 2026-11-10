@@ -5,6 +5,7 @@
 //   node tools/bundle.mjs --all [--name realm_bundle]       every behavior pack except the standalone ones (tools/standalone.json)
 //   node tools/bundle.mjs --resources [--name realm_resources]  every resource pack except the standalone ones
 //   node tools/bundle.mjs --packs welcome_bp,stats_bp [--name realm_bundle] [--title "Realm Bundle"]
+//   --no-news         skip the gen-news.mjs refresh of news_bp (tests: they must not touch the working tree)
 //   --icon <folder>   the pack whose pack_icon.png the bundle uses (default: Realm Skies, sky_rp)
 //
 // How the merge works:
@@ -44,6 +45,7 @@ const { values: args } = parseArgs({
     name: { type: "string" },
     title: { type: "string" },
     icon: { type: "string", default: "sky_rp" },
+    "no-news": { type: "boolean", default: false },
   },
 });
 
@@ -117,7 +119,7 @@ if (!args.all && !args.resources && !args.packs) fail("pass --all, --resources, 
 
 // Realm News shows the newest docs/NEWS.md entry: refresh it before bundling (not for --list, which only reads:
 // pack-docs.mjs and publish-packs.mjs in hosting call it, and a listing must not write news_bp or bump it).
-execFileSync(process.execPath, [join(root, "tools", "gen-news.mjs")], { stdio: ["ignore", 2, 2] }); // stderr: stdout may be JSON
+if (!args["no-news"]) execFileSync(process.execPath, [join(root, "tools", "gen-news.mjs")], { stdio: ["ignore", 2, 2] }); // stderr: stdout may be JSON
 packs.splice(0, packs.length, ...loadPacks()); // news_bp's manifest may have just been bumped
 
 /** @type {Pack[]} */

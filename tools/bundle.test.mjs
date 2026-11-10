@@ -40,7 +40,7 @@ function unzip(buf) {
 
 test("the Realm Bundle stores shared modules once and every import resolves", () => {
   try {
-    const log = execFileSync(process.execPath, [join(root, "tools", "bundle.mjs"), "--all", "--name", NAME], { cwd: root, encoding: "utf8" });
+    const log = execFileSync(process.execPath, [join(root, "tools", "bundle.mjs"), "--all", "--no-news", "--name", NAME], { cwd: root, encoding: "utf8" });
     assert.match(log, /deduped \d+ modules, saved \d+ KB/);
     const files = unzip(readFileSync(out));
 

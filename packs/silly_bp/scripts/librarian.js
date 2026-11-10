@@ -1,10 +1,12 @@
 import {
+  CommandPermissionLevel,
   EnchantmentType,
   Entity,
   EquipmentSlot,
   GameMode,
   ItemStack,
   Player,
+  ScriptEventSource,
   system,
   world,
 } from "@minecraft/server";
@@ -16,7 +18,7 @@ export const PROP_LIB_BOOK = "silly:lib_book";
 export const LOCKED_TAG = "realm:locked_librarian";
 
 /** @typedef {{ id: string, level: number }} BookEnchant */
-/** @typedef {{ enchants: BookEnchant[], sillyId?: string, label: string, emeralds: number }} BookSpec */
+/** @typedef {{ enchants: BookEnchant[], sillyId?: string, label: string, emeralds: number, owner?: string }} BookSpec */
 /** @typedef {{ id: string, name: string }} SillyEnchantLike */
 
 const TREASURE_ENCHANTS = new Set([
@@ -226,7 +228,7 @@ export async function promptConvertLibrarian(player, target, spec) {
 
   const res = await showForm(player, form);
   if (!res || res.canceled || res.selection !== 0 || !target.isValid) return;
-  lockVillagerToBook(target, spec);
+  lockVillagerToBook(target, { ...spec, owner: player.id });
   player.sendMessage(
     `§a[Librarian] This villager is now a Novice Librarian locked to §b${spec.label}§a (§e${spec.emeralds} Emeralds + 1 Book§a)! Right-click them anytime to trade.`,
   );
@@ -332,6 +334,8 @@ export function handleVillagerInteract(player, target, itemStack, hooks = {}) {
     !target?.isValid ||
     target.typeId !== "minecraft:villager_v2" ||
     target.hasTag("realm:npc") ||
+    target.hasTag("realm:resident") ||
+    (target.nameTag && !target.nameTag.startsWith("§bLibrarian")) ||
     target.getComponent("minecraft:is_baby")
   ) {
     return false;
@@ -347,7 +351,13 @@ export function handleVillagerInteract(player, target, itemStack, hooks = {}) {
   const lockedSpec = readLockedSpec(target);
   const isLocked = target.hasTag(LOCKED_TAG) || !!lockedSpec;
 
-  if (bookSpec && (!isLocked || lockedSpec?.label !== bookSpec.label || player.isSneaking)) {
+  const isOp = player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+  const mayRelock = !lockedSpec?.owner || lockedSpec.owner === player.id || isOp;
+  if (bookSpec && isLocked && !mayRelock) {
+    player.sendMessage("§7[Silly Enchants] This librarian was locked by another player.");
+  }
+
+  if (bookSpec && (!isLocked || (mayRelock && (lockedSpec?.label !== bookSpec.label || player.isSneaking)))) {
     if (!activePrompts.has(player.id)) {
       activePrompts.add(player.id);
       system.run(() => {
@@ -390,10 +400,11 @@ export function initLibrarianBookLock(hooks = {}) {
   });
 
   // Headless BDS test hook: SimulatedPlayer.interactWithEntity returns false on villager_v2 when holding an Enchanted Book.
+  // Runs only from the server console (scriptevent realm:silly_villager_interact {"player","target"}); players and command blocks are ignored.
   onScriptEvent(
     "realm:silly_villager_interact",
-    ({ id, message }) => {
-      if (id !== "realm:silly_villager_interact") return;
+    ({ id, message, sourceType }) => {
+      if (id !== "realm:silly_villager_interact" || sourceType !== ScriptEventSource.Server) return;
       try {
         const req = JSON.parse(message);
         const player = world.getAllPlayers().find((p) => p.id === req?.player || p.name === req?.player);
