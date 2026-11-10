@@ -9,7 +9,7 @@
 //   realm:wander_hide  { wid, player, seconds }                                   -> (objectives.js) during an escort
 //   realm:place_ready  { name, state, dim, x, y?, z, wid? }                       -> (places.js) every place, camps too
 import { system, world } from "@minecraft/server";
-import { chapterDone, currentChapter, entries, finished, flagOf, hostileById, invalidate, markDirty, pickTemplate, requires, sagaOf, storyById, storyWaitsForPacks } from "./data.js";
+import { chapterDone, currentChapter, entries, finished, flagOf, hostileById, invalidate, markDirty, objDone, pickTemplate, requires, sagaOf, storyById, storyWaitsForPacks } from "./data.js";
 import { mates, spawnGroup } from "./objectives.js";
 import { campName, ensurePlace, locate, makeCamp, needCamp, placesOf, placeLabel } from "./places.js";
 import { STORIES } from "./stories.js";
@@ -98,7 +98,7 @@ function wanderLeft(player, wv) {
   wv.g = 1;
   const e = entries(player).find((x) => x.wv === wv.w);
   const npc = `w_${wv.w}`;
-  const needsThem = !!e && e.chapter.objectives.some((o, i) => o.npc === npc && (e.st.o?.[i] ?? 0) < (o.count ?? 1));
+  const needsThem = !!e && e.chapter.objectives.some((o, i) => o.npc === npc && !objDone(e, i, sagaOf(player)));
   if (!needsThem) {
     player.sendMessage(`§7[Story] ${wv.nm} has moved on. Finish the job anyway: they left word that you'll be paid.`);
     return;

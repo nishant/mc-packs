@@ -312,11 +312,13 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
           console.warn(`[night] ${e}`);
         }
       });
+      const realmOff = get("enabled") !== true ? " (The night sky show is disabled on this realm right now.)" : "";
       return {
         status: CustomCommandStatus.Success,
-        message: on
-          ? "Night sky (aurora and shooting stars): Enabled. Run /realm:night again to disable it."
-          : "Night sky (aurora and shooting stars): Disabled. Run /realm:night again to enable it.",
+        message:
+          (on
+            ? "Night sky (aurora and shooting stars): Enabled. Run /realm:night again to disable it."
+            : "Night sky (aurora and shooting stars): Disabled. Run /realm:night again to enable it.") + realmOff,
       };
     }
   );

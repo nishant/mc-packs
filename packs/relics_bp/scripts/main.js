@@ -428,8 +428,15 @@ function queue(playerId, relic, shards) {
   const ok = pendingStore.update(playerId, (cur) => {
     const entry = cur && typeof cur === "object" ? cur : { r: [], s: 0 };
     if (!Array.isArray(entry.r)) entry.r = [];
-    if (relic && entry.r.length < 20) entry.r.push(relic);
-    entry.s = Math.min(6400, (Number(entry.s) || 0) + shards);
+    if (relic) {
+      // Story relics are unique and few: always kept (once each). Others stop at 20 per player, which keeps the record small.
+      const story = relics.get(relic)?.story === true;
+      if (story ? entry.r.includes(relic) : entry.r.length < 20) entry.r.push(relic);
+      else if (!story) console.warn(`[relics] gift cap (20) reached for ${playerId}: dropped relic ${relic}`);
+    }
+    const total = (Number(entry.s) || 0) + shards;
+    if (total > 6400) console.warn(`[relics] shard cap (6400) reached for ${playerId}: dropped ${total - 6400} shards`);
+    entry.s = Math.min(6400, total);
     return entry;
   });
   if (!ok) console.warn(`[relics] a gift for ${playerId} could not be saved (${relic ?? `${shards} shards`})`);

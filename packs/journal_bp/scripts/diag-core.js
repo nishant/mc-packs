@@ -41,7 +41,7 @@
 // (diag-core.js subscribes one itself only if no pack did by the first tick, or after that one is unsubscribed).
 // Time is Date.now() (Bedrock has no finer clock): one call reads 0 or 1 ms, sums over many calls are fair.
 // Time after an `await` inside an async callback is not counted (it runs outside the wrapper).
-import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandRegistry, ScriptEventSource, System, World, system, world } from "@minecraft/server";
 
 const API = 1;
 const MAX_TICKS = 1200;
@@ -122,8 +122,7 @@ function install() {
 // Wrapping
 // ---------------------------------------------------------------------------
 
-/** @type {WeakMap<Function, Function>} original callback -> wrapper (for unsubscribe) */
-const wrapped = G.__realmDiagWrapped ?? (G.__realmDiagWrapped = new WeakMap());
+// original callback -> wrapper (for unsubscribe) is kept per signal inside patchSignals: one callback may be on two signals.
 /** Under the test harness profiler (tools/test-bds/lib/profile.js) only: wrapper -> the pack's function, for its labels. @type {WeakMap<Function, Function> | undefined} */
 const inner = G.__harnessProfile ? (G.__realmDiagInner ??= new WeakMap()) : undefined;
 
@@ -255,6 +254,8 @@ function patchSignals(st, owner_, prefix) {
     if (!sig || typeof sig.subscribe !== "function") continue;
     const sub = sig.subscribe;
     const unsub = sig.unsubscribe;
+    /** @type {WeakMap<Function, Function>} original callback -> wrapper, for this signal only */
+    const wrapped = new WeakMap();
     const ser = prefix === "system.after" && name === "scriptEventReceive";
     if (ser) st.ser = { sig, sub, unsub };
     try {
@@ -268,7 +269,7 @@ function patchSignals(st, owner_, prefix) {
           /** @this {any} @param {any} ev */
           w = function (ev) {
             const id = ev.id;
-            if (id === "realm:diag_ping" || id === "realm:diag_forget") handle(st, id, ev.message);
+            if (id === "realm:diag_ping" || id === "realm:diag_forget") handle(st, id, ev.message, ev.sourceType, ev.sourceEntity);
             return base.call(this, ev);
           };
           if (inner) inner.set(w, cb);
@@ -304,7 +305,7 @@ const carries = (opts) => !opts || !Array.isArray(opts.namespaces) || opts.names
 function listen(st) {
   if (st.own || !st.ser) return;
   st.own = function diagListener(/** @type {any} */ ev) {
-    if (ev.id === "realm:diag_ping" || ev.id === "realm:diag_forget") handle(st, ev.id, ev.message);
+    if (ev.id === "realm:diag_ping" || ev.id === "realm:diag_forget") handle(st, ev.id, ev.message, ev.sourceType, ev.sourceEntity);
   };
   st.ser.sub.call(st.ser.sig, st.own, { namespaces: ["realm"] });
 }
@@ -545,8 +546,21 @@ function forget(st, rid, pack, confirm) {
   else send("realm:diag_forgot", { id: rid, pack: rec.pack, ok: true, removed, bytes, ...(note ? { note } : {}) });
 }
 
-/** @param {State} st @param {string} id @param {string} message */
-function handle(st, id, message) {
+/** Whether a forget may come from this script event source: the server console / system.sendScriptEvent, or an operator player.
+ * @param {unknown} sourceType @param {any} sourceEntity */
+function mayForget(sourceType, sourceEntity) {
+  if (sourceType === ScriptEventSource.Server) return true;
+  if (sourceType !== ScriptEventSource.Entity || !sourceEntity || sourceEntity.typeId !== "minecraft:player") return false;
+  try {
+    if (typeof sourceEntity.isOp === "function" && sourceEntity.isOp()) return true;
+    return sourceEntity.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+  } catch {
+    return false;
+  }
+}
+
+/** @param {State} st @param {string} id @param {string} message @param {unknown} [sourceType] @param {any} [sourceEntity] */
+function handle(st, id, message, sourceType, sourceEntity) {
   /** @type {any} */
   let m;
   try {
@@ -559,7 +573,14 @@ function handle(st, id, message) {
   const prev = st.cur;
   st.cur = null; // reading every key for the totals must not claim them
   try {
-    if (id === "realm:diag_forget") return forget(st, rid, m.pack, m.confirm);
+    if (id === "realm:diag_forget") {
+      if (!mayForget(sourceType, sourceEntity)) {
+        // Only the packs that own the named pack answer, like a refusal for a confirm: another add-on's pack answers itself.
+        if (typeof m.pack === "string" && st.packs.has(m.pack)) send("realm:diag_forgot", { id: rid, pack: m.pack, ok: false, error: "send it from Pack diagnostics" });
+        return;
+      }
+      return forget(st, rid, m.pack, m.confirm);
+    }
     const n = Math.floor(Number(m.ticks));
     if (!(n > 0)) return pongAll(st, rid, undefined);
     const ticks = Math.min(MAX_TICKS, n);

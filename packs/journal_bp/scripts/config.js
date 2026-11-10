@@ -143,7 +143,8 @@ export const CONFIG = {
     {
       id: "story",
       label: "Story",
-      reward: { levels: 10, crowns: 300, title: "Loremaster" },
+      // No entries, so the page never completes: no reward to give.
+      reward: { levels: 0, crowns: 0, title: "" },
       entries: [],
     },
     {

@@ -33,6 +33,7 @@ const GLASS = [
   "minecraft:glass_pane",
   ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].flatMap((c) => [`minecraft:${c}_stained_glass`, `minecraft:${c}_stained_glass_pane`]),
 ];
+const CANDLES = ["minecraft:candle", ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].map((c) => `minecraft:${c}_candle`)];
 const SILENCE = { "drowned_bell.bell": "silence" };
 const RING = { "drowned_bell.bell": "ring" };
 const FREE = { "g:vesna": "free" };
@@ -163,7 +164,7 @@ const INN_GHOST = {
         `${E}Don't come waving a lantern; she'll think it's me come to put her to bed, and she'll hide. And if she asks for me...\n\nElsie stops. Starts again.\n\n${E}If she asks for me, you tell her whatever you think is kind.`,
         `${E}I'll leave the kitchen door unlatched. Come straight back after, whatever the hour. I won't be sleeping.`,
         { text: `${E}You've a soft heart; I've watched you all year. Half the town owes you a kindness. She'll feel it. Children always do.`, when: { "g:mercy": ">=3" } },
-        { text: `${E}You've a hard way about you these days, love. I don't blame you, with the year we're having. But leave it at the gate tonight.`, when: { "g:iron": ">=3" } },
+        { text: `${E}You've a hard way about you these days, love. I don't blame you, with the year we're having. But leave it at the gate tonight.`, when: { "g:iron": ">=3", "g:mercy": "<=2" } },
       ],
       objectives: [
         { type: "vigil", label: "Sit very still by Lily's stone at night (sneak)", place: "graveyard", radius: 6, seconds: 60, timeOfDay: NIGHT, sneaking: true },
@@ -384,7 +385,7 @@ const GRAVEYARD_SHIFT = {
         `${MO}I've a skeleton problem. One skeleton, technically. I call him Gerald. Every night he climbs out and rattles about, and I knock him down, and every night he puts himself back together and goes again. Like a tax collector. Which he was.`,
         `${MO}Tonight I want him to stay down. Knock him apart five times before sunrise and the bones get the hint. Then whatever's holding him together has to show itself. They always do. They're very proud, the ones that hold things together.`,
         { text: `${MO}You've a hard look about you, friend. Good. Gerald respects a hard look. He's never managed one himself. No eyes.`, when: { "g:iron": ">=3" } },
-        { text: `${MO}Folk say you're the gentle sort. Don't be gentle with Gerald. He takes it as an invitation.`, when: { "g:mercy": ">=3" } },
+        { text: `${MO}Folk say you're the gentle sort. Don't be gentle with Gerald. He takes it as an invitation.`, when: { "g:mercy": ">=3", "g:iron": "<=2" } },
       ],
       objectives: [
         { type: "defeat", label: "Knock Gerald down 5 times in one night (skeletons at the graveyard)", mobs: ["minecraft:skeleton"], count: 5, place: "graveyard", radius: 32, night: true, within: 480 },
@@ -1130,12 +1131,12 @@ const HOLLIS_FAITH = {
             { text: "Hollis closes the book. 'There,' he says, to no one you can see. 'Someone remembers you now. That's all I can do. Go to sleep.'", seconds: 5 },
           ],
         },
-        { type: "interact", label: "Ring the chapel bell, or light a candle, for the lost", place: "old_chapel", blocks: ["minecraft:bell", "minecraft:candle", "minecraft:white_candle"], count: 1, radius: 10 },
+        { type: "interact", label: "Ring the chapel bell, or light a candle, for the lost", place: "old_chapel", blocks: ["minecraft:bell", ...CANDLES], count: 1, radius: 10 },
       ],
       outro: [
         "Back in the chapel the candles are lit, the windows are whole, and the lamp burns in the east window although it's broad daylight. Hollis sits on the front pew with the Book of the Lost on his knees.",
         { text: `${H}You've been kind to everyone this year. I've heard. I'm almost afraid of what you'll say, because I know you'll be kind to me too, and I don't know if I've earned it.`, when: { "g:mercy": ">=4" } },
-        { text: `${H}You've been hard this year, when things needed hardness. I've heard. That's why I'm asking you. You won't flatter me.`, when: { "g:iron": ">=4" } },
+        { text: `${H}You've been hard this year, when things needed hardness. I've heard. That's why I'm asking you. You won't flatter me.`, when: { "g:iron": ">=4", "g:mercy": "<=3" } },
         `${H}I let them in. Asleep, dreaming, with another voice in my head, but it was my hands. Tell me something true about that. Please.`,
       ],
       choices: [

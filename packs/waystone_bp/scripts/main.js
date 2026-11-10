@@ -275,7 +275,10 @@ onScriptEvent(
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   knownCache.delete(playerId);
-  channels.delete(playerId);
+  if (channels.has(playerId)) {
+    channels.delete(playerId);
+    dropFollowers(playerId, "The trip was canceled");
+  }
   lastNpc.delete(playerId);
 });
 
@@ -578,7 +581,7 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity }) => {
   if (!(hurtEntity instanceof Player)) return;
   const ch = channels.get(hurtEntity.id);
   if (ch) ch.hurt = true;
-});
+}, { entityTypes: ["minecraft:player"] });
 
 const CHANNEL_STEP = 5; // ticks
 system.runInterval(() => {

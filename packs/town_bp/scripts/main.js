@@ -1379,7 +1379,10 @@ function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
   const close = nearestTown(player, get("townRadius") / 2);
   if (close) return tell(`§c${close.n} is too close (its center is at ${close.x}, ${close.z}). Towns must be at least ${Math.round(get("townRadius") / 2)} blocks apart.`);
   let id = base;
-  for (let k = 2; allTowns().has(id); k++) id = `${base}_${k}`;
+  // A removed town's id stays in town:gone (its residents out in unloaded ground are still moved away on load): a new
+  // town of the same name gets a fresh id, like one that clashes with a live town.
+  const goneIds = goneTowns();
+  for (let k = 2; allTowns().has(id) || goneIds.includes(id); k++) id = `${base}_${k}`;
   /** @type {Town} */
   const t = {
     id,
@@ -1400,8 +1403,6 @@ function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
   const mayors = get("townMayors") === true;
   if (mayors) Object.assign(t, { v: 2 }, newTownMayor([...allTowns().values()], t.id, t.n, CONFIG.mayorNames));
   saveTown(t);
-  const gone = goneTowns();
-  if (gone.includes(t.id)) saveGone(gone.filter((x) => x !== t.id)); // a new town of that name: no more an old one's
   zonesChanged();
   if (mayors && isTownMayorId(t.m)) mayorSet(t, { x: t.x, y: t.y, z: t.z }, player.getRotation().y);
   levelUp(t); // only if the config has no projects for level 1
@@ -3571,7 +3572,7 @@ function dropCarried(e) {
   }
 }
 
-/** Takes our tags off a villager (it stays, an ordinary villager that keeps its name). @param {import("@minecraft/server").Entity | undefined} e @param {string} town */
+/** Takes our tags off a villager: no longer managed, but it keeps its name and the realm:town_resident behavior group and realm:resident property (no bed or job claim, home restriction). @param {import("@minecraft/server").Entity | undefined} e @param {string} town */
 function untagResident(e, town) {
   if (!e) return;
   try {

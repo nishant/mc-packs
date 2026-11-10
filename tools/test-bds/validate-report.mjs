@@ -5,8 +5,9 @@
 // the same-runner comparisons (tools/test-bds/perf-compare.mjs), the head's budget lines, the memory curve and the
 // scenario totals. It also writes the scenario seconds (--times, a suite --json shape) for pr-tests.yml's shards.
 //   node tools/test-bds/validate-report.mjs --dir <artifacts> --base <sha> --head <sha> [--run <url>] --out report.md [--times t.json]
-// Sets `status` in $GITHUB_OUTPUT: ok, or red when a scenario failed or timed out, a pair regressed, or a soak gave
-// no valid measurement (an INVALID soak is never a pass).
+// Sets `status` in $GITHUB_OUTPUT: ok, or red when a scenario failed or timed out, a pair regressed, a soak gave
+// no valid measurement (an INVALID soak is never a pass), or a memory side has no RSS samples or an exit code that is
+// missing or not 0.
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -112,7 +113,7 @@ function main() {
     for (const m of memory.values()) for (const [i, side] of /** @type {const} */ (["base", "head"]).entries()) {
       const s = m[side];
       L.push(`| ${m.name} | ${side} | ${s ? s.minutes.toFixed(0) : "-"} | ${f(s?.start)} | ${f(s?.at10)} | ${f(s?.end)} | ${f(s?.max)} | ${s ? `${s.growth >= 0 ? "+" : ""}${s.growth.toFixed(0)}` : "-"} | ${m.exits[i] || "-"} |`);
-      if (!s) red = true;
+      if (!s || m.exits[i] !== "0") red = true;
     }
     L.push("");
   }

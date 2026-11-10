@@ -238,7 +238,7 @@ export const STORIES = [
           `${T}Bring a boat, any kind. You row; I give directions and complain. A couple hundred blocks of open water, then you dive for the seal while I hold the boat steady over you.`,
           `${T}And Elsie says something guards the seal itself. Not one of the little ones. The old one. The elder. Biggest fish I'll ever not catch.`,
           { text: `${T}They say you've got a soft way with people. Reyes says it'll get you hurt one day. I say it's why I'm getting in a boat with you.`, when: { "g:mercy": ">=4" } },
-          { text: `${T}They say you hit first and ask later. Fine by me today. Whatever's down there won't be asking either.`, when: { "g:iron": ">=4" } },
+          { text: `${T}They say you hit first and ask later. Fine by me today. Whatever's down there won't be asking either.`, when: { "g:iron": ">=4", "g:mercy": "<=3" } },
         ],
         introChoices: [
           {
@@ -433,7 +433,7 @@ export const STORIES = [
           `${I}Sixteen blocks. Chiseled deepslate or polished blackstone, either one. Chisel it from cobbled deepslate slabs, or polish blackstone in a stonecutter. Place them around the seal stone. I'll chalk the lines.`,
           `${I}One more thing. Don't panic.\n\nShe says it the way other people say good morning.\n\n${I}When we hammer, it hears. The Warden. It's an ear, Elsie says. Something under the world listening through it.`,
           `${I}When it comes, we sneak and we keep still. Not a step. Not a breath you don't need. It goes when it hears nothing. It always goes.\n\nShe checks her own boots twice.`,
-          { text: `${I}And don't hit it. I know you. Some things you don't win by hitting.`, when: { "g:iron": ">=4" } },
+          { text: `${I}And don't hit it. I know you. Some things you don't win by hitting.`, when: { "g:iron": ">=4", "g:mercy": "<=3" } },
           { text: `${I}You're good at being gentle. Be gentle with the floor.`, when: { "g:mercy": ">=4" } },
         ],
         introChoices: [
@@ -450,7 +450,7 @@ export const STORIES = [
         ],
         objectives: [
           { type: "place", label: "Rebuild the seal frame: place 16 chiseled deepslate or polished blackstone", blocks: ["minecraft:chiseled_deepslate", "minecraft:polished_blackstone"], count: 16, place: "seal_stone", radius: 12 },
-          { type: "vigil", label: "The Warden is near: sneak and keep still by the seal for 60 seconds", place: "seal_stone", radius: 6, seconds: 60, sneaking: true },
+          { type: "vigil", label: "Sneak and keep still by the seal for 60 seconds", place: "seal_stone", radius: 6, seconds: 60, sneaking: true },
         ],
         outro: [
           "For a full minute something enormous breathes in the dark beyond the chained door. You hear its heartbeat in the floor, in the new frame, in your own knees. It sniffs the air an arm's length from your face. Then, slowly, it turns away, and the heartbeat sinks back into the stone.",
@@ -661,7 +661,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "wayfarers", amount: 10 }],
-        hint: "Bring 24 quartz blocks or glass (clear, tinted, white, light gray, light blue or yellow) and place them within 16 blocks of the ring. The Lantern Thief comes when you are near: fight on a wide platform with a bow, and bring slow falling or a water bucket.",
+        hint: "Bring 24 quartz blocks or any glass (clear, tinted or any stained color) and place them within 16 blocks of the ring. The Lantern Thief comes when you are near: fight on a wide platform with a bow, and bring slow falling or a water bucket.",
       },
       {
         id: "sky_vision",
@@ -673,7 +673,7 @@ export const STORIES = [
           `${S}Stand in the ring. Hold up the shard. Let it show you. I will stay right here, counting stars, so you have something to come back to.`,
           `${S}Then light the crown: the end rods at the top of the ring. Tap them with the shard in hand, all four. Arcturus first, if you are being proper. Nobody is.`,
           { text: `${S}You are gentle with broken things. That is good. The Lantern is the most broken thing I know.`, when: { "g:mercy": ">=4" } },
-          { text: `${S}You have a hard way about you lately. Leave it outside the ring, if you can. The Lantern has been hurt enough.`, when: { "g:iron": ">=4" } },
+          { text: `${S}You have a hard way about you lately. Leave it outside the ring, if you can. The Lantern has been hurt enough.`, when: { "g:iron": ">=4", "g:mercy": "<=3" } },
         ],
         introChoices: [
           {

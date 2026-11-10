@@ -652,12 +652,26 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   if ((nextSpin.get(playerId) ?? 0) <= system.currentTick) nextSpin.delete(playerId); // a cooldown still running stays
 });
 
+/**
+ * A block id without the parts that change with its state: a "lit_" prefix after the namespace and an "_inverted"
+ * suffix (furnace and lit_furnace, redstone_lamp and lit_redstone_lamp, daylight_detector and daylight_detector_inverted).
+ * @param {string} id
+ */
+function normalBlockId(id) {
+  return id.replace(/^([^:]*:)?lit_/, "$1").replace(/_inverted$/, "");
+}
+
+/** @param {string} a @param {string} b */
+function sameBlockKind(a, b) {
+  return normalBlockId(a) === normalBlockId(b);
+}
+
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
   if (ev.cancel) return; // another pack refused the tap (e.g. a land claim)
   const { block, player } = ev;
   const m = machineAt(block.dimension.id, block.location);
   if (!m) return;
-  if (m.t !== block.typeId) {
+  if (m.t !== block.typeId && !(m.t !== undefined && sameBlockKind(m.t, block.typeId))) {
     // Blown up, pushed away or replaced without being broken by a player: a different block now, not a machine.
     // (A machine made before the id was kept learns it on its first tap.)
     const d = block.dimension.id;

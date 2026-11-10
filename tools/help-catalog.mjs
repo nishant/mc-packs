@@ -133,6 +133,12 @@ for (const folder of readdirSync(join(root, "packs"))) {
 const current = existsSync(out) ? readFileSync(out, "utf8") : "";
 
 if (check) {
+  // A behavior pack whose "## Name — `folder`" heading doesn't match is silently left out of the catalog.
+  const cataloged = new Set([...text.matchAll(/"folder": "([^"]+)"/g)].map((m) => m[1]));
+  for (const folder of readdirSync(join(root, "packs"))) {
+    if (!folder.endsWith("_bp") || !existsSync(join(root, "packs", folder, "scripts", "main.js")) || cataloged.has(folder)) continue;
+    problems.push(`${folder}: no catalog entry; docs/PACKS.md needs a heading exactly like "## Name — \`${folder}\`" (em dash, folder in backticks, nothing after)`);
+  }
   if (current !== text) problems.push(`${HELP}: scripts/catalog.js is out of date with docs/PACKS.md (run node tools/help-catalog.mjs)`);
   if (problems.length) {
     console.error(`/realm:help problems:\n${problems.map((p) => `  - ${p}`).join("\n")}`);

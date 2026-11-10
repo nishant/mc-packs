@@ -257,6 +257,7 @@
  * @property {Objective} objective
  * @property {Reward} reward
  * @property {[string, string]} lines intro and thanks, spoken by the NPC
+ * @property {When} [when] the favor is only offered while this matches (like a chapter's `when`, e.g. `{ "g:hollis": "!lost" }`)
  */
 
 /**

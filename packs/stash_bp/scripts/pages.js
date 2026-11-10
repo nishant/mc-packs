@@ -1919,10 +1919,13 @@ function inventoryMenu(player) {
             : "Your inventory has a single page.\n§7The realm's page count is 1 (operators can change it in /realm:config)."
       );
     const off = getFor(player, "invOff") === true;
+    // The pages this player gets once it is turned back on (totalPages is 1 while it is off).
+    const onPages = Math.max(1, Math.min(MAX_PAGES, Number(get("pages")) || 1));
+    const onPagesText = `${onPages} page${onPages === 1 ? "" : "s"}`;
     /** @type {(() => void)[]} */
     const actions = [];
     if (off) {
-      form.button("Enable Expansive Inventory (5 pages)\n§8Restore extra pages and dark slot buttons");
+      form.button(`Enable Expansive Inventory (${onPagesText})\n§8Restore extra pages and dark slot buttons`);
       actions.push(() => {
         setFor(player, "invOff", false);
         enforcePageCount(player);
@@ -1935,7 +1938,7 @@ function inventoryMenu(player) {
         setFor(player, "invOff", true);
         enforcePageCount(player);
         removeButtons(player);
-        player.sendMessage("§aSwitched to normal 1-page inventory (no buttons). Run /realm:inv anytime to re-enable 5 pages.");
+        player.sendMessage(`§aSwitched to normal 1-page inventory (no buttons). Run /realm:inv anytime to re-enable ${onPagesText}.`);
       });
     }
     if (total > 1) {
@@ -2179,7 +2182,7 @@ export async function recoverInventory(operator, target) {
   const changed = first.changed.slice(0, RECOVER_LINES).map(line);
   if (first.changed.length > RECOVER_LINES) changed.push(`- and ${first.changed.length - RECOVER_LINES} more`);
   let body = first.items
-    ? `${target.name}'s inventory move did not finish. Of the ${first.kept} stacks in their saved before-image, these ${first.items} are no longer in their inventory:\n` +
+    ? `${target.name}'s inventory move did not finish. Of the ${first.kept} stacks in their saved before-image, ${first.items === 1 ? "this one is" : `these ${first.items} are`} no longer in their inventory:\n` +
       `${list.join("\n")}\n` +
       `Confirming puts them into ${first.chests} chest(s) on empty floor next to you, then clears the journal. Stacks they still carry (inventory, cursor, armor and offhand) are not copied, and their inventory is not touched. ` +
       `Anything they dropped or put in a chest since counts as missing: check with them first.` +

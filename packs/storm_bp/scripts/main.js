@@ -475,6 +475,51 @@ function collect(player, rod) {
   gossip(`${cellNo}:${player.id}`, { kind: "storm_haul", player: player.id, name: player.name, n });
 }
 
+// Access checks (same protocol as Stash, copied here: packs import nothing from each other):
+//   realm:access_check        { id, player, spots: [[dim, x, y, z], ...] }
+//   realm:access_check_result { id, from, closed: [i, ...] }  (indexes into that message's spots)
+// Every pack that keeps players out of blocks answers every check, with nothing closed too, so an asker learns who
+// answers and waits for each of them (2 s at most), or 5 ticks when none has answered yet.
+/** Packs that have answered an access check. @type {Set<string>} */
+const accessResponders = new Set();
+/** @type {Map<string, { got: Set<string>, closed: boolean, done: () => void }>} */
+const accessAsks = new Map();
+let accessNext = 1;
+
+/** @param {string} playerId @param {[string, number, number, number]} spot @param {(closed: boolean) => void} cb */
+function askClosed(playerId, spot, cb) {
+  const id = `storm${accessNext++}`;
+  const waitFor = [...accessResponders];
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    const closed = accessAsks.get(id)?.closed === true;
+    accessAsks.delete(id);
+    cb(closed);
+  };
+  accessAsks.set(id, { got: new Set(), closed: false, done: () => waitFor.length && waitFor.every((r) => accessAsks.get(id)?.got.has(r)) && finish() });
+  system.sendScriptEvent("realm:access_check", JSON.stringify({ id, player: playerId, spots: [spot] }));
+  system.runTimeout(finish, waitFor.length ? 40 : 5);
+}
+
+onScriptEvent("realm:access_check_result", ({ id, message }) => {
+  if (id !== "realm:access_check_result") return;
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.from !== "string") return;
+    const from = m.from.slice(0, 32);
+    accessResponders.add(from);
+    const ask = accessAsks.get(String(m.id));
+    if (!ask) return;
+    ask.got.add(from);
+    if (Array.isArray(m.closed) && m.closed.includes(0)) ask.closed = true;
+    ask.done();
+  } catch {
+    // not ours
+  }
+});
+
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, isFirstEvent, itemStack } = event;
   // Another pack already refused this tap (Land Claims: a rod in someone else's claim): its glass stays there.
@@ -483,12 +528,17 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   if (!rod) return;
   if (rod[4]) {
     event.cancel = true; // don't place a block against it: the tap collects the glass
+    // Ask the packs that keep players out (Land Claims) whether this rod's spot is closed to the player, instead of
+    // trusting that they subscribed first. The vanilla tap is already cancelled; the glass is collected after the answer.
     system.run(() => {
-      try {
-        collect(player, rod);
-      } catch (e) {
-        console.warn(`[storm] ${e}`);
-      }
+      askClosed(player.id, [DIMS[rod[0]], rod[1], rod[2], rod[3]], (closed) => {
+        try {
+          if (closed) return;
+          collect(player, rod);
+        } catch (e) {
+          console.warn(`[storm] ${e}`);
+        }
+      });
     });
   } else if (!itemStack) {
     system.run(() => {

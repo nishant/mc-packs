@@ -489,8 +489,13 @@ export function commitInventory(player, old, next, after) {
     throw error;
   } finally {
     // A failed rollback deliberately keeps both durable images and its journal.
-    const live = stateOf(player);
-    if (!retain && !live.pending) {
+    let pending = true; // unknown state: keep the before/after images
+    try {
+      pending = !!stateOf(player).pending;
+    } catch (e) {
+      console.warn(`[stash] could not read the journal state, keeping the before/after images: ${e}`);
+    }
+    if (!retain && !pending) {
       discardSnapshot(before);
       discardSnapshot(afterRef);
     }
@@ -796,5 +801,5 @@ export function exportPending(operator, target, skip, withChanged = false) {
   retireSnapshot(pending.before);
   retireSnapshot(pending.after);
   if (!plan.length) return { ok: true, message: `${target.name} still carries everything from the saved before-image, so nothing was exported. Their journal is cleared.` };
-  return { ok: true, message: `Exported ${plan.length} stacks into ${chests} chest(s) next to you: what ${target.name} no longer carried. Their journal is cleared. Nothing they still carry was copied.` };
+  return { ok: true, message: `Exported ${plan.length} stack${plan.length === 1 ? "" : "s"} into ${chests} chest${chests === 1 ? "" : "s"} next to you: what ${target.name} no longer carried. Their journal is cleared. Nothing they still carry was copied.` };
 }

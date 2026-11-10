@@ -72,6 +72,8 @@ function fakeServer() {
     clearDynamicProperties() { this.props.clear(); }
   }
   class CustomCommandRegistry { registerCommand(def, cb) { this.cb = cb; } }
+  const ScriptEventSource = { Block: "Block", Entity: "Entity", NPCDialogue: "NPCDialogue", Server: "Server" };
+  const CommandPermissionLevel = { Any: 0, GameDirectors: 1, Admin: 2, Host: 3, Owner: 4 };
   const system = new System();
   const startup = { subscribe(cb) { return cb; }, unsubscribe() {} };
   system.afterEvents = { scriptEventReceive: natives };
@@ -90,7 +92,7 @@ function fakeServer() {
       }
     }
   };
-  return { System, World, CustomCommandRegistry, system, world, step, sent, natives, deliver };
+  return { System, World, CustomCommandRegistry, ScriptEventSource, CommandPermissionLevel, system, world, step, sent, natives, deliver };
 }
 
 /** A copy of tools/events-shared.js at its own path (one module instance per pack, like a bundle). @param {string} dir @param {string} pack */
@@ -104,7 +106,7 @@ async function loadRouter(dir, pack) {
 
 /** Loads diag-shared.js as one pack's diag-core.js, registered the way its diag.js stub does. */
 async function loadDiag(dir, pack) {
-  const src = readFileSync(join(root, "tools", "diag-shared.js"), "utf8").replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;");
+  const src = readFileSync(join(root, "tools", "diag-shared.js"), "utf8").replace(/^import .* from "@minecraft\/server";$/m, "const { CommandPermissionLevel, CustomCommandRegistry, ScriptEventSource, System, World, system, world } = globalThis.__mcFake;");
   mkdirSync(join(dir, pack), { recursive: true });
   writeFileSync(join(dir, pack, "diag-core.js"), src);
   const file = join(dir, pack, "diag.js");

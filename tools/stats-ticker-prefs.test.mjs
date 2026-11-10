@@ -95,6 +95,7 @@ const server = {
   System,
   World,
   CommandPermissionLevel: { Any: 0, GameDirectors: 1 },
+  ScriptEventSource: { Block: "Block", Entity: "Entity", NPCDialogue: "NPCDialogue", Server: "Server" },
   CustomCommandParamType: { Enum: "enum", String: "string" },
   CustomCommandStatus: { Success: 0, Failure: 1 },
   DisplaySlotId: { Sidebar: "sidebar" },
@@ -184,7 +185,7 @@ const ui = {
   FormCancelationReason: { UserBusy: "UserBusy", UserClosed: "UserClosed" },
 };
 
-const serverUrl = dataUrl(`const s = globalThis.__statsMc; export const { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, DisplaySlotId, ObjectiveSortOrder, ScoreboardIdentityType, Player, CustomCommandRegistry, System, World, system, world } = s;`);
+const serverUrl = dataUrl(`const s = globalThis.__statsMc; export const { CommandPermissionLevel, ScriptEventSource, CustomCommandParamType, CustomCommandStatus, DisplaySlotId, ObjectiveSortOrder, ScoreboardIdentityType, Player, CustomCommandRegistry, System, World, system, world } = s;`);
 const uiUrl = dataUrl(`const u = globalThis.__statsUi; export const { ActionFormData, FormCancelationReason, ModalFormData } = u;`);
 globalThis.__statsMc = server;
 globalThis.__statsUi = ui;

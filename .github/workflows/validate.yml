@@ -149,7 +149,7 @@ jobs:
             memory)
               for side in ${SIDE:-base head}; do
                 rss "$OUT/$side.rss" & sampler=$!
-                (cd "${!side}" && node tools/test-bds/run.mjs --quiet --no-relay --scenario tools/test-bds/examples/perf-soak.js --arg players="$PLAYERS" --arg seconds="$SECONDS_" --timeout $((SECONDS_ * 2 + 900)) > "$OUT/$side.out" 2>&1; echo $? > "$OUT/$side.exit") || true
+                (cd "${!side}" && { node tools/test-bds/run.mjs --quiet --no-relay --scenario tools/test-bds/examples/perf-soak.js --arg players="$PLAYERS" --arg seconds="$SECONDS_" --timeout $((SECONDS_ * 2 + 900)) > "$OUT/$side.out" 2>&1; echo $? > "$OUT/$side.exit"; }) || echo $? > "$OUT/$side.exit"
                 kill "$sampler" || true
                 echo "$side: exit $(cat "$OUT/$side.exit"), $(wc -l < "$OUT/$side.rss" 2>/dev/null || echo 0) RSS samples"
               done ;;

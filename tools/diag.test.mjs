@@ -31,9 +31,15 @@ function fakeServer() {
     runJob(gen) { queue.push({ at: tick + 1, fn: () => { for (const _ of gen); } }); return 1; }
     sendScriptEvent(id, message) {
       sent.push({ id, message });
-      queue.push({ at: tick + 1, fn: () => { for (const cb of [...system.afterEvents.scriptEventReceive.subs]) cb({ id, message }); } });
+      queue.push({ at: tick + 1, fn: () => { for (const cb of [...system.afterEvents.scriptEventReceive.subs]) cb({ id, message, sourceType: ScriptEventSource.Server }); } });
+    }
+    /** An event from another source (command block, NPC, player), delivered like sendScriptEvent's. */
+    fromSource(id, message, sourceType, sourceEntity) {
+      queue.push({ at: tick + 1, fn: () => { for (const cb of [...system.afterEvents.scriptEventReceive.subs]) cb({ id, message, sourceType, sourceEntity }); } });
     }
   }
+  const ScriptEventSource = { Block: "Block", Entity: "Entity", NPCDialogue: "NPCDialogue", Server: "Server" };
+  const CommandPermissionLevel = { Any: 0, GameDirectors: 1, Admin: 2, Host: 3, Owner: 4 };
   class World {
     constructor() { this.props = new Map(); }
     getDynamicProperty(k) { return this.props.get(k); }
@@ -60,12 +66,12 @@ function fakeServer() {
       }
     }
   };
-  return { System, World, CustomCommandRegistry, system, world, step, sent };
+  return { System, World, CustomCommandRegistry, ScriptEventSource, CommandPermissionLevel, system, world, step, sent };
 }
 
 /** Writes one pack's diag-core.js and diag.js stub like sync-diag does and imports the stub. @param {string} dir @param {string} pack */
 async function loadCopy(dir, pack, version = "1.0.0", prefixes = []) {
-  const src = SRC.replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;");
+  const src = SRC.replace(/^import .* from "@minecraft\/server";$/m, "const { CommandPermissionLevel, CustomCommandRegistry, ScriptEventSource, System, World, system, world } = globalThis.__mcFake;");
   mkdirSync(join(dir, pack), { recursive: true });
   writeFileSync(join(dir, pack, "diag-core.js"), src);
   const file = join(dir, pack, "diag.js");
@@ -368,4 +374,74 @@ test("F2: a frame in the bundle's _shared folder (no leading slash on BDS) is sk
   const b = list.find((p) => p.pack === "b_bp");
   assert.ok(a.top.some((x) => x.k === "runInterval(1) @ a_bp/main.js:5:1"), JSON.stringify(a.top));
   assert.equal(b.calls, 0, "b is not billed");
+});
+
+async function soloContext() {
+  const mc = fakeServer();
+  globalThis.__mcFake = mc;
+  delete globalThis.__realmDiag;
+  delete globalThis.__realmDiagWrapped;
+  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  await loadCopy(dir, "solo_bp");
+  mc.step(1);
+  mc.world.setDynamicProperty("solo:x", "abc");
+  return mc;
+}
+const forgetMsg = (id) => JSON.stringify({ id, pack: "solo_bp", confirm: "FORGET solo_bp" });
+
+test("MCP-174: forget from the Server source works", async () => {
+  const mc = await soloContext();
+  mc.system.sendScriptEvent("realm:diag_forget", forgetMsg("s"));
+  mc.step(2);
+  assert.equal(mc.world.props.size, 0);
+  assert.equal(pongs(mc, "realm:diag_forgot")[0].ok, true);
+});
+
+test("MCP-174: forget from a command block or an NPC is refused and nothing is deleted", async () => {
+  const mc = await soloContext();
+  mc.system.fromSource("realm:diag_forget", forgetMsg("b"), "Block", undefined);
+  mc.system.fromSource("realm:diag_forget", forgetMsg("n"), "NPCDialogue", undefined);
+  mc.system.fromSource("realm:diag_forget", forgetMsg("e"), "Entity", { typeId: "minecraft:zombie", commandPermissionLevel: 4 });
+  mc.system.fromSource("realm:diag_forget", forgetMsg("p"), "Entity", { typeId: "minecraft:player", commandPermissionLevel: 0, isOp: () => false });
+  mc.step(2);
+  assert.equal(mc.world.props.get("solo:x"), "abc");
+  const r = pongs(mc, "realm:diag_forgot");
+  assert.equal(r.length, 4);
+  for (const x of r) {
+    assert.equal(x.ok, false);
+    assert.equal(x.pack, "solo_bp");
+    assert.equal(x.error, "send it from Pack diagnostics");
+  }
+});
+
+test("MCP-174: forget from an operator player works", async () => {
+  const mc = await soloContext();
+  mc.system.fromSource("realm:diag_forget", forgetMsg("o"), "Entity", { typeId: "minecraft:player", commandPermissionLevel: 1 });
+  mc.step(2);
+  assert.equal(mc.world.props.size, 0);
+  assert.equal(pongs(mc, "realm:diag_forgot")[0].ok, true);
+});
+
+test("MCP-174: ping answers from any source", async () => {
+  const mc = await soloContext();
+  mc.system.fromSource("realm:diag_ping", JSON.stringify({ id: "pb" }), "Block", undefined);
+  mc.system.fromSource("realm:diag_ping", JSON.stringify({ id: "pe" }), "Entity", { typeId: "minecraft:zombie" });
+  mc.step(2);
+  assert.deepEqual(pongs(mc).map((p) => p.id).sort(), ["pb", "pe"]);
+});
+
+test("MCP-358: one callback on two signals unsubscribes from each", async () => {
+  const mc = await soloContext();
+  const cb = () => {};
+  const a = mc.world.afterEvents.playerJoin;
+  const b = mc.world.beforeEvents.chatSend;
+  a.subscribe(cb);
+  b.subscribe(cb);
+  assert.equal(a.subs.length, 1);
+  assert.equal(b.subs.length, 1);
+  a.unsubscribe(cb);
+  assert.equal(a.subs.length, 0, "removed from the first signal");
+  assert.equal(b.subs.length, 1);
+  b.unsubscribe(cb);
+  assert.equal(b.subs.length, 0, "removed from the second signal");
 });

@@ -55,7 +55,7 @@ const CALLING = {
         `${H}{player}, may I show you something? It's under the altar cloth. Careful, the spine is older than the chapel. Older than the town, maybe.`,
         `${H}It's a book of Callings. Six of them. The first settlers swore to one each: delving, warding, pathfinding, keeping the hearth, working wood, calling storms. Each kept a sigil, and the sigil kept them.`,
         `${H}I've watched you. You mine, you fight, you fish, you walk farther than anyone. You're ready for one. I'd be honored to write your name next to it. Choose when you're ready. Ask me, and I'll read you each page.`,
-        { text: `*His voice drops, flat and cold.* Six doors, and every one of them opens onto water.\n\n${H}...Sorry. Sorry. I don't know why I said that. Choose. Please.`, when: { "g:ending": "crown" } },
+        { text: `§7§oHis voice drops, flat and cold.§r Six doors, and every one of them opens onto water.\n\n${H}...Sorry. Sorry. I don't know why I said that. Choose. Please.`, when: { "g:ending": "crown" } },
       ],
       objectives: [
         { type: "event", or: "pick", label: "Choose your Calling: tap Hollis and pick Choose a Calling", quest: QUEST, count: 1 },

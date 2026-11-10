@@ -32,6 +32,10 @@ if (base) {
   }
 } else {
   base = tryGit("merge-base", "HEAD", "origin/master");
+  if (!base && (process.env.CI || process.env.GITHUB_ACTIONS)) {
+    console.error("check-versions: no origin/master to compare with. In CI, check out with fetch-depth: 0.");
+    process.exit(1);
+  }
   if (!base) {
     console.log("check-versions: no origin/master to compare with (no git, or not fetched): versions not checked.");
     process.exit(0);

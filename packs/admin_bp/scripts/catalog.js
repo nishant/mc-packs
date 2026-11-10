@@ -460,7 +460,7 @@ export const PACKS = [
     pack: "Skills",
     commands: [
       {"name":"realm:skills","description":"Skills: your levels, XP and perks in Mining, Woodcutting, Farming, Fishing, Combat and Exploration","permission":"any","params":[]},
-      {"name":"realm:skills_calling","description":"Skills: your Calling (from a total skill level of 75): choose one, spend talent points, get the Calling Sigil","permission":"any","params":[]},
+      {"name":"realm:skills_calling","description":"Skills: your Calling (once your skill levels add up high enough, 75 by default): choose one, spend talent points, get the Calling Sigil","permission":"any","params":[]},
     ],
   },
   {

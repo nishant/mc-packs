@@ -33,7 +33,7 @@ export const CONFIG = {
   /** Most letters from packs (townsfolk, Community Goals) one inbox keeps; a newer one pushes out the oldest of them. Letters from players are never pushed out by these. */
   systemInboxLimit: 20,
 
-  /** Days a letter from a pack is kept, read or not, before it is deleted. */
+  /** Days a letter from a pack is kept, read or not, before it is deleted: 1 to 365. Pack-letter expiry cannot be turned off (0 is treated as 1). */
   systemLetterDays: 30,
 
   /** Letters of the realm's 5000 kept free for players: letters from packs stop arriving when the realm holds 5000 minus this. */

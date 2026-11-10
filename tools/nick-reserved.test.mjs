@@ -116,3 +116,16 @@ test("O31 review: an online operator's gamertag is protected without any config,
   const own = await tryNick(sim, sneaky, "Ad_min");
   assert.equal(own.saved, "Ad_min");
 });
+
+test("MCP-180: a nickname is refused when it matches another player's gamertag with spaces or underscores removed", async () => {
+  const sim = await world({ props: { "nick:g:cool guy": "idOld", "nick:g:zedzed": "idZed" } });
+  const p = sim.join("Ann");
+  sim.join("Bob Smith");
+  for (const name of ["BobSmith", "bob_smith", "Zed_Zed"]) {
+    const r = await tryNick(sim, p, name);
+    assert.equal(r.saved, undefined, `${name} saved`);
+    assert.match(r.said, /someone else's gamertag/i, name);
+  }
+  const ok = await tryNick(sim, p, "Free Name");
+  assert.equal(ok.saved, "Free Name");
+});

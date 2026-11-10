@@ -20,7 +20,7 @@ const listAll = process.argv.includes("--list");
 const walk = (/** @type {string} */ dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
 const rel = (/** @type {string} */ f) => relative(root, f).split(sep).join("/");
 /** Shared copies are checked once, in tools/*-shared.js (they are generated into every pack). */
-const SHARED = /\/scripts\/(settings|zones|side|diag)\.js$/;
+const SHARED = /\/scripts\/(settings-core|zones|side|diag-core)\.js$/;
 
 /** The text of a call's arguments, from the "(" at `open`, balanced over (), [], {} and strings. @param {string} src @param {number} open */
 function argsAt(src, open) {
@@ -84,7 +84,7 @@ const add = (/** @type {string} */ file, /** @type {string} */ key) => {
 
 const files = [
   ...readdirSync(join(root, "packs")).filter((f) => existsSync(join(root, "packs", f, "scripts"))).flatMap((f) => walk(join(root, "packs", f, "scripts"))),
-  ...["settings-shared.js", "zones-shared.js", "side-shared.js"].map((f) => join(root, "tools", f)).filter(existsSync),
+  ...["settings-shared.js", "zones-shared.js", "side-shared.js", "diag-shared.js"].map((f) => join(root, "tools", f)).filter(existsSync),
 ].filter((f) => f.endsWith(".js") && !SHARED.test(f.split(sep).join("/")));
 
 for (const f of files) {

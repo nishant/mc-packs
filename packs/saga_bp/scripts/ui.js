@@ -32,6 +32,7 @@ import {
   objApplies,
   objDone,
   objKey,
+  PROP_PLAYER,
   onHold,
   pagesFor,
   partyViews,
@@ -49,7 +50,7 @@ import {
 import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, outdoors, ownUntil, progressed, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, timeWait, TRACKER_STEADY, weatherWait } from "./objectives.js";
 import { canTake, partyMates, partyTick, reporters, takers, together } from "./party.js";
 import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
-import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
+import { campCheck, campForChapter, startHostile, wanderForget, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
 import { QUEST_TEXT_BYTES, SLOTS, SLOT_NAMES, byteLength, isSlot, questCode } from "./side.js";
 import { PACK, across, alive, busy, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, lifecycle, npcName, num, plain, send, show, showOnce } from "./util.js";
@@ -255,7 +256,7 @@ function favorOffer(player, npc) {
   }
   const day = today();
   if (fs && fs.d >= day) return undefined; // done (or turned down) today
-  const f = favorOfDay(player.id, npc, day);
+  const f = favorOfDay(player.id, npc, day, saga);
   return f ? { key: `fvstart:${npc}`, label: `Daily favor: ${f.label}` } : undefined;
 }
 
@@ -954,7 +955,7 @@ async function favorStart(player, npc) {
     const day = today();
     const fs = saga.fv?.[npc];
     if ((fs?.a && !fs.c) || (fs && fs.d >= day)) return;
-    const f = favorOfDay(player.id, npc, day);
+    const f = favorOfDay(player.id, npc, day, saga);
     if (!f) return;
     const pick = await dialog(player, `Daily favor: ${f.label}`, "", [`${pagesFor([f.lines[0]], saga, "", player.name)[0] ?? ""}\n\n§e${f.objective.label}`], ["Accept", "Not now"]);
     if (pick !== 0 || !player.isValid) return;
@@ -1832,7 +1833,7 @@ async function favorsPage(player) {
       const e = entries(player).find((x) => x.fav === npc);
       status = e && chapterDone(e, saga) ? "§6done: report back" : `§ein progress: ${e ? plain(stepLine(player, e, saga)) : ""}`;
     } else if (fs && fs.d >= day) status = "§adone for today";
-    else status = `§f${favorOfDay(player.id, npc, day)?.label ?? ""} §7(tap them to take it)`;
+    else status = `§f${favorOfDay(player.id, npc, day, saga)?.label ?? ""} §7(tap them to take it)`;
     lines.push(`§e${npcName(npc)}§r: ${status}§r`);
   }
   await show(player, new ActionFormData().title("Daily favors").body(lines.join("\n")).button("Back"));
@@ -1855,7 +1856,9 @@ async function pickPlayer(player, /** @type {string} */ title) {
 export function resetPlayer(target, by) {
   forget(target.id);
   endScenesOf(target.id);
-  target.setDynamicProperty("saga:p", undefined);
+  target.setDynamicProperty(PROP_PLAYER, undefined);
+  wanderForget(target.id);
+  trackSent.delete(target.id);
   target.sendMessage("§e[Story] Your stories were reset by an operator.");
   if (by && by.id !== target.id) by.sendMessage(`§a[Story] Reset the stories of ${target.name}.`);
 }

@@ -139,9 +139,14 @@ export function favorShape(f) {
 /** Today's UTC day number. */
 export const today = () => Math.floor(Date.now() / 86400000);
 
-/** The favor an NPC offers this player today: a deterministic pick from its templates. @param {string} playerId @param {string} npc @param {number} day */
-export function favorOfDay(playerId, npc, day) {
-  const list = favorsByNpc.get(npc);
+/**
+ * The favor an NPC offers this player today: a deterministic pick from its templates. With the player's `saga`, favors whose
+ * `when` does not hold (Hollis after the sea took him) are left out.
+ * @param {string} playerId @param {string} npc @param {number} day @param {Saga} [saga]
+ */
+export function favorOfDay(playerId, npc, day, saga) {
+  const all = favorsByNpc.get(npc);
+  const list = saga ? all?.filter((f) => matches(f.when, saga, `fv:${npc}`)) : all;
   if (!list?.length) return undefined;
   let h = 0x811c9dc5;
   for (const ch of `${playerId}|${npc}|${day}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;

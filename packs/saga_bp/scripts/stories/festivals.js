@@ -329,7 +329,7 @@ export const STORIES = [
           `${B}And nobody can blame the mayor for the result. Truly, the finest day of my career.`,
         ],
         reward: { levels: 2, crowns: 25, items: [{ item: "minecraft:pumpkin_pie", amount: 2 }] },
-        hint: "Use shears on a placed pumpkin to carve it. A jack o'lantern is a carved pumpkin crafted with a torch. During the Lantern Fair, placing a carved pumpkin also enters the carve-off; votes are in /realm:calendar.",
+        hint: "Shear a pumpkin, mine the carved pumpkin, then place it. A jack o'lantern is a carved pumpkin crafted with a torch. During the Lantern Fair, placing a carved pumpkin also enters the carve-off; votes are in /realm:calendar.",
       },
     ],
   },

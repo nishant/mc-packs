@@ -296,6 +296,9 @@ function onCalendar(msg) {
 /** The answers of the scan in progress. @type {Set<string> | undefined} */
 let scanAnswers;
 
+/** Rescans in a row each installed pack has not answered since the first scan. @type {Map<string, number>} */
+const packMisses = new Map();
+
 /** Asks every pack to answer realm:help_ping; after 2 seconds the answers are the installed packs. */
 function scanPacks() {
   const answers = new Set([PACK]);
@@ -308,7 +311,20 @@ function scanPacks() {
   system.runTimeout(() => {
     if (scanAnswers !== answers) return;
     scanAnswers = undefined;
-    installed.set = answers;
+    // The first scan is taken as it is. After it a pack is dropped only when it misses two scans in a row (a laggy
+    // Realm answers late), so `pack:` flags don't flip off mid-session; one that answers is there at once.
+    if (installed.ready) {
+      for (const f of answers) packMisses.delete(f);
+      for (const f of [...installed.set]) {
+        if (answers.has(f)) continue;
+        const n = (packMisses.get(f) ?? 0) + 1;
+        if (n >= 2) {
+          packMisses.delete(f);
+          installed.set.delete(f);
+        } else packMisses.set(f, n);
+      }
+      for (const f of answers) installed.set.add(f);
+    } else installed.set = answers;
     installed.ready = true;
   }, PACK_SCAN_TICKS);
 }
@@ -348,7 +364,8 @@ function onChoose(msg) {
 /**
  * realm:saga_debug (operators and test scenarios; /scriptevent needs operator rights):
  * `{ player, action: "answer", text }` answers the player's first open riddle, `{ player, action: "finish", story, flags? }`
- * marks a whole story finished, `{ player, action: "places" }` tells the player every saved place, `{ player, action: "state" }`
+ * marks a whole story finished, `{ player, action: "jump", story, chapter, flags? }` starts them at that chapter (every
+ * chapter before it counts as finished), `{ player, action: "places" }` tells the player every saved place, `{ player, action: "state" }`
  * prints their saved progress to the content log, `{ player, action: "wander_finish" }` finishes their stranger's one-off,
  * `{ player, action: "bump", story, i?, n? }` adds n (1) to objective i (0) of their chapter (or party quest) of that story,
  * `{ player, action: "race_expire" }` ends their running races now (lost, unless the target falls first),
