@@ -46,6 +46,9 @@ const DRY_GROUND = new Set([
   "minecraft:sand", "minecraft:red_sand", "minecraft:hardened_clay", ...COLORS.map((c) => `minecraft:${c}_terracotta`),
   "minecraft:snow", "minecraft:snow_layer", "minecraft:powder_snow", "minecraft:ice", "minecraft:packed_ice", "minecraft:blue_ice",
 ]);
+// What players build roofs from: two or more blocks above the feet these are a roof. Snow and ice up there are a snowy
+// tree's canopy or a house roof in a snowy biome, and stay dry ground (snow falls there).
+const ROOF_GROUND = /^minecraft:(sand|red_sand|hardened_clay|[a-z_]+_terracotta)$/;
 const WATERY = /water|kelp|seagrass|bubble_column/;
 const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }];
 
@@ -282,14 +285,15 @@ function leave(player, st) {
 
 /**
  * Ground where it doesn't rain: natural sand, terracotta, snow or ice on top (a beach in a rainy biome counts too).
- * A roof of it over the player (two or more blocks above the feet) is not ground, so the player is indoors.
+ * A terracotta or sand roof over the player (two or more blocks above the feet) is not ground, so the player is indoors;
+ * snow and ice that high stay dry ground.
  * getTopmostBlock skips water, so the sand under a sea, a river or a pool is a seabed, where it rains: one more
  * lookup, only for such ground below the feet.
  * @param {import("@minecraft/server").Block} here @param {Vector3} feet
  */
 function dryGround(here, feet) {
   if (!DRY_GROUND.has(here.typeId)) return false;
-  if (here.location.y >= Math.floor(feet.y) + 2) return false; // a roof, not ground
+  if (here.location.y >= Math.floor(feet.y) + 2 && ROOF_GROUND.test(here.typeId)) return false; // a terracotta or sand roof, not ground
   if (here.location.y >= Math.floor(feet.y)) return true;
   try {
     const up = here.above();

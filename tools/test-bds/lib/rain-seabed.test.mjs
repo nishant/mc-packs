@@ -357,3 +357,18 @@ test("the suite still plans the scenario from its header: the whole recipe fits 
   assert.match(r.stdout, /^rain-seabed: run\.mjs .*--scenario tools[\\/]test-bds[\\/]examples[\\/]rain-seabed\.js \(after header recipe\)/m, r.stdout);
   assert.doesNotMatch(r.stdout, /skipped/);
 });
+
+test("a roof only counts when it is terracotta or sand: snow and ice overhead stay dry ground", async () => {
+  const env = createEnv();
+  await loadRain(env, "globalThis.__dryGround = dryGround;");
+  const dryGround = globalThis.__dryGround;
+  const feet = { x: 0.5, y: 70, z: 0.5 };
+  const at = (typeId, y) => ({ typeId, location: { x: 0, y, z: 0 }, isLiquid: false, above: () => undefined });
+  for (const id of ["minecraft:snow_layer", "minecraft:snow", "minecraft:powder_snow", "minecraft:ice", "minecraft:packed_ice", "minecraft:blue_ice"]) {
+    assert.equal(dryGround(at(id, 73), feet), true, `${id} above the head stays dry ground`);
+  }
+  for (const id of ["minecraft:sand", "minecraft:red_sand", "minecraft:hardened_clay", "minecraft:red_terracotta"]) {
+    assert.equal(dryGround(at(id, 72), feet), false, `${id} two blocks up is a roof`);
+    assert.equal(dryGround(at(id, 70), feet), true, `${id} at the feet is ground`);
+  }
+});
