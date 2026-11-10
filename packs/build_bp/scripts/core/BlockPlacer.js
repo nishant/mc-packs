@@ -345,7 +345,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
             }, 1);
         }
     }
-    reportPlaced(dim.id, toPlace);
+    reportPlaced(dim.id, toPlace, (p) => (assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? p.typeId ?? typeId) : (p.typeId ?? typeId)));
     recordSnapshot(player, snapshot);
     return total;
 }

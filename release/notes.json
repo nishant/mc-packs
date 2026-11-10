@@ -1,7 +1,7 @@
 {
   "notes": [
     "Blocks you build with the Building Book no longer earn Skills XP, Guilds reputation or Daily Quest progress when broken, and towns leave them alone.",
-    "Land Claims pop back out pistons and slime or honey blocks placed beside someone else's claim, and break pistons that push blocks into one.",
+    "Land Claims pop back out pistons and slime or honey blocks placed beside someone else's claim, and break pistons that move blocks into or out of one afterwards (the move is not undone).",
     "Town Projects no longer duplicate lecterns, barrels or smokers when a spot is removed or rebuilt, and a Treasure Map cairn's lantern no longer drops as a free item.",
     "Many packs now recognize dead bushes, lily pads, item frames, note blocks and rooted dirt, so the Minimap draws them properly.",
     "A creative player no longer gives party mates Defeat progress, Wanderers state real distances, and choosing an ordinary moon before a full moon sticks."
@@ -25,7 +25,7 @@
     },
     "claims_bp": {
       "version": "1.5.11",
-      "notes": "A piston, sticky piston, slime block or honey block placed within 2 blocks of someone else's claim pops back out, and a piston outside a claim that moves blocks into it breaks a moment later."
+      "notes": "A piston, sticky piston, slime block or honey block placed within 2 blocks of someone else's claim pops back out, and a piston outside a claim that moves blocks into or out of it breaks a moment later (the move itself is not undone)."
     },
     "town_bp": {
       "version": "1.7.5",
@@ -100,7 +100,7 @@
       "notes": "Choosing an ordinary moon during the day before a full moon now sticks, and Blood Moon mobs are always new entities."
     },
     "news_bp": {
-      "version": "1.7.102",
+      "version": "1.7.103",
       "notes": "Shows the Build safe, claims tighter notes once after the update."
     },
     "help_bp": {

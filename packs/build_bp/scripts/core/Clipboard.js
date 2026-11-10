@@ -343,7 +343,7 @@ export async function executePaste(player, origin) {
         for (const [tid, count] of consumed) removeBlocks(player, tid, count);
     }
 
-    reportPlaced(dim.id, entries.map((e) => e.pos));
+    reportPlaced(dim.id, entries.map((e) => ({ ...e.pos, typeId: e.typeId })), (p) => p.typeId);
     recordSnapshot(player, snapshot);
 
     if (isCut && !creative) {

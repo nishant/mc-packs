@@ -94,3 +94,28 @@ for (const [pack, prop] of [["guilds_bp", "guilds:pbox"], ["quests_bp", "quests:
     assert.equal(sim.props.get(prop), `${OW}|5,1,5,9,3,9;${OW}|0,0,0,63,0,0`);
   });
 }
+
+test("guilds: a box covers ores but not a crop with a growth state", async () => {
+  const sim = createSim();
+  await sim.load("guilds_bp");
+  sim.boot();
+  const p = sim.join("Ann", { id: "id-Ann" });
+  p.getGameMode = () => "Survival";
+  send(sim, [0, 60, 0, 10, 70, 10]);
+  const dim = { id: OW, spawnItem() {}, getBlock: () => undefined };
+  const brk = (typeId, x, y, z, perm) => {
+    const location = { x, y, z };
+    sim.game.emit("world.after.playerBreakBlock", { player: p, block: { typeId, location, x, y, z, dimension: dim }, brokenBlockPermutation: perm, itemStackBeforeBreak: undefined });
+  };
+  const prog = () => {
+    sim.step(600);
+    const raw = p.getDynamicProperty("guilds:prog");
+    return raw ? JSON.parse(raw) : { o: 0, c: 0 };
+  };
+  brk("minecraft:iron_ore", 5, 65, 5, { type: { id: "minecraft:iron_ore" } });
+  assert.equal(prog().o, 0, "an ore inside the box earns nothing");
+  brk("minecraft:iron_ore", 50, 65, 50, { type: { id: "minecraft:iron_ore" } });
+  assert.equal(prog().o, 1, "an ore outside the box does");
+  brk("minecraft:wheat", 6, 65, 6, { type: { id: "minecraft:wheat" }, getState: () => 7 });
+  assert.equal(prog().c, 1, "ripe wheat inside the box still counts");
+});

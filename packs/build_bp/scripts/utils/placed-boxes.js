@@ -1,5 +1,8 @@
+/** Positions are grouped by cells of this many blocks per side, so a sparse build does not become one huge box. */
+export const BOX_CELL = 16;
+
 /**
- * Groups block positions into small integer boxes (at most 64 blocks per side) for realm:blocks_placed.
+ * Groups block positions into small integer boxes (at most BOX_CELL blocks per side) for realm:blocks_placed.
  * @param {{x: number, y: number, z: number}[]} positions
  * @returns {number[][]} boxes as [minX, minY, minZ, maxX, maxY, maxZ]
  */
@@ -10,7 +13,7 @@ export function placedBoxes(positions) {
         const x = Math.floor(p.x);
         const y = Math.floor(p.y);
         const z = Math.floor(p.z);
-        const key = `${Math.floor(x / 64)},${Math.floor(y / 64)},${Math.floor(z / 64)}`;
+        const key = `${Math.floor(x / BOX_CELL)},${Math.floor(y / BOX_CELL)},${Math.floor(z / BOX_CELL)}`;
         const b = groups.get(key);
         if (!b) {
             groups.set(key, [x, y, z, x, y, z]);

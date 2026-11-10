@@ -10,7 +10,7 @@ entries below as a changelog.
 ## Build safe, claims tighter
 
 - Easy Building: blocks you build with the Building Book no longer farm Skills XP, Guilds reputation or Daily Quests, and towns leave them alone.
-- Land Claims: pistons can no longer push blocks into someone else's claim or be set up beside it.
+- Land Claims: pistons can no longer be set up beside someone else's claim, and a piston that moves blocks into or out of one is broken a moment later (the move itself is not undone).
 - Town Projects: Remove spot and Rebuild no longer duplicate lecterns, barrels or smokers. Treasure Maps: a cairn's lantern no longer drops as a free item.
 - Daily Quests: a creative player no longer gives party mates Defeat progress, and daily picks are fairer.
 - Dead bushes, lily pads, item frames, note blocks and rooted dirt are now recognized by many packs, such as the Minimap.

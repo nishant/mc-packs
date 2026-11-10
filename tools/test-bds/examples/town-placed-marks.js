@@ -42,7 +42,7 @@ export default async function (t) {
   const inside = ([x1, z1, x2, z2], x, z) => x >= x1 && x <= x2 && z >= z1 && z <= z2;
   t.check(!inside(r1, mid.x, mid.z), `the new region keeps off the placed block's cell (${JSON.stringify(r1)})`);
   // Another pack reports a box where the well is now: it moves again.
-  t.system.sendScriptEvent("realm:blocks_placed", JSON.stringify({ dim: "overworld", box: [r1[0], G - 2, r1[1], r1[2], G + 4, r1[3]] }));
+  t.system.sendScriptEvent("realm:blocks_placed", JSON.stringify({ dim: "overworld", box: [r1[0], G - 2, r1[1], r1[2], G + 4, r1[3]], natural: true }));
   await t.wait(5);
   town("remove", { project: "well" });
   await t.wait(5);

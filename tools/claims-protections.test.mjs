@@ -230,3 +230,24 @@ test("MCP-108: a piston that moves claimed blocks is broken; one inside the clai
   w.sim.step(10);
   assert.deepEqual(ran, ["setblock 19 64 0 air destroy"]);
 });
+
+test("MCP-108: a push into the claim is caught by its destination, and a piston part pushed beside the claim is broken", async () => {
+  const w = await world({ claims: one });
+  const ran = [];
+  const blocks = new Map([["18,64,0", "minecraft:sticky_piston"]]);
+  const dimension = { id: OW, runCommand: (c) => ran.push(c), getBlock: (l) => ({ typeId: blocks.get(`${l.x},${l.y},${l.z}`) ?? "minecraft:stone" }) };
+  // Facing west (4): the blocks at `attached` move one step west.
+  const fire = (px, attached) =>
+    w.sim.game.emit("world.after.pistonActivate", {
+      dimension,
+      block: { location: { x: px, y: 64, z: 0 }, permutation: { getState: () => 4 } },
+      piston: { state: "Expanding", getAttachedBlocksLocations: () => attached.map((x) => ({ x, y: 64, z: 0 })) },
+    });
+  fire(20, [17]); // 17 is outside the claim but the block lands on 16, inside it
+  w.sim.step(10);
+  assert.deepEqual(ran, ["setblock 20 64 0 air destroy"]);
+  ran.length = 0;
+  fire(22, [19]); // a sticky piston lands on 18, within 2 blocks of the claim
+  w.sim.step(10);
+  assert.deepEqual(ran, ["setblock 18 64 0 air destroy"]);
+});

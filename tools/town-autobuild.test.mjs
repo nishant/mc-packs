@@ -322,10 +322,16 @@ test("taking a build away drops a container's contents but never the job block i
   assert.deepEqual(slots, [undefined, undefined, undefined], "slots cleared");
   assert.deepEqual(types, ["minecraft:air"]);
   fns.spill(dim, block("minecraft:barrel", { container: { size: 27, emptySlotsCount: 27 } }));
-  fns.spill(dim, block("minecraft:lectern", undefined));
   fns.spill(dim, block("minecraft:oak_planks", undefined));
   assert.equal(spawned.length, 2);
-  assert.deepEqual(commands, [], "never a destroy setblock (it dropped the job block itself)");
+  assert.deepEqual(commands, [], "a container is never broken with a destroy setblock (it would drop the job block itself)");
+  // A lectern is broken like a player does (its book drops) and only the dropped lectern item is removed.
+  const removed = [];
+  const item = (id) => ({ getComponent: () => ({ itemStack: { typeId: id } }), remove: () => removed.push(id) });
+  const lecternDim = { ...dim, getEntities: () => [item("minecraft:lectern"), item("minecraft:written_book")] };
+  fns.spill(lecternDim, block("minecraft:lectern", undefined));
+  assert.deepEqual(commands, ["setblock 1 65 2 air destroy"]);
+  assert.deepEqual(removed, ["minecraft:lectern"], "the book stays");
 });
 
 test("a resumed build leaves alone the blocks players placed since its check (mine), cut, fill and design alike", () => {

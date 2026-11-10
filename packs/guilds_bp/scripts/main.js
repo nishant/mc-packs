@@ -574,7 +574,9 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
     if (!playing(player)) return;
     const id = brokenBlockPermutation.type.id;
     if (!ores.has(id) && !crops.has(id)) return;
-    if (placed().delete(spot(block.dimension.id, block.location)) || inPlacedBox(block.dimension.id, block.location.x, block.location.y, block.location.z)) {
+    // A box covers ores and stateless crops only; a crop with a growth state had to grow, so it still counts.
+    const boxed = (ores.has(id) || crops.get(id)?.state === undefined) && inPlacedBox(block.dimension.id, block.location.x, block.location.y, block.location.z);
+    if (placed().delete(spot(block.dimension.id, block.location)) || boxed) {
       placedDirty = true;
       return;
     }

@@ -148,7 +148,7 @@ export function recordSnapshot(player, snapshot) {
     routeClear(player, "redo");
 }
 function applyBlocks(dim, playerId, blocks) {
-    reportPlaced(dim.id, blocks.filter((b) => unpack(b.t) !== "minecraft:air"));
+    reportPlaced(dim.id, blocks.filter((b) => unpack(b.t) !== "minecraft:air"), (b) => unpack(b.t));
     const applyOne = (b) => {
         const pos = { x: b.x, y: b.y, z: b.z };
         try {

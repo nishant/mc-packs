@@ -39,7 +39,7 @@ export default async function (t) {
     const s = (await dump()).town.spots.well;
     // A player's dirt on the spot, after the check: marked like a placed block.
     t.server(`/setblock ${s.x} ${s.y} ${s.z} dirt`);
-    t.system.sendScriptEvent("realm:blocks_placed", JSON.stringify({ dim: "minecraft:overworld", box: [s.x, s.y, s.z, s.x, s.y, s.z] }));
+    t.system.sendScriptEvent("realm:blocks_placed", JSON.stringify({ dim: "minecraft:overworld", box: [s.x, s.y, s.z, s.x, s.y, s.z], natural: true }));
     await t.wait(260); // the coalesced save of the placed cells
     t.world.setDynamicProperty("harness:spot", JSON.stringify(s));
     t.restart("restarting mid-build");

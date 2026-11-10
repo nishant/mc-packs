@@ -822,15 +822,31 @@ function restoreGround(dim, st, box, cells) {
 
 /**
  * Before a build's own block is taken away (Remove spot, Relocate, Rebuild): a container with something in it (a
- * stall's or a house's barrel, a smoker, a brewing stand) or a lectern (it may hold a book) is broken the way a player
- * breaks it, so what it holds drops on the ground instead of being lost.
+ * stall's or a house's barrel, a smoker, a brewing stand) drops what it holds on the ground instead of losing it, but
+ * the job block itself does not drop (the build puts its own back). A lectern is broken the way a player breaks it
+ * (its book drops), and only the dropped lectern item is removed, because @minecraft/server 2.1.0 cannot read its book.
  * @param {Dimension} dim @param {import("@minecraft/server").Block} b
  */
 function spill(dim, b) {
   try {
+    if (b.typeId === "minecraft:lectern") {
+      const { x, y, z } = b.location;
+      const center = { x: x + 0.5, y: y + 0.5, z: z + 0.5 };
+      dim.runCommand(`setblock ${x} ${y} ${z} air destroy`);
+      const sweep = () => {
+        try {
+          for (const e of dim.getEntities({ type: "minecraft:item", location: center, maxDistance: 1.5 })) {
+            if (/** @type {any} */ (e.getComponent("minecraft:item"))?.itemStack?.typeId === "minecraft:lectern") e.remove();
+          }
+        } catch {
+          // not loaded
+        }
+      };
+      sweep();
+      system.runTimeout(sweep, 1);
+      return;
+    }
     const c = /** @type {import("@minecraft/server").BlockInventoryComponent | undefined} */ (b.getComponent("minecraft:inventory"))?.container;
-    // Only the contents drop, never the job block itself (the build puts its own lectern/barrel/smoker back).
-    // @minecraft/server 2.1.0 has no lectern book component, so a lectern's book is not dropped.
     if (!(c && c.emptySlotsCount < c.size)) return;
     const { x, y, z } = b.location;
     const center = { x: x + 0.5, y: y + 0.5, z: z + 0.5 };
@@ -3004,7 +3020,7 @@ function layPosts(t, dim, posts) {
 // Placed blocks (placed.js): natural-kind blocks players place in a town look like the ground, so the town keeps
 // their 4 x 4 x 4 cells in "town:pl:<town>:0" and ":1" (saved at most every 10 s) and never levels there. Other packs
 // that place natural blocks by script report boxes with realm:blocks_placed { dim, box: [x1, y1, z1, x2, y2, z2] }
-// (or x1..z2 as fields).
+// (or x1..z2 as fields) and natural: true (boxes without it are for other packs and ignored here).
 // ---------------------------------------------------------------------------
 
 const PLACED_PREFIX = "town:pl:";
@@ -3059,6 +3075,7 @@ onScriptEvent("realm:blocks_placed", ({ id, message }) => {
   try {
     const m = JSON.parse(message);
     if (!m || typeof m !== "object") return;
+    if (m.natural !== true) return; // only boxes of natural-kind blocks and wild plants; man-made blocks look built already
     const b = Array.isArray(m.box) ? m.box.map(Number) : [m.x1, m.y1, m.z1, m.x2, m.y2, m.z2].map(Number);
     if (b.length !== 6 || !b.every(Number.isFinite)) return;
     const dim = dimId(m.dim);

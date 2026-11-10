@@ -304,29 +304,85 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
 const PISTON_PARTS = new Set(["minecraft:piston", "minecraft:sticky_piston", "minecraft:slime", "minecraft:honey_block"]);
 const pistonWarned = new Set();
 
-// A piston outside a claim that moves claimed blocks is broken (there is no before-event to cancel); pistons inside a claim are never touched.
+/** The way a piston faces (its facing_direction state: down, up, north, south, west, east). */
+const PISTON_DIRS = [[0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1], [-1, 0, 0], [1, 0, 0]];
+
+/** Someone else's claim within `margin` blocks of a spot (not `homeId`'s). @param {string} dimId @param {import("@minecraft/server").Vector3} at @param {number | undefined} homeId @param {number} margin */
+function foreignClaimNear(dimId, at, homeId, margin) {
+  for (let dx = -margin; dx <= margin; dx++) {
+    for (let dz = -margin; dz <= margin; dz++) {
+      const c = claimAt(dimId, { x: at.x + dx, y: at.y, z: at.z + dz });
+      if (c && c.id !== homeId) return c;
+    }
+  }
+  return undefined;
+}
+
+// A piston outside a claim that moves blocks into or out of it is broken afterwards (there is no before-event to cancel,
+// so the move itself is not undone; a block pulled out stays where it landed and its owner is told). A piston part
+// (piston, slime, honey) that a piston moved to within 2 blocks of someone else's claim is broken too. Pistons inside
+// a claim are never touched.
 world.afterEvents.pistonActivate.subscribe(({ dimension, piston, block }) => {
   if (!enabled() || !claims().size) return;
   try {
     const home = claimAt(dimension.id, block.location);
     let hit;
+    let pulled = false;
+    /** @type {import("@minecraft/server").Vector3[]} */
+    const partSpots = [];
+    let step;
+    try {
+      const dir = PISTON_DIRS[Number(block.permutation?.getState("facing_direction"))];
+      if (dir) step = /^Retract/.test(String(piston.state)) ? [-dir[0], -dir[1], -dir[2]] : dir;
+    } catch {
+      // facing unknown: only the blocks' old positions are checked
+    }
     for (const loc of piston.getAttachedBlocksLocations()) {
-      const c = claimAt(dimension.id, loc);
-      if (c && c.id !== home?.id) { hit = c; break; }
+      const from = claimAt(dimension.id, loc);
+      if (from && from.id !== home?.id) {
+        hit ??= from;
+        pulled = true;
+      }
+      if (!step) continue;
+      const to = { x: loc.x + step[0], y: loc.y + step[1], z: loc.z + step[2] };
+      const into = claimAt(dimension.id, to);
+      if (into && into.id !== home?.id) hit ??= into;
+      if (foreignClaimNear(dimension.id, to, home?.id, 2)) partSpots.push(to);
+    }
+    const { x, y, z } = block.location;
+    /** @param {import("@minecraft/server").Vector3} at */
+    const breakAt = (at) => {
+      system.runTimeout(() => {
+        try {
+          dimension.runCommand(`setblock ${at.x} ${at.y} ${at.z} air destroy`);
+        } catch (e) {
+          console.warn(`[claims] ${e}`);
+        }
+      }, 3);
+    };
+    for (const to of partSpots) {
+      let moved;
+      try {
+        moved = dimension.getBlock(to)?.typeId;
+      } catch {
+        // unloaded
+      }
+      if (moved && PISTON_PARTS.has(moved) && !(to.x === x && to.y === y && to.z === z)) breakAt(to);
     }
     if (!hit) return;
-    const { x, y, z } = block.location;
     if (!pistonWarned.has(hit.id)) {
       pistonWarned.add(hit.id);
       console.warn(`[claims] a piston at ${x} ${y} ${z} moved blocks of claim ${hit.id}; breaking it`);
     }
-    system.runTimeout(() => {
+    if (pulled) {
       try {
-        dimension.runCommand(`setblock ${x} ${y} ${z} air destroy`);
-      } catch (e) {
-        console.warn(`[claims] ${e}`);
+        const owner = world.getEntity(hit.o);
+        if (owner instanceof Player) owner.sendMessage(`§cA piston at ${x} ${y} ${z} moved blocks out of your claim. They were not put back.`);
+      } catch {
+        // owner not loaded
       }
-    }, 3);
+    }
+    breakAt({ x, y, z });
   } catch (e) {
     console.warn(`[claims] ${e}`);
   }
