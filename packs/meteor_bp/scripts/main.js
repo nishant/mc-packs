@@ -35,7 +35,7 @@ const BURST_HEIGHT = 40; // a meteor over a safe zone (inZone "burst") blows apa
 // Blocks a crater may remove or replace: natural ground, stone, ores, leaves and plants.
 const NATURAL = new Set(
   [
-    "grass_block", "dirt", "coarse_dirt", "podzol", "mycelium", "rooted_dirt", "dirt_with_roots", "mud", "clay", "gravel",
+    "grass_block", "dirt", "coarse_dirt", "podzol", "mycelium", "dirt_with_roots", "mud", "clay", "gravel",
     "sand", "red_sand", "sandstone", "red_sandstone", "stone", "granite", "diorite", "andesite", "deepslate", "tuff",
     "calcite", "dripstone_block", "moss_block", "snow", "ice", "packed_ice", "blue_ice", "powder_snow", "terracotta",
     "white_terracotta", "orange_terracotta", "yellow_terracotta", "brown_terracotta", "red_terracotta", "light_gray_terracotta",
@@ -43,7 +43,7 @@ const NATURAL = new Set(
 );
 const ORE = /_ore$/;
 const PLANT =
-  /^minecraft:(short_grass|tall_grass|fern|large_fern|dead_bush|bush|firefly_bush|sweet_berry_bush|dandelion|poppy|blue_orchid|allium|azure_bluet|(red|orange|white|pink)_tulip|oxeye_daisy|cornflower|lily_of_the_valley|wither_rose|sunflower|lilac|rose_bush|peony|pink_petals|wildflowers|leaf_litter|short_dry_grass|tall_dry_grass|torchflower|closed_eyeblossom|open_eyeblossom|cactus_flower|vine|glow_lichen|moss_carpet|brown_mushroom|red_mushroom|cactus|sugar_cane|[a-z_]*sapling|[a-z_]*leaves|snow_layer)$/;
+  /^minecraft:(short_grass|tall_grass|fern|large_fern|deadbush|bush|firefly_bush|sweet_berry_bush|dandelion|poppy|blue_orchid|allium|azure_bluet|(red|orange|white|pink)_tulip|oxeye_daisy|cornflower|lily_of_the_valley|wither_rose|sunflower|lilac|rose_bush|peony|pink_petals|wildflowers|leaf_litter|short_dry_grass|tall_dry_grass|torchflower|closed_eyeblossom|open_eyeblossom|cactus_flower|vine|glow_lichen|moss_carpet|brown_mushroom|red_mushroom|cactus|sugar_cane|[a-z_]*sapling|[a-z_]*leaves|snow_layer)$/;
 // Player-made blocks: a crater never goes where the scan finds one of these.
 const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|copper|waxed_|quartz|purpur|terracotta|_block$|bars|tinted|lamp|cauldron|crafter|target|bee_nest|beehive|_head$|_skull$|pot$/;

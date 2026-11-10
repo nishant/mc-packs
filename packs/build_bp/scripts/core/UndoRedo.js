@@ -2,6 +2,7 @@
 import { world, system, BlockPermutation } from "@minecraft/server";
 import { coachEvent } from "../utils/CoachEvents.js";
 import { enqueue } from "./PlacementQueue.js";
+import { reportPlaced } from "../utils/PlacedReport.js";
 import { getUndoThreshold } from "./Settings.js";
 import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
@@ -147,6 +148,7 @@ export function recordSnapshot(player, snapshot) {
     routeClear(player, "redo");
 }
 function applyBlocks(dim, playerId, blocks) {
+    reportPlaced(dim.id, blocks.filter((b) => unpack(b.t) !== "minecraft:air"));
     const applyOne = (b) => {
         const pos = { x: b.x, y: b.y, z: b.z };
         try {

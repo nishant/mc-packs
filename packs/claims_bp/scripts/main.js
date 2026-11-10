@@ -275,12 +275,58 @@ world.beforeEvents.playerInteractWithEntity.subscribe((event) => {
 // Anything placed in a claim some way the tap didn't catch is taken back out: broken as if mined, so the block (and
 // anything inside it, like a shulker box's items) drops instead of vanishing.
 world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
-  const c = closedTo(player, block.dimension.id, block.location);
-  if (!c) return;
+  const dim = block.dimension;
+  const c = closedTo(player, dim.id, block.location);
+  if (!c) {
+    // A piston or slime next to a claim could pull its blocks out, so those can't go within 2 blocks of someone else's claim.
+    if (!PISTON_PARTS.has(block.typeId)) return;
+    const { x, y, z } = block.location;
+    let near;
+    for (let dx = -2; dx <= 2 && !near; dx++) for (let dz = -2; dz <= 2 && !near; dz++) near = closedTo(player, dim.id, { x: x + dx, y, z: z + dz });
+    if (!near) return;
+    try {
+      dim.runCommand(`setblock ${x} ${y} ${z} air destroy`);
+      bar(player, `§cToo close to ${near.n}'s claim for that block`);
+    } catch (e) {
+      console.warn(`[claims] ${e}`);
+    }
+    return;
+  }
   try {
     const { x, y, z } = block.location;
-    block.dimension.runCommand(`setblock ${x} ${y} ${z} air destroy`);
+    dim.runCommand(`setblock ${x} ${y} ${z} air destroy`);
     bar(player, `§cThis land is claimed by ${c.n}`);
+  } catch (e) {
+    console.warn(`[claims] ${e}`);
+  }
+});
+
+const PISTON_PARTS = new Set(["minecraft:piston", "minecraft:sticky_piston", "minecraft:slime", "minecraft:honey_block"]);
+const pistonWarned = new Set();
+
+// A piston outside a claim that moves claimed blocks is broken (there is no before-event to cancel); pistons inside a claim are never touched.
+world.afterEvents.pistonActivate.subscribe(({ dimension, piston, block }) => {
+  if (!enabled() || !claims().size) return;
+  try {
+    const home = claimAt(dimension.id, block.location);
+    let hit;
+    for (const loc of piston.getAttachedBlocksLocations()) {
+      const c = claimAt(dimension.id, loc);
+      if (c && c.id !== home?.id) { hit = c; break; }
+    }
+    if (!hit) return;
+    const { x, y, z } = block.location;
+    if (!pistonWarned.has(hit.id)) {
+      pistonWarned.add(hit.id);
+      console.warn(`[claims] a piston at ${x} ${y} ${z} moved blocks of claim ${hit.id}; breaking it`);
+    }
+    system.runTimeout(() => {
+      try {
+        dimension.runCommand(`setblock ${x} ${y} ${z} air destroy`);
+      } catch (e) {
+        console.warn(`[claims] ${e}`);
+      }
+    }, 3);
   } catch (e) {
     console.warn(`[claims] ${e}`);
   }

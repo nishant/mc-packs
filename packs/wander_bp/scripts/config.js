@@ -1,5 +1,5 @@
 export const CONFIG = {
-  /** Wanderers appear. Disabled, nobody new appears (those on the road leave within a minute) and camps stay empty. */
+  /** Wanderers appear. Disabled, nobody new appears (those on the road leave within a second) and camps stay empty. */
   enabled: true,
 
   /** Ticks between rolls for each player (1200 = once a minute). Read when the world starts. */

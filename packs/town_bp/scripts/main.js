@@ -829,9 +829,18 @@ function restoreGround(dim, st, box, cells) {
 function spill(dim, b) {
   try {
     const c = /** @type {import("@minecraft/server").BlockInventoryComponent | undefined} */ (b.getComponent("minecraft:inventory"))?.container;
-    if (!(c && c.emptySlotsCount < c.size) && b.typeId !== "minecraft:lectern") return;
+    // Only the contents drop, never the job block itself (the build puts its own lectern/barrel/smoker back).
+    // @minecraft/server 2.1.0 has no lectern book component, so a lectern's book is not dropped.
+    if (!(c && c.emptySlotsCount < c.size)) return;
     const { x, y, z } = b.location;
-    dim.runCommand(`setblock ${x} ${y} ${z} air destroy`);
+    const center = { x: x + 0.5, y: y + 0.5, z: z + 0.5 };
+    for (let i = 0; i < c.size; i++) {
+      const item = c.getItem(i);
+      if (!item) continue;
+      dim.spawnItem(item, center);
+      c.setItem(i, undefined);
+    }
+    b.setType("minecraft:air");
   } catch {
     // no inventory (most blocks), or not loaded
   }
@@ -1252,7 +1261,11 @@ async function townList(player) {
 async function townStats(player) {
   const t = nearestTown(player);
   if (!t) {
-    player.sendMessage(`§7No towns yet.${isOp(player) ? " Stand in the middle of one and run /realm:town_add <name>." : ""}`);
+    player.sendMessage(
+      allTowns().size > 0
+        ? "§7No towns in this dimension. Open /realm:town and pick Other towns to see the rest."
+        : `§7No towns yet.${isOp(player) ? " Stand in the middle of one and run /realm:town_add <name>." : ""}`,
+    );
     return;
   }
   await townMenu(player, t.id, canDeliverIn(player, t));
@@ -1274,6 +1287,7 @@ async function mainMenu(player) {
   const lines = [];
   if (here) lines.push(`You're in §l${here.n}§r: ${levelName(here.lvl)}, level ${here.lvl} of ${MAX_LEVEL}.`);
   else if (near) lines.push(`The nearest town is §l${near.n}§r, ${Math.round(Math.hypot(player.location.x - near.x, player.location.z - near.z))} blocks away.`);
+  else if (allTowns().size > 0) lines.push("No towns in this dimension. Other towns lists the rest.");
   else lines.push(`There are no towns yet.${op ? " Stand in the middle of one and add it." : ""}`);
   if (op && here) lines.push(`§7Protect from world events: ${isProtected(here) ? "§aEnabled" : "§cDisabled"}`);
   if (op && here?.nos?.length) lines.push(`§eNo good spot was found for ${here.nos.map((id) => byId.get(id)?.name ?? id).join(", ")}: set one (Set a project spot) or try Find spots again.`);
@@ -2814,9 +2828,11 @@ function clearLife(t, id, leftOnly = false) {
     // its dimension isn't there: later
   }
   if (!leftOnly) delete w[id];
+  const before = JSON.stringify(w);
   delete w[old];
   if (left[0].length || left[1].length) w[old] = [packCells(left[0], t.x, t.z), packCells(left[1], t.x, t.z)];
-  saveLife(t, w);
+  // Leftovers in an unloaded area come back unchanged every tick: save only when something changed.
+  if (!leftOnly || JSON.stringify(w) !== before) saveLife(t, w);
 }
 
 /** Rects as inclusive columns. @param {import("./sites.js").Rect} r @param {number} x @param {number} z */

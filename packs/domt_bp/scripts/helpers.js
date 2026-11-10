@@ -216,9 +216,9 @@ export function randomEnchanted(id, pool, count, maxLevel, opts = {}) {
 // ---------------------------------------------------------------------------
 
 /** Small plants and decorations a player can stand in. */
-const PASSABLE = /(^minecraft:(short_grass|tall_grass|fern|large_fern|deadbush|dead_bush|snow_layer|vine|glow_lichen|leaf_litter|wildflowers|bush|firefly_bush|short_dry_grass|tall_dry_grass|pink_petals)$)|(flower|tulip|dandelion|poppy|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|wither_rose|sapling|_carpet|torch$)/;
+const PASSABLE = /(^minecraft:(short_grass|tall_grass|fern|large_fern|deadbush|snow_layer|vine|glow_lichen|leaf_litter|wildflowers|bush|firefly_bush|short_dry_grass|tall_dry_grass|pink_petals)$)|(flower|tulip|dandelion|poppy|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|wither_rose|sapling|_carpet|torch$)/;
 /** Never stand on or in these. */
-const HARMFUL = /lava|fire|magma|cactus|campfire|sweet_berry_bush|powder_snow|wither_rose|pointed_dripstone|cobweb|water|bubble_column|kelp|seagrass|scaffolding|end_portal|portal|lily_pad|pressure_plate|tripwire|trapdoor|_door$|_sign$|ladder/;
+const HARMFUL = /lava|fire|magma|cactus|campfire|sweet_berry_bush|powder_snow|wither_rose|pointed_dripstone|cobweb|water|bubble_column|kelp|seagrass|scaffolding|end_portal|portal|waterlily|pressure_plate|tripwire|trapdoor|_door$|_sign$|ladder/;
 
 /** @param {Dimension} dim @param {import("@minecraft/server").Vector3} loc */
 export function blockAt(dim, loc) {

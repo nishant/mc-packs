@@ -132,6 +132,8 @@ test("the id allowlist reasons stay specific", () => {
       assert.equal(reason.includes("ignore all"), false);
     }
   }
-  assert.ok(Object.values(reasons).some((reason) => reason.includes("dead_bush") || reason.includes("deadbush")));
-  assert.ok(Object.values(reasons).some((reason) => reason.includes("note_block") || reason.includes("noteblock")));
+  const java = /dead_bush|lily_pad|item_frame|note_block|rooted_dirt|dirt_path|stained_hardened_clay/;
+  for (const [fileName, ids] of Object.entries(raw)) {
+    if (Array.isArray(ids)) for (const id of ids) assert.equal(java.test(id), false, `${fileName} allowlists the Java name ${id}; use the Bedrock id`);
+  }
 });

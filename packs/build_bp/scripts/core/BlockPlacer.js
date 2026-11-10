@@ -5,6 +5,7 @@ import { getMaxBlocks, getBuildSpeed, getUndoThreshold, getReplaceBlocks } from 
 import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 import { enqueue } from "./PlacementQueue.js";
+import { reportPlaced } from "../utils/PlacedReport.js";
 import { captureSnapshot, recordSnapshot } from "./UndoRedo.js";
 import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern } from "./Palette.js";
 import { getPlacementStatesFromAir } from "../modes/AirBuildMode.js";
@@ -344,6 +345,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
             }, 1);
         }
     }
+    reportPlaced(dim.id, toPlace);
     recordSnapshot(player, snapshot);
     return total;
 }

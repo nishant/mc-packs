@@ -96,11 +96,11 @@ jobs:
       - name: Install the mc-packs tools
         working-directory: mc-packs
         run: npm ci --ignore-scripts
-      # hosting/minecraft has no lockfile: marked and Playwright.
+      # Installs hosting/minecraft's locked tools (marked, Playwright, qrcode) from its package-lock.json, with no install scripts.
       - name: Install the hosting tools
         working-directory: hosting/minecraft
         run: |
-          npm install --no-save --no-package-lock --no-audit --no-fund --ignore-scripts
+          npm ci --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Release (open the hosting PR, do not merge it)
         id: release
@@ -198,7 +198,7 @@ jobs:
       - name: Install the hosting tools
         working-directory: hosting/minecraft
         run: |
-          npm install --no-save --no-package-lock --no-audit --no-fund --ignore-scripts
+          npm ci --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Merge the hosting PR once its checks pass, and check the live site
         env:

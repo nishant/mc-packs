@@ -112,7 +112,7 @@ const callers = [
   ["domt_bp", "effects.js", [/spawnFresh\(dim, "minecraft:vindicator", at\)/]],
   ["domt_bp", "events.js", [/spawnFresh\(dim, type, \{ x: state\.center\.x/]],
   ["calendar_bp", "main.js", [/\{ spawnEvent: "minecraft:entity_born", attempts: 4 \}/, /\+ 1, z: at\.z \}, \{ attempts: 4 \}/]],
-  ["moon_bp", "main.js", [/spawnFresh\(p\.dimension, id, \{ x: at\.x \+ 0\.5, y: at\.y, z: at\.z \+ 0\.5 \}, \{ attempts: 4 \}\)\.addTag\(MOB_TAG\)/]],
+  ["moon_bp", "main.js", [/spawnFresh\(p\.dimension, id, \{ x: at\.x \+ 0\.5, y: at\.y, z: at\.z \+ 0\.5 \}, \{ attempts: 4, fresh: true \}\)\.addTag\(MOB_TAG\)/]],
   ["expedition_bp", "gauntlet.js", [/spawnShared\(dim, type, at, \{ fresh: true \}\)/, /spawnFresh\(dim, "minecraft:chest_minecart", \{ x: at\.x \+ 0\.5/]],
 ];
 for (const [folder, file, wanted] of callers) {

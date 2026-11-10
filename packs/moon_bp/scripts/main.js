@@ -688,7 +688,7 @@ function spawnWave(p, budget = {}) {
     if (!id) continue;
     try {
       // Never an existing entity (a pet, an item): tagged, dawn would remove it.
-      spawnFresh(p.dimension, id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, { attempts: 4 }).addTag(MOB_TAG);
+      spawnFresh(p.dimension, id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, { attempts: 4, fresh: true }).addTag(MOB_TAG);
       if (budget.left !== undefined && budget.left !== Infinity) budget.left--;
     } catch (e) {
       console.warn(`[moon] spawn ${id}: ${e}`);
@@ -801,7 +801,7 @@ function setMoon(state) {
     startNight(day, state);
     return `Tonight is now ${NAME[state]}.`;
   }
-  world.setDynamicProperty(PROP_PENDING, state === "normal" && world.getMoonPhase() !== 0 ? undefined : state);
+  world.setDynamicProperty(PROP_PENDING, state); // always kept, even "normal": a dawn-time choice before a full moon must survive the midnight phase rollover; decide() consumes it at dusk
   return `Tonight will be ${NAME[state]}.`;
 }
 

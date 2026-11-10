@@ -443,6 +443,71 @@ function savePlaced() {
 /** @param {string} dim @param {Vector3} at */
 const spot = (dim, at) => `${DIM_CHARS[dim] ?? dim}${at.x},${at.y},${at.z}`;
 
+// Boxes other packs built or pasted (Easy Building sends realm:blocks_placed): a block inside one counts as placed.
+// At most 500, oldest dropped first; one world property (guilds:pbox) of "dim|x1,y1,z1,x2,y2,z2" joined by ";".
+const PBOX_PROP = "guilds:pbox";
+const PBOX_MAX = 500;
+const PBOX_SIDE = 64;
+/** @type {Array<{ d: string, b: number[] }> | undefined} */
+let pboxes;
+let pboxDirty = false;
+
+function boxes() {
+  if (pboxes) return pboxes;
+  pboxes = [];
+  try {
+    const raw = world.getDynamicProperty(PBOX_PROP);
+    if (typeof raw === "string") {
+      for (const e of raw.split(";")) {
+        const [d, c] = e.split("|");
+        const b = (c ?? "").split(",").map(Number);
+        if (d && b.length === 6 && b.every(Number.isFinite)) pboxes.push({ d, b });
+      }
+    }
+  } catch (e) {
+    console.warn(`[guilds] placed boxes: ${e}`);
+  }
+  return pboxes;
+}
+
+function savePboxes() {
+  if (!pboxDirty || !pboxes) return;
+  try {
+    world.setDynamicProperty(PBOX_PROP, pboxes.map((e) => `${e.d}|${e.b.join(",")}`).join(";") || undefined);
+    pboxDirty = false;
+  } catch (e) {
+    console.warn(`[guilds] saving placed boxes: ${e}`);
+  }
+}
+system.runInterval(savePboxes, 600);
+
+onScriptEvent("realm:blocks_placed", ({ id, message }) => {
+  if (id !== "realm:blocks_placed") return;
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m !== "object" || typeof m.dim !== "string" || !m.dim) return;
+    const r = Array.isArray(m.box) ? m.box.map(Number) : [m.x1, m.y1, m.z1, m.x2, m.y2, m.z2].map(Number);
+    if (r.length !== 6 || !r.every(Number.isFinite)) return;
+    const b = [Math.floor(Math.min(r[0], r[3])), Math.floor(Math.min(r[1], r[4])), Math.floor(Math.min(r[2], r[5])), Math.floor(Math.max(r[0], r[3])), Math.floor(Math.max(r[1], r[4])), Math.floor(Math.max(r[2], r[5]))];
+    if (b[3] - b[0] + 1 > PBOX_SIDE || b[4] - b[1] + 1 > PBOX_SIDE || b[5] - b[2] + 1 > PBOX_SIDE) return;
+    const list = boxes();
+    list.push({ d: m.dim.includes(":") ? m.dim : `minecraft:${m.dim}`, b });
+    while (list.length > PBOX_MAX) list.shift();
+    pboxDirty = true;
+  } catch {
+    // not ours
+  }
+});
+
+/** Is this spot inside a box another pack built? @param {string} dimId @param {number} x @param {number} y @param {number} z */
+function inPlacedBox(dimId, x, y, z) {
+  const px = Math.floor(x);
+  const py = Math.floor(y);
+  const pz = Math.floor(z);
+  for (const { d, b } of boxes()) if (d === dimId && px >= b[0] && px <= b[3] && py >= b[1] && py <= b[4] && pz >= b[2] && pz <= b[5]) return true;
+  return false;
+}
+
 /** Is this permutation a fully grown crop from `crops`? @param {import("@minecraft/server").BlockPermutation} perm */
 function ripe(perm) {
   const c = crops.get(perm.type.id);
@@ -509,7 +574,7 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
     if (!playing(player)) return;
     const id = brokenBlockPermutation.type.id;
     if (!ores.has(id) && !crops.has(id)) return;
-    if (placed().delete(spot(block.dimension.id, block.location))) {
+    if (placed().delete(spot(block.dimension.id, block.location)) || inPlacedBox(block.dimension.id, block.location.x, block.location.y, block.location.z)) {
       placedDirty = true;
       return;
     }

@@ -170,17 +170,24 @@ export default async function (t) {
   const origOk = rec.blocks.filter((b) => b !== top && typeAt(b[0], b[1], b[2]) !== rec.types[b[4]].t);
   t.check(!origOk.length, `restored to what was there (${origOk.map((b) => `${typeAt(b[0], b[1], b[2])}!=${rec.types[b[4]].t}`).join(",")})`);
 
-  // 4. The last leg: chest; put back only once empty.
-  h = (await hunts("Alice"))[0];
-  const s2 = await grassSpot(163, 170, 450, [s1]);
-  h.leg = h.pts.length - 1;
-  h.pts[h.leg] = { x: s2.x, z: s2.z };
-  h.near = undefined; h.mark = undefined; h.nomark = undefined;
-  await setHunts("Alice", [h]);
-  a.teleport({ x: s2.x + 0.5, y: s2.y + 1, z: s2.z + 30.5 });
-  await t.waitMessage(a, /grows warm|ink shifts|washed up/i, { timeout: 300 });
-  h = (await hunts("Alice"))[0];
-  if (h?.chest) {
+  // 4. The last leg: chest; put back only once empty. Chance can skip the chest (moved or handed over): retry elsewhere.
+  const base4 = (await hunts("Alice"))[0];
+  const used = [s1];
+  for (let k = 0; k < 3 && !h?.chest; k++) {
+    const s2 = await grassSpot(163, 170, 450 + 70 * k, used);
+    used.push(s2);
+    h = JSON.parse(JSON.stringify(base4));
+    h.leg = h.pts.length - 1;
+    h.pts[h.leg] = { x: s2.x, z: s2.z };
+    h.near = undefined; h.mark = undefined; h.nomark = undefined;
+    await setHunts("Alice", [h]);
+    a.teleport({ x: s2.x + 0.5, y: s2.y + 1, z: s2.z + 30.5 });
+    await t.waitMessage(a, /grows warm|ink shifts|washed up/i, { timeout: 300 });
+    h = (await hunts("Alice"))[0];
+    if (!h?.chest) t.log(`no chest at try ${k + 1} (moved or handed over)`);
+  }
+  t.assert(h?.chest, "the last leg built a chest (within 3 tries)");
+  {
     const c = h.chest;
     a.teleport({ x: c.x + 0.5, y: dim.getTopmostBlock({ x: c.x, z: c.z }).location.y + 1, z: c.z + 0.5 });
     await t.waitMessage(a, /You found the treasure/i, { timeout: 60 });
@@ -193,33 +200,40 @@ export default async function (t) {
     dim.getBlock(c).getComponent("inventory").container.clearAll();
     await until(async () => !(await undo()).some((r) => r.id === rec.id), 300, "empty chest put back");
     t.check(typeAt(c.x, c.y, c.z) === rec.types[rec.blocks[0][4]].t, `chest spot is ${typeAt(c.x, c.y, c.z)} again`);
-  } else t.log("no chest this time (moved or handed over)");
+  }
 
-  // 5. Two hunters at one spot.
+  // 5. Two hunters at one spot. Chance can leave Alice without a marker (a bottle): retry elsewhere.
   const b = await t.player("Bob", { x: 170, z: 170 });
   t.cmd(a, "/realm:maps_give @a");
   await t.waitMessage(b, /first clue/i, { timeout: 60 });
-  const s3 = await grassSpot(163, 170, 380, [s1, s2]);
-  for (const name of ["Alice", "Bob"]) {
-    const hh = (await hunts(name))[0];
-    hh.pts[0] = { x: s3.x, z: s3.z };
-    await setHunts(name, [hh]);
+  const base5 = { Alice: (await hunts("Alice"))[0], Bob: (await hunts("Bob"))[0] };
+  const used5 = [s1, ...used.slice(1)];
+  let ha, hb, ra, rb, s3;
+  for (let k = 0; k < 3 && !ha?.mark; k++) {
+    s3 = await grassSpot(163, 170, 380 + 70 * k, used5);
+    used5.push(s3);
+    for (const name of ["Alice", "Bob"]) {
+      const hh = JSON.parse(JSON.stringify(base5[name]));
+      hh.pts[0] = { x: s3.x, z: s3.z };
+      await setHunts(name, [hh]);
+    }
+    a.teleport({ x: s3.x + 0.5, y: s3.y + 1, z: s3.z + 40.5 });
+    b.teleport({ x: s3.x + 2.5, y: s3.y + 1, z: s3.z + 40.5 });
+    await t.waitMessage(a, /ink darkens/i, { timeout: 200 });
+    await t.waitMessage(b, /ink darkens/i, { timeout: 200 });
+    ha = (await hunts("Alice"))[0]; hb = (await hunts("Bob"))[0];
+    t.log(`Alice: ${JSON.stringify(ha.mark)} ${ha.style}; Bob: ${JSON.stringify(hb.mark)} ${hb.style}`);
+    const all = await undo();
+    ra = all.find((r) => r.hunt === ha.id && r.what === "mark"); rb = all.find((r) => r.hunt === hb.id && r.what === "mark");
   }
-  a.teleport({ x: s3.x + 0.5, y: s3.y + 1, z: s3.z + 40.5 });
-  b.teleport({ x: s3.x + 2.5, y: s3.y + 1, z: s3.z + 40.5 });
-  await t.waitMessage(a, /ink darkens/i, { timeout: 200 });
-  await t.waitMessage(b, /ink darkens/i, { timeout: 200 });
-  const ha = (await hunts("Alice"))[0], hb = (await hunts("Bob"))[0];
-  t.log(`Alice: ${JSON.stringify(ha.mark)} ${ha.style}; Bob: ${JSON.stringify(hb.mark)} ${hb.style}`);
-  const all = await undo();
-  const ra = all.find((r) => r.hunt === ha.id && r.what === "mark"), rb = all.find((r) => r.hunt === hb.id && r.what === "mark");
+  t.assert(ha?.mark, "Alice's leg built a marker, so the restart phase runs");
   if (ra && rb) {
     const keys = new Set(ra.blocks.map((q) => `${q[0]},${q[1]},${q[2]}`));
     t.check(!rb.blocks.some((q) => keys.has(`${q[0]},${q[1]},${q[2]}`)), "the two markers share no block");
-    t.check(rb.blocks.every((q) => ra.blocks.every((p) => Math.hypot(p[0] - q[0], p[2] - q[2]) > 1.5) || true), "apart");
-  } else t.log(`one hunter got a bottle: ${!!ra} ${!!rb}`);
+    t.check(rb.blocks.every((q) => ra.blocks.every((p) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) > 1.5)), "no two blocks of the two markers are within 1.5 blocks");
+  } else t.fail(`one hunter got a bottle, not a marker: Alice ${!!ra}, Bob ${!!rb}; ${t.messages(a, {}).slice(-3).map((m) => m.plain).join(" | ")}`);
   // Alice reaches hers and the server restarts right away (the record is due in 3 seconds).
-  if (ha.mark) {
+  {
     a.teleport({ x: ha.mark.x + 0.5, y: ha.mark.y + 4, z: ha.mark.z + 0.5 });
     await t.waitMessage(a, /You found the/i, { timeout: 60 });
     const r = (await undo()).find((q) => q.hunt === ha.id && q.what === "mark");

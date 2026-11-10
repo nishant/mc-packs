@@ -57,7 +57,7 @@ const MAX_MOBS = 24;
 const CIRCLE_KINDS = new Set(["minecraft:gray_concrete", "minecraft:bell", "minecraft:white_candle"]);
 /** Blocks players make and nature doesn't (as Atlas checks): a circle never covers them. */
 const BUILT =
-  /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|note_block|scaffolding|ladder|stairs|slab|brick|polished|item_frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate|_wall$|chiseled|path|farmland|hay_block|bone_block|tinted|end_rod|pumpkin|portal|spawner/;
+  /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|noteblock|scaffolding|ladder|stairs|slab|brick|polished|frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate|_wall$|chiseled|path|farmland|hay_block|bone_block|tinted|end_rod|pumpkin|portal|spawner/;
 const SOFT = /grass$|short_grass|tall_grass|fern|flower|bush|tulip|orchid|poppy|dandelion|allium|bluet|daisy|lily_of|cornflower|snow_layer|petals|leaf_litter|sapling|deadbush|lilac|peony|sunflower|rose_bush|mushroom$|^minecraft:air$/;
 const TREE = /_leaves$|_log$|_wood$|mushroom_block|azalea|mangrove_roots$|bamboo|cactus/;
 

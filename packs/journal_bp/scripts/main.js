@@ -326,7 +326,7 @@ function checkComplete(player, data, page) {
 // ---------------------------------------------------------------------------
 
 /** Things that "die" but aren't mobs: never a Mobs entry. */
-const NOT_MOBS = new Set(["npc", "armor_stand", "player", "ender_crystal", "boat", "chest_boat", "minecart", "chest_minecart", "hopper_minecart", "tnt_minecart", "command_block_minecart", "painting", "leash_knot", "item_frame", "glow_item_frame"].map((m) => `minecraft:${m}`));
+const NOT_MOBS = new Set(["npc", "armor_stand", "player", "ender_crystal", "boat", "chest_boat", "minecart", "chest_minecart", "hopper_minecart", "tnt_minecart", "command_block_minecart", "painting", "leash_knot", "frame", "glow_frame"].map((m) => `minecraft:${m}`));
 
 world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   const killer = damageSource.damagingEntity;

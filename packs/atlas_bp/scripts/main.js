@@ -65,7 +65,7 @@ const LAND_WEIGHTS = /** @type {[string, number][]} */ ([
 ]);
 /** Blocks players make and nature doesn't (as Story Questlines checks): a site never covers them. */
 const BUILT =
-  /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|note_block|scaffolding|ladder|stairs|slab|brick|polished|item_frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate|_wall$|chiseled|path|farmland|hay_block|bone_block|tinted|end_rod/;
+  /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|noteblock|scaffolding|ladder|stairs|slab|brick|polished|frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate|_wall$|chiseled|path|farmland|hay_block|bone_block|tinted|end_rod/;
 const SOFT = /grass$|fern|flower|bush|tulip|orchid|poppy|dandelion|allium|bluet|daisy|lily_of|cornflower|snow_layer|petals|leaf_litter|sapling|vine|seagrass|kelp|deadbush|lilac|peony|sunflower|leaves|mushroom$|_log$|_wood$|azalea|bamboo|cactus|sugar_cane|sweet_berry|moss_carpet|web|pumpkin$|melon_block/;
 const TREE = /_leaves$|_log$|_wood$|mushroom_block|azalea|mangrove_roots$|bamboo/;
 const WATER_PLANT = /seagrass|kelp|coral|sea_pickle|waterlily/;
@@ -477,8 +477,8 @@ function guessGroup(player) {
     const id = t.id.replace("minecraft:", "");
     let g = 0;
     if (id.includes("water") && t.depth >= 6) g = 5;
-    else if (/mangrove|mud|waterlily|lily_pad/.test(id) || (id.includes("water") && t.depth < 6)) g = 4;
-    else if (/sand|terracotta|hardened_clay|acacia|cactus|deadbush|dead_bush/.test(id)) g = 3;
+    else if (/mangrove|mud|waterlily|waterlily/.test(id) || (id.includes("water") && t.depth < 6)) g = 4;
+    else if (/sand|terracotta|hardened_clay|acacia|cactus|deadbush/.test(id)) g = 3;
     else if (/snow|ice|spruce|podzol|stone|calcite|gravel/.test(id) || t.y > 110) g = 2;
     else if (/leaves|_log|azalea|bamboo/.test(id)) g = 1;
     votes[g]++;

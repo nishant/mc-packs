@@ -1528,7 +1528,7 @@ export function* buildSteps(name, dimension, origin, facing, opts = {}) {
 // Site checks
 // ---------------------------------------------------------------------------
 
-const NATURAL = /^minecraft:(grass_block|dirt|coarse_dirt|rooted_dirt|dirt_with_roots|podzol|mycelium|mud|muddy_mangrove_roots|clay|sand|red_sand|gravel|suspicious_gravel|suspicious_sand|stone|granite|diorite|andesite|deepslate|tuff|calcite|dripstone_block|moss_block|pale_moss_block|snow|powder_snow|sandstone|red_sandstone|terracotta|[a-z_]+_terracotta|smooth_basalt|basalt|blackstone|netherrack|end_stone|[a-z_]*_ore|mangrove_roots)$/;
+const NATURAL = /^minecraft:(grass_block|dirt|coarse_dirt|dirt_with_roots|dirt_with_roots|podzol|mycelium|mud|muddy_mangrove_roots|clay|sand|red_sand|gravel|suspicious_gravel|suspicious_sand|stone|granite|diorite|andesite|deepslate|tuff|calcite|dripstone_block|moss_block|pale_moss_block|snow|powder_snow|sandstone|red_sandstone|terracotta|[a-z_]+_terracotta|smooth_basalt|basalt|blackstone|netherrack|end_stone|[a-z_]*_ore|mangrove_roots)$/;
 
 /**
  * What the top of a column is.

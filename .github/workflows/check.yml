@@ -2,7 +2,7 @@
 # Realm (or a public server) without `npm run check` and `npm run build` passing. Then a bounded smoke test starts the
 # genuine Realm Bundle (every behavior pack merged into one script context, as on the Realm) on a Bedrock Dedicated Server
 # with one simulated player: the bundle must load without script errors and every pack must answer /realm:help and
-# /realm:diag. The full BDS scenario suite stays local (tools/test-bds/suite.mjs): several minutes of a real server each.
+# /realm:diag. The scenarios a PR touches run in pr-tests.yml, and the whole suite after each merge in validate.yml.
 # Running BDS needs Ubuntu 18 or later (the only Linux Mojang supports); the server archive comes from minecraft.net.
 name: check
 on:

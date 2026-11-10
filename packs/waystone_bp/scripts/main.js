@@ -17,7 +17,7 @@ const CHECK_RANGE = 96; // waystones this close to a player (so their chunk is l
 const CHECKS_PER_RUN = 8;
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const DIM_NAMES = /** @type {Record<string, string>} */ ({ "minecraft:overworld": "Overworld", "minecraft:nether": "Nether", "minecraft:the_end": "The End" });
-const PASSABLE = /^minecraft:air$|sign|torch|short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|carpet|snow_layer|button|lever|rail|vine|banner|pressure_plate|sapling|petals|leaf_litter|deadbush|dead_bush/;
+const PASSABLE = /^minecraft:air$|sign|torch|short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|carpet|snow_layer|button|lever|rail|vine|banner|pressure_plate|sapling|petals|leaf_litter|deadbush|deadbush/;
 const UNSAFE_FLOOR = /lava|fire|magma|cactus|campfire|sweet_berry|powder_snow|water|^minecraft:air$/;
 const NEWS_TEXT = /** @type {Record<string, string>} */ ({
   tornado: "A tornado tore across the land",

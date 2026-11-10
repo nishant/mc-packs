@@ -7,6 +7,15 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Build safe, claims tighter
+
+- Easy Building: blocks you build with the Building Book no longer farm Skills XP, Guilds reputation or Daily Quests, and towns leave them alone.
+- Land Claims: pistons can no longer push blocks into someone else's claim or be set up beside it.
+- Town Projects: Remove spot and Rebuild no longer duplicate lecterns, barrels or smokers. Treasure Maps: a cairn's lantern no longer drops as a free item.
+- Daily Quests: a creative player no longer gives party mates Defeat progress, and daily picks are fairer.
+- Dead bushes, lily pads, item frames, note blocks and rooted dirt are now recognized by many packs, such as the Minimap.
+- Wanderers and the Blood and Harvest Moons: a few small fixes.
+
 ## Safer stories, fairer trades
 
 - Story Questlines: a story save that can't be read is copied aside instead of being wiped, places are never rewritten over a damaged list, and terrain that couldn't be put back finishes when someone comes near. Boss warnings show once a while, and Old Words isn't offered after the gift ending.

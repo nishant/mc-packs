@@ -799,7 +799,7 @@ const plants = new Map();
 function plant(id) {
   let p = plants.get(id);
   if (p === undefined) {
-    p = !id.includes("leaves") && /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|lily_of_the_valley|rose_bush|peony|lilac|dead_bush/.test(id);
+    p = !id.includes("leaves") && /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|lily_of_the_valley|rose_bush|peony|lilac|deadbush/.test(id);
     if (plants.size < 2000) plants.set(id, p);
   }
   return p;
@@ -882,7 +882,7 @@ function kindOf(id) {
   else if (/cherry_leaves|pink_petals/.test(id)) kind = "cherry";
   else if (/birch_leaves|azalea/.test(id)) kind = "birch";
   else if (/spruce_leaves|podzol/.test(id)) kind = "spruce";
-  else if (/mangrove_leaves|mud|swamp|lily_pad/.test(id)) kind = "swamp";
+  else if (/mangrove_leaves|mud|swamp|waterlily/.test(id)) kind = "swamp";
   else if (/acacia_leaves|hay_block|dry_grass/.test(id)) kind = "savanna";
   else if (/warped_/.test(id)) kind = "warped";
   else if (/netherrack|nylium|wart_block|crimson|soul_/.test(id)) kind = "nether";

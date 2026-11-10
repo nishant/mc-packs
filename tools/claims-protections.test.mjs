@@ -66,7 +66,7 @@ test("doors: closed to visitors by default, opened per claim by the owner's swit
   while (w.sim.pending.length) w.sim.answer({ canceled: true });
   assert.equal(JSON.parse(w.sim.props.get("claims:c:1")).dr, true);
   for (const t of REAL_DOORS) assert.equal(blockTap(w, w.bob, t), false, t);
-  for (const t of ["minecraft:iron_door", "minecraft:iron_trapdoor", "minecraft:chest", "minecraft:iron_door"]) assert.equal(blockTap(w, w.bob, t), true, `${t} stays closed`);
+  for (const t of ["minecraft:iron_door", "minecraft:iron_trapdoor", "minecraft:chest", "minecraft:barrel"]) assert.equal(blockTap(w, w.bob, t), true, `${t} stays closed`);
   assert.equal(blockTap(w, w.bob, "minecraft:wooden_door", { x: 400, y: 64, z: 3 }), false, "outside");
 });
 
@@ -166,16 +166,27 @@ test("O27 review: a new claim starts with a last visit, and an owner standing in
   assert.ok(key, [...w.sim.props.keys()].join());
   const made = JSON.parse(w.sim.props.get(key)).lv;
   assert.ok(Math.abs(made - Date.now()) < 5000, "set on creation");
-  const old = { ...JSON.parse(w.sim.props.get(key)), lv: Date.now() - 3 * DAY };
-  w.sim.props.set(key, JSON.stringify(old));
+  const lvBefore = JSON.parse(w.sim.props.get(key)).lv;
   w.sim.leave(w.bob);
+  assert.equal(JSON.parse(w.sim.props.get(key)).lv, lvBefore, "Bob leaving doesn't change Ann's last visit");
   const w2 = await world({ claims: [claim(1, "id-Ann", "Ann", 0, 16, { lv: Date.now() - 3 * DAY })] });
   w2.ann.location = { x: 1, y: 64, z: 1 };
   w2.sim.step(25);
   assert.ok(JSON.parse(w2.sim.props.get("claims:c:1")).lv > Date.now() - 5000, "refreshed while inside");
   const writes = w2.sim.props.get("claims:c:1");
-  w2.sim.step(100);
-  assert.equal(w2.sim.props.get("claims:c:1"), writes, "not rewritten within a minute");
+  const realNow = Date.now;
+  let skew = 0;
+  Date.now = () => realNow() + skew;
+  try {
+    skew = 55_000;
+    w2.sim.step(1100); // ~55 s, just under the 60 s throttle
+    assert.equal(w2.sim.props.get("claims:c:1"), writes, "not rewritten within a minute");
+    skew = 61_000;
+    w2.sim.step(40);
+    assert.notEqual(w2.sim.props.get("claims:c:1"), writes, "rewritten once past the throttle");
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 test("O27 review: the audit list rechecks the operator when it opens", async () => {
@@ -184,4 +195,38 @@ test("O27 review: the audit list rechecks the operator when it opens", async () 
   w.sim.run("realm:claim", w.op);
   const f = await w.sim.nextForm();
   assert.ok(!f.form.buttons.some((b) => /All claims/.test(b)));
+});
+
+const place = (w, player, typeId, at, ran) => {
+  const dimension = { id: OW, runCommand: (c) => ran.push(c) };
+  w.sim.game.emit("world.after.playerPlaceBlock", { player, block: { typeId, location: at, dimension } });
+};
+
+test("MCP-108: a piston placed within 2 blocks of a claim is removed for outsiders, kept for the owner", async () => {
+  const w = await world({ claims: one });
+  const ran = [];
+  place(w, w.bob, "minecraft:sticky_piston", { x: 18, y: 64, z: 0 }, ran);
+  assert.deepEqual(ran, ["setblock 18 64 0 air destroy"]);
+  place(w, w.ann, "minecraft:sticky_piston", { x: 18, y: 64, z: 0 }, ran);
+  place(w, w.bob, "minecraft:sticky_piston", { x: 25, y: 64, z: 0 }, ran);
+  place(w, w.bob, "minecraft:stone", { x: 18, y: 64, z: 0 }, ran);
+  assert.equal(ran.length, 1, "owner, far away and non-piston blocks are kept");
+});
+
+test("MCP-108: a piston that moves claimed blocks is broken; one inside the claim is not", async () => {
+  const w = await world({ claims: one });
+  const ran = [];
+  const dimension = { id: OW, runCommand: (c) => ran.push(c) };
+  const fire = (px, attached) =>
+    w.sim.game.emit("world.after.pistonActivate", {
+      dimension,
+      block: { location: { x: px, y: 64, z: 0 } },
+      piston: { getAttachedBlocksLocations: () => attached.map((x) => ({ x, y: 64, z: 0 })) },
+    });
+  fire(10, [11, 12]);
+  w.sim.step(10);
+  assert.deepEqual(ran, [], "inside the claim: untouched");
+  fire(19, [16]);
+  w.sim.step(10);
+  assert.deepEqual(ran, ["setblock 19 64 0 air destroy"]);
 });
