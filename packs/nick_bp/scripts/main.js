@@ -262,19 +262,23 @@ function isReserved(player, name, op = isOp(player)) {
 function problem(player, name) {
   if (!NAME_RULE.test(name)) return "A nickname is 3 to 16 characters: letters A-Z, digits, spaces and _.";
   if (isReserved(player, name)) return `${name} is a reserved name.`;
-  const lower = name.toLowerCase();
   const key = squash(name);
   for (const p of world.getAllPlayers()) {
     if (p.id !== player.id && squash(p.name) === key) return `${p.name} is someone else's gamertag.`;
   }
   try {
-    // The squashed key first, then the lowercase key older versions wrote (moved to the squashed key when found).
+    // The squashed key first, then any key older versions wrote (lowercase with spaces and _ kept): found by squashing
+    // its suffix, and moved to the squashed key.
     let owner = world.getDynamicProperty(SEEN_PREFIX + key);
-    if (typeof owner !== "string" && lower !== key) {
-      owner = world.getDynamicProperty(SEEN_PREFIX + lower);
-      if (typeof owner === "string") {
-        world.setDynamicProperty(SEEN_PREFIX + key, owner);
-        world.setDynamicProperty(SEEN_PREFIX + lower, undefined);
+    if (typeof owner !== "string") {
+      for (const k of world.getDynamicPropertyIds()) {
+        if (!k.startsWith(SEEN_PREFIX) || k === SEEN_PREFIX + key || squash(k.slice(SEEN_PREFIX.length)) !== key) continue;
+        const v = world.getDynamicProperty(k);
+        if (typeof v !== "string") continue;
+        owner = v;
+        world.setDynamicProperty(SEEN_PREFIX + key, v);
+        world.setDynamicProperty(k, undefined);
+        break;
       }
     }
     if (typeof owner === "string" && owner !== player.id) return `${name} is someone else's gamertag.`; // a player who is offline now

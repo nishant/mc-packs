@@ -431,7 +431,7 @@ function queue(playerId, relic, shards) {
     if (relic) {
       // Story relics are unique and few: always kept (once each). Others stop at 20 per player, which keeps the record small.
       const story = relics.get(relic)?.story === true;
-      if (story ? entry.r.includes(relic) : entry.r.length < 20) entry.r.push(relic);
+      if (story ? !entry.r.includes(relic) : entry.r.length < 20) entry.r.push(relic);
       else if (!story) console.warn(`[relics] gift cap (20) reached for ${playerId}: dropped relic ${relic}`);
     }
     const total = (Number(entry.s) || 0) + shards;

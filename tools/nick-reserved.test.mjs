@@ -121,7 +121,7 @@ test("MCP-180: a nickname is refused when it matches another player's gamertag w
   const sim = await world({ props: { "nick:g:cool guy": "idOld", "nick:g:zedzed": "idZed" } });
   const p = sim.join("Ann");
   sim.join("Bob Smith");
-  for (const name of ["BobSmith", "bob_smith", "Zed_Zed"]) {
+  for (const name of ["BobSmith", "bob_smith", "Zed_Zed", "CoolGuy", "Cool_Guy"]) {
     const r = await tryNick(sim, p, name);
     assert.equal(r.saved, undefined, `${name} saved`);
     assert.match(r.said, /someone else's gamertag/i, name);

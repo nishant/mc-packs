@@ -3,7 +3,7 @@
 // operators' places menu.
 import { Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { ActionFormData } from "@minecraft/server-ui";
-import { CAMPS, PREFABS, buildSteps, footprint, prefabInfo, rotate, siteOk } from "./prefabs.js";
+import { CAMPS, PREFABS, buildSteps, clearEntities, footprint, prefabInfo, rotate, siteOk } from "./prefabs.js";
 import { get } from "./settings.js";
 import { farDist, farOffset, refresh as refreshFar, setPlaceDist } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
@@ -388,10 +388,16 @@ function snapshot(name, dim, box, tag = "") {
   return out;
 }
 
-/** Puts a place's terrain back from its snapshot and deletes the snapshot. @param {SavedPlace} rec @returns {boolean} */
-function restore(rec) {
+/** Puts a place's terrain back from its snapshot and deletes the snapshot. @param {string} name @param {SavedPlace} rec @returns {boolean} */
+function restore(name, rec) {
   if (!rec.s?.length) return false;
   const dim = world.getDimension(rec.dim);
+  try {
+    // The entities the build spawned (a minecart, ...) go with it.
+    if (typeof rec.y === "number") clearEntities(pfOf(name), dim, { x: rec.x, y: rec.y, z: rec.z }, rec.f ?? 0);
+  } catch {
+    // chunk unloaded: the terrain restore still runs
+  }
   const sm = world.structureManager;
   let ok = true;
   /** @type {Array<[string, number, number, number, string, number]>} */
@@ -567,7 +573,7 @@ export async function buildAt(name, dim, origin, facing, extra) {
   try {
     const old = placesOf()[name];
     const same = !!old?.b && !!old.s?.length && old.x === o.x && old.y === o.y && old.z === o.z && old.dim === dim.id && (old.f ?? 0) === facing;
-    if (old?.b && old.s && !same) restore(old);
+    if (old?.b && old.s && !same) restore(name, old);
     // Built again on the same spot: the terrain from before the first build stays the one to put back.
     let snap = same ? old?.s : undefined;
     // The footing can reach under the box: the ground there is saved too, so Remove puts it back.
@@ -650,7 +656,7 @@ const stale = (name, rec) => !!rec.b && (rec.pv ?? 0) < (prefabInfo(pfOf(name))?
 export function removePlace(name) {
   const rec = placesOf()[name];
   if (!rec) return false;
-  if (rec.b) restore(rec);
+  if (rec.b) restore(name, rec);
   setPlace(name, undefined);
   retryAt.delete(name);
   return true;
@@ -842,7 +848,7 @@ export function makeCamp(wid, prefab, dim, near, pid) {
     setPlace(name, { ...old, u, v: Date.now() });
     return false;
   }
-  if (old?.b) restore(old);
+  if (old?.b) restore(name, old);
   retryAt.delete(name);
   waits.delete(name);
   setPlace(name, { dim, x: Math.floor(near.x), z: Math.floor(near.z), yh: near.y === undefined ? undefined : Math.floor(near.y), a: 1, p: 1, pf: prefab, w: wid, u, v: Date.now() });
@@ -1067,7 +1073,7 @@ export function setHere(player, name) {
   }
   const old = placesOf()[name];
   if (old?.b) {
-    if (restore(old)) player.sendMessage(`§7[Story] The old ${placeLabel(name)} building was removed and its terrain put back.`);
+    if (restore(name, old)) player.sendMessage(`§7[Story] The old ${placeLabel(name)} building was removed and its terrain put back.`);
     else player.sendMessage(`§7[Story] The old ${placeLabel(name)} building will be taken down and its terrain put back when a player is near it.`);
   }
   const l = player.location;

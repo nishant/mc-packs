@@ -32,7 +32,15 @@ test("setPlace() never overwrites an unreadable saga:places", () => {
 });
 
 test("restore() reports unfinished tiles into saga:restore, retried by autoTick", () => {
-  assert.match(body(places, "function restore(rec)"), /addPending\(pending\)/);
+  assert.match(body(places, "function restore(name, rec)"), /addPending\(pending\)/);
   assert.match(body(places, "export function autoTick()"), /retryRestores\(\)/);
   assert.match(body(places, "export function retryRestores()"), /queued === 1/);
+});
+
+test("restore() removes the entities a build spawned, for Remove, relocate and camps alike", () => {
+  const f = body(places, "function restore(name, rec)");
+  assert.match(f, /clearEntities\(pfOf\(name\), dim,/);
+  assert.ok(f.indexOf("clearEntities(") < f.indexOf("sm.place("), "cleared before the terrain goes back");
+  assert.ok(!/restore\((old|rec)\)/.test(places), "every caller passes the place name");
+  for (const from of ["export function removePlace(name)", "export function setHere(player, name)"]) assert.match(body(places, from), /restore\(name, /);
 });
