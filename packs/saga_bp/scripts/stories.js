@@ -91,7 +91,7 @@ const PROLOGUE = [
           `${T}Go see Reyes again. If the drowned are coming ashore, she'll want a hand. Here, something warm for the climb.`,
         ],
         reward: { levels: 3, items: [{ item: "minecraft:cooked_cod", amount: 8 }] },
-        hint: "The lighthouse stands on the coast: the tracker above your hotbar points to it. Warden Reyes is one of the townsfolk; /realm:npc shows where she stands.",
+        hint: "The lighthouse stands on the coast: the story tracker on your screen points to it. Warden Reyes is one of the townsfolk; /realm:npc shows where she stands.",
       },
       {
         id: "choir",
@@ -265,7 +265,7 @@ const PROLOGUE = [
         title: "Three Pins",
         intro: [
           `${M}The three pins are far out: about {far:900,-700} blocks northeast, {far:-1100,-200} blocks west, and {far:150,1200} blocks south of the world spawn. Visit them in any order.`,
-          `${M}The tracker above your hotbar shows the nearest pin you haven't stood on yet, with its direction and distance. Get within 24 blocks of a pin and it counts.`,
+          `${M}The story tracker on your screen shows the nearest pin you haven't stood on yet, with its direction and distance. Get within 24 blocks of a pin and it counts.`,
           `${M}That's a long way on foot. Take a horse, a boat along the coast, or elytra if you have them, plus food and a bed. Fenn always said a rushed map is a wrong map.`,
         ],
         objectives: [
@@ -278,7 +278,7 @@ const PROLOGUE = [
           `${M}There's only one old thing at that spot: the old chapel, the one nobody uses anymore. Fenn used to sit there for hours. I never asked him why.`,
         ],
         reward: { levels: 6, crowns: 60, journal: { entry: "fenn_pins", label: "Fenn's Three Pins" } },
-        hint: "Follow the tracker: it always points at the nearest pin you still need. Each pin is a spot counted from the world spawn, so the coordinates in this hint are exact.",
+        hint: "Follow the tracker: it always points at the nearest pin you still need. Each pin is a spot counted from the world spawn.",
       },
       {
         id: "chapel",

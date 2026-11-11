@@ -406,54 +406,101 @@ world.afterEvents.itemCompleteUse.subscribe(({ source, itemStack }) => {
   }
 });
 
-// Fishing: a hook belongs to the player nearest to where it appears. An item that appears where a
-// hook just was is that player's catch.
-/** @type {Map<string, { hook: import("@minecraft/server").Entity, owner: Player, dim: string, at: import("@minecraft/server").Vector3, seen: number }>} */
+// Fishing (the same test as Fishing Rewards and the Journal, copied here): a hook belongs to the player who cast it. An item
+// that appears within a few ticks of that hook going, after it was out a while and in water, and that no player dropped, is
+// the catch: one fish, whatever the stack size.
+const CATCH_TICKS = 4; // a catch appears within a few ticks of its hook going
+const MIN_HOOK_TICKS = 30; // a hook out for less than this can't have caught anything
+/** @type {Map<string, { hook: import("@minecraft/server").Entity, owner: Player, dim: string, at: import("@minecraft/server").Vector3, born: number, wet: boolean, gone?: number, item?: { id: string, tick: number } }>} */
 const hooks = new Map();
+
+/** @param {import("@minecraft/server").Dimension} dimension @param {import("@minecraft/server").Vector3} at */
+function isWater(dimension, at) {
+  try {
+    const b = dimension.getBlock(at);
+    return !!b && (b.typeId === "minecraft:water" || b.typeId === "minecraft:flowing_water" || b.isWaterlogged);
+  } catch {
+    return false; // unloaded
+  }
+}
+
+/** Did any player drop this item (it appears at their head, not at a hook)? @param {import("@minecraft/server").Dimension} dimension @param {import("@minecraft/server").Vector3} at */
+function droppedByPlayer(dimension, at) {
+  for (const p of dimension.getPlayers({ location: at, maxDistance: 3 })) {
+    try {
+      const head = p.getHeadLocation();
+      if (Math.hypot(head.x - at.x, head.y - at.y, head.z - at.z) < 1.2) return true;
+    } catch {
+      // gone
+    }
+  }
+  return false;
+}
+
+/** The player who cast a hook: the projectile's owner when the game says, else the nearest player. @param {import("@minecraft/server").Entity} hook */
+function hookOwner(hook) {
+  try {
+    const owner = hook.getComponent("minecraft:projectile")?.owner;
+    if (owner instanceof Player) return owner;
+  } catch {
+    // no projectile component on this hook
+  }
+  return hook.dimension.getPlayers({ location: hook.location, maxDistance: 4, closest: 1 })[0];
+}
+
+/** @param {Player} owner @param {string} item */
+function caught(owner, item) {
+  if (owner.isValid) progress(owner, "fish", item, 1);
+}
 
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
-      const [owner] = entity.dimension.getPlayers({ location: entity.location, maxDistance: 4, closest: 1 });
-      if (owner && wants(owner, "fish")) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick });
+      const owner = hookOwner(entity);
+      if (owner && wants(owner, "fish")) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, born: system.currentTick, wet: false });
       return;
     }
     if (entity.typeId !== "minecraft:item" || !hooks.size) return;
     const stack = entity.getComponent("minecraft:item")?.itemStack;
     if (!stack) return;
     const at = entity.location;
+    const now = system.currentTick;
     for (const [id, h] of hooks) {
       if (h.dim !== entity.dimension.id) continue;
-      if (Math.abs(h.at.x - at.x) > 3 || Math.abs(h.at.y - at.y) > 3 || Math.abs(h.at.z - at.z) > 3) continue;
-      // An item dropped from the inventory appears at the owner's head, not at the hook: dropping
-      // fish next to a hook close by isn't a catch.
-      if (h.owner.isValid) {
-        const head = h.owner.getHeadLocation();
-        if (Math.hypot(head.x - at.x, head.y - at.y, head.z - at.z) < 1) continue;
-      }
-      hooks.delete(id);
-      if (h.owner.isValid) progress(h.owner, "fish", stack.typeId, stack.amount);
-      break;
+      if (Math.hypot(h.at.x - at.x, h.at.y - at.y, h.at.z - at.z) > 3) continue;
+      if (!h.wet || now - h.born < MIN_HOOK_TICKS || droppedByPlayer(entity.dimension, at)) return;
+      if (h.gone !== undefined || !h.hook.isValid) {
+        hooks.delete(id);
+        if (now - (h.gone ?? now) <= CATCH_TICKS) caught(h.owner, stack.typeId);
+      } else h.item = { id: stack.typeId, tick: now };
+      return;
     }
   } catch (e) {
     console.warn(`[quests] ${e}`);
   }
 });
 
-// Follow live hooks, and forget them a second after they're gone (the catch appears as the hook goes).
+// Follow live hooks (and whether they reached water); once one is gone, the item that appeared with it is the catch.
 system.runInterval(() => {
   if (!hooks.size) return;
+  const now = system.currentTick;
   for (const [id, h] of hooks) {
-    if (h.hook.isValid) {
+    if (h.gone === undefined && h.hook.isValid) {
       try {
         h.at = h.hook.location;
-        h.seen = system.currentTick;
+        if (!h.wet && now % 4 === 0) h.wet = isWater(h.hook.dimension, h.at) || isWater(h.hook.dimension, { x: h.at.x, y: h.at.y - 0.5, z: h.at.z });
       } catch {
         // unloaded
       }
-    } else if (system.currentTick - h.seen > 20) hooks.delete(id);
+      continue;
+    }
+    if (h.gone === undefined) h.gone = now;
+    if (h.item && now - h.item.tick <= CATCH_TICKS) {
+      hooks.delete(id);
+      caught(h.owner, h.item.id);
+    } else if (now - h.gone > CATCH_TICKS) hooks.delete(id);
   }
-}, 2);
+}, 1);
 
 // Travel: distance moved each second; whole blocks are added every 5 seconds.
 /** @type {Map<string, { last?: { x: number, y: number, z: number, dim: string }, blocks: number, ticks: number }>} */

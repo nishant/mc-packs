@@ -22,7 +22,7 @@ const OPTIONS = [
   { key: "autoStore", type: "bool", scope: "world", label: "Auto-store pickups into other pages", help: "When a page is full, new stacks move to another page. Players can turn it off for themselves" },
   { key: "sneakTap", type: "enum", scope: "player", base: "sneakTap", choices: ["menu", "sort", "off"], names: ["Empty hand sorts, gear opens menu", "Sort it right away", "Nothing (opens as usual)"], label: "When I sneak-tap a container" },
   { key: "sortHotbar", type: "bool", scope: "player", base: "sortHotbar", label: "My inventory sort includes my hotbar" },
-  { key: "invOff", type: "bool", scope: "player", lock: [["pages", 1]], default: false, invert: true, label: "Expansive inventory (5 pages)", help: "Extra inventory pages and in-inventory buttons. Disabled: normal 27-slot inventory with no buttons (items on other pages move back to your inventory)" },
+  { key: "invOff", type: "bool", scope: "player", lock: [["pages", 1]], default: false, invert: true, label: "Expansive inventory (extra pages)", help: "Extra inventory pages and in-inventory buttons. Disabled: normal 27-slot inventory with no buttons (items on other pages move back to your inventory)" },
   { key: "invButtons", type: "bool", scope: "player", lock: [["pages", 1]], base: "invButtons", label: "In-inventory page buttons" },
   { key: "autoStore", type: "bool", scope: "player", lock: [["pages", 1]], base: "autoStore", label: "Auto-store pickups into other pages" },
 ];

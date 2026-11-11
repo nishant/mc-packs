@@ -45,8 +45,7 @@ You install them one of two ways. **Pick one and keep it**:
 
 World settings that matter:
 
-- **Daylight cycle on.** Story nights, festivals, the moon events and the Realm Calendar follow the in-game day.
-  With `doDaylightCycle` off, many story steps that wait for night or a time of day never finish.
+- **Daylight cycle on.** Festivals, moon events and the Realm Calendar still follow the in-game day, while story steps that wait for night or a time of day fall back to real time when the cycle is stopped.
 - Keep the world's spawn near where the town will be: some story steps (and the reminder to put a safe zone over it)
   start from world spawn.
 - A resource pack is needed for the HUD (minimap, side boxes), skies and rain. On BDS set
@@ -144,8 +143,8 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 
 These are the release's actual Large-preset limits, not measured performance approval. Champions use a world ceiling of 80 with 0.8 per online player and at most 3 nearby; saved non-default ceilings (such as the old Large value 16) remain until an operator reapplies the preset or changes the setting. A world using the old unstored default 8 automatically adopts the new scaling default.
 
-Measured with 40 simulated players, Large server took the whole bundle from 9.5 to 8.3 ms a tick (the Minimap from
-3.8 to 2.9 ms). Pick Small Realm again to put every value back. Each value can still be changed on its own in
+In an earlier measurement with 40 simulated players, Large server took the whole bundle from 9.5 to 8.3 ms a tick (the Minimap from
+3.8 to 2.9 ms); that was over the 5 ms goal, since fixed, see Latest measurements. Pick Small Realm again to put every value back. Each value can still be changed on its own in
 `/realm:config`.
 
 ## Performance
@@ -178,11 +177,11 @@ client FPS or all of the server's CPU. Every figure in this table and the two bu
 | 10 | 6.6 | 4.9 |
 | 40 | 9.4 | 8.0 |
 
-- **At 40 players the packs are over the 5 ms goal** (about 8 ms a tick, 15% less than before). This is open: the
-  goal stays, and the packs keep getting cheaper wherever a measurement shows a gain.
-- The Minimap is the largest part, 3.7 ms against its 1 ms budget. Over the 0.15 ms typical-pack budget: Easy
-  Building 0.57, Quick Stack & Sort 0.31, Silly Enchants 0.28, Elytra HUD 0.23, Story Questlines 0.23, Stats 0.21,
-  Realm Configuration 0.18 and Realm Calendar 0.15.
+- **At 40 players the packs were over the 5 ms goal** in mid-October (about 8 ms a tick, 15% less than before); that
+  was over the goal, since fixed, see Latest measurements.
+- The Minimap was the largest part then, 3.7 ms against its 1 ms budget. Over the 0.15 ms typical-pack budget at the
+  time: Easy Building 0.57, Quick Stack & Sort 0.31, Silly Enchants 0.28, Elytra HUD 0.23, Story Questlines 0.23,
+  Stats 0.21, Realm Configuration 0.18 and Realm Calendar 0.15.
 - **A separate, shorter run** (a 4-core Linux test machine, an earlier build of these fixes, 5-minute steady window):
   the Realm Bundle running as one pack took about 4.8 ms a tick at 10 players, under the goal. It is not the same
   setup as the table, so do not compare the two directly.
@@ -217,7 +216,7 @@ October 2026. "ms a tick" is script time in the packs' callbacks; a server has 5
 
 - **`/realm:diag [seconds]`** (operators; also **Operator Tools > Pack diagnostics**) measures every pack's script
   time for a few seconds (default 10, up to 60) and lists the packs slowest first, with version, ms per tick and saved
-  data. Red means over 0.5 ms a tick, or one saved entry over 24 KB (an entry can hold 32 KB). A pack's page shows its
+  data. Red means over 0.15 ms a tick (1 ms for the Minimap and Realm HUD, `map_bp` and `hud_bp`), or one saved entry over 24 KB (an entry can hold 32 KB). A pack's page shows its
   two costliest callbacks. Packs listed under **No answer** are older versions without diagnostics.
 - **Turning a feature off:** most packs have an **Enabled** switch in `/realm:config`, and their costly parts their
   own settings (the Minimap's budget, ranges, intervals). That keeps the pack installed and its data safe.

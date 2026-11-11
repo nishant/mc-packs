@@ -8,8 +8,12 @@ import { ActionFormData, MessageFormData } from "@minecraft/server-ui";
 import { onScriptEvent } from "./script-events.js";
 
 const TITLE = "Realm Configuration";
-/** Over this many ms per tick a pack is over budget (a typical pack needs 0.15 or less). */
-export const BUDGET_MS = 0.5;
+/** Over this many ms per tick a pack is over budget (a typical pack needs 0.15 or less); the Minimap and Realm HUD get HEAVY_MS. */
+export const HEAVY = new Set(["map_bp", "hud_bp"]);
+export const HEAVY_MS = 1;
+export const BUDGET_MS = 0.15;
+/** @param {string} pack */
+export const budgetOf = (pack) => (HEAVY.has(pack) ? HEAVY_MS : BUDGET_MS);
 /** One saved entry over this is close to Bedrock's 32 KB limit for one property. */
 export const BIG_BYTES = 24 * 1024;
 /** How long packs get to answer once the profiling window is over. */
@@ -88,7 +92,7 @@ const kb = (bytes) => (bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${by
 /** @param {number | undefined} mpt */
 const msText = (mpt) => `${(mpt ?? 0).toFixed(2)} ms/tick`;
 /** @param {Pong} p */
-const over = (p) => (p.mpt ?? 0) > BUDGET_MS;
+const over = (p) => (p.mpt ?? 0) > budgetOf(p.pack);
 /** @param {Pong} p */
 const big = (p) => (p.big ?? 0) > BIG_BYTES;
 /** @param {unknown} s */
@@ -167,7 +171,7 @@ async function listPage(player, ctx, got, expected, secs, back) {
   const form = new ActionFormData().title("Pack diagnostics");
   const ticks = list[0]?.ticks ?? secs * 20;
   let body = `Script time per pack over ${(ticks / 20).toFixed(1)} s with ${world.getAllPlayers().length} online: ${total.toFixed(2)} ms/tick for all ${list.length} packs (a tick has 50 ms).`;
-  body += `\n§cRed§r: over budget (more than ${BUDGET_MS} ms/tick), or one saved entry over ${BIG_BYTES / 1024} KB (the limit is 32 KB).`;
+  body += `\n§cRed§r: over budget (more than ${BUDGET_MS} ms/tick, ${HEAVY_MS} ms for the Minimap and Realm HUD), or one saved entry over ${BIG_BYTES / 1024} KB (the limit is 32 KB).`;
   if (flagged) body += ` ${flagged} pack${flagged === 1 ? " is" : "s are"} red.`;
   const shared = list.find((p) => (p.shared ?? 0) > 1);
   if (shared) {

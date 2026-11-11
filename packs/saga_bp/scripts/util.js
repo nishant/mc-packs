@@ -51,8 +51,11 @@ export function compass(dx, dz) {
 /** Text without § codes. @param {string} s */
 export const plain = (s) => s.replace(/§./g, "");
 
-/** 1234 -> "1,234". @param {number} n */
-export const num = (n) => Math.round(n).toLocaleString("en-US");
+/** 1234 -> "1,234", -1234 -> "-1,234" (toLocaleString has no separators in the game). @param {number} n */
+export const num = (n) => {
+  const r = Math.round(n);
+  return (r < 0 ? "-" : "") + String(Math.abs(r)).replace(/\B(?=(\d{3})+$)/g, ",");
+};
 
 /** Seconds as "1:05", or "3 min" / "2 h" when long. @param {number} s */
 export function clock(s) {

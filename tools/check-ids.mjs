@@ -30,6 +30,19 @@ const ALLOW_FILE = join(root, "tools", "check-ids.allow.json");
 const listAll = process.argv.includes("--list");
 
 /** @type {any} */
+/** The installed @minecraft/vanilla-data version, else the root package.json spec. */
+function vanillaVersion() {
+  try {
+    return JSON.parse(readFileSync(join(root, "node_modules", "@minecraft", "vanilla-data", "package.json"), "utf8")).version;
+  } catch {
+    try {
+      const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+      return pkg.dependencies?.["@minecraft/vanilla-data"] ?? pkg.devDependencies?.["@minecraft/vanilla-data"] ?? "?";
+    } catch {
+      return "?";
+    }
+  }
+}
 let vanilla;
 try {
   vanilla = await import("@minecraft/vanilla-data");
@@ -303,5 +316,5 @@ if (problems.length) {
   if (!listAll) console.error(`(a known one waiting for a fix goes in ${rel(ALLOW_FILE)})`);
   process.exit(1);
 }
-console.log(`Game ids: ${files} files checked against @minecraft/vanilla-data 1.26.52 and ${OURS.size} ids of our own packs${allowed ? ` (${allowed} known in ${rel(ALLOW_FILE)})` : ""}.`);
+console.log(`Game ids: ${files} files checked against @minecraft/vanilla-data ${vanillaVersion()} and ${OURS.size} ids of our own packs${allowed ? ` (${allowed} known in ${rel(ALLOW_FILE)})` : ""}.`);
 }

@@ -16,7 +16,7 @@ export const DEFAULTS = {
   /** Popup title bar. */
   title: "§l§6Welcome!",
 
-  /** Popup body text. Empty here: the default is built from the installed packs (see WELCOME below and main.js). */
+  /** Popup body text. Empty here: the default is built from the installed packs (see GENERIC below and main.js). */
   body: "",
   /** Text on the close button. */
   button: "§lClose",
@@ -39,7 +39,6 @@ export const DEFAULTS = {
  * what the installed packs (pack folder -> line) really add, and no spoilers: nothing past the first day of the story.
  */
 export const GENERIC = {
-  title: "§l§6Welcome!",
   heading: { world: "The World", features: "What You Can Do", next: "Where To Go Next" },
   greeting: "Hey §b{player}§r, glad you're here! §7({online} online)§r",
   /** With Story Questlines: the story's first day (docs/STORY_BIBLE.md, section 1). */

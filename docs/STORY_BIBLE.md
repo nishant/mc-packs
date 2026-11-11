@@ -74,7 +74,7 @@ The main story tracks three player-wide flags (global, so side quests can read t
 
 | Flag | Values | Set by | Pays off |
 |---|---|---|---|
-| `g:heart` | a running tally of `mercy` vs `iron` choices, stored as the last major choice plus counters `g:mercy` / `g:iron` (`"1"`..`"9"`) | Choices across the main acts and many side quests | Which ending choices are offered, epilogue text, the Herald's last words |
+| `g:mercy` / `g:iron` | two counters of the player's `mercy` and `iron` choices (`"1"`..`"9"`), compared with `>=` / `<=` in `when` | Choices across the main acts and many side quests | Which ending choices are offered, epilogue text, the Herald's last words |
 | `g:hollis` | `saved` / `lost` | Act II and Act III choices about Brother Hollis | Whether Hollis lives, helps in the finale, or becomes a second boss |
 | `g:quill` | `trusted` / `exposed` | Act II (Quill's double life) and Quill's side story | Quill brings smuggled allies to Lantern Night, or the Choir has a spy |
 
@@ -336,7 +336,7 @@ Tones: epic, heroic, violent, sad, scary. ~8 chapters plus epilogues.
    Hollis (saved). Each ally adds a short scene. Without them, harder `defend`.
 3. **The Long Night** — `defend` the town (lighthouse) from four waves; Blood Moon tone.
 4. **Through the Gate** — enter `hollow_gate`, `stealth` past the Choir's last circle or fight
-   (`defeat` 30) depending on `g:heart`.
+   (`defeat` 30) depending on the `g:mercy` / `g:iron` counters.
 5. **The Herald** — boss: Brother Ashgrave (champion drowned with adds, 3 phases written as three
    `defeat` objectives with champion stages). If `g:hollis=lost`, a corrupted Hollis fights first.
 6. **The Choice** — the endings (section 3), shown as choices whose availability depends on flags
@@ -350,6 +350,8 @@ Tones: epic, heroic, violent, sad, scary. ~8 chapters plus epilogues.
 
 The outline was the plan; the story files in `packs/saga_bp/scripts/stories/` are the truth. Where
 they differ (October 2026):
+
+- **No `g:heart` flag.** The main story keeps the `g:mercy` / `g:iron` counters instead (see section 3); RPG_DESIGN.md (the Saga notes near line 16) lists the real gates.
 
 - **Act I** has 10 chapters: *The Skipping Song* (`rhyme`) comes third. The Report or Pursue flag is
   `act1:path` (`report` / `alone`), a flag of story `act1_signs`; other stories read it as

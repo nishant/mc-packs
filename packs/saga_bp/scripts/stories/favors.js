@@ -405,6 +405,7 @@ export const FAVORS = [
   {
     id: "hollis_wax",
     npc: "hollis",
+    when: { "g:hollis": "!lost" },
     label: "Wax for Candles",
     objective: { type: "deliver", label: "Bring Hollis 6 honeycomb", npc: "hollis", item: "minecraft:honeycomb", count: 6 },
     reward: { levels: 2, crowns: 25, items: [{ item: "minecraft:candle", amount: 2 }] },
@@ -416,6 +417,7 @@ export const FAVORS = [
   {
     id: "hollis_vigil",
     npc: "hollis",
+    when: { "g:hollis": "!lost" },
     label: "Sit With the Dead",
     objective: { type: "vigil", label: "Sit a quiet vigil at the Old Graveyard at dusk", place: "graveyard", radius: 20, seconds: 60, timeOfDay: [12000, 14000] },
     reward: { levels: 2, crowns: 25 },
@@ -427,6 +429,7 @@ export const FAVORS = [
   {
     id: "hollis_alms",
     npc: "hollis",
+    when: { "g:hollis": "!lost" },
     label: "Bread for the Hungry",
     objective: { type: "deliver", label: "Bring Hollis 10 bread", npc: "hollis", item: "minecraft:bread", count: 10 },
     reward: { levels: 1, crowns: 30 },
@@ -438,6 +441,7 @@ export const FAVORS = [
   {
     id: "hollis_lights",
     npc: "hollis",
+    when: { "g:hollis": "!lost" },
     label: "Light the Path",
     objective: { type: "place", label: "Place 6 torches or lanterns at the Old Graveyard", blocks: ["minecraft:torch", "minecraft:lantern", "minecraft:soul_torch", "minecraft:soul_lantern"], count: 6, place: "graveyard", radius: 24 },
     reward: { levels: 2, crowns: 30 },

@@ -1826,7 +1826,7 @@ test("F4 recover: a stack moved into armor or the offhand since counts as carrie
   p.container.setItem(22, undefined);
   mc.formResponses.set(op.id, [{ selection: 0 }]);
   const message = await pages.recoverInventory(op, p);
-  assert.match(message, /Exported 1 stacks/, message);
+  assert.match(message, /Exported 1 stack into/, message);
   assert.deepEqual(chestContents(dim), ["diamond:3"], "nothing worn is copied");
   p.worn = undefined;
 });
@@ -1846,8 +1846,8 @@ test("F4 recover: a tool kept but used since is listed as changed and exported o
     const message = await pages.recoverInventory(op, p);
     const shown = mc.forms.filter((f) => f.player === op).at(-1).form.text;
     assert.match(shown, /used, renamed, enchanted or dyed since[^]*1 x Diamond pickaxe/i, shown);
-    assert.match(shown, /these 1 are no longer/, "only the diamonds are listed as missing");
-    assert.match(message, /Exported \d+ stacks/, message);
+    assert.match(shown, /this one is no longer/, "only the diamonds are listed as missing");
+    assert.match(message, /Exported \d+ stacks?/, message);
     if (choice === 0) assert.deepEqual(chestContents(dim), ["diamond:3"], "the kept pickaxe is not copied by default");
     else assert.deepEqual(chestContents(dim), ["diamond:3", "diamond_pickaxe:1"], "the operator chose to export it too");
     assert.equal(nativeIndex(p).pending, undefined);
@@ -1901,7 +1901,7 @@ test("F4 recover: the confirm form is retried while the operator's chat is still
     advance(1);
   }
   const message = await run;
-  assert.match(message, /Exported 1 stacks/, message);
+  assert.match(message, /Exported 1 stack into/, message);
   assert.equal(mc.forms.filter((f) => f.player === op).length, 3, "shown again after each UserBusy");
   assert.deepEqual(chestContents(dim), ["diamond:3"]);
 });

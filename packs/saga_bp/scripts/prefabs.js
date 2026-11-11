@@ -115,7 +115,7 @@ export const PREFABS = {
  */
 export const CAMPS = {
   camp_road: { label: "Road Camp", size: { x: 7, y: 6, z: 7 }, below: 1, site: "land", minDist: 0, maxDist: 100000, slope: 3, features: { actor: v(0, 1, -2), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
-  camp_peak: { label: "Peak Camp", size: { x: 7, y: 6, z: 7 }, below: 1, site: "land", minDist: 0, maxDist: 100000, slope: 4, features: { actor: v(0, 1, -2), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
+  camp_peak: { label: "Peak Camp", size: { x: 7, y: 7, z: 7 }, below: 2, site: "land", minDist: 0, maxDist: 100000, slope: 4, features: { actor: v(0, 1, -2), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
   camp_ruin: { label: "Ruin Camp", size: { x: 7, y: 6, z: 7 }, below: 1, site: "land", minDist: 0, maxDist: 100000, slope: 3, features: { actor: v(0, 1, -1), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
   camp_deep: { label: "Deep Camp", size: { x: 7, y: 6, z: 7 }, below: 1, site: "deep", minDist: 0, maxDist: 100000, features: { actor: v(0, 1, -1), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
 };
@@ -163,6 +163,29 @@ export function footprint(name, origin, facing) {
     min: { x: origin.x + Math.min(a.x, b.x), y: y0, z: origin.z + Math.min(a.z, b.z) },
     max: { x: origin.x + Math.max(a.x, b.x), y: y0 + info.size.y - 1, z: origin.z + Math.max(a.z, b.z) },
   };
+}
+
+/** Tag on every entity a prefab spawns, so removing the build can find them again. */
+export const PREFAB_TAG = "saga:prefab";
+
+/**
+ * Removes the entities a prefab spawned (tagged PREFAB_TAG) inside its footprint. Call it before or after
+ * restoring the terrain on Remove or relocate. Never throws: the chunk may be unloaded.
+ * @param {string} name @param {Dimension} dimension @param {V3} origin @param {number} facing @returns {number} how many were removed
+ */
+export function clearEntities(name, dimension, origin, facing) {
+  let n = 0;
+  try {
+    const { min, max } = footprint(name, origin, facing);
+    const found = dimension.getEntities({ tags: [PREFAB_TAG], location: { x: min.x, y: min.y, z: min.z }, volume: { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 } });
+    for (const en of found) {
+      try {
+        en.remove();
+        n++;
+      } catch {}
+    }
+  } catch {}
+  return n;
 }
 
 const NAMES = ["north", "east", "south", "west"];
@@ -304,7 +327,7 @@ class Plan {
     /** @type {Map<string, Entry>} */
     this.m = new Map();
     this.r = rng(seed);
-    /** @type {{ type: string, at: V3 }[]} */
+    /** @type {{ type: string, at: V3, tag?: string }[]} */
     this.entities = [];
   }
   /** @param {number} x @param {number} y @param {number} z @param {Spec} spec @param {number} [k] */
@@ -984,7 +1007,7 @@ const BUILD = {
     p.set(3, 1, -6, barrel("w"));
     for (let y = 1; y <= 2; y++) p.set(-3, y, -5, "spruce_fence");
     p.set(-3, 3, -5, lantern());
-    p.entities.push({ type: "minecraft:minecart", at: v(0, 1, -6) });
+    p.entities.push({ type: "minecraft:minecart", at: v(0, 1, -6), tag: PREFAB_TAG });
     // the bottom room and the sealed tunnel
     const deep = mix(["stone", 2], ["cobbled_deepslate", 2], ["deepslate", 2], ["tuff", 1]);
     p.box(-3, -8, 4, 3, -4, 8, deep);
@@ -1331,7 +1354,7 @@ function connect(p) {
 
 /**
  * The build's blocks in placing order, in local coordinates (facing 0).
- * @param {string} name @param {V3} origin @returns {{ entries: Entry[], entities: { type: string, at: V3 }[] }}
+ * @param {string} name @param {V3} origin @returns {{ entries: Entry[], entities: { type: string, at: V3, tag?: string }[] }}
  */
 export function blueprint(name, origin) {
   const p = new Plan(hash(`${name}:${origin.x},${origin.y},${origin.z}`));
@@ -1512,7 +1535,10 @@ export function* buildSteps(name, dimension, origin, facing, opts = {}) {
       const o = rotate(en.at, f);
       const at = { x: origin.x + o.x + 0.5, y: origin.y + en.at.y, z: origin.z + o.z + 0.5 };
       try {
-        if (!dimension.getEntities({ type: en.type, location: at, maxDistance: 3 }).length) dimension.spawnEntity(/** @type {any} */ (en.type), at);
+        if (!dimension.getEntities({ type: en.type, location: at, maxDistance: 3 }).length) {
+          const spawned = dimension.spawnEntity(/** @type {any} */ (en.type), at);
+          if (en.tag) spawned.addTag(en.tag);
+        }
       } catch {
         skipped++;
       }

@@ -45,7 +45,8 @@ for (const folder of packs) {
   if (!/^### How to use\s*$/m.test(section)) problems.push(`${folder}: no "### How to use" section`);
 
   for (const name of registeredNames(join(root, "packs", folder)).commands) {
-    if (!section.includes(`\`/${name}`)) problems.push(`${folder}: command \`/${name}\` not documented`);
+    // The name must end there: `/foo` does not document `/foobar`.
+    if (!new RegExp("`/" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w])").test(section)) problems.push(`${folder}: command \`/${name}\` not documented`);
   }
 
   const config = join(scripts, "config.js");

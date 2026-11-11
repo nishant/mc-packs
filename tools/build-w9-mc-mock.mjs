@@ -59,6 +59,7 @@ export class ItemStack {
 export const EquipmentSlot = { Mainhand: "Mainhand" };
 export const GameMode = { Survival: "Survival", Creative: "Creative", Adventure: "Adventure", Spectator: "Spectator" };
 export const CommandPermissionLevel = { GameDirectors: 3 };
+export const ScriptEventSource = { Block: "Block", Entity: "Entity", NPCDialogue: "NPCDialogue", Server: "Server" };
 export const CustomCommandStatus = { Success: 0, Failure: 1 };
 let resolveCalls = 0;
 export function resolveCount() { return resolveCalls; }

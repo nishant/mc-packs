@@ -1070,7 +1070,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:skills_calling",
-      description: "Skills: your Calling (from a total skill level of 75): choose one, spend talent points, get the Calling Sigil",
+      description: "Skills: your Calling (once your skill levels add up high enough, 75 by default): choose one, spend talent points, get the Calling Sigil",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },

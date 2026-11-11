@@ -77,6 +77,25 @@ const OTHERS = "*";
 const SAVE_LIMIT = 30000;
 
 /**
+ * Retries a failed save on the next tick, up to `left` more times, so the cache and the property agree again.
+ * @param {Goal} g @param {number} left
+ */
+function retrySave(g, left) {
+  if (left <= 0) {
+    console.warn(`[goals] gave up saving ${g.id}; the cache holds progress that is not on disk`);
+    return;
+  }
+  system.run(() => {
+    try {
+      save(g);
+    } catch (e) {
+      console.warn(`[goals] save retry for ${g.id} failed (${left - 1} left): ${e}`);
+      retrySave(g, left - 1);
+    }
+  });
+}
+
+/**
  * Saves the goal. One with so many contributors that it would pass the property's limit (hundreds, on a big server)
  * keeps the biggest by name and adds the smallest up under "Others", so its total and top list stay right.
  * @param {Goal} g
@@ -270,7 +289,13 @@ function donate(player, id) {
     const mine = g.c[player.id];
     g.c[player.id] = [player.name, (mine?.[1] ?? 0) + moved];
     announce(g, player);
-    save(g);
+    try {
+      save(g);
+    } catch (e) {
+      console.warn(`[goals] donate: could not save ${g.id}: ${e}`);
+      player.sendMessage("§cYour gift is in the chest, but progress could not be saved yet; it will be retried.");
+      retrySave(g, 5);
+    }
     player.sendMessage(`§aYou gave ${fmt(moved)} ${itemName(g.item)} to ${g.n}. §7Now ${fmt(g.got)} / ${fmt(g.target)} (${pct(g)} percent).`);
     player.playSound("random.orb", { pitch: 1.3, volume: 0.6 });
   }

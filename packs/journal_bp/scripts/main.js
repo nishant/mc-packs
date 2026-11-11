@@ -341,7 +341,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 });
 
 // ---------------------------------------------------------------------------
-// Places and weather: each player every 2 seconds, a few block lookups
+// Places and weather: each player every 4 seconds (80 ticks, one share), a few block lookups
 // ---------------------------------------------------------------------------
 
 /** @type {WeatherType} */
@@ -425,7 +425,7 @@ function explore(player, spawn) {
   if (overworld) {
     far = Math.floor(Math.hypot(loc.x - spawn.x, loc.z - spawn.z));
     if (data.far === undefined || far > data.far + 9) {
-      // saved in steps of 10 blocks, so walking away doesn't save every 2 seconds
+      // saved in steps of 10 blocks, so walking away doesn't save every 4 seconds
       data.far = far;
       changed = true;
     }
@@ -550,6 +550,17 @@ function droppedByPlayer(dimension, at) {
   return false;
 }
 
+/** The player who cast a hook: the projectile's owner when the game says, else the nearest player. @param {import("@minecraft/server").Entity} hook */
+function hookOwner(hook) {
+  try {
+    const owner = hook.getComponent("minecraft:projectile")?.owner;
+    if (owner instanceof Player) return owner;
+  } catch {
+    // no projectile component on this hook
+  }
+  return hook.dimension.getPlayers({ location: hook.location, maxDistance: 4, closest: 1 })[0];
+}
+
 /** @param {Player} owner @param {string} item */
 function caught(owner, item) {
   const fish = fishItems.get(item);
@@ -560,7 +571,7 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
       if (get("enabled") !== true) return;
-      const [owner] = entity.dimension.getPlayers({ location: entity.location, maxDistance: 4, closest: 1 });
+      const owner = hookOwner(entity);
       if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, born: system.currentTick, wet: false });
       return;
     }

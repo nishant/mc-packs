@@ -693,6 +693,8 @@ NPC birthdays (section 2) use this calendar.
 
 ## Minimap (as shipped, `map_bp` 1.0.0 + Side HUD 1.2.0, October 2026)
 
+**As shipped (later):** the minimap now draws terrain, the radar is circular and 33 x 33 (not 7 x 7), and it keeps to budget levels (`budgetLevel`). Everything below, including the 1.0.0 radar size and costs, is history from the first release; see PACKS.md (Minimap) for the current behavior.
+
 - What was asked: region names, a destination marker, NPCs, the player and their heading, and red dots for mobs.
   Scripts can't draw on the HUD or on map items, so it's three parts: Bedrock's own locator map for the land
   (`/realm:map` gives "Mara's Field Map", `give @s minecraft:empty_map 1 2` then named; held in the offhand), a
@@ -713,7 +715,7 @@ NPC birthdays (section 2) use this calendar.
   with `npc` for a townsfolk to talk to; computed every 2 s for every player with a story, shown or not). Saga's
   `realm:place_ready` for camps carries `label`. Parties needed nothing (the `realm_party:` tag); wanderers
   needed nothing: road wanderers show only after a non-hostile `realm:wander_spawn`, camps always.
-- Not done: no drawn terrain; no story places other than camps on the strip; JSON UI layout and glyph size
+- Not done in 1.0.0 (terrain was added later, see above): no drawn terrain; no story places other than camps on the strip; JSON UI layout and glyph size
   unseen in a client (BDS draws no HUD); the locator map's data value can't be read back by scripts.
-- Cost: 0.39 ms per player pass (10 players, strip and radar on, 24 mobs; includes the test harness's title
+- Cost (1.0.0, history): 0.39 ms per player pass (10 players, strip and radar on, 24 mobs; includes the test harness's title
   relay), 0.25-0.3 ms without the title. Scenario: `tools/test-bds/examples/map.js`.

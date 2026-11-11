@@ -37,7 +37,7 @@ function fakeServer() {
     runJob(gen) { queue.push({ at: tick + 1, fn: () => { for (const _ of gen); } }); return 1; }
     sendScriptEvent(id, message) {
       sent.push({ id, message });
-      queue.push({ at: tick + 1, fn: () => { for (const cb of [...system.afterEvents.scriptEventReceive.subs]) cb({ id, message }); } });
+      queue.push({ at: tick + 1, fn: () => { for (const cb of [...system.afterEvents.scriptEventReceive.subs]) cb({ id, message, sourceType: ScriptEventSource.Server }); } });
     }
   }
   class World {
@@ -50,6 +50,8 @@ function fakeServer() {
     getAllPlayers() { return this.players; }
   }
   class CustomCommandRegistry { registerCommand() {} }
+  const ScriptEventSource = { Block: "Block", Entity: "Entity", NPCDialogue: "NPCDialogue", Server: "Server" };
+  const CommandPermissionLevel = { Any: 0, GameDirectors: 1, Admin: 2, Host: 3, Owner: 4 };
   const system = new System();
   system.afterEvents = { scriptEventReceive: signal() };
   system.beforeEvents = { startup: signal() };
@@ -67,7 +69,7 @@ function fakeServer() {
       }
     }
   };
-  return { System, World, CustomCommandRegistry, system, world, step, sent };
+  return { System, World, CustomCommandRegistry, ScriptEventSource, CommandPermissionLevel, system, world, step, sent };
 }
 
 let n = 0;
@@ -122,7 +124,7 @@ async function setup({ ids, failDelete = [], keepAfterDelete = [], failList = fa
   mkdirSync(join(dir, "expedition_bp"), { recursive: true });
   const id = n++;
   const file = join(dir, "expedition_bp", `diag${id}.js`);
-  writeFileSync(join(dir, "expedition_bp", `diag-core${id}.js`), diagCoreSource.replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;"));
+  writeFileSync(join(dir, "expedition_bp", `diag-core${id}.js`), diagCoreSource.replace(/^import .* from "@minecraft\/server";$/m, "const { CommandPermissionLevel, CustomCommandRegistry, ScriptEventSource, System, World, system, world } = globalThis.__mcFake;"));
   writeFileSync(file, diagSource.replace("./diag-core.js", `./diag-core${id}.js`));
   await import(pathToFileURL(file).href);
   mc.step(1);

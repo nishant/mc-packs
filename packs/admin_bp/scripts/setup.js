@@ -166,6 +166,8 @@ export async function facts(ctx, player, withSize = false) {
       system.sendScriptEvent("realm:waystones_known_ping", JSON.stringify({ player: player.id }));
       if (withSize) system.sendScriptEvent("realm:cfg_ping", JSON.stringify({ id }));
       await system.waitTicks(ctx.answerTicks());
+      // a long answer comes in parts: wait once more if a pack said more parts are coming (as sizeOptions does)
+      if ((folkParts > 0 && folk.size < folkParts) || (wayParts > 0 && ways.size < wayParts)) await system.waitTicks(ctx.answerTicks());
     }
   );
   const values = new Map([...schemas].flatMap(([pack, parts]) => [...parts.values()].flat().map((o) => [`${pack}:${o.key}`, o])));
@@ -498,6 +500,9 @@ export async function sizePage(ctx, player, back) {
   return applySize(ctx, player, size.id, opts, back);
 }
 
+/** How long a server size waits for every setting to be acknowledged (ticks). */
+export const ACK_TICKS = 100;
+
 /**
  * Shows every change of a profile and applies them after a confirmation.
  * @param {Ctx} ctx @param {Player} player @param {"small" | "large"} id @param {Awaited<ReturnType<typeof sizeOptions>>} opts @param {(() => Promise<unknown>) | undefined} back
@@ -548,14 +553,18 @@ async function applySize(ctx, player, id, opts, back) {
     },
     async () => {
       for (const c of changes) system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: req, pack: c.pack, key: c.key, value: c.to }));
-      for (let t = 0; t < ctx.answerTicks() * 2 && acks.size < changes.length; t++) await system.waitTicks(1);
+      for (let t = 0; t < ACK_TICKS && acks.size < changes.length; t++) await system.waitTicks(1);
     }
   );
-  const ok = changes.filter((c) => acks.get(`${c.pack}:${c.key}`)?.ok);
-  const failed = changes.filter((c) => !acks.get(`${c.pack}:${c.key}`)?.ok);
-  if (ok.length) save((s) => void (s.size = id));
+  const ackOf = (/** @type {Change} */ c) => acks.get(`${c.pack}:${c.key}`);
+  const ok = changes.filter((c) => ackOf(c)?.ok);
+  const failed = changes.filter((c) => ackOf(c) && !ackOf(c).ok);
+  const silent = changes.filter((c) => !ackOf(c));
+  // saved only when every change was acknowledged as applied, so the checklist does not mark Server size done early
+  if (ok.length === changes.length) save((s) => void (s.size = id));
   if (!alive(player, gen)) return;
-  player.sendMessage(`§6[${TITLE}] §rServer size: ${size.title}. Changed ${ok.length} setting${ok.length === 1 ? "" : "s"}${failed.length ? `; §c${failed.length} didn't change§r (${failed.map((c) => `${c.title}: ${c.label}: ${acks.get(`${c.pack}:${c.key}`)?.error ?? "no answer"}`).join("; ")})` : ""}.`);
+  const why = (/** @type {Change} */ c) => `${c.title}: ${c.label}: ${ackOf(c)?.error ?? "no answer yet"}`;
+  player.sendMessage(`§6[${TITLE}] §rServer size: ${size.title}. Changed ${ok.length} setting${ok.length === 1 ? "" : "s"}${failed.length ? `; §c${failed.length} didn't change§r (${failed.map(why).join("; ")})` : ""}${silent.length ? `; §e${silent.length} no answer yet§r (${silent.map(why).join("; ")})` : ""}.${ok.length < changes.length ? ` Server size is not saved as done: check Realm Settings, then apply it again.` : ""}`);
   return back?.();
 }
 

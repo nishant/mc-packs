@@ -789,11 +789,20 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       cheatsRequired: false,
       mandatoryParameters: [{ name: "realm:sidebar_stat", type: CustomCommandParamType.Enum }],
     },
-    (_origin, /** @type {string} */ choice) => {
+    (origin, /** @type {string} */ choice) => {
+      const who = origin.initiator ?? origin.sourceEntity;
       system.run(() => {
         // Saved where /realm:config keeps it; the change listener shows it (again, if something else took the slot).
         const error = set("sidebar", choice);
-        if (error) console.warn(`[stats] sidebar ${choice}: ${error}`);
+        if (error) {
+          console.warn(`[stats] sidebar ${choice}: ${error}`);
+          // The command has already answered by now, so the initiating player is told here.
+          try {
+            if (who instanceof Player && who.isValid) who.sendMessage(`§cSidebar not changed: ${error}`);
+          } catch {
+            // the player left
+          }
+        }
       });
       return { status: CustomCommandStatus.Success, message: `Sidebar: ${choice}` };
     }

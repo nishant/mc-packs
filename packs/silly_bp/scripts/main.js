@@ -364,6 +364,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   lastSneak.delete(playerId);
   lastPos.delete(playerId);
   flights.delete(playerId);
+  lastGround.delete(playerId);
   wasJumping.delete(playerId);
   cooldowns.delete(playerId);
 });
@@ -574,6 +575,7 @@ function jumpTick() {
     const g = gear.get(p.id);
     if (!g || !g.feet.has("hyper_jump")) continue;
     try {
+      if (p.isOnGround) lastGround.set(p.id, system.currentTick);
       const jumping = p.isJumping; // no isValid first (see the ambient loop): one who left throws here
       const rising = jumping && !wasJumping.get(p.id);
       wasJumping.set(p.id, jumping);
@@ -591,9 +593,13 @@ function jumpTick() {
  * @type {Map<string, { start: number, until: number, cushion: boolean, rose: boolean }>}
  */
 const flights = new Map();
+/** The last tick each player was seen on the ground: Hyper Jump needs it within 2 ticks. @type {Map<string, number>} */
+const lastGround = new Map();
 
 /** @param {Player} p @param {boolean} quiet no "recharging" note @returns {boolean} true if it bounced */
 export function hyperJump(p, quiet) {
+  if (p.isOnGround) lastGround.set(p.id, system.currentTick);
+  if (flights.has(p.id) || system.currentTick - (lastGround.get(p.id) ?? -1000) > 2) return false; // mid-flight or mid-air: no re-launch
   const cd = Math.max(1, Math.floor(Number(get("hyperJumpCooldownSeconds")) || 4)) * 20;
   if (!ready(p, "hyper_jump", cd)) {
     if (!quiet && (cooldowns.get(p.id)?.get("hyper_jump") ?? 0) - system.currentTick < cd - 5) {
@@ -779,6 +785,7 @@ function hatTrick(p, at) {
   if (!ready(p, "hat_trick", Math.max(1, Number(CONFIG.hatTrickCooldownSeconds) || 10) * 20)) return;
   const rabbit = p.dimension.spawnEntity("minecraft:rabbit", at, { spawnEvent: "minecraft:entity_born" });
   rabbit.addTag(RABBIT_TAG);
+  liveRabbits++;
   rabbit.setDynamicProperty(PROP_RABBIT_UNTIL, Date.now() + Math.max(2, Number(CONFIG.hatTrickRabbitSeconds) || 10) * 1000);
   particle(p.dimension, "minecraft:villager_happy", at);
   particle(p.dimension, "minecraft:white_smoke_particle", at);
@@ -788,9 +795,14 @@ function hatTrick(p, at) {
   if (Math.random() < 0.5) sound(p.dimension, "random.levelup", at, 0.8, 2); // ta-da
 }
 
-// Hat Trick rabbits vanish on time, even after a chunk reload.
+// Hat Trick rabbits vanish on time, even after a chunk reload. liveRabbits counts the ones known to be alive:
+// while it is 0 the 40-tick sweep is skipped. A sweep resets it to what it found; one runs soon after world
+// load (liveRabbits starts at 1) to catch rabbits left from before a restart.
+let liveRabbits = 1;
 system.runInterval(() => {
+  if (liveRabbits <= 0) return;
   const now = Date.now();
+  let alive = 0;
   for (const id of ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"]) {
     let list;
     try {
@@ -801,7 +813,10 @@ system.runInterval(() => {
     for (const r of list) {
       try {
         const until = r.getDynamicProperty(PROP_RABBIT_UNTIL);
-        if (typeof until === "number" && until > now) continue;
+        if (typeof until === "number" && until > now) {
+          alive++;
+          continue;
+        }
         particle(r.dimension, "minecraft:white_smoke_particle", r.location);
         r.remove();
       } catch {
@@ -809,6 +824,7 @@ system.runInterval(() => {
       }
     }
   }
+  liveRabbits = alive;
 }, 40);
 
 // Defeats: Grunt Birthday, Tiny Thunder.

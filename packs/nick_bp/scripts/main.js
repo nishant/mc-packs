@@ -10,17 +10,18 @@ import { spreadPlayers } from "./spread.js";
 // A nickname shows above the player's head (Player.nameTag). The stable Script API has no chat
 // events, so chat, the player list and death messages keep the gamertag.
 //
-// The AFK pack sets the same name tag (to "[AFK] Name" and back), so twice a second this pack puts the
-// nickname back on anyone whose tag differs, keeping the AFK prefix while the player has the afk tag.
+// The AFK pack sets the same name tag (to "[AFK] Name" and back), so this pack puts the nickname back at
+// once on realm:nametag, and every 5 seconds for anything that says nothing, on anyone whose tag differs,
+// keeping the AFK prefix while the player has the afk tag.
 //
 // A title from the Titles & Trails pack (the player tag `realm_title:<text>`) shows as a gray line
-// under the name, with or without a nickname. Tags can change at any time, so the same twice-a-second
-// check picks it up, and puts the plain gamertag back once the title is gone.
+// under the name, with or without a nickname. Tags can change at any time, so the same check (at once on
+// realm:nametag, otherwise every 5 seconds) picks it up, and puts the plain gamertag back once the title is gone.
 
 /** @typedef {{ n: string, c: string, g: string }} Nick nickname, color code (one character after §), gamertag when last seen */
 
 const KEY_PREFIX = "nick:p:"; // world property per player: nick:p:<player id> -> Nick
-const SEEN_PREFIX = "nick:g:"; // world property per gamertag ever seen here: nick:g:<lowercase gamertag> -> player id
+const SEEN_PREFIX = "nick:g:"; // world property per gamertag ever seen here: nick:g:<gamertag, lowercase with spaces and _ removed> -> player id
 const TIME_PREFIX = "nick:t:"; // world property per player: nick:t:<player id> -> when last seen (ms)
 const NAME_RULE = /^[A-Za-z0-9_ ]{3,16}$/;
 const LIST_MAX = 40; // entries read from a reserved list
@@ -170,9 +171,11 @@ onChange(() => refreshAll());
 
 /** Remembers a gamertag, so nobody can take it as a nickname while its player is offline. @param {Player} player */
 function noteGamertag(player) {
-  const key = SEEN_PREFIX + player.name.toLowerCase();
+  const key = SEEN_PREFIX + squash(player.name);
+  const old = SEEN_PREFIX + player.name.toLowerCase();
   try {
     if (world.getDynamicProperty(key) !== player.id) world.setDynamicProperty(key, player.id);
+    if (old !== key && world.getDynamicProperty(old) !== undefined) world.setDynamicProperty(old, undefined); // migrated to the squashed key
     const now = Date.now();
     if (stale(world.getDynamicProperty(TIME_PREFIX + player.id), now)) world.setDynamicProperty(TIME_PREFIX + player.id, now);
   } catch (e) {
@@ -259,20 +262,33 @@ function isReserved(player, name, op = isOp(player)) {
 function problem(player, name) {
   if (!NAME_RULE.test(name)) return "A nickname is 3 to 16 characters: letters A-Z, digits, spaces and _.";
   if (isReserved(player, name)) return `${name} is a reserved name.`;
-  const lower = name.toLowerCase();
+  const key = squash(name);
   for (const p of world.getAllPlayers()) {
-    if (p.id !== player.id && p.name.toLowerCase() === lower) return `${p.name} is someone else's gamertag.`;
+    if (p.id !== player.id && squash(p.name) === key) return `${p.name} is someone else's gamertag.`;
   }
   try {
-    const owner = world.getDynamicProperty(SEEN_PREFIX + lower);
+    // The squashed key first, then any key older versions wrote (lowercase with spaces and _ kept): found by squashing
+    // its suffix, and moved to the squashed key.
+    let owner = world.getDynamicProperty(SEEN_PREFIX + key);
+    if (typeof owner !== "string") {
+      for (const k of world.getDynamicPropertyIds()) {
+        if (!k.startsWith(SEEN_PREFIX) || k === SEEN_PREFIX + key || squash(k.slice(SEEN_PREFIX.length)) !== key) continue;
+        const v = world.getDynamicProperty(k);
+        if (typeof v !== "string") continue;
+        owner = v;
+        world.setDynamicProperty(SEEN_PREFIX + key, v);
+        world.setDynamicProperty(k, undefined);
+        break;
+      }
+    }
     if (typeof owner === "string" && owner !== player.id) return `${name} is someone else's gamertag.`; // a player who is offline now
   } catch {
     // not readable: the checks below still run
   }
   for (const [id, nick] of nicks()) {
     if (id === player.id) continue;
-    if (nick.n.toLowerCase() === lower) return `${nick.g || "Someone"} already has that nickname.`;
-    if (nick.g.toLowerCase() === lower) return `${nick.g} is someone else's gamertag.`;
+    if (squash(nick.n) === key) return `${nick.g || "Someone"} already has that nickname.`;
+    if (squash(String(nick.g ?? "")) === key) return `${nick.g} is someone else's gamertag.`;
   }
   return undefined;
 }

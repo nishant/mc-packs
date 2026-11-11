@@ -334,11 +334,14 @@ class StubForm {
   async show() { return { canceled: true, cancelationReason: FormCancelationReason.UserClosed }; }
 }
 
+const ScriptEventSource = { Block: "Block", Entity: "Entity", NPCDialogue: "NPCDialogue", Server: "Server" };
+
 async function createAdminHarness() {
   const world = new MockWorld();
   const system = new MockSystem();
   globalThis.__adminMock = {
     CommandPermissionLevel,
+    ScriptEventSource,
     CustomCommandParamType,
     CustomCommandStatus,
     EntityComponentTypes,
@@ -368,7 +371,7 @@ async function createAdminHarness() {
     fs.writeFileSync(
       serverStub,
       `const m = globalThis.__adminMock;
-export const { CommandPermissionLevel, CustomCommandParamType, CustomCommandRegistry, CustomCommandStatus, EntityComponentTypes, EquipmentSlot, GameMode, ItemLockMode, ItemStack, ItemTypes, Player, System, TimeOfDay, WeatherType, World, system, world } = m;\n`
+export const { CommandPermissionLevel, ScriptEventSource, CustomCommandParamType, CustomCommandRegistry, CustomCommandStatus, EntityComponentTypes, EquipmentSlot, GameMode, ItemLockMode, ItemStack, ItemTypes, Player, System, TimeOfDay, WeatherType, World, system, world } = m;\n`
     );
     fs.writeFileSync(
       uiStub,

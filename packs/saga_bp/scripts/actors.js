@@ -137,9 +137,14 @@ function poof(ent) {
 export function removeActor(id, effect = false) {
   const a = actors.get(id);
   actors.delete(id);
-  anchorGuard.forget(id);
-  anchorFall.forget(id);
-  nameLabels.removeFor(id);
+  dressing.delete(id);
+  try {
+    anchorGuard.forget(id);
+    anchorFall.forget(id);
+    nameLabels.removeFor(id);
+  } catch {
+    // a helper that throws must not keep the entity in the world
+  }
   if (!a) return;
   try {
     if (a.ent.isValid) {
@@ -254,7 +259,7 @@ export function tendActors() {
         if (hp && hp.currentValue < hp.effectiveMax) hp.resetToMaxValue();
       }
     } catch {
-      actors.delete(id);
+      removeActor(id); // the entity, its label, guards and dressing too, so the scene doesn't spawn a second copy
     }
   }
 }

@@ -294,7 +294,7 @@ const WARDENS_OATH = {
         `${R}The line. Yes.\n\nThe company says it back, all together, and it carries down the east road farther than you would think.`,
         `${R}Now the last part. That's yours, not mine. Every warden swears to be one thing above the rest: a shield or a sword. There's no wrong answer. There's only the one you can live with at the top of a stair.`,
         { text: `${R}I've watched you. You spare what can be spared. I think I know which you'll pick. Say it anyway.`, when: { "g:mercy": ">=3" } },
-        { text: `${R}I've watched you. You finish what needs finishing. I think I know which you'll pick. Say it anyway.`, when: { "g:iron": ">=3" } },
+        { text: `${R}I've watched you. You finish what needs finishing. I think I know which you'll pick. Say it anyway.`, when: { "g:iron": ">=3", "g:mercy": "<=2" } },
       ],
       choices: [
         {
@@ -601,7 +601,7 @@ const MAYORS_BURDEN = {
         `${B}It's the first real election in twenty years. Hattie Moon is running against me. She grows the best pumpkins in the county and says exactly what she means, which I find very threatening.`,
         `${B}If people think I stole the ballots so I couldn't lose... Please. Look around the square. I left the box on the bench outside for, oh, an hour. Maybe two. I may have gone to lunch.`,
         { text: `${B}People say you're the kind who gives a fellow a fair chance. I need one. Just one. Preferably today.`, when: { "g:mercy": ">=3" } },
-        { text: `${B}People say you're hard but fair. I'll take hard. At this point I'll take anything.`, when: { "g:iron": ">=3" } },
+        { text: `${B}People say you're hard but fair. I'll take hard. At this point I'll take anything.`, when: { "g:iron": ">=3", "g:mercy": "<=2" } },
       ],
       objectives: [
         {
@@ -706,7 +706,7 @@ const MAYORS_BURDEN = {
       ],
       reward: { levels: 3, crowns: 35 },
       rep: [{ guild: "growers", amount: 5 }],
-      hint: "Both farms are a little over 200 blocks southeast of town, on the tracker. Hattie and Garrow appear when you get close; talk to each. Then place 12 fences of any wood within 16 blocks of the disputed field between the two farms.",
+      hint: "Both farms are about 200 to 280 blocks southeast of town, on the tracker. Hattie and Garrow appear when you get close; talk to each. Then place 12 fences of any wood within 16 blocks of the disputed field between the two farms.",
     },
     {
       id: "unveiling",
@@ -1036,8 +1036,8 @@ const EDGES_OF_MAP = {
       ],
       objectives: [
         { type: "ride", label: "Row a boat 600 blocks over open water", mobs: BOATS, distance: 600 },
-        { type: "fish", label: "Catch 3 fish out on the deep water", items: ["minecraft:cod", "minecraft:salmon", "minecraft:tropical_fish", "minecraft:pufferfish"], count: 3 },
-        { type: "reach", label: "Dive below y 40 in a deep ocean", belowY: 40 },
+        { type: "fish", label: "Catch 3 fish", items: ["minecraft:cod", "minecraft:salmon", "minecraft:tropical_fish", "minecraft:pufferfish"], count: 3 },
+        { type: "reach", label: "Go below y 40", belowY: 40 },
       ],
       outro: [
         "You tell her about the bottom: blue-black and cold, kelp like a forest, the ribs of something enormous half buried in sand, and once, far off, the green glow of a monument's windows.",

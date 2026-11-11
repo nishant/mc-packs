@@ -15,7 +15,7 @@ const PUFFER = "minecraft:pufferfish";
  */
 
 export const CONFIG = {
-  /** Replace vanilla fish caught with a fishing rod by a species from `species`, with a size and the catcher's name. */
+  /** Replace vanilla fish caught with a fishing rod by a species from `species`, with a size. */
   enabled: true,
 
   /** Tell everyone in chat when someone catches a legendary fish. */

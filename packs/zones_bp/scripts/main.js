@@ -407,18 +407,25 @@ async function zoneList(player) {
     player,
     "§lSafe zones",
     list.length ? `${list.length} safe zone${list.length === 1 ? "" : "s"}, nearest first.` : "No safe zones yet.",
-    list.map((z) => ({ text: `${z.name} (radius ${z.r})\n§8${z.x}, ${z.z} - ${away(player, z)}`, run: () => zoneMenu(player, z.id) }))
+    list.map((z) => ({
+      text: knowsWhere(player, z) ? `${z.name} (radius ${z.r})\n§8${z.x}, ${z.z} - ${away(player, z)}` : `${z.name} (radius ${z.r})\n§8${away(player, z)}`,
+      run: () => zoneMenu(player, z.id),
+    }))
   );
+}
+
+/** May this player see where the zone is and who added it? Operators, its creator, and anyone standing in it. @param {Player} player @param {Zone} z */
+function knowsWhere(player, z) {
+  return isOp(player) || (!!z.o && z.o === player.id) || (player.dimension.id === z.dim && edge(z, player.location).inside);
 }
 
 /** @param {Player} player @param {string} id */
 async function zoneMenu(player, id) {
   const z = zones().find((x) => x.id === id);
   if (!z) return;
-  const body = [
-    `§e${z.name}§r: radius ${z.r} around ${z.x}, ${z.z} (${shortDim(z.dim)}), top to bottom. ${away(player, z)}.`,
-    z.on ? `§7Added by ${z.on}.` : "§7Added by an operator.",
-  ].join("\n");
+  const body = knowsWhere(player, z)
+    ? [`§e${z.name}§r: radius ${z.r} around ${z.x}, ${z.z} (${shortDim(z.dim)}), top to bottom. ${away(player, z)}.`, z.on ? `§7Added by ${z.on}.` : "§7Added by an operator."].join("\n")
+    : `§e${z.name}§r: radius ${z.r}, ${shortDim(z.dim)}, top to bottom. ${away(player, z)}.`;
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [{ text: "Show outline\n§8For a few seconds", run: () => showOutline(player, z) }];
   if (canEdit(player, z)) {
@@ -436,12 +443,14 @@ async function zoneMenu(player, id) {
     actions.push({
       text: "§cRemove",
       run: () =>
-        menu(player, "§lRemove this safe zone?", `${z.name}: radius ${z.r} around ${z.x}, ${z.z}. World events could break blocks there again.`, [
+        menu(player, "§lRemove this safe zone?", `${z.name}: radius ${z.r}${knowsWhere(player, z) ? ` around ${z.x}, ${z.z}` : ""}. World events could break blocks there again.`, [
           {
             text: "§cRemove it",
             run: () => {
               // Checked again: the player may have been de-opped, or the zone changed hands, while the menu was open.
-              if (!canEdit(player, z)) return player.sendMessage("§cThat safe zone isn't yours to remove.");
+              const now = zones().find((x) => x.id === z.id);
+              if (!now) return player.sendMessage("§7That safe zone is already gone.");
+              if (!canEdit(player, now)) return player.sendMessage("§cThat safe zone isn't yours to remove.");
               saveZones(zones().filter((x) => x.id !== z.id));
               player.sendMessage(`§aSafe zone ${z.name} removed.`);
             },
