@@ -168,7 +168,7 @@ eb.settings.player.zoom_max=Full Zoom Distance  (blocks)\n§7Distance at which m
 eb.settings.player.air_reach=Air Build Reach  (blocks)\n§7Max reach when placing in open air
 eb.settings.player.infinite_reach=Infinite Reach\n§7Build beyond normal reach distance
 eb.settings.player.inf_reach_dist=Infinite Reach Distance  (blocks)\n§7How far infinite reach extends
-eb.settings.player.swap_book_actions=Swap Book Actions\n§7Right-click opens Palette, Left-click opens Menu
+eb.settings.player.swap_book_actions=Swap Book Actions\n§7Right-click opens Palette; Mode Menu: /realm:build
 eb.settings.player.hints_enabled=Contextual Hints\n§7One-line chat tip the first time you open\n§7a panel or pick a build mode
 eb.settings.player.undo_limit=Undo Limit\n§7Max blocks tracked for undo after breaking
 eb.settings.player.max_blocks=Max Blocks  (1 - %1)\n§7Maximum blocks per single operation
@@ -356,8 +356,8 @@ eb.clipboard.loaded_auto=§a[EB] §7Last Copy loaded - aim and interact to paste
 eb.clipboard.cleared_auto=§7[EB] Last Copy cleared.
 eb.clipboard.restored_cut=§6[EB] §fYou still have a §6cut§f selection waiting to be pasted.\n§7Open the §eClipboard§7 or aim and interact to place it.
 
-eb.bar.book_controls=§6§lBuilding Book§r  §8|  §7Right-click §fMenu§r§8, §7Hold §fQuick switch§r§8, §7Left-click §fPalette\n§7Sneak+Right §fSettings§r§8, §7Sneak+Left §fModifiers§r§8, §7Sneak twice §fMode on/off
-eb.bar.book_controls_swapped=§6§lBuilding Book§r  §8|  §7Right-click §fPalette§r§8, §7Hold §fQuick switch§r§8, §7Left-click §fMenu\n§7Sneak+Right §fSettings§r§8, §7Sneak+Left §fModifiers§r§8, §7Sneak twice §fMode on/off
+eb.bar.book_controls=§6§lBuilding Book§r  §8|  §7Right-click §fMenu§r§8, §7Hold §fQuick switch\n§7Sneak+Right §fSettings§r§8, §7Sneak twice §fMode on/off
+eb.bar.book_controls_swapped=§6§lBuilding Book§r  §8|  §7Right-click §fPalette§r§8, §7Hold §fQuick switch\n§7Sneak+Right §fSettings§r§8, §7Sneak twice §fMode on/off
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Right-click §fNext page§r§8, §7Hit the book §fBack§r§8, §7Sneak §fJump a chapter
 
 eb.preview.step_of=Step %1/%2

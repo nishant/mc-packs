@@ -54,3 +54,14 @@ test("CubeMode.getPositions honors opts.cap", () => {
   const full = CubeMode.getPositions(a, b, player, null, { cap: 5000 });
   assert.equal(full.length, 100);
 });
+
+test("hollow shapes are judged by their shell, not their bounding volume", () => {
+  const cap = 50001;
+  const s = G.shellSphere({ x: 0, y: 64, z: 0 }, { x: 50, y: 64, z: 0 }, cap);
+  assert.equal(s.oversize, undefined);
+  assert.ok(s.length > 20000 && s.length < cap);
+  const c = G.hollowCylinder({ x: 0, y: 0, z: 0 }, { x: 50, y: 100, z: 0 }, cap);
+  assert.equal(c.oversize, undefined);
+  assert.ok(c.length > 40000 && c.length < cap);
+  assert.equal(G.hollowCircleXZ(0, 64, 0, 500, cap).oversize, undefined);
+});

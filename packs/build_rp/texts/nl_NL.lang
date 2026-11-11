@@ -143,7 +143,7 @@ eb.settings.player.zoom_max=Volledige zoomafstand (blokken)\n§7Afstand waarop m
 eb.settings.player.air_reach=Luchtbouwbewerksbereik (blokken)\n§7Maximaal bereik bij plaatsen in de open lucht
 eb.settings.player.infinite_reach=Oneindig Bereik\n§7Bouwen buiten de normale bereikafstand
 eb.settings.player.inf_reach_dist=Oneindig Bereik Afstand (blokken)\n§7Hoe ver het oneindige bereik reikt
-eb.settings.player.swap_book_actions=Boekacties omwisselen\n§7Rechtermuisklik opent Palet, Linkermuisklik opent Menu
+eb.settings.player.swap_book_actions=Boekacties omwisselen\n§7Rechtermuisklik opent Palet; Modusmenu: /realm:build
 eb.settings.player.undo_limit=Ongedaan maken Limiet\n§7Maximaal aantal blokken bijgehouden voor ongedaan maken
 eb.settings.player.max_blocks=Max Blokken (1 – %1)\n§7Maximaal aantal blokken per enkele operatie
 
@@ -368,8 +368,8 @@ eb.preview.step_of=Stap %1/%2
 eb.preview.idle_start=§7%1  §8·  §7Stap %2/%3  §8·  §fRechtsklik op een blok om te beginnen
 eb.preview.idle_need_item=§7%1  §8·  §eHoud een blok vast om te gaan bouwen
 
-eb.bar.book_controls=§6§lBouwboek§r  §8|  §7Rechtsklik §fMenu§r  §8·  §7Vasthouden §fSnel wisselen§r  §8·  §7Linksklik §fPalet\n§7Sluipen+Rechts §fInstellingen§r  §8·  §7Sluipen+Links §fModifiers§r  §8·  §72× sluipen §fModus aan/uit
-eb.bar.book_controls_swapped=§6§lBouwboek§r  §8|  §7Rechtsklik §fPalet§r  §8·  §7Vasthouden §fSnel wisselen§r  §8·  §7Linksklik §fMenu\n§7Sluipen+Rechts §fInstellingen§r  §8·  §7Sluipen+Links §fModifiers§r  §8·  §72× sluipen §fModus aan/uit
+eb.bar.book_controls=§6§lBouwboek§r  §8|  §7Rechtsklik §fMenu§r  §8·  §7Vasthouden §fSnel wisselen§r\n§7Sluipen+Rechts §fInstellingen§r  §8·  §72× sluipen §fModus aan/uit
+eb.bar.book_controls_swapped=§6§lBouwboek§r  §8|  §7Rechtsklik §fPalet§r  §8·  §7Vasthouden §fSnel wisselen§r\n§7Sluipen+Rechts §fInstellingen§r  §8·  §72× sluipen §fModus aan/uit
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Rechtsklik §fVolgende pagina§r  §8·  §7Boek slaan §fTerug§r  §8·  §7Sluipen §fHoofdstuk overslaan
 
 eb.palette.enabled_notice=§e[EB] §fBlokkenpalet §eAAN§f - §6%1§f.\n§7Je bouwsels §emengen nu meerdere bloksoorten§7 in plaats van alleen het blok waarop je klikt.\n§7Uitzetten: §eBoek > Palet > Bron > Uit§7.

@@ -143,7 +143,7 @@ eb.settings.player.zoom_max=Jarak Zoom Penuh (blok)\n§7Jarak saat zoom maksimum
 eb.settings.player.air_reach=Jangkauan Bangun Udara (blok)\n§7Jangkauan maksimum saat menempatkan di udara terbuka
 eb.settings.player.infinite_reach=Jangkauan Tak Terbatas\n§7Membangun melampaui jarak jangkauan normal
 eb.settings.player.inf_reach_dist=Jarak Jangkauan Tak Terbatas (blok)\n§7Seberapa jauh jangkauan tak terbatas meluas
-eb.settings.player.swap_book_actions=Tukar Aksi Buku\n§7Klik kanan buka Palet, Klik kiri buka Menu
+eb.settings.player.swap_book_actions=Tukar Aksi Buku\n§7Klik kanan buka Palet; Menu Mode: /realm:build
 eb.settings.player.undo_limit=Batas Urungkan\n§7Blok maksimum yang dilacak untuk diurungkan setelah hancur
 eb.settings.player.max_blocks=Blok Maksimum (1 – %1)\n§7Blok maksimum per operasi tunggal
 
@@ -368,8 +368,8 @@ eb.preview.step_of=Langkah %1/%2
 eb.preview.idle_start=§7%1  §8·  §7Langkah %2/%3  §8·  §fKlik kanan sebuah blok untuk mulai
 eb.preview.idle_need_item=§7%1  §8·  §ePegang sebuah blok untuk mulai membangun
 
-eb.bar.book_controls=§6§lBuku Bangunan§r  §8|  §7Klik kanan §fMenu§r  §8·  §7Tahan §fGanti cepat§r  §8·  §7Klik kiri §fPalet\n§7Jongkok+Kanan §fPengaturan§r  §8·  §7Jongkok+Kiri §fPengubah§r  §8·  §7Jongkok dua kali §fMode nyala/mati
-eb.bar.book_controls_swapped=§6§lBuku Bangunan§r  §8|  §7Klik kanan §fPalet§r  §8·  §7Tahan §fGanti cepat§r  §8·  §7Klik kiri §fMenu\n§7Jongkok+Kanan §fPengaturan§r  §8·  §7Jongkok+Kiri §fPengubah§r  §8·  §7Jongkok dua kali §fMode nyala/mati
+eb.bar.book_controls=§6§lBuku Bangunan§r  §8|  §7Klik kanan §fMenu§r  §8·  §7Tahan §fGanti cepat§r\n§7Jongkok+Kanan §fPengaturan§r  §8·  §7Jongkok dua kali §fMode nyala/mati
+eb.bar.book_controls_swapped=§6§lBuku Bangunan§r  §8|  §7Klik kanan §fPalet§r  §8·  §7Tahan §fGanti cepat§r\n§7Jongkok+Kanan §fPengaturan§r  §8·  §7Jongkok dua kali §fMode nyala/mati
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Klik kanan §fHalaman berikut§r  §8·  §7Pukul bukunya §fKembali§r  §8·  §7Jongkok §fLompat satu bab
 
 eb.palette.enabled_notice=§e[EB] §fPalet Blok §eAKTIF§f - §6%1§f.\n§7Bangunanmu kini §emencampur beberapa jenis blok§7, bukan hanya blok yang kamu klik.\n§7Matikan: §eBuku > Palet > Sumber > Mati§7.

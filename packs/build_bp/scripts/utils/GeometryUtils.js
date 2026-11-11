@@ -201,6 +201,9 @@ export function slopeFloor(anchor, target, yaw = 0, cap = MAX_BLOCKS) {
 const OVERSIZE_MIN_CELLS = 1_000_000;
 function oversizeResult() { const out = []; out.oversize = true; return out; }
 function tooManyCells(cells, cap) { return cells >= OVERSIZE_MIN_CELLS && cells > cap * 16; }
+/** Hollow shapes: judge the shell (the output), not the bounding volume. A hard ceiling still bounds the scan. */
+const HOLLOW_MAX_SCAN_CELLS = 32_000_000;
+function shellTooBig(cells, estimate, cap) { return estimate > cap || cells > HOLLOW_MAX_SCAN_CELLS; }
 export function circleXZ(cx, cy, cz, r, cap = MAX_BLOCKS) {
     if (r < 0.5) return [{ x: cx, y: cy, z: cz }];
     const ri = Math.ceil(r);
@@ -219,7 +222,7 @@ export function circleXZ(cx, cy, cz, r, cap = MAX_BLOCKS) {
 export function hollowCircleXZ(cx, cy, cz, r, cap = MAX_BLOCKS) {
     if (r < 0.5) return [{ x: cx, y: cy, z: cz }];
     const ri = Math.ceil(r), r2 = r * r;
-    if (tooManyCells((2*ri+1)**2, cap)) return oversizeResult();
+    if (shellTooBig((2*ri+1)**2, 2 * Math.PI * (r + 1), cap)) return oversizeResult();
     const positions = [];
     for (let dx = -ri; dx <= ri; dx++)
         for (let dz = -ri; dz <= ri; dz++) {
@@ -380,7 +383,7 @@ export function shellSphere(anchor, target, cap = MAX_BLOCKS) {
     const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (r < 0.5) return [{ x: anchor.x, y: anchor.y, z: anchor.z }];
     const ri = Math.ceil(r);
-    if (tooManyCells((2*ri+1)**3, cap)) return oversizeResult();
+    if (shellTooBig((2*ri+1)**3, 4 * Math.PI * (r + 1) ** 2, cap)) return oversizeResult();
     const r2 = r * r;
     const positions = [];
     for (let ddx = -ri; ddx <= ri; ddx++)
@@ -407,7 +410,7 @@ export function hollowCylinder(anchor, target, cap = MAX_BLOCKS) {
     const yMin = Math.min(anchor.y, target.y);
     const yMax = Math.max(anchor.y, target.y);
     const ri = Math.ceil(r), r2 = r * r;
-    if (tooManyCells((2*ri+1)**2 * (Math.abs(yMax - yMin) + 1), cap)) return oversizeResult();
+    if (shellTooBig((2*ri+1)**2 * (Math.abs(yMax - yMin) + 1), 2 * Math.PI * (r + 1) * (Math.abs(yMax - yMin) + 1) + 2 * Math.PI * (r + 1) ** 2, cap)) return oversizeResult();
     const positions = [];
     for (const y of range(yMin, yMax)) {
         const isCap = (y === yMin || y === yMax);

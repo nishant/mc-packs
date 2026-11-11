@@ -143,7 +143,7 @@ eb.settings.player.zoom_max=Volle Zoom-Entfernung (Blöcke)\n§7Entfernung, bei 
 eb.settings.player.air_reach=Air Build Reichweite (Blöcke)\n§7Maximale Reichweite beim Platzieren in freier Luft
 eb.settings.player.infinite_reach=Unendliche Reichweite\n§7Bauen über die normale Reichweite hinaus
 eb.settings.player.inf_reach_dist=Unendliche Reichweite Entfernung (Blöcke)\n§7Wie weit die unendliche Reichweite reicht
-eb.settings.player.swap_book_actions=Buchaktionen tauschen\n§7Rechtsklick öffnet Palette, Linksklick öffnet Menü
+eb.settings.player.swap_book_actions=Buchaktionen tauschen\n§7Rechtsklick öffnet Palette; Modusmenü: /realm:build
 eb.settings.player.undo_limit=Rückgängig-Limit\n§7Maximale Blockanzahl für Rückgängig nach Abbau
 eb.settings.player.max_blocks=Max. Blöcke (1 – %1)\n§7Maximale Blockanzahl pro Operation
 
@@ -368,8 +368,8 @@ eb.preview.step_of=Schritt %1/%2
 eb.preview.idle_start=§7%1  §8·  §7Schritt %2/%3  §8·  §fRechtsklick auf einen Block zum Starten
 eb.preview.idle_need_item=§7%1  §8·  §eHalte einen Block, um zu bauen
 
-eb.bar.book_controls=§6§lBaubuch§r  §8|  §7Rechtsklick §fMenü§r  §8·  §7Halten §fSchnellwechsel§r  §8·  §7Linksklick §fPalette\n§7Schleichen+Rechts §fEinstellungen§r  §8·  §7Schleichen+Links §fModifikatoren§r  §8·  §72× schleichen §fModus an/aus
-eb.bar.book_controls_swapped=§6§lBaubuch§r  §8|  §7Rechtsklick §fPalette§r  §8·  §7Halten §fSchnellwechsel§r  §8·  §7Linksklick §fMenü\n§7Schleichen+Rechts §fEinstellungen§r  §8·  §7Schleichen+Links §fModifikatoren§r  §8·  §72× schleichen §fModus an/aus
+eb.bar.book_controls=§6§lBaubuch§r  §8|  §7Rechtsklick §fMenü§r  §8·  §7Halten §fSchnellwechsel§r\n§7Schleichen+Rechts §fEinstellungen§r  §8·  §72× schleichen §fModus an/aus
+eb.bar.book_controls_swapped=§6§lBaubuch§r  §8|  §7Rechtsklick §fPalette§r  §8·  §7Halten §fSchnellwechsel§r\n§7Schleichen+Rechts §fEinstellungen§r  §8·  §72× schleichen §fModus an/aus
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Rechtsklick §fNächste Seite§r  §8·  §7Buch schlagen §fZurück§r  §8·  §7Schleichen §fKapitel springen
 
 eb.palette.enabled_notice=§e[EB] §fBlockpalette §eAN§f - §6%1§f.\n§7Deine Bauten §emischen jetzt mehrere Blockarten§7, statt nur den angeklickten Block zu nutzen.\n§7Ausschalten: §eBuch > Palette > Quelle > Aus§7.

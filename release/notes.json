@@ -1,7 +1,7 @@
 {
   "notes": [
     "Easy Building: Instant build speed is faster, Mirror now flips slabs, torches, observers and amethyst and works with Array and Radial, and Radial turns stairs and logs with each slice.",
-    "Easy Building: a shape bigger than your block limit shows the exceeds-limit warning and is refused, a far-off anchor is cleared, and Undo refunds the right number of items.",
+    "Easy Building: a shape bigger than your block limit shows the exceeds-limit warning and is refused, and Undo refunds the right number of items.",
     "Easy Building: the Building Book no longer needs left-click shortcuts; open Modifiers and the Block Palette from the Mode Menu or their commands.",
     "Expeditions: a Nightmare Sigil is no longer lost when the server restarts before your party goes in; it comes back to the leader in a parcel.",
     "Townsfolk: gossip about a player is no longer repeated or told back to that player, and Undo for moving townsfolk remembers the right spots."

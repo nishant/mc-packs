@@ -143,7 +143,7 @@ eb.settings.player.zoom_max=Distancia de zoom completo (bloques)\n§7Distancia a
 eb.settings.player.air_reach=Alcance de construcción en el aire (bloques)\n§7Alcance máximo al colocar en el aire
 eb.settings.player.infinite_reach=Alcance infinito\n§7Construye más allá de la distancia normal de alcance
 eb.settings.player.inf_reach_dist=Distancia de alcance infinito (bloques)\n§7Hasta dónde se extiende el alcance infinito
-eb.settings.player.swap_book_actions=Intercambiar acciones del libro\n§7Clic derecho abre Paleta, Clic izquierdo abre Menú
+eb.settings.player.swap_book_actions=Intercambiar acciones del libro\n§7Clic derecho abre Paleta; menú de modos: /realm:build
 eb.settings.player.undo_limit=Límite de deshacer\n§7Máximo de bloques rastreados para deshacer tras romper
 eb.settings.player.max_blocks=Máx. de bloques (1 – %1)\n§7Máximo de bloques por operación única
 
@@ -368,8 +368,8 @@ eb.preview.step_of=Paso %1/%2
 eb.preview.idle_start=§7%1  §8·  §7Paso %2/%3  §8·  §fClic derecho en un bloque para empezar
 eb.preview.idle_need_item=§7%1  §8·  §eSostén un bloque para empezar a construir
 
-eb.bar.book_controls=§6§lLibro de Construcción§r  §8|  §7Clic derecho §fMenú§r  §8·  §7Mantener §fCambio rápido§r  §8·  §7Clic izquierdo §fPaleta\n§7Agacharse+Derecho §fAjustes§r  §8·  §7Agacharse+Izquierdo §fModificadores§r  §8·  §7Agacharse dos veces §fModo sí/no
-eb.bar.book_controls_swapped=§6§lLibro de Construcción§r  §8|  §7Clic derecho §fPaleta§r  §8·  §7Mantener §fCambio rápido§r  §8·  §7Clic izquierdo §fMenú\n§7Agacharse+Derecho §fAjustes§r  §8·  §7Agacharse+Izquierdo §fModificadores§r  §8·  §7Agacharse dos veces §fModo sí/no
+eb.bar.book_controls=§6§lLibro de Construcción§r  §8|  §7Clic derecho §fMenú§r  §8·  §7Mantener §fCambio rápido§r\n§7Agacharse+Derecho §fAjustes§r  §8·  §7Agacharse dos veces §fModo sí/no
+eb.bar.book_controls_swapped=§6§lLibro de Construcción§r  §8|  §7Clic derecho §fPaleta§r  §8·  §7Mantener §fCambio rápido§r\n§7Agacharse+Derecho §fAjustes§r  §8·  §7Agacharse dos veces §fModo sí/no
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Clic derecho §fPágina siguiente§r  §8·  §7Golpear el libro §fAtrás§r  §8·  §7Agacharse §fSaltar un capítulo
 
 eb.palette.enabled_notice=§e[EB] §fPaleta de bloques §eACTIVA§f - §6%1§f.\n§7Tus construcciones ahora §emezclan varios tipos de bloque§7 en lugar de usar solo el que pulsas.\n§7Para desactivarla: §eLibro > Paleta > Origen > No§7.

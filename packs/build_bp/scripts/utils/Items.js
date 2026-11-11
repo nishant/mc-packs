@@ -12,7 +12,6 @@ export const BOOK_LORE = [
     "§8> §7Right-click         §8| §fMenu",
     "§8> §7Hold right-click    §8| §fQuick switch",
     "§8> §7Sneak + right-click §8| §fSettings",
-    "§8> §7Left-click           §8| §fBlock palette",
     "§7Hold it in your hand and use it",
 ];
 export const TUTORIAL_BOOK_NAME = "§b§lEffortless Building Tutorial§r";

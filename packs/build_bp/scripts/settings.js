@@ -272,7 +272,7 @@ const OPTIONS = [
     choices: ["normal", "quiet", "off"],
     names: ["Normal", "Quiet", "Off"],
   },
-  { key: "swapBookActions", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:swapBookActions", default: false, label: "Swap Building Book right-click and left-click" },
+  { key: "swapBookActions", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:swapBookActions", default: false, label: "Building Book right-click opens the Block Palette (Mode Menu: /realm:build)" },
   { key: "fovZoomEnabled", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:fovZoomEnabled", default: true, label: "Selection FOV zoom when aiming far away" },
   { key: "hintsEnabled", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:hintsEnabled", default: true, label: "Show gameplay hints" },
 ];

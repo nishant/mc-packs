@@ -143,7 +143,7 @@ eb.settings.player.zoom_max=最大ズーム距離 (ブロック)\n§7最大ま�
 eb.settings.player.air_reach=空中建築の射程 (ブロック)\n§7空中にブロックを置く際の最大射程
 eb.settings.player.infinite_reach=無限射程\n§7通常の射程距離を超えて建築を可能にする
 eb.settings.player.inf_reach_dist=無限射程の距離 (ブロック)\n§7無限射程が拡張される最大距離
-eb.settings.player.swap_book_actions=本の操作を入れ替え\n§7右クリックでパレット、左クリックでメニュー
+eb.settings.player.swap_book_actions=本の操作を入れ替え\n§7右クリックでパレット、モードメニューは /realm:build
 eb.settings.player.undo_limit=元に戻す制限\n§7破壊後に元に戻すことができる最大ブロック数
 eb.settings.player.max_blocks=最大ブロック数 (1 – %1)\n§71回の操作で配置できる最大ブロック数
 
@@ -368,8 +368,8 @@ eb.preview.step_of=手順 %1/%2
 eb.preview.idle_start=§7%1  §8·  §7手順 %2/%3  §8·  §fブロックを右クリックして開始
 eb.preview.idle_need_item=§7%1  §8·  §eブロックを手に持つと建築を始められます
 
-eb.bar.book_controls=§6§l建築の書§r  §8|  §7右クリック §fメニュー§r  §8·  §7長押し §fクイック切替§r  §8·  §7左クリック §fパレット\n§7スニーク+右 §f設定§r  §8·  §7スニーク+左 §fモディファイア§r  §8·  §7スニーク2回 §fモードのオン/オフ
-eb.bar.book_controls_swapped=§6§l建築の書§r  §8|  §7右クリック §fパレット§r  §8·  §7長押し §fクイック切替§r  §8·  §7左クリック §fメニュー\n§7スニーク+右 §f設定§r  §8·  §7スニーク+左 §fモディファイア§r  §8·  §7スニーク2回 §fモードのオン/オフ
+eb.bar.book_controls=§6§l建築の書§r  §8|  §7右クリック §fメニュー§r  §8·  §7長押し §fクイック切替§r\n§7スニーク+右 §f設定§r  §8·  §7スニーク2回 §fモードのオン/オフ
+eb.bar.book_controls_swapped=§6§l建築の書§r  §8|  §7右クリック §fパレット§r  §8·  §7長押し §fクイック切替§r\n§7スニーク+右 §f設定§r  §8·  §7スニーク2回 §fモードのオン/オフ
 eb.bar.tutorial_book_controls=§6§lチュートリアル§r  §8|  §7右クリック §f次のページ§r  §8·  §7本をたたく §f戻る§r  §8·  §7スニーク §f章を飛ばす
 
 eb.palette.enabled_notice=§e[EB] §fブロックパレット §eオン§f - §6%1§f。\n§7クリックしたブロックだけでなく、§e複数のブロックを混ぜて§7建築します。\n§7オフにするには: §e本 > パレット > ソース > オフ§7。

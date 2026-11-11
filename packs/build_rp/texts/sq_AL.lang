@@ -143,7 +143,7 @@ eb.settings.player.zoom_max=Distanca e Zmadhimit të Plotë (blloke)\n§7Distanc
 eb.settings.player.air_reach=Arritja e Ndërtimit në Ajër (blloke)\n§7Arritja maksimale kur vendoset në ajër të hapur
 eb.settings.player.infinite_reach=Arritja e Pafundme\n§7Ndërtoni përtej distancës normale të arritjes
 eb.settings.player.inf_reach_dist=Distanca e Arritjes së Pafundme (blloke)\n§7Sa larg shtrihet arritja e pafundme
-eb.settings.player.swap_book_actions=Ndrysho Veprimet e Librit\n§7Klik i djathtë hap Paletën, Klik i majtë hap Menunë
+eb.settings.player.swap_book_actions=Ndrysho Veprimet e Librit\n§7Klik i djathtë hap Paletën; Menuja e Mënyrave: /realm:build
 eb.settings.player.undo_limit=Kufiri i Zhbërjes\n§7Blloket maksimale të gjurmuara për zhbërje pas prishjes
 eb.settings.player.max_blocks=Blloket Maksimale (1 – %1)\n§7Blloket maksimale për operacion të vetëm
 
@@ -368,8 +368,8 @@ eb.preview.step_of=Hapi %1/%2
 eb.preview.idle_start=§7%1  §8·  §7Hapi %2/%3  §8·  §fKlikim i djathtë mbi një bllok për të nisur
 eb.preview.idle_need_item=§7%1  §8·  §eMbani një bllok për të nisur ndërtimin
 
-eb.bar.book_controls=§6§lLibri i Ndërtimit§r  §8|  §7Klikim i djathtë §fMenu§r  §8·  §7Mbaj shtypur §fNdërrim i shpejtë§r  §8·  §7Klikim i majtë §fPaleta\n§7Zvarritje+Djathtas §fCilësimet§r  §8·  §7Zvarritje+Majtas §fModifikuesit§r  §8·  §7Zvarritje dy herë §fMënyra ndez/fik
-eb.bar.book_controls_swapped=§6§lLibri i Ndërtimit§r  §8|  §7Klikim i djathtë §fPaleta§r  §8·  §7Mbaj shtypur §fNdërrim i shpejtë§r  §8·  §7Klikim i majtë §fMenu\n§7Zvarritje+Djathtas §fCilësimet§r  §8·  §7Zvarritje+Majtas §fModifikuesit§r  §8·  §7Zvarritje dy herë §fMënyra ndez/fik
+eb.bar.book_controls=§6§lLibri i Ndërtimit§r  §8|  §7Klikim i djathtë §fMenu§r  §8·  §7Mbaj shtypur §fNdërrim i shpejtë§r\n§7Zvarritje+Djathtas §fCilësimet§r  §8·  §7Zvarritje dy herë §fMënyra ndez/fik
+eb.bar.book_controls_swapped=§6§lLibri i Ndërtimit§r  §8|  §7Klikim i djathtë §fPaleta§r  §8·  §7Mbaj shtypur §fNdërrim i shpejtë§r\n§7Zvarritje+Djathtas §fCilësimet§r  §8·  §7Zvarritje dy herë §fMënyra ndez/fik
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Klikim i djathtë §fFaqja tjetër§r  §8·  §7Godit librin §fPrapa§r  §8·  §7Zvarritje §fKapërce një kapitull
 
 eb.palette.enabled_notice=§e[EB] §fPaleta e Blloqeve §eNDEZUR§f - §6%1§f.\n§7Ndërtimet tuaja tani §epërziejnë disa lloje blloqesh§7 në vend të vetëm bllokut që klikoni.\n§7Për ta fikur: §eLibri > Paleta > Burimi > Fikur§7.

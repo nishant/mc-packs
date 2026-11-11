@@ -5,7 +5,7 @@ import { isDiggingTool } from "./BlockDestroyer.js";
 import { getModeHandler, MODE_OPTIONS } from "../modes/ModeRegistry.js";
 import { FACE_OFFSETS, smartOutline, wireframePositions, skeletonAABB, boxEdges, sampledBoxEdges, catmullRomSpline, aabbBounds } from "../utils/GeometryUtils.js";
 import { getModeOption } from "../utils/ModeOptions.js";
-import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReach, getInfiniteReach, getInfiniteReachDistance, getReplaceBlocks, getMaxBlocks, getMaxReachCap, getPreviewQuality, getSwapBookActions, getDeferShapeCalc, SHAPE_SETTLE_TICKS } from "./Settings.js";
+import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReach, getInfiniteReach, getInfiniteReachDistance, getReplaceBlocks, getMaxBlocks, getPreviewQuality, getSwapBookActions, getDeferShapeCalc, SHAPE_SETTLE_TICKS } from "./Settings.js";
 import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "../utils/Items.js";
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
@@ -19,7 +19,7 @@ import { ALWAYS_REPLACEABLE } from "./BlockPlacer.js";
 import { getPaletteMode, getDistributionMode } from "./Palette.js";
 import { isCreative } from "../utils/InventoryUtils.js";
 import { t, rawtext } from "../utils/Text.js";
-import { isActionBarLocked, steadyBar, lockActionBar } from "../utils/ActionBar.js";
+import { isActionBarLocked, steadyBar } from "../utils/ActionBar.js";
 import { showHintOnce } from "../utils/Hints.js";
 import { recordTick, tpsText } from "../utils/Tps.js";
 import { getAirBuildTarget } from "../modes/AirBuildMode.js";
@@ -679,19 +679,6 @@ export function startPreviewLoop() {
                     previewCache.delete(player.id);
                     clearAnchor(player);
                     continue;
-                }
-                {
-                    // A forgotten anchor far away would keep scanning a huge shape every tick: drop it.
-                    const pl = player.location, an = state.anchor;
-                    const farLimit = Math.max(getMaxReachCap(), 64) * 2;
-                    if (an && Math.hypot(pl.x - an.x, pl.y - an.y, pl.z - an.z) > farLimit) {
-                        lastPreviewTarget.delete(player.id);
-                        clearPreviewCache(player.id);
-                        clearAnchor(player);
-                        lockActionBar(player.id, 2000);
-                        try { player.onScreenDisplay.setActionBar("§7Anchor cleared: too far away"); } catch {}
-                        continue;
-                    }
                 }
                 const isDestroy  = state.blockTypeId === "eb:destroy";
                 const previewMode = isDestroy ? getDestroyPreviewMode(player) : getPreviewMode(player);
