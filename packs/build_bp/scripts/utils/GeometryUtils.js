@@ -67,23 +67,6 @@ export function catmullRomSpline(points, clampY = false, cap = MAX_BLOCKS) {
     }
     return dedup(out);
 }
-export function bezierCurve(p0, p1, p2) {
-    const d1 = Math.sqrt((p1.x-p0.x)**2 + (p1.y-p0.y)**2 + (p1.z-p0.z)**2);
-    const d2 = Math.sqrt((p2.x-p1.x)**2 + (p2.y-p1.y)**2 + (p2.z-p1.z)**2);
-    const steps = Math.max(Math.ceil((d1 + d2) * 2), 2);
-    const positions = [];
-    for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const mt = 1 - t;
-        positions.push({
-            x: Math.round(mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x),
-            y: Math.round(mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y),
-            z: Math.round(mt * mt * p0.z + 2 * mt * t * p1.z + t * t * p2.z),
-        });
-        if (positions.length >= MAX_BLOCKS) break;
-    }
-    return dedup(positions);
-}
 export function lineBetween(p1, p2, cap = MAX_BLOCKS) {
     const dx = Math.round(p2.x) - Math.round(p1.x);
     const dy = Math.round(p2.y) - Math.round(p1.y);
@@ -105,40 +88,6 @@ export function lineBetween(p1, p2, cap = MAX_BLOCKS) {
 export function isFacingNS(yaw) {
     const a = Math.abs(yaw);
     return a < 45 || a > 135;
-}
-export function axisLineByYaw(anchor, target, yaw) {
-    const positions = [];
-    if (isFacingNS(yaw)) {
-        for (const x of range(anchor.x, target.x)) {
-            positions.push({ x, y: anchor.y, z: anchor.z });
-            if (positions.length >= MAX_BLOCKS) break;
-        }
-    } else {
-        for (const z of range(anchor.z, target.z)) {
-            positions.push({ x: anchor.x, y: anchor.y, z });
-            if (positions.length >= MAX_BLOCKS) break;
-        }
-    }
-    return positions;
-}
-export function wallAABBByYaw(anchor, target, yaw) {
-    const positions = [];
-    const y1 = Math.min(anchor.y, target.y);
-    const y2 = Math.max(anchor.y, target.y);
-    if (isFacingNS(yaw)) {
-        for (const x of range(anchor.x, target.x))
-            for (let y = y1; y <= y2; y++) {
-                positions.push({ x, y, z: anchor.z });
-                if (positions.length >= MAX_BLOCKS) return positions;
-            }
-    } else {
-        for (const z of range(anchor.z, target.z))
-            for (let y = y1; y <= y2; y++) {
-                positions.push({ x: anchor.x, y, z });
-                if (positions.length >= MAX_BLOCKS) return positions;
-            }
-    }
-    return positions;
 }
 export function axisLine(anchor, target, cap = MAX_BLOCKS) {
     const dx = target.x - anchor.x;
@@ -248,9 +197,14 @@ export function slopeFloor(anchor, target, yaw = 0, cap = MAX_BLOCKS) {
     }
     return dedup(positions);
 }
+/** Scan-size guard: a result flagged oversize means the shape would scan far more cells than the cap allows. */
+const OVERSIZE_MIN_CELLS = 1_000_000;
+function oversizeResult() { const out = []; out.oversize = true; return out; }
+function tooManyCells(cells, cap) { return cells >= OVERSIZE_MIN_CELLS && cells > cap * 16; }
 export function circleXZ(cx, cy, cz, r, cap = MAX_BLOCKS) {
     if (r < 0.5) return [{ x: cx, y: cy, z: cz }];
     const ri = Math.ceil(r);
+    if (tooManyCells((2*ri+1)**2, cap)) return oversizeResult();
     const r2 = r * r;
     const positions = [];
     for (let dx = -ri; dx <= ri; dx++)
@@ -265,6 +219,7 @@ export function circleXZ(cx, cy, cz, r, cap = MAX_BLOCKS) {
 export function hollowCircleXZ(cx, cy, cz, r, cap = MAX_BLOCKS) {
     if (r < 0.5) return [{ x: cx, y: cy, z: cz }];
     const ri = Math.ceil(r), r2 = r * r;
+    if (tooManyCells((2*ri+1)**2, cap)) return oversizeResult();
     const positions = [];
     for (let dx = -ri; dx <= ri; dx++)
         for (let dz = -ri; dz <= ri; dz++) {
@@ -285,6 +240,7 @@ export function ellipseXZ(cx, cy, cz, rx, rz, cap = MAX_BLOCKS) {
     rx = Math.max(rx, 0); rz = Math.max(rz, 0);
     if (rx < 0.5 && rz < 0.5) return [{ x: cx, y: cy, z: cz }];
     const rix = Math.ceil(rx), riz = Math.ceil(rz);
+    if (tooManyCells((2*rix+1)*(2*riz+1), cap)) return oversizeResult();
     const positions = [];
     for (let dx = -rix; dx <= rix; dx++)
         for (let dz = -riz; dz <= riz; dz++) {
@@ -299,7 +255,7 @@ export function ellipseXZ(cx, cy, cz, rx, rz, cap = MAX_BLOCKS) {
 }
 export function hollowEllipseXZ(cx, cy, cz, rx, rz, cap = MAX_BLOCKS) {
     const filled = ellipseXZ(cx, cy, cz, rx, rz, cap);
-    if (filled.length <= 1) return filled;
+    if (filled.oversize || filled.length <= 1) return filled;
     let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
     for (const p of filled) {
         if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
@@ -317,7 +273,9 @@ export function ellipseCylinder(anchor, target, cap = MAX_BLOCKS) {
     const rz = Math.abs(target.z - anchor.z);
     const positions = [];
     for (const y of range(anchor.y, target.y)) {
-        for (const p of ellipseXZ(anchor.x, y, anchor.z, rx, rz, cap)) {
+        const slice = ellipseXZ(anchor.x, y, anchor.z, rx, rz, cap);
+        if (slice.oversize) return slice;
+        for (const p of slice) {
             positions.push(p);
             if (positions.length >= cap) return dedup(positions);
         }
@@ -334,6 +292,7 @@ export function hollowEllipseCylinder(anchor, target, cap = MAX_BLOCKS) {
         const slice = (y === yMin || y === yMax)
             ? ellipseXZ(anchor.x, y, anchor.z, rx, rz, cap)
             : hollowEllipseXZ(anchor.x, y, anchor.z, rx, rz, cap);
+        if (slice.oversize) return slice;
         for (const p of slice) {
             positions.push(p);
             if (positions.length >= cap) return dedup(positions);
@@ -347,7 +306,9 @@ export function cylinder(anchor, target, cap = MAX_BLOCKS) {
     const r = Math.sqrt(dx * dx + dz * dz);
     const positions = [];
     for (const y of range(anchor.y, target.y)) {
-        for (const p of circleXZ(anchor.x, y, anchor.z, r, cap)) {
+        const slice = circleXZ(anchor.x, y, anchor.z, r, cap);
+        if (slice.oversize) return slice;
+        for (const p of slice) {
             positions.push(p);
             if (positions.length >= cap) return dedup(positions);
         }
@@ -386,6 +347,7 @@ export function sphere(anchor, target, cap = MAX_BLOCKS) {
     const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (r < 0.5) return [{ x: anchor.x, y: anchor.y, z: anchor.z }];
     const ri = Math.ceil(r);
+    if (tooManyCells((2*ri+1)**3, cap)) return oversizeResult();
     const r2 = r * r;
     const positions = [];
     for (let ddx = -ri; ddx <= ri; ddx++)
@@ -418,6 +380,7 @@ export function shellSphere(anchor, target, cap = MAX_BLOCKS) {
     const r = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (r < 0.5) return [{ x: anchor.x, y: anchor.y, z: anchor.z }];
     const ri = Math.ceil(r);
+    if (tooManyCells((2*ri+1)**3, cap)) return oversizeResult();
     const r2 = r * r;
     const positions = [];
     for (let ddx = -ri; ddx <= ri; ddx++)
@@ -444,6 +407,7 @@ export function hollowCylinder(anchor, target, cap = MAX_BLOCKS) {
     const yMin = Math.min(anchor.y, target.y);
     const yMax = Math.max(anchor.y, target.y);
     const ri = Math.ceil(r), r2 = r * r;
+    if (tooManyCells((2*ri+1)**2 * (Math.abs(yMax - yMin) + 1), cap)) return oversizeResult();
     const positions = [];
     for (const y of range(yMin, yMax)) {
         const isCap = (y === yMin || y === yMax);

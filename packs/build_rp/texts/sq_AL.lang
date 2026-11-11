@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rJu keni marrë §6akses administratori§r si lojtar i parë në këtë botë.\n§7Hapni Cilësimet (Zvarritje + Klikim i djathtë) për opsionet e administratorit.
 eb.join.no_left_click=§e[Effortless Building] §rKlikimi i majtë (lëvizja) §cNUK mbështetet§r në versionin tuaj të Minecraft.\n§7Përdorni §f/palette§7 në vend të klikimit të majtë mbi §6Librin e Ndërtimit§7 për të hapur paletën e blloqeve.
-eb.join.received_book=§a[Effortless Building] §rKeni marrë një §6Libër Ndërtimi§r!\n§7Klikim i djathtë §r- hap mënyrat e ndërtimit §7| §rZvarritje + Klikim i djathtë §r- cilësimet.\n§c§l❗ §r§cE humbët? §fShkruani §a/getbook §f(kushton §e5 nivele XP§f).
+eb.join.received_book=§a[Effortless Building] §rKeni marrë një §6Libër Ndërtimi§r!\n§7Klikim i djathtë §r- hap mënyrat e ndërtimit §7| §rZvarritje + Klikim i djathtë §r- cilësimet.\n§c§l❗ §r§cE humbët? §fShkruani §a/realm:build_book§f.
 
 eb.getbook.already_have=§c[EB] Ju e keni tashmë Librin e Ndërtimit.
-eb.getbook.not_enough_xp=§c[EB] Ju duhen të paktën %1 nivele XP për të marrë një libër të ri. (Ju keni %2)
 
 eb.place.no_blocks=§c[EB] §rNuk ka blloqe në inventar!
 eb.place.limited_blocks=§e[EB] §rVetëm %1 blloqe - vendos ato që keni.
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=Mesatare
 eb.onboarding.tier.high=E fuqishme
 eb.onboarding.tier_applied=§a[EB] §rParacaktimi %1 u zbatua. Gjithçka mund ta rregulloni te §eCilësimet§r kurdo.
 eb.onboarding.capped_by_admin=§e[EB] §rMaksimumi juaj i blloqeve u kufizua në §f%1§r nga kufiri i administratorit të serverit.
+eb.onboarding.capped_raise_in_config=§e[EB] §rKufiri i blloqeve mbetet §f%1§r: së pari rrit kufirin për gjithë realmin te /realm:config (Easy Building).
 eb.onboarding.complete=§a[EB] §rGati! Klikim i djathtë me §6Librin e Ndërtimit§r për të nisur. Mbani librin §6Tutorial§r për udhëzuesin, ose shkruani §a/guide§r për tutorialin e drejtpërdrejtë.
 
 eb.mode_select.btn.more_modes=§b+ Më Shumë Mënyra§r

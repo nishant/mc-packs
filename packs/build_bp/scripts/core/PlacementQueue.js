@@ -9,79 +9,127 @@ const DEFAULT_SPEED    = 2500;
 const GLOBAL_MAX_TICK  = 50000;
 const NOTIFY_EVERY     = 20;
 const LOADER_UPDATE_EVERY = 20;
-const pending      = [];
+const TIME_BUDGET_MS   = 4;
+const ROUND_SLICE      = 256;
+const MAX_ATTEMPTS     = 200;
+// Per-player FIFO: items[head..] are waiting. head advances on pop; the array is compacted when head passes half.
+const queues       = new Map();
 const playerSpeeds = new Map();
+let totalPending   = 0;
+let tickNo         = 0;
+let rotate         = 0;
+function waiting(q) { return q.head === 0 ? q.items : q.items.slice(q.head); }
 export function setPlayerBuildSpeed(playerId, blocksPerTick) {
     playerSpeeds.set(playerId, Math.max(1, Math.floor(blocksPerTick)));
 }
 export function removePlayerBuildSpeed(playerId) {
     playerSpeeds.delete(playerId);
-    for (let i = pending.length - 1; i >= 0; i--) {
-        if (pending[i].playerId === playerId) pending.splice(i, 1);
+    const q = queues.get(playerId);
+    if (q) {
+        totalPending -= q.items.length - q.head;
+        queues.delete(playerId);
     }
     releaseChunkLoaders(playerId);
 }
 export function enqueue(playerId, dimensionId, pos, permutation) {
-    const isFirst = !pending.some(e => e.playerId === playerId);
-    pending.push({ playerId, dimensionId, pos, permutation });
-    if (isFirst) {
-        ensureChunkLoaders(playerId, dimensionId, pending.filter(e => e.playerId === playerId));
-    }
+    let q = queues.get(playerId);
+    const isFirst = !q;
+    if (!q) { q = { items: [], head: 0 }; queues.set(playerId, q); }
+    q.items.push({ playerId, dimensionId, pos, permutation, attempts: 0, tried: -1 });
+    totalPending++;
+    if (isFirst) ensureChunkLoaders(playerId, dimensionId, waiting(q));
 }
-export function queueSize() { return pending.length; }
+export function queueSize() { return totalPending; }
+function isUnloaded(e) {
+    return e?.name === "LocationInUnloadedChunkError" || /unloaded chunk/i.test(String(e?.message ?? e));
+}
 export function startPlacementQueue() {
 
     const hadPending = new Set();
 
     system.runInterval(() => {
-        if (pending.length === 0) {
+        if (totalPending === 0) {
             for (const playerId of hadPending) releaseChunkLoaders(playerId);
             hadPending.clear();
             return;
         }
+        tickNo++;
+        const start = Date.now();
         const placedThisTick = new Map();
         let totalPlaced = 0;
-        let i = 0;
-        while (i < pending.length && totalPlaced < GLOBAL_MAX_TICK) {
-            const { playerId, dimensionId, pos, permutation } = pending[i];
-            const limit       = playerSpeeds.get(playerId) ?? DEFAULT_SPEED;
-            const playerDone  = placedThisTick.get(playerId) ?? 0;
-            if (playerDone >= limit) { i++; continue; }
-            let remove = false;
-            try {
-                const block = world.getDimension(dimensionId).getBlock(pos);
-                if (block) {
-                    block.setPermutation(permutation);
-                    placedThisTick.set(playerId, playerDone + 1);
-                    totalPlaced++;
-                    remove = true;
+        let steps = 0;
+        let outOfTime = false;
+        const ids = [...queues.keys()];
+        const n = ids.length;
+        const first = rotate++ % Math.max(1, n);
+        let progress = true;
+        while (progress && !outOfTime && totalPlaced < GLOBAL_MAX_TICK) {
+            progress = false;
+            for (let k = 0; k < n && !outOfTime && totalPlaced < GLOBAL_MAX_TICK; k++) {
+                const playerId = ids[(first + k) % n];
+                const q = queues.get(playerId);
+                if (!q) continue;
+                const limit = playerSpeeds.get(playerId) ?? DEFAULT_SPEED;
+                let done = placedThisTick.get(playerId) ?? 0;
+                let visits = Math.min(ROUND_SLICE, q.items.length - q.head);
+                while (visits-- > 0 && q.head < q.items.length && done < limit && totalPlaced < GLOBAL_MAX_TICK) {
+                    if ((++steps & 31) === 0 && Date.now() - start > TIME_BUDGET_MS) { outOfTime = true; break; }
+                    const entry = q.items[q.head];
+                    q.items[q.head++] = undefined;
+                    if (entry.tried === tickNo) {
+                        // Already retried this tick: move to the back, try again next tick.
+                        q.items.push(entry);
+                        continue;
+                    }
+                    let result = "drop";
+                    try {
+                        const block = world.getDimension(entry.dimensionId).getBlock(entry.pos);
+                        if (block) {
+                            block.setPermutation(entry.permutation);
+                            result = "placed";
+                        } else {
+                            result = "retry";
+                        }
+                    } catch (e) {
+                        result = isUnloaded(e) ? "retry" : "drop";
+                    }
+                    progress = true;
+                    if (result === "placed") {
+                        done++;
+                        totalPlaced++;
+                        totalPending--;
+                    } else if (result === "retry" && ++entry.attempts < MAX_ATTEMPTS) {
+                        entry.tried = tickNo;
+                        q.items.push(entry);
+                    } else {
+                        // Dropped. The charge happens in BlockPlacer, not here, so there is no refund path to call.
+                        totalPending--;
+                    }
                 }
-
-            } catch {
-                remove = true;
+                placedThisTick.set(playerId, done);
+                if (q.head >= q.items.length) {
+                    queues.delete(playerId);
+                } else if (q.head > q.items.length / 2) {
+                    q.items = q.items.slice(q.head);
+                    q.head = 0;
+                }
             }
-            if (remove) pending.splice(i, 1);
-            else i++;
         }
 
-        const nowPending = new Set(pending.map(e => e.playerId));
         for (const playerId of hadPending) {
-            if (!nowPending.has(playerId)) {
+            if (!queues.has(playerId)) {
                 releaseChunkLoaders(playerId);
                 hadPending.delete(playerId);
             }
         }
-        for (const playerId of nowPending) hadPending.add(playerId);
+        for (const playerId of queues.keys()) hadPending.add(playerId);
     }, 1);
 
     system.runInterval(() => {
-        if (pending.length === 0) return;
+        if (totalPending === 0) return;
 
         const byPlayer = new Map();
-        for (const e of pending) {
-            if (!byPlayer.has(e.playerId)) byPlayer.set(e.playerId, []);
-            byPlayer.get(e.playerId).push(e);
-        }
+        for (const [id, q] of queues) byPlayer.set(id, waiting(q));
 
         for (const player of allPlayers()) {
             try {

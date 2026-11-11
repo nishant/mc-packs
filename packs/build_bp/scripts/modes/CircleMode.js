@@ -22,8 +22,8 @@ export const CircleMode = {
             };
         } catch { return null; }
     },
-    getPositions(anchor, target, player) {
-        const cap   = getMaxBlocks(player);
+    getPositions(anchor, target, player, secondAnchor, opts) {
+        const cap   = opts?.cap ?? getMaxBlocks(player);
         const fill  = getModeOption(player, "circle", "fill");
         const shape = getModeOption(player, "circle", "shape");
         const dx    = target.x - anchor.x;

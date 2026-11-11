@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rJe hebt §6beheerderstoegang§r gekregen als eerste speler op deze wereld.\n§7Open Instellingen (Sluipen + Rechtermuisklik) voor beheeropties.
 eb.join.no_left_click=§e[Effortless Building] §rLinkermuisklik (zwaaien) wordt §cniet ondersteund§r in jouw Minecraft-versie.\n§7Gebruik §f/palette§7 in plaats van linkermuisklik op het §6Bouwboek§7 om het blokpalet te openen.
-eb.join.received_book=§a[Effortless Building] §rJe hebt een §6Bouwboek§r ontvangen!\n§7Rechtermuisklik §rom bouwmodi te openen §7| §rSluipen + Rechtermuisklik §rvoor instellingen.\n§c§l❗ §r§cKwijt? §fTik §a/getbook §f(kost §e5 XP-niveaus§f).
+eb.join.received_book=§a[Effortless Building] §rJe hebt een §6Bouwboek§r ontvangen!\n§7Rechtermuisklik §rom bouwmodi te openen §7| §rSluipen + Rechtermuisklik §rvoor instellingen.\n§c§l❗ §r§cKwijt? §fTik §a/realm:build_book§f.
 
 eb.getbook.already_have=§c[EB] Je hebt het Bouwboek al.
-eb.getbook.not_enough_xp=§c[EB] Je hebt minimaal %1 XP-levels nodig om een nieuw boek te krijgen. (Je hebt er %2)
 
 eb.place.no_blocks=§c[EB] §rGeen blokken in inventaris!
 eb.place.limited_blocks=§e[EB] §rSlechts %1 blokken – plaatst wat je hebt.
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=Gemiddeld
 eb.onboarding.tier.high=Krachtig
 eb.onboarding.tier_applied=§a[EB] §rVoorinstelling %1 toegepast. Je kunt alles altijd bijstellen in §eInstellingen§r.
 eb.onboarding.capped_by_admin=§e[EB] §rJe blokkenlimiet is door de adminlimiet van de server begrensd op §f%1§r.
+eb.onboarding.capped_raise_in_config=§e[EB] §rBlokkenlimiet blijft §f%1§r: verhoog eerst de realmbrede limiet in /realm:config (Easy Building).
 eb.onboarding.complete=§a[EB] §rHelemaal klaar! Rechtsklik met het §6Bouwboek§r om te beginnen. Houd het §6Tutorial§r-boek vast voor de gids, of typ §a/guide§r voor de live tutorial.
 
 eb.mode_select.btn.more_modes=§b+ Meer modi§r

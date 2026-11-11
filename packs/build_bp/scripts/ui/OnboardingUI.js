@@ -15,22 +15,20 @@ function waitTicks(ticks) {
 }
 
 async function showPersistent(player, buildForm, persist) {
-    for (let attempt = 0; ; attempt++) {
+    let busyTries = 0;
+    while (true) {
         if (!player || player.isValid !== true) return null;
-        const res = await buildForm().show(player);
+        let res;
+        try { res = await buildForm().show(player); } catch { return null; }
         if (!player || player.isValid !== true) return null;
         if (!res.canceled) return res;
-        if (res.cancelationReason === FormCancelationReason.UserBusy && attempt < MAX_REOPENS) {
+        if (res.cancelationReason === FormCancelationReason.UserBusy) {
+            if (++busyTries > MAX_REOPENS) return null;
             await waitTicks(2);
             continue;
         }
-        if (!persist) return res;
-
-        const reopenable = res.cancelationReason === FormCancelationReason.UserBusy
-                        || res.cancelationReason === FormCancelationReason.UserClosed;
-        if (!reopenable || attempt >= MAX_REOPENS) return null;
-
-        await waitTicks(REOPEN_DELAY_TICKS);
+        if (res.cancelationReason === FormCancelationReason.UserClosed) return persist ? null : res;
+        return persist ? null : res;
     }
 }
 

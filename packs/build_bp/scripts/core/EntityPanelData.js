@@ -2791,7 +2791,7 @@ export const PANEL_SETTINGS = {
                 "Disabled",
                 "200 blocks (Default)",
                 "500 blocks",
-                "1 000 blocks"
+                "1,000 blocks"
             ],
             "back": [
                 79,

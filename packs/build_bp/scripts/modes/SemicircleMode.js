@@ -44,8 +44,8 @@ export const SemicircleMode = {
         }
         return getConstrainedTarget(player, anchor, player.getRotation().y);
     },
-    getPositions(anchor, target, player) {
-        const cap         = getMaxBlocks(player);
+    getPositions(anchor, target, player, secondAnchor, opts) {
+        const cap         = opts?.cap ?? getMaxBlocks(player);
         const orientation = getModeOption(player, "semicircle", "orientation");
         const fill        = getModeOption(player, "semicircle", "fill");
         const yaw         = player.getRotation().y;
@@ -96,8 +96,8 @@ export const SemicircleMode = {
             minZ: anchor.z - r, maxZ: anchor.z + r,
         };
     },
-    getShellPositions(anchor, target, player) {
-        const cap         = getMaxBlocks(player);
+    getShellPositions(anchor, target, player, secondAnchor, opts) {
+        const cap         = opts?.cap ?? getMaxBlocks(player);
         const orientation = getModeOption(player, "semicircle", "orientation");
         const yaw         = player.getRotation().y;
         const facingNS    = isFacingNS(yaw);

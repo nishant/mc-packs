@@ -8,14 +8,14 @@ export const SphereMode = {
     getTarget(player, anchor) {
         return getConstrainedTarget(player, anchor, player.getRotation().y);
     },
-    getPositions(anchor, target, player) {
+    getPositions(anchor, target, player, secondAnchor, opts) {
         const fill = getModeOption(player, "sphere", "fill");
         return fill === "hollow"
-            ? shellSphere(anchor, target, getMaxBlocks(player))
-            : sphere(anchor, target, getMaxBlocks(player));
+            ? shellSphere(anchor, target, opts?.cap ?? getMaxBlocks(player))
+            : sphere(anchor, target, opts?.cap ?? getMaxBlocks(player));
     },
-    getShellPositions(anchor, target, player) {
-        return shellSphere(anchor, target, getMaxBlocks(player));
+    getShellPositions(anchor, target, player, secondAnchor, opts) {
+        return shellSphere(anchor, target, opts?.cap ?? getMaxBlocks(player));
     },
 
     getBounds(anchor, target) {

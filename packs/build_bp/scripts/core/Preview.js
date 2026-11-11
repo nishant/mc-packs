@@ -5,12 +5,12 @@ import { isDiggingTool } from "./BlockDestroyer.js";
 import { getModeHandler, MODE_OPTIONS } from "../modes/ModeRegistry.js";
 import { FACE_OFFSETS, smartOutline, wireframePositions, skeletonAABB, boxEdges, sampledBoxEdges, catmullRomSpline, aabbBounds } from "../utils/GeometryUtils.js";
 import { getModeOption } from "../utils/ModeOptions.js";
-import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReach, getInfiniteReach, getInfiniteReachDistance, getReplaceBlocks, getMaxBlocks, getPreviewQuality, getSwapBookActions, getDeferShapeCalc, SHAPE_SETTLE_TICKS } from "./Settings.js";
+import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReach, getInfiniteReach, getInfiniteReachDistance, getReplaceBlocks, getMaxBlocks, getMaxReachCap, getPreviewQuality, getSwapBookActions, getDeferShapeCalc, SHAPE_SETTLE_TICKS } from "./Settings.js";
 import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "../utils/Items.js";
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
 import { beginVisualizationTick, markHolderDirty, visualizationHolders, visualizationIdle, visualizationReleased } from "../utils/tool-gate.js";
-import { getFlippedStates } from "../modifiers/MirrorModifier.js";
+import { modifiedStates } from "../modifiers/MirrorModifier.js";
 import { expandBeds, isBedType, directionFromYaw, directionFromStates, bedPartnerPos } from "./beds.js";
 
 /** Players the preview looks at every tick: a mode on, or a book in hand. The others every IDLE_EVERY ticks. */
@@ -19,7 +19,7 @@ import { ALWAYS_REPLACEABLE } from "./BlockPlacer.js";
 import { getPaletteMode, getDistributionMode } from "./Palette.js";
 import { isCreative } from "../utils/InventoryUtils.js";
 import { t, rawtext } from "../utils/Text.js";
-import { isActionBarLocked, steadyBar } from "../utils/ActionBar.js";
+import { isActionBarLocked, steadyBar, lockActionBar } from "../utils/ActionBar.js";
 import { showHintOnce } from "../utils/Hints.js";
 import { recordTick, tpsText } from "../utils/Tps.js";
 import { getAirBuildTarget } from "../modes/AirBuildMode.js";
@@ -339,7 +339,7 @@ function previewBedPositions(positions, typeId, player, blockStates) {
     try { yaw = player.getRotation().y; } catch { yaw = 0; }
     const { positions: expanded } = expandBeds(positions.map((p) => {
         const raw = p.states ?? p._resolvedStates ?? blockStates ?? {};
-        const flipped = (p._mx || p._my || p._mz) ? getFlippedStates(raw, !!p._mx, !!p._my, !!p._mz) : raw;
+        const flipped = modifiedStates(raw, p);
         return {
             x: p.x, y: p.y, z: p.z, typeId,
             direction: directionFromStates(flipped) ?? directionFromYaw(yaw),
@@ -680,6 +680,19 @@ export function startPreviewLoop() {
                     clearAnchor(player);
                     continue;
                 }
+                {
+                    // A forgotten anchor far away would keep scanning a huge shape every tick: drop it.
+                    const pl = player.location, an = state.anchor;
+                    const farLimit = Math.max(getMaxReachCap(), 64) * 2;
+                    if (an && Math.hypot(pl.x - an.x, pl.y - an.y, pl.z - an.z) > farLimit) {
+                        lastPreviewTarget.delete(player.id);
+                        clearPreviewCache(player.id);
+                        clearAnchor(player);
+                        lockActionBar(player.id, 2000);
+                        try { player.onScreenDisplay.setActionBar("§7Anchor cleared: too far away"); } catch {}
+                        continue;
+                    }
+                }
                 const isDestroy  = state.blockTypeId === "eb:destroy";
                 const previewMode = isDestroy ? getDestroyPreviewMode(player) : getPreviewMode(player);
                 if (previewMode === "disable" && !isDestroy) continue;
@@ -949,9 +962,21 @@ export function startPreviewLoop() {
                     continue;
                 }
 
+                const maxBlocks = getMaxBlocks(player);
                 const rawPositions = handler.getPositions(
-                    state.anchor, target, player, state.secondAnchor ?? null
+                    state.anchor, target, player, state.secondAnchor ?? null, { cap: maxBlocks + 1 }
                 );
+                if (rawPositions?.oversize || rawPositions?.length > maxBlocks) {
+                    const last = previewCache.get(player.id);
+                    const stillRelevant = last?.contextKey === contextKey;
+                    const warnBar = t("eb.preview.exceeds_limit", maxBlocks.toLocaleString());
+                    if (stillRelevant) {
+                        previewCache.set(player.id, { ...last, key: cacheKey, settled: true, actionBar: warnBar });
+                        spawnParticles(dim, last.preview, last.particleId);
+                    }
+                    if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
+                    continue;
+                }
                 if (!rawPositions?.length) continue;
                 const allPositions = applyModifiers(player, rawPositions);
                 if (!allPositions?.length) continue;

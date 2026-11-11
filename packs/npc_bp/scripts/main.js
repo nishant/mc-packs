@@ -1342,7 +1342,7 @@ function hearGossip(msg) {
   const from = gossipFrom(msg.from);
   if (from) g.f = from;
   // Pieces told by different townsfolk (two towns' mayors) are different news.
-  const same = (/** @type {Gossip} */ o) => o.p === g.p && o.f === g.f && now - o.t < GOSSIP_REPEAT_MS && (o.k === g.k || (!!g.p && !!g.pl && o.pl === g.pl));
+  const same = (/** @type {Gossip} */ o) => (o.p === g.p || (!!g.n && o.n === g.n)) && o.f === g.f && now - o.t < GOSSIP_REPEAT_MS && (o.k === g.k || (!!g.p && !!g.pl && o.pl === g.pl));
   gossip = gossipAlive().filter((o) => !same(o));
   const ofKind = gossip.filter((o) => o.k === g.k);
   if (ofKind.length >= GOSSIP_PER_KIND) {
@@ -1380,7 +1380,7 @@ function gossipLine(player, t) {
   const heard = heardOf(player);
   const g = alive.filter((x) => !heard.includes(x.i) && tellsGossip(x, t.id)).sort((a, b) => b.i - a.i)[0];
   if (!g) return undefined;
-  const self = !!g.p && g.p === player.id; // town news (no player) is never about the listener
+  const self = !!g.p && (g.p === player.id || g.p === player.name || g.n === player.name); // town news (no player) is never about the listener
   // A playerless piece names nobody. Lines that need {name} fall back to the nameless news line, so the
   // name is never left empty and no player is invented. A caravan line names a place, so it stays.
   const voiced = [...(HEARTH[t.id]?.gossip?.[g.k] ?? []), ...(GOSSIP[g.k] ?? (g.p ? GOSSIP.other : GOSSIP.news))];
@@ -2013,17 +2013,22 @@ function assignHouses(houses, ids) {
   return out;
 }
 
-/**
- * Moves each townsfolk to its new post: the NPC itself (its skin stays), or placed again from its saved skin when
- * it can't be reached. The spots from before are kept for /realm:npc_undo.
- * @param {Dimension} dim @param {{ id: string, post: Vector3, yaw: number }[]} plan
- */
-async function moveTo(dim, plan) {
+/** Keeps the spots from before a move for /realm:npc_undo. */
+function keepPrev() {
   try {
     world.setDynamicProperty(PROP_PREV, JSON.stringify(list));
   } catch (e) {
     console.warn(`[npc] keep the old spots: ${e}`);
   }
+}
+
+/**
+ * Moves each townsfolk to its new post: the NPC itself (its skin stays), or placed again from its saved skin when
+ * it can't be reached. The spots from before are kept for /realm:npc_undo.
+ * @param {Dimension} dim @param {{ id: string, post: Vector3, yaw: number }[]} plan
+ */
+async function moveTo(dim, plan, { savePrev = true } = {}) {
+  if (savePrev) keepPrev();
   let moved = 0;
   for (const p of plan) {
     const rec = placedOf(p.id);
@@ -2139,7 +2144,8 @@ async function undoMove(player) {
     const byDim = new Map();
     for (const r of prev) byDim.set(r.dim, [...(byDim.get(r.dim) ?? []), { id: r.id, post: r.orig ?? { x: r.x, y: r.y, z: r.z }, yaw: r.yaw }]);
     let moved = 0;
-    for (const [d, plan] of byDim) moved += await moveTo(world.getDimension(d), plan);
+    keepPrev(); // once, before any dimension moves: later dimensions must not overwrite it with half-moved spots
+    for (const [d, plan] of byDim) moved += await moveTo(world.getDimension(d), plan, { savePrev: false });
     if (player.isValid) player.sendMessage(`§aPut ${moved} townsfolk back.§7 Run /realm:npc_undo again to swap back.`);
   } finally {
     moving = false;

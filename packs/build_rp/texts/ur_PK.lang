@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rآپ کو §6ایڈمن رسائی§r دی گئی ہے کیونکہ آپ اس دنیا کے پہلے کھلاڑی ہیں۔\n§7ایڈمن آپشنز تک رسائی کے لیے ترتیبات کھولیں (جھکنا + دائیں کلک)۔
 eb.join.no_left_click=§e[Effortless Building] §rبائیں کلک (جھولنا) آپ کے Minecraft ورژن میں §cسپورٹ نہیں ہے§r۔\n§7بلاک پیلٹ کھولنے کے لیے §6بلڈنگ بک§7 پر بائیں کلک کی بجائے §f/palette§7 استعمال کریں۔
-eb.join.received_book=§a[Effortless Building] §rآپ کو ایک §6بلڈنگ بک§r ملی!\n§7بلڈ موڈز کھولنے کے لیے دائیں کلک §rکریں §7| §rترتیبات کے لیے جھکنا + دائیں کلک §rکریں۔\n§c§l❗ §r§cگم ہو گئی؟ §fٹائپ کریں §a/getbook §f(§e5 XP لیول§f لگیں گے)۔
+eb.join.received_book=§a[Effortless Building] §rآپ کو ایک §6بلڈنگ بک§r ملی!\n§7بلڈ موڈز کھولنے کے لیے دائیں کلک §rکریں §7| §rترتیبات کے لیے جھکنا + دائیں کلک §rکریں۔\n§c§l❗ §r§cگم ہو گئی؟ §fٹائپ کریں §a/realm:build_book§f۔
 
 eb.getbook.already_have=§c[EB] آپ کے پاس پہلے ہی بلڈنگ بک موجود ہے۔
-eb.getbook.not_enough_xp=§c[EB] نیا کتاب حاصل کرنے کے لیے آپ کو کم از کم %1 XP لیول درکار ہیں۔ (آپ کے پاس %2 ہیں)
 
 eb.place.no_blocks=§c[EB] §rانوینٹری میں کوئی بلاک نہیں!
 eb.place.limited_blocks=§e[EB] §rصرف %1 بلاک ہیں – جو ہیں وہ رکھے جا رہے ہیں۔
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=درمیانی
 eb.onboarding.tier.high=طاقتور
 eb.onboarding.tier_applied=§a[EB] §r%1 پری سیٹ لاگو ہوا۔ آپ کسی بھی وقت §eترتیبات§r میں سب کچھ باریکی سے بدل سکتے ہیں۔
 eb.onboarding.capped_by_admin=§e[EB] §rسرور کی ایڈمن حد کی وجہ سے آپ کے زیادہ سے زیادہ بلاک §f%1§r تک محدود کر دیے گئے۔
+eb.onboarding.capped_raise_in_config=§e[EB] §rبلاک کی حد §f%1§r پر برقرار رکھی گئی: پہلے /realm:config (Easy Building) میں پورے ریلم کی حد بڑھائیں۔
 eb.onboarding.complete=§a[EB] §rسب تیار! شروع کرنے کے لیے §6بلڈنگ بک§r سے دائیں کلک کریں۔ گائیڈ کے لیے §6ٹیوٹوریل§r بک ہاتھ میں لیں، یا لائیو ٹیوٹوریل کے لیے §a/guide§r ٹائپ کریں۔
 
 eb.mode_select.btn.more_modes=§b+ مزید موڈز§r

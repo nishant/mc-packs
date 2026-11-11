@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { system, BlockPermutation } from "@minecraft/server";
-import { getFlippedStates } from "../modifiers/MirrorModifier.js";
+import { modifiedStates, hasStateMods } from "../modifiers/MirrorModifier.js";
 import { getMaxBlocks, getBuildSpeed, getUndoThreshold, getReplaceBlocks } from "./Settings.js";
 import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
@@ -96,13 +96,13 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
         try { yaw = player.getRotation().y; } catch { yaw = 0; }
         const entries = (assignments ?? toPlace.map(p => ({ pos: p, typeId }))).map(({ pos, typeId: tid }) => {
             const raw = pos.states ?? blockStates ?? {};
-            const flipped = (pos._mx || pos._my || pos._mz) ? getFlippedStates(raw, !!pos._mx, !!pos._my, !!pos._mz) : raw;
+            const flipped = modifiedStates(raw, pos);
             return {
                 x: pos.x, y: pos.y, z: pos.z, typeId: tid,
                 states: flipped,
                 direction: directionFromStates(flipped) ?? directionFromYaw(yaw),
                 _alreadyHalf: flipped.head_piece_bit === true,
-                _mx: pos._mx, _my: pos._my, _mz: pos._mz,
+                _mx: pos._mx, _my: pos._my, _mz: pos._mz, _rot: pos._rot, _alt: pos._alt,
             };
         });
         const expanded = expandBeds(entries, canPlaceBed);
@@ -222,12 +222,12 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                     perm = BlockPermutation.resolve(base, known);
                 }
             } catch {  }
-        } else if (pos._mx || pos._my || pos._mz) {
+        } else if (hasStateMods(pos)) {
             try {
                 const base = assignments
                     ? (posTypeMap.get(`${pos.x},${pos.y},${pos.z}`) ?? typeId)
                     : typeId;
-                const flippedStates = getFlippedStates(blockStates ?? {}, pos._mx, pos._my, pos._mz);
+                const flippedStates = modifiedStates(blockStates ?? {}, pos);
                 perm = BlockPermutation.resolve(base, flippedStates);
             } catch {  }
         }
@@ -293,13 +293,37 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
             }
         }
     }
+    function scheduleOrdered(ordered, perTick) {
+        let idx = 0;
+        const runId = system.runInterval(() => {
+            try {
+                let end = Math.min(idx + perTick, ordered.length);
+                const edge = ordered[end - 1];
+                const next = ordered[end];
+                if (edge && next && edge._bedGroup != null && edge._bedGroup === next._bedGroup) end++;
+                for (; idx < end; idx++) placeOne(ordered[idx]);
+                if (idx >= ordered.length) system.clearRun(runId);
+            } catch {
+                system.clearRun(runId);
+                if (survival && idx < ordered.length && player.isValid) {
+                    const refund = new Map();
+                    for (let r = idx; r < ordered.length; r++) {
+                        const p = ordered[r];
+                        if (p._bedHead) continue;
+                        const tid = assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? typeId) : typeId;
+                        refund.set(tid, (refund.get(tid) ?? 0) + 1);
+                    }
+                    for (const [tid, cnt] of refund) giveBlocks(player, tid, cnt);
+                }
+            }
+        }, 1);
+    }
     if (options.immediate) {
         for (let i = 0; i < total; i++) placeOne(toPlace[i]);
     } else {
         const waveTicks = getBuildSpeed(player);
         if (waveTicks <= 1) {
-
-            for (let i = 0; i < total; i++) placeOne(toPlace[i]);
+            scheduleOrdered(keepBedHalvesTogether(toPlace), 256);
         } else {
 
             const ax = anchor.x + 0.5, ay = anchor.y, az = anchor.z + 0.5;
@@ -319,30 +343,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
             }
             const shellList     = [...shellMap.keys()].sort((a, b) => a - b).map(k => shellMap.get(k));
             const ordered       = keepBedHalvesTogether(shellList.flat());
-            const perTick       = Math.min(64, Math.max(1, Math.ceil(ordered.length / waveTicks)));
-            let idx             = 0;
-            const runId = system.runInterval(() => {
-                try {
-                    let end = Math.min(idx + perTick, ordered.length);
-                    const edge = ordered[end - 1];
-                    const next = ordered[end];
-                    if (edge && next && edge._bedGroup != null && edge._bedGroup === next._bedGroup) end++;
-                    for (; idx < end; idx++) placeOne(ordered[idx]);
-                    if (idx >= ordered.length) system.clearRun(runId);
-                } catch {
-                    system.clearRun(runId);
-                    if (survival && idx < ordered.length && player.isValid) {
-                        const refund = new Map();
-                        for (let r = idx; r < ordered.length; r++) {
-                            const p = ordered[r];
-                            if (p._bedHead) continue;
-                            const tid = assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? typeId) : typeId;
-                            refund.set(tid, (refund.get(tid) ?? 0) + 1);
-                        }
-                        for (const [tid, cnt] of refund) giveBlocks(player, tid, cnt);
-                    }
-                }
-            }, 1);
+            scheduleOrdered(ordered, Math.min(64, Math.max(1, Math.ceil(ordered.length / waveTicks))));
         }
     }
     reportPlaced(dim.id, toPlace, (p) => (assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? p.typeId ?? typeId) : (p.typeId ?? typeId)));

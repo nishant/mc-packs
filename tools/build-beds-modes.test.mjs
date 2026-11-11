@@ -35,7 +35,7 @@ function bedPlayer(beds) {
     addItem: (item) => { for (let i = 0; i < 36; i++) if (!slots.get(i)) { slots.set(i, item); return undefined; } return item; },
   };
   const p = {
-    id: `bm${++seq}`, name: `Bed${seq}`, isValid: true, isOp: true, isSneaking: false, selectedSlotIndex: 0,
+    id: `bm${++seq}`, name: `Bed${seq}`, isValid: true, isOp: true, commandPermissionLevel: 3, isSneaking: false, selectedSlotIndex: 0,
     dimension: mc.world.getDimension("minecraft:overworld"), location: { x: 0, y: 64, z: 0 },
     getGameMode: () => "survival", getRotation: () => ({ x: 0, y: 0 }),
     getDynamicProperty: (k) => props.get(k),

@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rFoi-lhe concedido §6acesso de administrador§r por ser o primeiro jogador neste mundo.\n§7Abra as Definições (Agachar + Clique direito) para aceder às opções de administrador.
 eb.join.no_left_click=§e[Effortless Building] §rO clique esquerdo (balanço) §cnão é suportado§r na sua versão do Minecraft.\n§7Use §f/palette§7 em vez de clicar com o botão esquerdo no §6Livro de Construção§7 para abrir a paleta de blocos.
-eb.join.received_book=§a[Effortless Building] §rRecebeu um §6Livro de Construção§r!\n§7Clique direito §rpara abrir os modos de construção §7| §rAgachar + Clique direito §rpara definições.\n§c§l❗ §r§cPerdeu? §fEscreva §a/getbook §f(custa §e5 níveis de XP§f).
+eb.join.received_book=§a[Effortless Building] §rRecebeu um §6Livro de Construção§r!\n§7Clique direito §rpara abrir os modos de construção §7| §rAgachar + Clique direito §rpara definições.\n§c§l❗ §r§cPerdeu? §fEscreva §a/realm:build_book§f.
 
 eb.getbook.already_have=§c[EB] Já tens o Livro de Construção.
-eb.getbook.not_enough_xp=§c[EB] Precisas de pelo menos %1 níveis de XP para obter um novo livro. (Tens %2)
 
 eb.place.no_blocks=§c[EB] §rNenhum bloco no inventário!
 eb.place.limited_blocks=§e[EB] §rTem apenas %1 blocos – a colocar o que tem.
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=Médio
 eb.onboarding.tier.high=Forte
 eb.onboarding.tier_applied=§a[EB] §rPredefinição %1 aplicada. Dá para ajustar tudo em §eAjustes§r quando quiser.
 eb.onboarding.capped_by_admin=§e[EB] §rSeu máximo de blocos foi limitado a §f%1§r pelo teto do administrador do servidor.
+eb.onboarding.capped_raise_in_config=§e[EB] §rLimite de blocos mantido em §f%1§r: primeiro aumente o teto de todo o realm em /realm:config (Easy Building).
 eb.onboarding.complete=§a[EB] §rTudo pronto! Clique direito com o §6Livro de Construção§r para começar. Segure o livro §6Tutorial§r para o guia, ou escreve §a/guide§r para o tutorial ao vivo.
 
 eb.mode_select.btn.more_modes=§b+ Mais modos§r

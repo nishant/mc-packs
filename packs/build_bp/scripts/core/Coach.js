@@ -245,11 +245,7 @@ function showCard(coach) {
     const aside  = (CARD.originX - CARD.width / 2) / CARD.pixelsPerBlock * size;
     const origin = { x: centre.x + Math.cos(rad) * aside, y: centre.y, z: centre.z + Math.sin(rad) * aside };
     let entity;
-    try {
-        entity = player.dimension.spawnEntity(CARD.id, origin, { initialRotation: yaw });
-    } catch {
-        try { entity = player.dimension.spawnEntity(CARD.id, origin); } catch { return; }
-    }
+    try { entity = player.dimension.spawnEntity(CARD.id, origin); } catch { return; }
     try { entity.setRotation({ x: 0, y: yaw }); } catch {}
     coach.card = { entity, origin, centre, yaw, def: CARD, hover: 0, cursor: getCursor(player), values: { tip: false },
         wanted: size, scale: scaleEntity(entity, size), side };
@@ -314,11 +310,7 @@ function placeMarker(coach, frame, [n, ahead, side]) {
     const where = { x: spot.x + 0.5, y: y + 1 + COACH_MARKER_ABOVE, z: spot.z + 0.5 };
     const yaw   = yawToward(where, player.location);
     let entity;
-    try {
-        entity = player.dimension.spawnEntity(MARKER_ID, where, { initialRotation: yaw });
-    } catch {
-        try { entity = player.dimension.spawnEntity(MARKER_ID, where); } catch { return; }
-    }
+    try { entity = player.dimension.spawnEntity(MARKER_ID, where); } catch { return; }
     try {
         entity.setRotation({ x: 0, y: yaw });
         entity.setProperty("eb:n", n);

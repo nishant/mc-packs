@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { ItemStack, system, world } from "@minecraft/server";
-import { createIdleClock, idleDue } from "./idle-cadence.js";
+import { idleDue } from "./idle-cadence.js";
 import { forgetHolder, markHolderDirty } from "./tool-gate.js";
 
 export const BOOK_ID          = "eb:building_book";
@@ -177,12 +177,7 @@ export function handJustChanged(player) {
  * Idle players (nothing to draw, no book in hand) are looked at every IDLE_EVERY ticks only, spread over the ticks
  * by their place in the player list, so a big server costs little while nobody builds.
  */
-export const IDLE_EVERY = 5;
-const idleClock = createIdleClock();
-/** One step of this loop's own clock. A period that divides the world tick still walks every idle index. */
-export function nextIdlePhase() {
-    return idleClock.tick();
-}
+export { IDLE_EVERY } from "./idle-cadence.js";
 export function idleSkip(player, index, busy, phase = playersTick, window = 1) {
     const now = system.currentTick;
     const span = Math.max(1, Number(window) || 1);
@@ -238,8 +233,8 @@ function give(player, typeId, name, lore) {
         const stack = new ItemStack(typeId, 1);
         stack.nameTag = name;
         stack.setLore(lore);
-        inv.addItem(stack);
-        return true;
+        const leftover = inv.addItem(stack);
+        return leftover === undefined;
     } catch { return false; }
 }
 

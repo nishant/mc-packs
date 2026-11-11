@@ -197,8 +197,8 @@ test("Run Away streams the same Ogg through spatial and personal record sounds",
   assert.equal(ogg.readUInt32LE(40), 44100, "44.1 kHz");
 });
 
-test("the generator reproduces all eight committed pictures", () => {
+test("the generator reproduces all seven committed pictures", () => {
   const result = spawnSync(process.execPath, [join(import.meta.dirname, "gen.mjs"), "--check"], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /\(8 files\)/);
+  assert.match(result.stdout, /\(7 files\)/);
 });

@@ -10,8 +10,8 @@ export const LineMode = {
             return getConstrainedTarget(player, anchor, player.getRotation().y);
         } catch { return null; }
     },
-    getPositions(anchor, target, player) {
-        return axisLine(anchor, target, getMaxBlocks(player));
+    getPositions(anchor, target, player, secondAnchor, opts) {
+        return axisLine(anchor, target, opts?.cap ?? getMaxBlocks(player));
     },
 
     getBounds(anchor, target) {

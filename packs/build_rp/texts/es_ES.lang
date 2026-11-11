@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rSe te ha otorgado §6acceso de administrador§r como el primer jugador en este mundo.\n§7Abre Configuración (Agacharse + Clic derecho) para acceder a las opciones de administrador.
 eb.join.no_left_click=§e[Effortless Building] §rEl clic izquierdo (balanceo) §cno está soportado§r en tu versión de Minecraft.\n§7Usa §f/palette§7 en lugar de clic izquierdo en el §6Libro de Construcción§7 para abrir la paleta de bloques.
-eb.join.received_book=§a[Effortless Building] §r¡Recibiste un §6Libro de Construcción§r!\n§7Clic derecho §rpara abrir modos de construcción §7| §rAgacharse + Clic derecho §rpara configuración.\n§c§l❗ §r§c¿Lo perdiste? §fEscribe §a/getbook §f(cuesta §e5 niveles de XP§f).
+eb.join.received_book=§a[Effortless Building] §r¡Recibiste un §6Libro de Construcción§r!\n§7Clic derecho §rpara abrir modos de construcción §7| §rAgacharse + Clic derecho §rpara configuración.\n§c§l❗ §r§c¿Lo perdiste? §fEscribe §a/realm:build_book§f.
 
 eb.getbook.already_have=§c[EB] Ya tienes el Libro de Construcción.
-eb.getbook.not_enough_xp=§c[EB] Necesitas al menos %1 niveles de XP para obtener un libro nuevo. (Tienes %2)
 
 eb.place.no_blocks=§c[EB] §r¡No hay bloques en el inventario!
 eb.place.limited_blocks=§e[EB] §rSolo tienes %1 bloques – colocando lo que hay.
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=Gama media
 eb.onboarding.tier.high=Gama alta
 eb.onboarding.tier_applied=§a[EB] §rAjuste %1 aplicado. Puedes afinarlo todo en §eAjustes§r cuando quieras.
 eb.onboarding.capped_by_admin=§e[EB] §rTu máximo de bloques quedó limitado a §f%1§r por el tope del administrador del servidor.
+eb.onboarding.capped_raise_in_config=§e[EB] §rLímite de bloques mantenido en §f%1§r: primero sube el tope de todo el realm en /realm:config (Easy Building).
 eb.onboarding.complete=§a[EB] §r¡Todo listo! Haz clic derecho con el §6Libro de Construcción§r para empezar. Sostén el libro §6Tutorial§r para la guía, o escribe §a/guide§r para el tutorial en vivo.
 
 eb.mode_select.btn.more_modes=§b+ Más modos§r

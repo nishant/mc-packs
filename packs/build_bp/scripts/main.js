@@ -14,7 +14,7 @@ import { offerTutorialBook } from "./ui/HelpUI.js";
 import { showClipboardUI, showCopyCutPrompt } from "./ui/ClipboardUI.js";
 import { showOnboarding } from "./ui/OnboardingUI.js";
 import { startLanguagePicker, hasPicker, pickerClick } from "./core/LanguagePicker.js";
-import { startEntityPanels, panelClick, hasPanel, removePanel } from "./core/EntityPanel.js";
+import { startEntityPanels, panelClick, removePanel } from "./core/EntityPanel.js";
 import "./ui/FloatingPanels.js";
 import { startCoachLoop, toggleCoach, coachClick, coachAimed, coachGuards, cleanupCoach } from "./core/Coach.js";
 import { coachEvent } from "./utils/CoachEvents.js";
@@ -35,7 +35,7 @@ import { startModifierVisualizerLoop } from "./core/ModifierVisualizer.js";
 import { startVanillaModifierHook } from "./core/VanillaModifierHook.js";
 import { performUndo, performRedo, clearPlayerTempStacks } from "./core/UndoRedo.js";
 import { getAirBuildTarget, getPlacementStatesFromAir, getPlacementStatesFromFace } from "./modes/AirBuildMode.js";
-import { getAirBuildReach, hasRequiredTag, getRequiredTag, getBuildSpeed, waveToQueueSpeed, getInfiniteReach, getInfiniteReachDistance, getAllowDestroy, getDestroyCreativeOnly, getAutoGiveBook, getFovZoomStart, getFovZoomMax, getFovZoomEnabled, getSwapBookActions, getOnboarded, hasSimpleModesPref, setSimpleModes } from "./core/Settings.js";
+import { getMaxBlocks, getAirBuildReach, hasRequiredTag, getRequiredTag, getBuildSpeed, waveToQueueSpeed, getInfiniteReach, getInfiniteReachDistance, getAllowDestroy, getDestroyCreativeOnly, getAutoGiveBook, getFovZoomStart, getFovZoomMax, getFovZoomEnabled, getSwapBookActions, getOnboarded, hasSimpleModesPref, setSimpleModes } from "./core/Settings.js";
 import { isCreative } from "./utils/InventoryUtils.js";
 import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
@@ -157,10 +157,6 @@ function welcome(player) {
         }
         if (received) player.sendMessage(t("eb.join.welcome"));
     }
-    if (!swingSupported && !player.getDynamicProperty("eb:leftClickNoticed")) {
-        player.setDynamicProperty("eb:leftClickNoticed", true);
-        player.sendMessage(t("eb.join.no_left_click"));
-    }
 }
 
 world.afterEvents.playerSpawn.subscribe(ev => {
@@ -189,6 +185,7 @@ world.afterEvents.playerSpawn.subscribe(ev => {
     system.run(() => { try { welcome(player); } catch { } });
     if (getAutoGiveBook() && !getOnboarded(player)) {
         system.runTimeout(() => {
+            if (!player.isValid) return;
             showOnboarding(player, { persist: true });
         }, 40);
     }
@@ -209,7 +206,9 @@ export async function filterBuildPositions(player, positions, typeId, blockState
     const ready = isDestroy
         ? expandDestroyForClaims(positions, (pos) => readPlaced(player, pos))
         : expandForClaims(positions, typeId, blockStates, yawOf(player));
-    const filtered = await filterAllowedPositionsAsync(player, player.dimension.id, ready, true);
+    const dimId = player.dimension.id;
+    const filtered = await filterAllowedPositionsAsync(player, dimId, ready, true);
+    if (!player.isValid || player.dimension.id !== dimId) return [];
     return dropIncompleteBeds(filtered ?? []);
 }
 export async function placeAir(player, target, typeId, blockStates) {
@@ -235,10 +234,12 @@ export function confirmPlacement(player, fallbackTarget) {
         if (!xzTarget) return;
         setSecondAnchor(player, xzTarget);
         const isDestroy3 = typeId === "eb:destroy";
-        system.run(() => player.onScreenDisplay.setActionBar(
-            t(isDestroy3 ? "eb.bar.xz_set_destroy" : "eb.bar.xz_set_place")
-        ));
-        lockActionBar(player.id, 1000);
+        system.run(() => {
+            lockActionBar(player.id, 1000);
+            player.onScreenDisplay.setActionBar(
+                t(isDestroy3 ? "eb.bar.xz_set_destroy" : "eb.bar.xz_set_place")
+            );
+        });
         return;
     }
     const isDestroy = typeId === "eb:destroy";
@@ -281,8 +282,8 @@ export function confirmPlacement(player, fallbackTarget) {
             if (!positions?.length) return;
             const placed = placeBlocks(player, positions, anchor, typeId, blockStates);
             if (placed > 0) {
-                player.onScreenDisplay.setActionBar(t("eb.bar.placed", placed, mode));
                 lockActionBar(player.id, 2500);
+                player.onScreenDisplay.setActionBar(t("eb.bar.placed", placed, mode));
                 coachEvent(player, "placed");
             }
         });
@@ -296,7 +297,13 @@ export function confirmPlacement(player, fallbackTarget) {
     clearPreviewCache(player.id);
     system.run(async () => {
         if (!handler) return;
-        const rawPositions = handler.getPositions(anchor, target, player, secondAnchor);
+        const maxBlocks = getMaxBlocks(player);
+        const rawPositions = handler.getPositions(anchor, target, player, secondAnchor, { cap: maxBlocks + 1 });
+        if (rawPositions?.oversize || rawPositions?.length > maxBlocks) {
+            lockActionBar(player.id, 2000);
+            player.onScreenDisplay.setActionBar(t("eb.preview.exceeds_limit", maxBlocks.toLocaleString()));
+            return;
+        }
         if (!rawPositions?.length) return;
         const modPositions = applyModifiers(player, rawPositions);
         if (!modPositions?.length) return;
@@ -305,16 +312,16 @@ export function confirmPlacement(player, fallbackTarget) {
         if (isDestroy) {
             destroyBlocks(player, positions, (destroyed) => {
                 if (destroyed > 0) {
-                    player.onScreenDisplay.setActionBar(t("eb.bar.destroyed", destroyed, mode));
                     lockActionBar(player.id, 2500);
+                    player.onScreenDisplay.setActionBar(t("eb.bar.destroyed", destroyed, mode));
                     coachEvent(player, "placed");
                 }
             });
         } else {
             const placed = placeBlocks(player, positions, anchor, typeId, blockStates);
             if (placed > 0) {
-                player.onScreenDisplay.setActionBar(t("eb.bar.placed", placed, mode));
                 lockActionBar(player.id, 2500);
+                player.onScreenDisplay.setActionBar(t("eb.bar.placed", placed, mode));
                 coachEvent(player, "placed");
             }
         }
@@ -381,8 +388,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
             clearAnchor(player);
             clearPreviewCache(player.id);
             anchoredAtMs.set(player.id, Date.now());
-            system.run(() => player.onScreenDisplay.setActionBar(t("eb.bar.copy_cleared")));
-            lockActionBar(player.id, 1500);
+            system.run(() => { lockActionBar(player.id, 1500); player.onScreenDisplay.setActionBar(t("eb.bar.copy_cleared")); });
             return;
         }
 
@@ -394,10 +400,10 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
                 const count = await executePaste(player, facePos);
                 if (!player.isValid) return;
                 if (count > 0) getState(player).lastPasteAt = Date.now();
+                lockActionBar(player.id, 2000);
                 player.onScreenDisplay.setActionBar(count > 0
                     ? t("eb.bar.pasted", count)
                     : t("eb.bar.paste_empty"));
-                lockActionBar(player.id, 2000);
             });
             return;
         }
@@ -409,8 +415,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
             setAnchor(player, clickPos, "eb:copy", {});
             anchoredAtMs.set(player.id, Date.now());
             lastInteractMs.set(player.id, Date.now());
-            system.run(() => player.onScreenDisplay.setActionBar(t("eb.bar.copy_corner1", clickPos.x, clickPos.y, clickPos.z)));
-            lockActionBar(player.id, 600);
+            system.run(() => { lockActionBar(player.id, 600); player.onScreenDisplay.setActionBar(t("eb.bar.copy_corner1", clickPos.x, clickPos.y, clickPos.z)); });
             return;
         }
 
@@ -420,8 +425,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
             setSecondAnchor(player, clickPos);
             anchoredAtMs.set(player.id, Date.now());
             lastInteractMs.set(player.id, Date.now());
-            system.run(() => player.onScreenDisplay.setActionBar(t("eb.bar.copy_corner2", clickPos.x, clickPos.y, clickPos.z)));
-            lockActionBar(player.id, 600);
+            system.run(() => { lockActionBar(player.id, 600); player.onScreenDisplay.setActionBar(t("eb.bar.copy_corner2", clickPos.x, clickPos.y, clickPos.z)); });
             return;
         }
 
@@ -466,10 +470,12 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
             }
             setAnchor(player, loc, "eb:destroy", {});
             anchoredAtMs.set(player.id, Date.now());
-            system.run(() => player.onScreenDisplay.setActionBar(
-                t("eb.bar.destroy_anchor_set", loc.x, loc.y, loc.z)
-            ));
-            lockActionBar(player.id, 1000);
+            system.run(() => {
+                lockActionBar(player.id, 1000);
+                player.onScreenDisplay.setActionBar(
+                    t("eb.bar.destroy_anchor_set", loc.x, loc.y, loc.z)
+                );
+            });
             return;
         }
         if (Date.now() - (anchoredAtMs.get(player.id) ?? 0) < 200) return;
@@ -497,9 +503,9 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
             if (isInsidePlayer(player, facePos)) return;
             const placed = await placeAir(player, facePos, item.typeId, blockStates);
             if (placed > 0) {
+                lockActionBar(player.id, 300);
                 player.onScreenDisplay.setActionBar(t("eb.bar.placed_one"));
                 coachEvent(player, "placed");
-                lockActionBar(player.id, 300);
             }
         });
         return;
@@ -582,9 +588,9 @@ world.afterEvents.itemUse.subscribe(ev => {
         system.run(async () => {
             const placed = await placeAir(player, target, item.typeId, blockStates);
             if (placed > 0) {
+                lockActionBar(player.id, 300);
                 player.onScreenDisplay.setActionBar(t("eb.bar.placed_one"));
                 coachEvent(player, "placed");
-                lockActionBar(player.id, 300);
             }
         });
         return;
@@ -598,15 +604,13 @@ world.afterEvents.itemUse.subscribe(ev => {
                 clearPreviewCache(player.id);
                 anchoredAtMs.set(player.id, Date.now());
                 lastInteractMs.set(player.id, Date.now());
-                system.run(() => player.onScreenDisplay.setActionBar(t("eb.bar.copy_cleared")));
-                lockActionBar(player.id, 1500);
+                system.run(() => { lockActionBar(player.id, 1500); player.onScreenDisplay.setActionBar(t("eb.bar.copy_cleared")); });
             } else if (state.anchor) {
                 clearAnchor(player);
                 clearPreviewCache(player.id);
                 anchoredAtMs.set(player.id, Date.now());
                 lastInteractMs.set(player.id, Date.now());
-                system.run(() => player.onScreenDisplay.setActionBar(t("eb.bar.copy_cancelled")));
-                lockActionBar(player.id, 1500);
+                system.run(() => { lockActionBar(player.id, 1500); player.onScreenDisplay.setActionBar(t("eb.bar.copy_cancelled")); });
             }
             return;
         }
@@ -620,10 +624,10 @@ world.afterEvents.itemUse.subscribe(ev => {
                 const count = await executePaste(player, airTarget);
                 if (!player.isValid) return;
                 if (count > 0) getState(player).lastPasteAt = Date.now();
+                lockActionBar(player.id, 2000);
                 player.onScreenDisplay.setActionBar(count > 0
                     ? t("eb.bar.pasted", count)
                     : t("eb.bar.paste_empty"));
-                lockActionBar(player.id, 2000);
             });
             return;
         }
@@ -637,8 +641,7 @@ world.afterEvents.itemUse.subscribe(ev => {
             setAnchor(player, airPos, "eb:copy", {});
             anchoredAtMs.set(player.id, Date.now());
             lastInteractMs.set(player.id, Date.now());
-            system.run(() => player.onScreenDisplay.setActionBar(t("eb.bar.copy_corner1", airPos.x, airPos.y, airPos.z)));
-            lockActionBar(player.id, 600);
+            system.run(() => { lockActionBar(player.id, 600); player.onScreenDisplay.setActionBar(t("eb.bar.copy_corner1", airPos.x, airPos.y, airPos.z)); });
             return;
         }
 
@@ -647,8 +650,7 @@ world.afterEvents.itemUse.subscribe(ev => {
             setSecondAnchor(player, airPos);
             anchoredAtMs.set(player.id, Date.now());
             lastInteractMs.set(player.id, Date.now());
-            system.run(() => player.onScreenDisplay.setActionBar(t("eb.bar.copy_corner2", airPos.x, airPos.y, airPos.z)));
-            lockActionBar(player.id, 600);
+            system.run(() => { lockActionBar(player.id, 600); player.onScreenDisplay.setActionBar(t("eb.bar.copy_corner2", airPos.x, airPos.y, airPos.z)); });
             return;
         }
 
@@ -694,10 +696,10 @@ world.afterEvents.itemUse.subscribe(ev => {
             setAnchor(player, target, "eb:destroy", {});
             lastAirBuildMs.set(player.id, Date.now());
             anchoredAtMs.set(player.id, Date.now());
+            lockActionBar(player.id, 1000);
             player.onScreenDisplay.setActionBar(
                 t("eb.bar.destroy_anchor_set", target.x, target.y, target.z)
             );
-            lockActionBar(player.id, 1000);
             return;
         }
         if (state.blockTypeId !== "eb:destroy") return;
@@ -732,10 +734,10 @@ world.afterEvents.itemUse.subscribe(ev => {
         setAnchor(player, target, item.typeId, blockStates);
         lastAirBuildMs.set(player.id, Date.now());
         anchoredAtMs.set(player.id, Date.now());
+        lockActionBar(player.id, 1000);
         player.onScreenDisplay.setActionBar(
             t("eb.bar.anchor_set", target.x, target.y, target.z)
         );
-        lockActionBar(player.id, 1000);
         return;
     }
     if (state.mode === "disable" || !state.anchor || !state.blockTypeId) return;
@@ -801,40 +803,6 @@ world.afterEvents.playerPlaceBlock.subscribe(ev => {
         t("eb.bar.anchor_set", facePos.x, facePos.y, facePos.z)
     );
 });
-let swingSupported = false;
-try {
-    world.afterEvents.playerSwingStart.subscribe(ev => {
-        const player = ev.player;
-        const inv = player.getComponent("minecraft:inventory")?.container;
-        if (!inv) return;
-        const item = inv.getItem(player.selectedSlotIndex);
-        if (coachGuards(player)) {
-            coachClick(player, true);
-            return;
-        }
-        if (!isBook(item)) return;
-        if (hasPicker(player.id)) {
-            pickerClick(player);
-            return;
-        }
-        if (hasPanel(player.id)) return;
-        if (!hasRequiredTag(player)) {
-            player.sendMessage(
-                t("eb.tag.required", getRequiredTag())
-            );
-            return;
-        }
-        if (player.isSneaking) {
-            showModifiersUI(player);
-        } else if (getSwapBookActions(player)) {
-            showModeMenu(player);
-        } else {
-            showPaletteUI(player);
-        }
-    });
-    swingSupported = true;
-} catch {
-}
 world.afterEvents.playerDimensionChange.subscribe(({ player }) => {
     if (player?.isValid && anchoredPlayers().has(player.id)) dropAnchorElsewhere(player, getState(player));
 });

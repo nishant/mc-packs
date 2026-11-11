@@ -15,8 +15,8 @@ export const ConeMode = {
         if (getModeOption(player, "cone", "axis") !== "diagonal") return null;
         return getFreeTarget(player);
     },
-    getPositions(anchor, target, player, secondAnchor) {
-        const cap  = getMaxBlocks(player);
+    getPositions(anchor, target, player, secondAnchor, opts) {
+        const cap  = opts?.cap ?? getMaxBlocks(player);
         const fill = getModeOption(player, "cone", "fill");
         const axis = getModeOption(player, "cone", "axis");
         if (secondAnchor) {
@@ -30,9 +30,9 @@ export const ConeMode = {
         }
         return cone(anchor, { x: target.x, y: anchor.y, z: target.z }, cap);
     },
-    getShellPositions(anchor, target, player, secondAnchor) {
+    getShellPositions(anchor, target, player, secondAnchor, opts) {
         if (!secondAnchor) return null;
-        const cap = getMaxBlocks(player);
+        const cap = opts?.cap ?? getMaxBlocks(player);
         if (getModeOption(player, "cone", "axis") === "diagonal") {
             return hollowDiagonalCone(anchor, secondAnchor, target, cap);
         }

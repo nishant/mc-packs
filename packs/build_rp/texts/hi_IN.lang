@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rइस दुनिया के पहले खिलाड़ी के रूप में आपको §6व्यवस्थापक अनुमति§r मिली है।\n§7व्यवस्थापक विकल्पों के लिए सेटिंग्स खोलें (छुपना + राइट-क्लिक)।
 eb.join.no_left_click=§e[Effortless Building] §rलेफ्ट-क्लिक (स्विंग) आपके Minecraft संस्करण में §cसमर्थित नहीं है§r।\n§7ब्लॉक पैलेट खोलने के लिए §6बिल्डिंग बुक§7 पर लेफ्ट-क्लिक के बजाय §f/palette§7 कमांड उपयोग करें।
-eb.join.received_book=§a[Effortless Building] §rआपको एक §6बिल्डिंग बुक§r मिली है!\n§7राइट-क्लिक §r- बिल्ड मोड खोलें §7| §rछुपना + राइट-क्लिक §r- सेटिंग्स।\n§c§l❗ §r§cखो गई? §f/getbook §fटाइप करें §7(§eXP लेवल 5§7 खर्च होते हैं)।
+eb.join.received_book=§a[Effortless Building] §rआपको एक §6बिल्डिंग बुक§r मिली है!\n§7राइट-क्लिक §r- बिल्ड मोड खोलें §7| §rछुपना + राइट-क्लिक §r- सेटिंग्स।\n§c§l❗ §r§cखो गई? §a/realm:build_book §fटाइप करें।
 
 eb.getbook.already_have=§c[EB] आपके पास पहले से ही बिल्डिंग बुक है।
-eb.getbook.not_enough_xp=§c[EB] आपको नई पुस्तक प्राप्त करने के लिए कम से कम %1 XP स्तरों की आवश्यकता है। (आपके पास %2 हैं)
 
 eb.place.no_blocks=§c[EB] §rइन्वेंटरी में कोई ब्लॉक नहीं!
 eb.place.limited_blocks=§e[EB] §rकेवल %1 ब्लॉक - जो हैं वो रखे जाएंगे।
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=मध्यम
 eb.onboarding.tier.high=ताकतवर
 eb.onboarding.tier_applied=§a[EB] §r%1 प्रीसेट लागू हुआ। आप कभी भी §eसेटिंग्स§r में सब कुछ बारीकी से बदल सकते हैं।
 eb.onboarding.capped_by_admin=§e[EB] §rसर्वर की एडमिन सीमा के कारण आपके अधिकतम ब्लॉक §f%1§r तक सीमित किए गए।
+eb.onboarding.capped_raise_in_config=§e[EB] §rब्लॉक सीमा §f%1§r पर रखी गई: पहले /realm:config (Easy Building) में पूरे रियल्म की सीमा बढ़ाएँ।
 eb.onboarding.complete=§a[EB] §rसब तैयार! शुरू करने के लिए §6बिल्डिंग बुक§r से राइट-क्लिक करें। गाइड के लिए §6ट्यूटोरियल§r बुक हाथ में लें, या लाइव ट्यूटोरियल के लिए §a/guide§r टाइप करें।
 
 eb.mode_select.btn.more_modes=§b+ और मोड§r

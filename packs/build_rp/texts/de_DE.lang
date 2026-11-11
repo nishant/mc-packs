@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rDir wurde §6Admin-Zugriff§r als erstem Spieler auf dieser Welt gewährt.\n§7Öffne Einstellungen (Schleichen + Rechtsklick) für Admin-Optionen.
 eb.join.no_left_click=§e[Effortless Building] §rLinksklick (Schwingen) wird §cnicht unterstützt§r in deiner Minecraft-Version.\n§7Verwende §f/palette§7 anstatt Linksklick auf das §6Baubuch§7, um die Blockpalette zu öffnen.
-eb.join.received_book=§a[Effortless Building] §rDu hast ein §6Baubuch§r erhalten!\n§7Rechtsklick §rzum Öffnen der Baumodi §7| §rSchleichen + Rechtsklick §rfür Einstellungen.\n§c§l❗ §r§cVerloren? §fTippe §a/getbook §f(kostet §e5 XP-Level§f).
+eb.join.received_book=§a[Effortless Building] §rDu hast ein §6Baubuch§r erhalten!\n§7Rechtsklick §rzum Öffnen der Baumodi §7| §rSchleichen + Rechtsklick §rfür Einstellungen.\n§c§l❗ §r§cVerloren? §fTippe §a/realm:build_book§f.
 
 eb.getbook.already_have=§c[EB] Du hast das Baubuch bereits.
-eb.getbook.not_enough_xp=§c[EB] Du benötigst mindestens %1 XP-Level, um ein neues Buch zu erhalten. (Du hast %2)
 
 eb.place.no_blocks=§c[EB] §rKeine Blöcke im Inventar!
 eb.place.limited_blocks=§e[EB] §rNur %1 Blöcke vorhanden – platziere was du hast.
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=Mittel
 eb.onboarding.tier.high=Stark
 eb.onboarding.tier_applied=§a[EB] §rVoreinstellung %1 angewendet. Alles lässt sich jederzeit in den §eEinstellungen§r anpassen.
 eb.onboarding.capped_by_admin=§e[EB] §rDein Blocklimit wurde vom Admin-Limit des Servers auf §f%1§r begrenzt.
+eb.onboarding.capped_raise_in_config=§e[EB] §rBlocklimit bleibt bei §f%1§r: Erhöhe zuerst das realmweite Limit in /realm:config (Easy Building).
 eb.onboarding.complete=§a[EB] §rAlles bereit! Rechtsklick mit dem §6Baubuch§r zum Starten. Halte das §6Tutorial§r-Buch für die Anleitung oder tippe §a/guide§r für das Live-Tutorial.
 
 eb.mode_select.btn.more_modes=§b+ Mehr Modi§r

@@ -65,6 +65,7 @@ import { STEP_MS, slabs } from "./slabs.js";
 
 const PROP_SITE = "expedition:site"; // world: JSON { x, z, by, at }
 const PROP_RUN = "expedition:run:"; // + slot. world: JSON RunRecord while a dungeon exists in that slot
+const PROP_SIGIL = "expedition:sigil:"; // + slot. world: JSON {sg, lid, x, y, z} while a run's sigil is not used up yet
 const PROP_NEXT = "expedition:next"; // world: next run id
 const PROP_BEST = "expedition:best"; // world (before tiers): JSON { [dungeonId]: Best[] }, read once into PROP_BEST_D
 const PROP_BEST_D = "expedition:best:"; // + dungeon id. world: JSON { [levelKey]: Best[] }
@@ -120,8 +121,9 @@ const BLESSINGS = [
 /** @typedef {ReturnType<typeof scaleFor>} Scale */
 /**
  * @typedef {{ id: number, slot: number, dungeon: string, seed: number, x: number, z: number, y: number, leader: string, phase: string,
- *   l?: number, g?: number, c?: number, h?: number, to?: string[], ch?: number[][] }} RunRecord
+ *   l?: number, g?: number, c?: number, h?: number, to?: string[], ch?: number[][], sg?: string, lid?: string }} RunRecord
  * l: level; g, c, h: the box's grid, cell size and height above the floor (missing in records from before tiers);
+ * sg, lid: while the run's sigil is not used up yet, its data line and the leader's id (see PROP_SIGIL);
  * to, ch: while the treasure room is open, the players still in the run and the treasure chests (x, y, z), so a restart
  * hands what's left in them to those players before the box is reset
  */
@@ -1112,6 +1114,21 @@ function makeSigil(d, tier, affixes) {
   return it;
 }
 
+/** The run a sigil's data line opens, or undefined. @param {string} line */
+function parseSigilLine(line) {
+  const m = SIGIL_LINE.exec(line);
+  if (!m) return undefined;
+  const d = dungeonById(m[1]);
+  const tier = Number(m[2]);
+  if (!d || tier < 1 || tier > 20) return undefined;
+  const affixes = m[3]
+    .split(".")
+    .filter((c) => c)
+    .map((c) => AFFIXES.find((a) => a.code === c)?.id)
+    .filter((a) => typeof a === "string");
+  return { d, tier, level: tier + 2, affixes: /** @type {string[]} */ (affixes), line };
+}
+
 /** The run a sigil opens, or undefined if this item isn't one. @param {ItemStack | undefined} it */
 function readSigil(it) {
   if (!it || it.typeId !== CONFIG.sigilItem) return undefined;
@@ -1122,17 +1139,8 @@ function readSigil(it) {
     return undefined;
   }
   for (const line of lore) {
-    const m = SIGIL_LINE.exec(line);
-    if (!m) continue;
-    const d = dungeonById(m[1]);
-    const tier = Number(m[2]);
-    if (!d || tier < 1 || tier > 20) return undefined;
-    const affixes = m[3]
-      .split(".")
-      .filter((c) => c)
-      .map((c) => AFFIXES.find((a) => a.code === c)?.id)
-      .filter((a) => typeof a === "string");
-    return { d, tier, level: tier + 2, affixes: /** @type {string[]} */ (affixes), line };
+    if (!SIGIL_LINE.test(line)) continue;
+    return parseSigilLine(line);
   }
   return undefined;
 }
@@ -1170,12 +1178,66 @@ function useSigil(p, line) {
 }
 
 /**
+ * MCP-081: keeps the run's sigil across a restart until the party goes in. It lives in its own world property, not
+ * only in the run record: a run that is still gathering has no box yet (saveRun first runs once the area is checked),
+ * and worldLoad resets the box of any record, so writing one that early would reset a box that was never built. The
+ * record also carries sg/lid once it exists. With no sigil left on the run the entry is cleared.
+ * @param {Run} run
+ */
+function keepSigil(run) {
+  try {
+    const line = run.sigilItem ? readSigil(run.sigilItem)?.line : undefined;
+    writeJson(PROP_SIGIL + run.slot, line ? { sg: line, lid: run.leaderId, x: run.o.x, y: run.o.y, z: run.o.z } : undefined);
+  } catch (e) {
+    console.warn(`[expedition] sigil keep: ${e}`);
+  }
+}
+
+/**
+ * After a restart, gives back the sigils of runs that were cut short before the party went in: to the leader through a
+ * parcel (or, if none can be made, in memory until they spawn), then clears the entries.
+ * @param {number} slot @param {RunRecord | undefined} rec
+ */
+function restoreSigil(slot, rec) {
+  try {
+    const kept = readJson(PROP_SIGIL + slot);
+    const sg = typeof kept?.sg === "string" ? kept.sg : rec?.sg;
+    const lid = typeof kept?.lid === "string" ? kept.lid : rec?.lid;
+    writeJson(PROP_SIGIL + slot, undefined);
+    if (!sg || !lid) return;
+    const sig = parseSigilLine(sg);
+    if (!sig) return;
+    const it = makeSigil(sig.d, sig.tier, sig.affixes);
+    const num = (/** @type {any} */ v) => typeof v === "number";
+    const s = site();
+    const o = num(rec?.x) && num(rec?.y) && num(rec?.z) ? { x: rec?.x ?? 0, y: rec?.y ?? 0, z: rec?.z ?? 0 }
+      : num(kept?.x) && num(kept?.y) && num(kept?.z) ? { x: kept.x, y: kept.y, z: kept.z }
+      : s ? { x: s.x, y: 0, z: s.z } : undefined;
+    let failed = true;
+    try {
+      failed = o ? parcelUp(o, "sigil", new Map([[lid, [it]]])).length > 0 : true;
+    } catch (e) {
+      console.warn(`[expedition] sigil restore parcel: ${e}`);
+    }
+    if (failed) dropped.set(lid, [...(dropped.get(lid) ?? []), it]);
+    if (rec) {
+      delete rec.sg;
+      delete rec.lid;
+      writeJson(PROP_RUN + slot, rec); // so a second restart can't give it twice
+    }
+  } catch (e) {
+    console.warn(`[expedition] sigil restore: ${e}`);
+  }
+}
+
+/**
  * A run called off before anyone went in gives its sigil back to the leader (when they're offline, as soon as they
  * next spawn). @param {Run} run
  */
 function refundSigil(run) {
   const it = run.sigilItem;
   run.sigilItem = undefined;
+  keepSigil(run);
   if (!it) return;
   const p = online(run.leaderId);
   if (!p) {
@@ -1248,6 +1310,7 @@ const recordOf = (run) => ({
   g: run.lay.grid,
   c: run.lay.cell,
   h: run.top,
+  ...(run.sigilItem && readSigil(run.sigilItem) ? { sg: readSigil(run.sigilItem)?.line, lid: run.leaderId } : {}),
   ...(run.phase === "finishing" ? { to: [...run.members.keys()], ch: spoilChests(run).map((v) => [v.x, v.y, v.z]) } : {}),
 });
 /** @param {Run} run */
@@ -1497,6 +1560,7 @@ async function start(leader, d, L, affixes, sigilLine, g, fromQueue = false) {
     finishCap: 0,
   };
   runs.set(slot, run);
+  keepSigil(run);
   if (!sigilLine) {
     // The affixes shown for this level are used up: next time there's a new roll (a newer roll than the ones used stays).
     const rolls = readPlayer(leader, PROP_ROLLS) ?? {};
@@ -1650,6 +1714,7 @@ async function prepare(run) {
   }
   run.phase = "active";
   run.sigilItem = undefined; // used up for good
+  keepSigil(run);
   run.started = gameMs() + 500;
   run.deadline = run.started + run.limitMin * 60000;
   saveRun(run);
@@ -3899,6 +3964,7 @@ world.afterEvents.worldLoad.subscribe(() => {
     }
     pending.set(slot, { ...rec, slot });
   }
+  for (let slot = 0; slot < 3; slot++) restoreSigil(slot, pending.get(slot)); // a sigil lost to the restart goes back to its leader
   try {
     loadQueue();
   } catch (e) {

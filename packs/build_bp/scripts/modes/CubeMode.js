@@ -33,8 +33,8 @@ export const CubeMode = {
             };
         } catch { return null; }
     },
-    getPositions(anchor, target, player, secondAnchor) {
-        const cap = getMaxBlocks(player);
+    getPositions(anchor, target, player, secondAnchor, opts) {
+        const cap = opts?.cap ?? getMaxBlocks(player);
         const p1 = { x: anchor.x, y: anchor.y, z: anchor.z };
         const p2 = secondAnchor
             ? { x: secondAnchor.x, y: target.y, z: secondAnchor.z }
@@ -45,9 +45,9 @@ export const CubeMode = {
         if (fill === "skeleton") return skeletonAABB(p1, p2, cap);
         return fillAABB(p1, p2, cap);
     },
-    getShellPositions(anchor, target, player, secondAnchor) {
+    getShellPositions(anchor, target, player, secondAnchor, opts) {
         if (!secondAnchor) return null;
-        const cap = getMaxBlocks(player);
+        const cap = opts?.cap ?? getMaxBlocks(player);
         const p1 = { x: anchor.x,       y: anchor.y, z: anchor.z };
         const p2 = { x: secondAnchor.x, y: target.y, z: secondAnchor.z };
         const fill = getModeOption(player, "cube", "fill");

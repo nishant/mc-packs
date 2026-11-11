@@ -46,8 +46,8 @@ export const CylinderMode = {
         }
         return getConstrainedTarget(player, anchor, player.getRotation().y);
     },
-    getPositions(anchor, target, player, secondAnchor) {
-        const cap   = getMaxBlocks(player);
+    getPositions(anchor, target, player, secondAnchor, opts) {
+        const cap   = opts?.cap ?? getMaxBlocks(player);
         const fill  = getModeOption(player, "cylinder", "fill");
         const shape = getModeOption(player, "cylinder", "shape");
         if (shape === "uneven") {
@@ -65,9 +65,9 @@ export const CylinderMode = {
         }
         return cylinder(anchor, { x: target.x, y: anchor.y, z: target.z }, cap);
     },
-    getShellPositions(anchor, target, player, secondAnchor) {
+    getShellPositions(anchor, target, player, secondAnchor, opts) {
         if (!secondAnchor) return null;
-        const cap   = getMaxBlocks(player);
+        const cap   = opts?.cap ?? getMaxBlocks(player);
         const shape = getModeOption(player, "cylinder", "shape");
         const t = { x: secondAnchor.x, y: target.y, z: secondAnchor.z };
         return shape === "uneven"

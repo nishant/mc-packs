@@ -2,7 +2,7 @@
 import { world, system, BlockPermutation, EquipmentSlot } from "@minecraft/server";
 import { anyModifierEnabled, getRadialState, getState } from "./PlayerState.js";
 import { applyModifiers } from "./ModifierPipeline.js";
-import { getFlippedStates } from "../modifiers/MirrorModifier.js";
+import { modifiedStates, hasStateMods } from "../modifiers/MirrorModifier.js";
 import { isCreative, countBlocks, removeBlocks } from "../utils/InventoryUtils.js";
 import { ALWAYS_REPLACEABLE, UNPLACEABLE } from "./BlockPlacer.js";
 import { UNBREAKABLE, canMineWithTool, isDiggingTool, getBlockDrop } from "./BlockDestroyer.js";
@@ -160,8 +160,8 @@ export function startVanillaModifierHook() {
                     playerPending.delete(key);
                     try {
                         let targetPerm = perm;
-                        if (pos._mx || pos._my || pos._mz) {
-                            const flipped = getFlippedStates(states, pos._mx, pos._my, pos._mz);
+                        if (hasStateMods(pos)) {
+                            const flipped = modifiedStates(states, pos);
                             targetPerm = BlockPermutation.resolve(typeId, flipped);
                         }
                         dim.getBlock(pos)?.setPermutation(targetPerm);
@@ -174,8 +174,8 @@ export function startVanillaModifierHook() {
                 for (const pos of copies) {
                     try {
                         let targetPerm = perm;
-                        if (pos._mx || pos._my || pos._mz) {
-                            const flipped = getFlippedStates(states, pos._mx, pos._my, pos._mz);
+                        if (hasStateMods(pos)) {
+                            const flipped = modifiedStates(states, pos);
                             targetPerm = BlockPermutation.resolve(typeId, flipped);
                         }
                         dim.getBlock(pos)?.setPermutation(targetPerm);
@@ -207,8 +207,6 @@ export function startVanillaModifierHook() {
                 fortuneLevel = enchLevel(toolItem, "fortune");
             } catch {}
         }
-
-        const lootMgr = world.getLootTableManager?.() ?? null;
 
         const positions = await copiesAllowed(player, dim, origin);
         if (positions.length <= 1 || !player.isValid) return;
@@ -260,22 +258,10 @@ export function startVanillaModifierHook() {
                         if (!creative) {
                             try {
                                 const spawnPos = { x: pos.x + 0.5, y: pos.y + 0.75, z: pos.z + 0.5 };
-                                if (lootMgr) {
-                                    const lootItems = lootMgr.generateLootFromBlockPermutation(b.permutation, toolItem);
-                                    if (lootItems?.length) {
-                                        for (const item of lootItems) {
-                                            try {
-                                                const entity = dim.spawnItem(item, spawnPos);
-                                                if (entity) spawnedEntities.push(entity);
-                                            } catch {}
-                                        }
-                                    }
-                                } else {
-                                    const drop = getBlockDrop(b, hasSilkTouch, fortuneLevel);
-                                    if (drop) {
-                                        const entity = dim.spawnItem(new ItemStack(drop.typeId, drop.amount), spawnPos);
-                                        if (entity) spawnedEntities.push(entity);
-                                    }
+                                const drop = getBlockDrop(b, hasSilkTouch, fortuneLevel);
+                                if (drop) {
+                                    const entity = dim.spawnItem(new ItemStack(drop.typeId, drop.amount), spawnPos);
+                                    if (entity) spawnedEntities.push(entity);
                                 }
                             } catch {}
                         }
@@ -305,28 +291,12 @@ export function startVanillaModifierHook() {
                         if (!creative) {
                             try {
                                 const spawnPos = { x: pos.x + 0.5, y: pos.y + 0.75, z: pos.z + 0.5 };
-                                if (lootMgr) {
-
-                                    const lootItems = lootMgr.generateLootFromBlockPermutation(
-                                        b.permutation, toolItem
+                                const drop = getBlockDrop(b, hasSilkTouch, fortuneLevel);
+                                if (drop) {
+                                    const entity = dim.spawnItem(
+                                        new ItemStack(drop.typeId, drop.amount), spawnPos
                                     );
-                                    if (lootItems?.length) {
-                                        for (const item of lootItems) {
-                                            try {
-                                                const entity = dim.spawnItem(item, spawnPos);
-                                                if (entity) spawnedEntities.push(entity);
-                                            } catch {}
-                                        }
-                                    }
-                                } else {
-
-                                    const drop = getBlockDrop(b, hasSilkTouch, fortuneLevel);
-                                    if (drop) {
-                                        const entity = dim.spawnItem(
-                                            new ItemStack(drop.typeId, drop.amount), spawnPos
-                                        );
-                                        if (entity) spawnedEntities.push(entity);
-                                    }
+                                    if (entity) spawnedEntities.push(entity);
                                 }
                             } catch {}
                         }

@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rこのワールドの最初のプレイヤーとして §6管理者権限§r が付与されました。\n§7設定を開くには（スニーク + 右クリック）から管理者オプションにアクセスしてください。
 eb.join.no_left_click=§e[Effortless Building] §rあなたのMinecraftバージョンでは左クリック（スイング）は §cサポートされていません§r。\n§7ブロックパレットを開くには §6建築の書§7 を左クリックする代わりに §f/palette§7 を使用してください。
-eb.join.received_book=§a[Effortless Building] §r§6建築の書§r を受け取りました！\n§7右クリック §rで建築モード選択 §7| §rスニーク + 右クリック §rで設定。\n§c§l❗ §r§c紛失? §fType §a/getbook §f(§e5 XPレベル§f必要).
+eb.join.received_book=§a[Effortless Building] §r§6建築の書§r を受け取りました！\n§7右クリック §rで建築モード選択 §7| §rスニーク + 右クリック §rで設定。\n§c§l❗ §r§c紛失? §fType §a/realm:build_book§f。
 
 eb.getbook.already_have=§c[EB] すでに建築書を持っています。
-eb.getbook.not_enough_xp=§c[EB] 新しい本を入手するには、少なくとも %1 レベルの経験値が必要です。(現: %2)
 
 eb.place.no_blocks=§c[EB] §rインベントリにブロックがありません！
 eb.place.limited_blocks=§e[EB] §rブロックが %1 個しかありません – 持っている分を設置します。
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=中性能
 eb.onboarding.tier.high=高性能
 eb.onboarding.tier_applied=§a[EB] §r%1 のプリセットを適用しました。§e設定§rでいつでも細かく調整できます。
 eb.onboarding.capped_by_admin=§e[EB] §r最大ブロック数はサーバーの管理者上限により §f%1§r に制限されました。
+eb.onboarding.capped_raise_in_config=§e[EB] §rブロック上限は §f%1§r のままです。先に /realm:config (Easy Building) でレルム全体の上限を引き上げてください。
 eb.onboarding.complete=§a[EB] §r準備完了！§6建築の書§rを右クリックして始めましょう。§6チュートリアル§rの本を持つとガイドが、§a/guide§r と入力するとライブチュートリアルが始まります。
 
 eb.mode_select.btn.more_modes=§b+ モードを増やす§r

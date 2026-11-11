@@ -230,7 +230,17 @@ export const BUILD_SPEED_OPTIONS = [1, 20, 60, 100];
 export const BUILD_SPEED_LABELS  = ["Instant", "Fast (Default)", "Normal", "Slow"];
 export function waveToQueueSpeed(waveTicks) { return Math.ceil(50000 / waveTicks); }
 export const UNDO_THRESHOLD_OPTIONS = [0, 200, 500, 1000];
-export const UNDO_THRESHOLD_LABELS  = ["Disabled", "200 blocks (Default)", "500 blocks", "1 000 blocks"];
+export const UNDO_THRESHOLD_LABELS  = ["Disabled", "200 blocks (Default)", "500 blocks", "1,000 blocks"]
+export function nearestIndex(values, value) {
+    if (typeof value !== "number" || !Number.isFinite(value)) return Math.max(0, values.indexOf(value));
+    let best = 0, bestDist = Infinity;
+    values.forEach((v, i) => {
+        if (typeof v !== "number") return;
+        const d = Math.abs(v - value);
+        if (d < bestDist) { best = i; bestDist = d; }
+    });
+    return best;
+};
 const DP_UNDO_THRESHOLD      = "eb:undoThreshold";
 const DEFAULT_UNDO_THRESHOLD = 200;
 export function getUndoThreshold(player) {

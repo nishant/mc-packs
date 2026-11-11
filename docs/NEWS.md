@@ -7,6 +7,13 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Building fixes, sigils kept
+
+- Easy Building: Instant builds are faster, Mirror flips slabs, torches and more, Radial turns stairs and logs, and a shape over your block limit is refused with a warning.
+- Easy Building: the left-click book shortcuts are gone. Open Modifiers and the Block Palette from the Mode Menu.
+- Expeditions: a Nightmare Sigil comes back to you if the server restarts before your party goes in.
+- Townsfolk: gossip no longer repeats or gets told back to the player it is about.
+
 ## Build safe, claims tighter
 
 - Easy Building: blocks you build with the Building Book no longer farm Skills XP, Guilds reputation or Daily Quests, and towns leave them alone.

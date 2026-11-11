@@ -6,7 +6,7 @@ import {
     getFlickPreview, setFlickPreview,
     getDeferShapeCalc, setDeferShapeCalc,
     getMaxBlocks, setMaxBlocks,
-    getAdminMaxBlocksCap, setAdminMaxBlocksCap,
+    getAdminMaxBlocksCap,
 } from "./Settings.js";
 import { isOp } from "../utils/Permissions.js";
 import { t } from "../utils/Text.js";
@@ -21,14 +21,9 @@ export const PRESETS = {
 
 function applyMaxBlocks(player, requested) {
     const adminCap = getAdminMaxBlocksCap();
-    if (requested > adminCap) {
-        if (isOp(player)) {
-            setAdminMaxBlocksCap(requested);
-        } else {
-            player.sendMessage(t("eb.onboarding.capped_by_admin", adminCap.toLocaleString()));
-        }
-    }
-    return setMaxBlocks(player, requested);
+    const value = Math.min(requested, adminCap);
+    if (requested > adminCap) player.sendMessage(t(isOp(player) ? "eb.onboarding.capped_raise_in_config" : "eb.onboarding.capped_by_admin", adminCap.toLocaleString()));
+    return setMaxBlocks(player, value);
 }
 
 export function applyPreset(player, presetId) {
