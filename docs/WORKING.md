@@ -97,6 +97,7 @@ Releases go out on check, build and the PR's own tests; the long measurements co
 - The BDS form shim has its own 1,200-tick fallback, separate from the test pack's `t.formTimeout`. Raising `t.formTimeout` does not extend it. A hung-form regression must prove the pack releases its own operation before that fallback, not accept the shim eventually closing it. Keep one lifecycle generation across the whole menu and its child dialogs; starting a fresh snapshot at each `show()` lets an old parent reopen after death or a dimension change.
 - Bedrock circle ticking areas accept radii 1-4, not 6. The harness rejects invalid radii before sending the command and reports a rejected add immediately unless the column is already readable. Use a legal radius and explicit fixture readiness, and retain the original command failure instead of calling it a pack regression.
 - `getTopmostBlock` on a column that isn't ticking can return a block (at y 319) that throws `LocationInUnloadedChunkError` as soon as you read it (`isLiquid`, `typeId`): wrap the reads too, not only the call (wander_bp's spot finder).
+- **Name probe (test only):** `build_rp` holds geometry/client resources for `realm:npc_name_probe`, a disabled name-visibility experiment (`NAME_PROBE_RELEASE_READY = false`). Production scripts never spawn it; it does not establish readable 20-block names or replace the legacy-label cleanup resources. Kept off PACKS.md because that file is the public realm page.
 
 ## Recurring bugs: the checklist (C1-C29)
 
