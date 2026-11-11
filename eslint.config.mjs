@@ -36,6 +36,7 @@ export default [
       "docs/**",
       "types/**",
       "tools/gen-rain/sources/**",
+      "tools/.tmp-*/**",
       "tools/test-bds/.cache/**",
       "tools/test-bds/logs/**",
     ],

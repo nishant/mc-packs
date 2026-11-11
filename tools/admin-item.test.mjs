@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { SIZE_OPTIONS } from "../packs/admin_bp/scripts/presets.js";
+import { after as afterAll } from "node:test";
+import { rmSync as rmTree } from "node:fs";
+
+/** Temp dirs made by this file, removed once every test has finished. */
+const tempDirs = /** @type {string[]} */ ([]);
+const track = (/** @type {string} */ dir) => (tempDirs.push(dir), dir);
+afterAll(() => {
+  for (const dir of tempDirs) rmTree(dir, { recursive: true, force: true });
+});
 
 test("Large server uses the operator-only 2000-block public building preset with no Infinite Reach", () => {
   const build = new Map(SIZE_OPTIONS.filter((option) => option.pack === "build_bp").map((option) => [option.key, option.large]));
@@ -361,7 +371,7 @@ async function createAdminHarness() {
     ModalFormData: StubForm,
   };
 
-  const tmpDir = fs.mkdtempSync(path.join(root, "tools/.tmp-admin-test-"));
+  const tmpDir = track(fs.mkdtempSync(path.join(os.tmpdir(), "admin-test-")));
   const cleanup = () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   };

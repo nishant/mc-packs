@@ -11,6 +11,15 @@ import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 import vm from "node:vm";
+import { after as afterAll } from "node:test";
+import { rmSync as rmTree } from "node:fs";
+
+/** Temp dirs made by this file, removed once every test has finished. */
+const tempDirs = /** @type {string[]} */ ([]);
+const track = (/** @type {string} */ dir) => (tempDirs.push(dir), dir);
+afterAll(() => {
+  for (const dir of tempDirs) rmTree(dir, { recursive: true, force: true });
+});
 
 const scripts = new URL("../packs/expedition_bp/scripts/", import.meta.url);
 const srcDir = process.env.EXPEDITION_SRC ? `${process.env.EXPEDITION_SRC}/` : undefined;
@@ -120,7 +129,7 @@ async function setup({ ids, failDelete = [], keepAfterDelete = [], failList = fa
   // Registered the way main.js registers it (checked below against the production source).
   globalThis.__realmDiagForgetHooks = { expedition_bp: hook.onForget };
 
-  const dir = mkdtempSync(join(tmpdir(), "o62-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "o62-")));
   mkdirSync(join(dir, "expedition_bp"), { recursive: true });
   const id = n++;
   const file = join(dir, "expedition_bp", `diag${id}.js`);

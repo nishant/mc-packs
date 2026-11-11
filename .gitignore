@@ -2,3 +2,4 @@ node_modules
 dist/
 tools/gen-rain/sources/
 .claude/worktrees/
+tools/.tmp-*/

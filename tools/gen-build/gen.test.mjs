@@ -65,7 +65,7 @@ for (const [id, name] of buttons) {
     assert.equal(item.format_version, "1.21.60");
     assert.deepEqual(item["minecraft:item"].description, {
       identifier: `custom:${id}`,
-      menu_category: { category: "items", is_hidden_in_commands: false },
+      menu_category: { category: "none", is_hidden_in_commands: true },
     });
     assert.deepEqual(item["minecraft:item"].components, {
       "minecraft:max_stack_size": 1,

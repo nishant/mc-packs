@@ -1126,7 +1126,10 @@ function gain(player, id, amount, why) {
   const before = levelOf(a[0]);
   let n = Math.round(amount);
   // The town is cold to the Hollow-Crowned: slower to warm up below Friend. Quill likes them more.
-  if (n > 0 && before < 2 && coldTo(player, id) && id !== "quill") n = Math.max(1, Math.round(n * (Number(CONFIG.crownedGain) || 1)));
+  if (n > 0 && before < 2 && coldTo(player, id) && id !== "quill") {
+    const g = Number(CONFIG.crownedGain); // 0 = no gain below Friend
+    n = Math.round(n * (Number.isFinite(g) && g >= 0 ? g : 1));
+  }
   a[0] = Math.max(0, Math.min(MAX_POINTS, a[0] + n));
   saveAff(player);
   const after = levelOf(a[0]);

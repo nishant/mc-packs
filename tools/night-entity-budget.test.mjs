@@ -406,7 +406,7 @@ test("approach: one run reads each block once, however many angles its steps try
   const code = [
     stmt(elite, "WALK_THROUGH"),
     line(elite, "NO_STEP_ON"),
-    /^let runBlocks;/m.test(elite) ? "let runBlocks;" : "let runBlocks;",
+    "let runBlocks;",
     optFn(elite, "lookAt"),
     line(elite, "open"),
     line(elite, "ground"),

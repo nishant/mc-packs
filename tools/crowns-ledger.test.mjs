@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSim } from "./lib/pack-sim.mjs";
+import { CONFIG } from "../packs/crowns_bp/scripts/config.js";
 
 const T0 = Date.UTC(2026, 9, 19, 23, 59, 0);
 const DAY = 86400000;
@@ -120,7 +121,10 @@ test("O30: the default limit is on and applies to an existing world with no save
   w.sim.run("realm:crowns_pay", a, [b], 100000);
   w.sim.run("realm:crowns_pay", a, [b], 100000);
   w.sim.run("realm:crowns_pay", a, [b], 100000);
-  assert.ok(w.bal(b) <= 250000 && w.bal(b) >= 100000, `paid ${w.bal(b)}`);
+  assert.equal(CONFIG.dailyPayLimit, 250000, "the default limit is on");
+  assert.equal(w.bal(b), 200000, "two pays fit under the limit, the third is refused");
+  assert.equal(w.bal(a), 800000);
+  assert.equal(w.ledger().length, 2);
 });
 
 test("O30: gives are recorded once per batch, with the amount that actually applied, and a no-op give records nothing", async () => {
@@ -186,7 +190,7 @@ test("O30 review: 200 entries fit even with worst-case names: quotes, backslashe
   const a = w.sim.join('"\\\u0001\u0007' + "\ud83d\ude00".repeat(20));
   const b = w.sim.join('\\"'.repeat(20));
   w.give(a, 1_000_000);
-  for (let i = 1; i <= 205; i++) w.sim.run("realm:crowns_pay", a, [b], 2_000_000 > i ? 2147 + i : 1);
+  for (let i = 1; i <= 205; i++) w.sim.run("realm:crowns_pay", a, [b], 2147 + i);
   const text = w.sim.props.get("crowns:ledger");
   assert.ok(Buffer.byteLength(text, "utf8") <= 30000);
   const l = JSON.parse(text);

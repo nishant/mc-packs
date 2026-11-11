@@ -4003,22 +4003,37 @@
         }
       },
       "minecraft:schedule_home_villager": {
-        "add": {
-          "component_groups": [
-            "make_and_receive_love",
-            "home_schedule_villager"
-          ]
-        },
-        "remove": {
-          "component_groups": [
-            "bed_schedule_villager",
-            "wander_schedule_villager",
-            "gather_schedule_villager",
-            "job_specific_goals",
-            "play_schedule_villager",
-            "trade_resupply_component_group"
-          ]
-        }
+        "sequence": [
+          {
+            "add": {
+              "component_groups": [
+                "home_schedule_villager"
+              ]
+            },
+            "remove": {
+              "component_groups": [
+                "bed_schedule_villager",
+                "wander_schedule_villager",
+                "gather_schedule_villager",
+                "job_specific_goals",
+                "play_schedule_villager",
+                "trade_resupply_component_group"
+              ]
+            }
+          },
+          {
+            "filters": {
+              "test": "bool_property",
+              "subject": "self",
+              "domain": "realm:resident",
+              "operator": "==",
+              "value": false
+            },
+            "add": {
+              "component_groups": ["make_and_receive_love"]
+            }
+          }
+        ]
       },
       "minecraft:schedule_bed_villager": {
         "add": {
@@ -4039,40 +4054,70 @@
         }
       },
       "minecraft:schedule_gather_villager": {
-        "add": {
-          "component_groups": [
-            "make_and_receive_love",
-            "gather_schedule_villager"
-          ]
-        },
-        "remove": {
-          "component_groups": [
-            "bed_schedule_villager",
-            "wander_schedule_villager",
-            "home_schedule_villager",
-            "job_specific_goals",
-            "play_schedule_villager",
-            "trade_resupply_component_group"
-          ]
-        }
+        "sequence": [
+          {
+            "add": {
+              "component_groups": [
+                "gather_schedule_villager"
+              ]
+            },
+            "remove": {
+              "component_groups": [
+                "bed_schedule_villager",
+                "wander_schedule_villager",
+                "home_schedule_villager",
+                "job_specific_goals",
+                "play_schedule_villager",
+                "trade_resupply_component_group"
+              ]
+            }
+          },
+          {
+            "filters": {
+              "test": "bool_property",
+              "subject": "self",
+              "domain": "realm:resident",
+              "operator": "==",
+              "value": false
+            },
+            "add": {
+              "component_groups": ["make_and_receive_love"]
+            }
+          }
+        ]
       },
       "minecraft:schedule_wander_villager": {
-        "add": {
-          "component_groups": [
-            "make_and_receive_love",
-            "wander_schedule_villager"
-          ]
-        },
-        "remove": {
-          "component_groups": [
-            "home_schedule_villager",
-            "bed_schedule_villager",
-            "wander_schedule_villager",
-            "job_specific_goals",
-            "play_schedule_villager",
-            "trade_resupply_component_group"
-          ]
-        }
+        "sequence": [
+          {
+            "add": {
+              "component_groups": [
+                "wander_schedule_villager"
+              ]
+            },
+            "remove": {
+              "component_groups": [
+                "home_schedule_villager",
+                "bed_schedule_villager",
+                "wander_schedule_villager",
+                "job_specific_goals",
+                "play_schedule_villager",
+                "trade_resupply_component_group"
+              ]
+            }
+          },
+          {
+            "filters": {
+              "test": "bool_property",
+              "subject": "self",
+              "domain": "realm:resident",
+              "operator": "==",
+              "value": false
+            },
+            "add": {
+              "component_groups": ["make_and_receive_love"]
+            }
+          }
+        ]
       },
       "minecraft:schedule_work_librarian": {
         "add": {

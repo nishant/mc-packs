@@ -7,6 +7,15 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Phone HUD, rain and moon fixes
+
+- Side HUD: the boxes on the right now start right under the compass when the Minimap radar is hidden, so they show on short phone screens.
+- Relics: Rain Charm and Tide Boots now work on beaches and on sandstone paths in the rain.
+- Blood Moon and Harvest Moon: a story never brings one two nights in a row, or over a moon an operator chose.
+- Skills: mining the same stone spot again within 5 minutes gives no Mining XP, so cobblestone generators do not farm it. Ores are not affected.
+- Story Questlines: the sky-wonder bonus in Frogs in Three Voices also works with Rainbows, Tornadoes or Storm Cells.
+- Town Projects: residents can no longer breed.
+
 ## Building fixes, sigils kept
 
 - Easy Building: Instant builds are faster, Mirror flips slabs, torches and more, Radial turns stairs and logs, and a shape over your block limit is refused with a warning.

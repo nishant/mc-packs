@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import test from "node:test";
+import test, { afterEach } from "node:test";
 import { pathToFileURL } from "node:url";
 
 const root = join(import.meta.dirname, "..");
@@ -39,11 +39,15 @@ function fakeWorld(initial = {}) {
   return w;
 }
 
+const realWarn = console.warn;
+// A test that throws between quiet() and restore() must not leave console.warn replaced for the next one.
+afterEach(() => {
+  console.warn = realWarn;
+});
 const quiet = () => {
   const logs = /** @type {string[]} */ ([]);
-  const orig = console.warn;
   console.warn = (/** @type {any[]} */ ...a) => void logs.push(a.join(" "));
-  return { logs, restore: () => (console.warn = orig) };
+  return { logs, restore: () => (console.warn = realWarn) };
 };
 
 const ids = (/** @type {number} */ n, start = 0) => Array.from({ length: n }, (_, i) => String(1000000000000000000n + BigInt(start + i)));
@@ -197,7 +201,7 @@ test("1,500 absent players: the oldest are dropped past the cap, each with a log
   assert.equal(s.size(), MAX_PLAYERS);
   assert.equal(q.logs.length, 500);
   assert.match(q.logs[0], new RegExp(`player ${players[0]} \\(\\{"cr":1\\}\\)`));
-  assert.match(q.logs[0], /more than 1000 players are owed/);
+  assert.match(q.logs[0], new RegExp(`more than ${MAX_PLAYERS} players are owed`));
   assert.equal(s.has(players[0]), false);
   assert.deepEqual(s.get(players[500]), { cr: 501 });
   assert.equal(w.props.size, MAX_PLAYERS + 1, "one value per player and the index, nothing else");
@@ -228,7 +232,7 @@ test("legacy data of more than the cap migrates the newest and logs the dropped 
   const players = ids(MAX_PLAYERS + 40);
   const legacy = Object.fromEntries(players.map((id, i) => [id, { cr: i + 1 }]));
   const w = fakeWorld();
-  // A legacy map that large can't exist in one property, so build it in pieces the way an older, bigger layout might have.
+  // Seeded directly past the byte limit (unreachable in game) to exercise the cap during migration.
   w.props.set("t:owed", JSON.stringify(legacy));
   const q = quiet();
   const s = createOwedStore(w, { base: "t:owed" });

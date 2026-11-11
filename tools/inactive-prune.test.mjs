@@ -69,7 +69,7 @@ test("the three packs declare conservative defaults", () => {
 test("nick: the sweep rereads days, online and the saved time for every entry after each pause", async () => {
   const { sweepGamertags } = await load("nick_bp");
   const world = { "seen:a": "A", "seen:b": "B", "seen:c": "C", "time:A": NOW - 400 * DAY, "time:B": NOW - 400 * DAY, "time:C": NOW - 400 * DAY };
-  let days = 365;
+  const days = 365;
   const online = new Set();
   const dropped = [];
   const job = sweepGamertags({
@@ -89,10 +89,16 @@ test("nick: the sweep rereads days, online and the saved time for every entry af
   job.next();
   job.next();
   assert.deepEqual(dropped, ["seen:a"]);
-  const off = sweepGamertags({ ...{ keys: () => ["seen:a"], owner: (k) => world[k], online: () => false, seen: () => NOW - 999 * DAY, days: () => 0, now: () => NOW, start() {}, drop: (k) => dropped.push(`off:${k}`), warn() {} } });
-  off.next();
-  assert.deepEqual(dropped, ["seen:a"], "a setting of 0 disables the sweep even mid-run");
-  days = 0;
+  const keys = ["seen:x", "seen:y"];
+  const world2 = { "seen:x": "X", "seen:y": "Y", "time:X": NOW - 400 * DAY, "time:Y": NOW - 400 * DAY };
+  let days2 = 365;
+  const dropped2 = [];
+  const mid = sweepGamertags({ keys: () => keys, owner: (k) => world2[k], online: () => false, seen: (id) => world2[`time:${id}`], days: () => days2, now: () => NOW, start() {}, drop: (k) => dropped2.push(k), warn: (e) => assert.fail(String(e)) });
+  mid.next();
+  assert.deepEqual(dropped2, ["seen:x"]);
+  days2 = 0; // the setting is switched off mid-run
+  mid.next();
+  assert.deepEqual(dropped2, ["seen:x"], "a setting of 0 disables the sweep even mid-run");
 });
 
 test("titles: the sweep rereads online, cache and the saved record per entry; a record with no time starts counting", async () => {

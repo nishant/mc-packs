@@ -9,7 +9,7 @@ import vm from "node:vm";
 import ts from "typescript";
 import { MinecraftBlockTypes } from "@minecraft/vanilla-data";
 import * as life from "../packs/town_bp/scripts/life.js";
-import { CLEARABLE, PATH_MAX, PATH_NEAR, POSTS_MAX, POST_EVERY, boardTexts, packCells, planPath, planPosts, postCount, readWorks, unpackCells, walk } from "../packs/town_bp/scripts/life.js";
+import { CLEARABLE, LEFT_PATH_MAX, LEFT_POSTS_MAX, PATH_MAX, PATH_NEAR, POSTS_MAX, POST_EVERY, boardTexts, packCells, planPath, planPosts, postCount, readWorks, unpackCells, walk } from "../packs/town_bp/scripts/life.js";
 
 const id = (b) => `minecraft:${b}`;
 
@@ -76,14 +76,16 @@ test("readWorks keeps whole cells, 48 path blocks a build and 12 posts a town", 
   assert.equal(w.house_1[1].length, 2 * 6);
   assert.deepEqual(readWorks(null), {});
   assert.deepEqual(readWorks([1]), {});
-  // The worst case stays far under the 32 KB property limit.
-  // 18 builds (7 projects, 10 houses, the pen), each with a full path and a full leftover of 2 paths, every post.
+  // The worst case stays under the 32 KB property limit (leftovers of 4 paths each made it about 27 KB).
+  // 18 builds (7 projects, 10 houses, the pen), each with a full path and a full leftover (4 paths), every post.
   const ids = ["well", "notice_board", "lamps", "garden", "stall", "dock", "bell_tower", ...Array.from({ length: 10 }, (_, i) => `house_${i + 1}`), "pen"];
-  const big = Object.fromEntries(ids.flatMap((k) => [[k, [cell.repeat(PATH_MAX), cell.repeat(POSTS_MAX)]], [`~${k}`, [cell.repeat(3 * PATH_MAX), cell.repeat(POSTS_MAX)]]]));
+  const big = Object.fromEntries(ids.flatMap((k) => [[k, [cell.repeat(PATH_MAX), cell.repeat(POSTS_MAX)]], [`~${k}`, [cell.repeat(5 * PATH_MAX), cell.repeat(POSTS_MAX)]]]));
   const kept = readWorks(big);
-  assert.equal(kept["~well"][0].length, 2 * PATH_MAX * 6, "a leftover keeps at most 2 paths");
-  assert.equal(postCount(kept), POSTS_MAX);
-  assert.ok(JSON.stringify(kept).length < 16500, `${JSON.stringify(kept).length} characters`);
+  assert.equal(kept["~well"][0].length, LEFT_PATH_MAX * 6, "a leftover keeps at most 4 paths");
+  assert.equal(postCount(kept), POSTS_MAX, "leftover posts do not use up the live budget");
+  const leftPosts = Object.entries(kept).filter(([k]) => k.startsWith("~")).reduce((n, [, v]) => n + v[1].length / 6, 0);
+  assert.equal(leftPosts, LEFT_POSTS_MAX, "leftover posts have their own budget");
+  assert.ok(JSON.stringify(kept).length < 28000, `${JSON.stringify(kept).length} characters`);
 });
 
 test("planPath: grass toward the center, steps of at most 1, stopping near the center", () => {

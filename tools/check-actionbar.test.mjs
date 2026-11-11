@@ -7,12 +7,21 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { analyze, functions, problemsOf } from "./check-actionbar.mjs";
+import { after as afterAll } from "node:test";
+import { rmSync as rmTree } from "node:fs";
+
+/** Temp dirs made by this file, removed once every test has finished. */
+const tempDirs = /** @type {string[]} */ ([]);
+const track = (/** @type {string} */ dir) => (tempDirs.push(dir), dir);
+afterAll(() => {
+  for (const dir of tempDirs) rmTree(dir, { recursive: true, force: true });
+});
 
 const repo = join(import.meta.dirname, "..");
 
 /** A pack whose scripts are `files` (path under scripts/ -> source). @param {Record<string, string>} files */
 function fixture(files) {
-  const root = mkdtempSync(join(tmpdir(), "actionbar-"));
+  const root = track(mkdtempSync(join(tmpdir(), "actionbar-")));
   for (const [path, src] of Object.entries(files)) {
     const file = join(root, "packs", "x_bp", "scripts", path);
     mkdirSync(dirname(file), { recursive: true });

@@ -122,10 +122,17 @@ test("O29: each sender has an unread cap per recipient, counted per sender and f
   assert.equal((await sendTo(w, Ann, "Bob")).problem, "");
 });
 
-test("O29: a cap of 0 is no cap, and the cap leaves letters from packs alone", async () => {
+test("O29: a cap of 0 is no cap", async () => {
   const w = await world({ cfg: { sendCooldownSeconds: 0, senderUnreadCap: 0 } });
   for (let i = 0; i < 8; i++) assert.equal((await sendTo(w, w.people.Ann, "Bob")).problem, "");
   assert.equal(w.stored().length, 8);
+});
+
+test("O29: the cap leaves letters from packs alone: an unread pack letter does not count against a player", async () => {
+  const w = await world({ cfg: { sendCooldownSeconds: 0, senderUnreadCap: 1 }, letters: [letter(1, "", "Quill the Trader", "id-Bob", "Bob")] });
+  assert.equal((await sendTo(w, w.people.Ann, "Bob")).problem, "");
+  assert.equal(w.stored().filter((l) => l.t === "id-Bob").length, 2, "the pack letter and Ann's letter");
+  assert.match((await sendTo(w, w.people.Ann, "Bob")).problem, /unread/, "but Ann's own letter still counts");
 });
 
 test("O29: an operator deletes every letter from a player, in every inbox and Sent, and nobody else's", async () => {

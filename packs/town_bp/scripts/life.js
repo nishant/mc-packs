@@ -12,6 +12,9 @@ export const PATH_MAX = 48;
 export const POST_EVERY = 8;
 /** Most lantern posts in one town. */
 export const POSTS_MAX = 12;
+/** What Remove spot could not reach yet ("~<id>"): path cells and posts kept per entry, apart from the live budgets. */
+export const LEFT_PATH_MAX = 4 * PATH_MAX;
+export const LEFT_POSTS_MAX = 2 * POSTS_MAX;
 /** A path stops this close to the town's center (where the well usually is). */
 export const PATH_NEAR = 3;
 
@@ -71,7 +74,8 @@ export function unpackCells(s, cx, cz, max = Infinity) {
 /**
  * The saved `town:w:<town>` record, cleaned: { <project or work id>: [path cells, post cells] } (packed), a path at
  * most PATH_MAX blocks, POSTS_MAX posts in the whole town (later ones dropped); "~<id>" holds what Remove spot couldn't
- * reach yet (unloaded), at most 2 paths of it. @param {unknown} raw
+ * reach yet (unloaded), at most LEFT_PATH_MAX path cells each and LEFT_POSTS_MAX posts in all, counted apart from the
+ * live ones (leftovers never use up the POSTS_MAX budget). @param {unknown} raw
  * @returns {Record<string, [string, string]>}
  */
 export function readWorks(raw) {
@@ -79,6 +83,7 @@ export function readWorks(raw) {
   const out = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   let posts = 0;
+  let leftPosts = 0;
   for (const [id, v] of Object.entries(raw)) {
     const left = id.startsWith("~"); // what a removal couldn't reach yet ("~<id>"), up to two paths of it
     if (!/^~?[a-z0-9_]{1,32}$/.test(id) || !Array.isArray(v)) continue;
@@ -88,16 +93,17 @@ export function readWorks(raw) {
       const k = Math.min(Math.floor(s.length / CELL), Math.max(0, n));
       return s.slice(0, k * CELL);
     };
-    const p = clean(v[0], left ? 2 * PATH_MAX : PATH_MAX);
-    const l = clean(v[1], POSTS_MAX - posts);
-    posts += l.length / CELL;
+    const p = clean(v[0], left ? LEFT_PATH_MAX : PATH_MAX);
+    const l = clean(v[1], left ? LEFT_POSTS_MAX - leftPosts : POSTS_MAX - posts);
+    if (left) leftPosts += l.length / CELL;
+    else posts += l.length / CELL;
     if (p || l) out[id] = [p, l];
   }
   return out;
 }
 
-/** Posts saved in a town's record. @param {Record<string, [string, string]>} w */
-export const postCount = (w) => Object.values(w).reduce((n, v) => n + v[1].length / CELL, 0);
+/** Live posts saved in a town's record (leftover "~<id>" entries not counted). @param {Record<string, [string, string]>} w */
+export const postCount = (w) => Object.entries(w).reduce((n, [k, v]) => (k.startsWith("~") ? n : n + v[1].length / CELL), 0);
 
 // ---------------------------------------------------------------------------
 // Paths

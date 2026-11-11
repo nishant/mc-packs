@@ -13,13 +13,22 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createSim } from "./lib/pack-sim.mjs";
+import { after as afterAll } from "node:test";
+import { rmSync as rmTree } from "node:fs";
+
+/** Temp dirs made by this file, removed once every test has finished. */
+const tempDirs = /** @type {string[]} */ ([]);
+const track = (/** @type {string} */ dir) => (tempDirs.push(dir), dir);
+afterAll(() => {
+  for (const dir of tempDirs) rmTree(dir, { recursive: true, force: true });
+});
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
 /** Loads a real pack's main.js from a temporary copy with the game modules stubbed by `sim` (as o2-hotpaths.test.mjs). */
 async function loadReal(sim, folder) {
   await sim.load("help_bp");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sweeps-"));
+  const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), "sweeps-")));
   const names = { "@minecraft/server": new Set(), "@minecraft/server-ui": new Set() };
   const copy = (from, to) => {
     fs.mkdirSync(to, { recursive: true });

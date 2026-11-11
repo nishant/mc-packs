@@ -24,7 +24,7 @@ import { BUILDS, FORWARD, buildCells, design, designFootprint, isOptionalPlace, 
 import { BRAM, cleanName, createPlacesAssembler, isTownMayorId, mayorParts, newTownMayor, offerTowns, planMigration, readMayor } from "./mayors.js";
 import { MAX_CELLS, addCell, boxCells, cellOf, loadCells, saveParts, touches } from "./placed.js";
 import { PEN_ID, addLog, cleanText, houseCount, isWorkId, logLine, makePen, makeWorks, nextLevelText, readLog, townJson } from "./growth.js";
-import { CLEARABLE, POSTS_MAX, boardTexts, packCells, penMissing, penSurplus, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
+import { CLEARABLE, LEFT_PATH_MAX, LEFT_POSTS_MAX, POSTS_MAX, boardTexts, packCells, penMissing, penSurplus, planPath, planPosts, postCount, readWorks, unpackCells } from "./life.js";
 import { NATURAL, UNDER, UNKNOWN, WILD, allowedInRegion, decodePlan, isLeaves, overlaps, readColumn, rectOf, regionOf, scanTown } from "./sites.js";
 import { HOME_LEASH, TICKS_PER_MINUTE, addNew, allocate, homeAt, homesFor, livingOf, lookEvent, lookFor, pickName, plan, readResidents, reconcile, ridOf, ridTag, slotCount } from "./residents.js";
 import { spawnFresh } from "./spawn.js";
@@ -2847,7 +2847,7 @@ function clearLife(t, id, leftOnly = false) {
   if (!leftOnly) delete w[id];
   const before = JSON.stringify(w);
   delete w[old];
-  if (left[0].length || left[1].length) w[old] = [packCells(left[0], t.x, t.z), packCells(left[1], t.x, t.z)];
+  if (left[0].length || left[1].length) w[old] = [packCells(left[0].slice(0, LEFT_PATH_MAX), t.x, t.z), packCells(left[1].slice(0, LEFT_POSTS_MAX), t.x, t.z)];
   // Leftovers in an unloaded area come back unchanged every tick: save only when something changed.
   if (!leftOnly || JSON.stringify(w) !== before) saveLife(t, w);
 }
@@ -3115,7 +3115,8 @@ system.runInterval(() => {
 }, PLACED_SAVE_TICKS);
 
 // ---------------------------------------------------------------------------
-// Scenario tests (BDS harness): the operator actions without forms. Only from the server console or an operator.
+// Scenario tests (BDS harness): the operator actions without forms. Honored only when the realm_test_hooks scoreboard
+// objective exists (the test harness adds it) and then only from the server console, a script, or an operator.
 //   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump|mayor_move|mayor_rename|remove_town|v1|scan|build_pause|census|residents_due", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?, "after"?}
 // ---------------------------------------------------------------------------
 
@@ -3123,6 +3124,7 @@ onScriptEvent(
   "realm:town_test",
   (ev) => {
     if (ev.id !== "realm:town_test") return;
+    if (!world.scoreboard.getObjective("realm_test_hooks")) return; // only the BDS harness creates this objective
     const src = ev.sourceEntity;
     if (ev.sourceType !== ScriptEventSource.Server && !(src instanceof Player && isOp(src))) return;
     let m;
