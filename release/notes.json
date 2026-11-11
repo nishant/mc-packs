@@ -6,7 +6,8 @@
     "Many packs now recognize dead bushes, lily pads, item frames, note blocks and rooted dirt, so the Minimap draws them properly.",
     "A creative player no longer gives party mates Defeat progress, Wanderers state real distances, and choosing an ordinary moon before a full moon sticks.",
     "Only the server console or an operator can make a pack forget its saved data, and the Server size setup is saved as done only when every setting was applied.",
-    "Goals, Journal, Quests, Nicknames, Stash, Storm, Zones and the Saga story packs save and clean up more safely."
+    "Goals, Journal, Quests, Nicknames, Stash, Storm, Zones and the Saga story packs save and clean up more safely.",
+    "The realm page shows the Give <item> and Learn: <dish> buttons by name again, and its Townsfolk and Easy Building Guides cards no longer show notes meant for maintainers."
   ],
   "packNotes": {
     "admin_bp": {

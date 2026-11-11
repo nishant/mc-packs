@@ -1227,7 +1227,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lGet to know them.§r The menu says how well you know each one (§eYou and Old Tobin: Friend (260/500)§r). Your first talk with a townsfolk each real day adds affinity. To give a gift, hold the item and sneak-tap them, or tap them and pick §lGive <item>§r at the top of the menu (it takes 1; one gift per townsfolk per real day). Each one loves, likes and dislikes different things: Tobin loves salmon, Hollis can't bear a bell. Finishing their daily favor or a story chapter they give or end adds more.",
+        "text": "§lGet to know them.§r The menu says how well you know each one (§eYou and Old Tobin: Friend (260/500)§r). Your first talk with a townsfolk each real day adds affinity. To give a gift, hold the item and sneak-tap them, or tap them and pick §eGive <item>§r at the top of the menu (it takes 1; one gift per townsfolk per real day). Each one loves, likes and dislikes different things: Tobin loves salmon, Hollis can't bear a bell. Finishing their daily favor or a story chapter they give or end adds more.",
         "ops": false
       },
       {
