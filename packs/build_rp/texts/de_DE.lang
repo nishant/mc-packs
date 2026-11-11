@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rDir wurde §6Admin-Zugriff§r als erstem Spieler auf dieser Welt gewährt.\n§7Öffne Einstellungen (Schleichen + Rechtsklick) für Admin-Optionen.
 eb.join.no_left_click=§e[Effortless Building] §rLinksklick (Schwingen) wird §cnicht unterstützt§r in deiner Minecraft-Version.\n§7Verwende §f/palette§7 anstatt Linksklick auf das §6Baubuch§7, um die Blockpalette zu öffnen.
-eb.join.received_book=§a[Effortless Building] §rDu hast ein §6Baubuch§r erhalten!\n§7Rechtsklick §rzum Öffnen der Baumodi §7| §rSchleichen + Rechtsklick §rfür Einstellungen.\n§c§l❗ §r§cVerloren? §fTippe §a/getbook §f(kostet §e5 XP-Level§f).
+eb.join.received_book=§a[Effortless Building] §rDu hast ein §6Baubuch§r erhalten!\n§7Rechtsklick §rzum Öffnen der Baumodi §7| §rSchleichen + Rechtsklick §rfür Einstellungen.\n§c§l❗ §r§cVerloren? §fTippe §a/realm:build_book§f.
 
 eb.getbook.already_have=§c[EB] Du hast das Baubuch bereits.
-eb.getbook.not_enough_xp=§c[EB] Du benötigst mindestens %1 XP-Level, um ein neues Buch zu erhalten. (Du hast %2)
 
 eb.place.no_blocks=§c[EB] §rKeine Blöcke im Inventar!
 eb.place.limited_blocks=§e[EB] §rNur %1 Blöcke vorhanden – platziere was du hast.
@@ -144,7 +143,7 @@ eb.settings.player.zoom_max=Volle Zoom-Entfernung (Blöcke)\n§7Entfernung, bei 
 eb.settings.player.air_reach=Air Build Reichweite (Blöcke)\n§7Maximale Reichweite beim Platzieren in freier Luft
 eb.settings.player.infinite_reach=Unendliche Reichweite\n§7Bauen über die normale Reichweite hinaus
 eb.settings.player.inf_reach_dist=Unendliche Reichweite Entfernung (Blöcke)\n§7Wie weit die unendliche Reichweite reicht
-eb.settings.player.swap_book_actions=Buchaktionen tauschen\n§7Rechtsklick öffnet Palette, Linksklick öffnet Menü
+eb.settings.player.swap_book_actions=Buchaktionen tauschen\n§7Rechtsklick öffnet Palette; Modusmenü: /realm:build
 eb.settings.player.undo_limit=Rückgängig-Limit\n§7Maximale Blockanzahl für Rückgängig nach Abbau
 eb.settings.player.max_blocks=Max. Blöcke (1 – %1)\n§7Maximale Blockanzahl pro Operation
 
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=Mittel
 eb.onboarding.tier.high=Stark
 eb.onboarding.tier_applied=§a[EB] §rVoreinstellung %1 angewendet. Alles lässt sich jederzeit in den §eEinstellungen§r anpassen.
 eb.onboarding.capped_by_admin=§e[EB] §rDein Blocklimit wurde vom Admin-Limit des Servers auf §f%1§r begrenzt.
+eb.onboarding.capped_raise_in_config=§e[EB] §rBlocklimit bleibt bei §f%1§r: Erhöhe zuerst das realmweite Limit in /realm:config (Easy Building).
 eb.onboarding.complete=§a[EB] §rAlles bereit! Rechtsklick mit dem §6Baubuch§r zum Starten. Halte das §6Tutorial§r-Buch für die Anleitung oder tippe §a/guide§r für das Live-Tutorial.
 
 eb.mode_select.btn.more_modes=§b+ Mehr Modi§r
@@ -368,8 +368,8 @@ eb.preview.step_of=Schritt %1/%2
 eb.preview.idle_start=§7%1  §8·  §7Schritt %2/%3  §8·  §fRechtsklick auf einen Block zum Starten
 eb.preview.idle_need_item=§7%1  §8·  §eHalte einen Block, um zu bauen
 
-eb.bar.book_controls=§6§lBaubuch§r  §8|  §7Rechtsklick §fMenü§r  §8·  §7Halten §fSchnellwechsel§r  §8·  §7Linksklick §fPalette\n§7Schleichen+Rechts §fEinstellungen§r  §8·  §7Schleichen+Links §fModifikatoren§r  §8·  §72× schleichen §fModus an/aus
-eb.bar.book_controls_swapped=§6§lBaubuch§r  §8|  §7Rechtsklick §fPalette§r  §8·  §7Halten §fSchnellwechsel§r  §8·  §7Linksklick §fMenü\n§7Schleichen+Rechts §fEinstellungen§r  §8·  §7Schleichen+Links §fModifikatoren§r  §8·  §72× schleichen §fModus an/aus
+eb.bar.book_controls=§6§lBaubuch§r  §8|  §7Rechtsklick §fMenü§r  §8·  §7Halten §fSchnellwechsel§r\n§7Schleichen+Rechts §fEinstellungen§r  §8·  §72× schleichen §fModus an/aus
+eb.bar.book_controls_swapped=§6§lBaubuch§r  §8|  §7Rechtsklick §fPalette§r  §8·  §7Halten §fSchnellwechsel§r\n§7Schleichen+Rechts §fEinstellungen§r  §8·  §72× schleichen §fModus an/aus
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Rechtsklick §fNächste Seite§r  §8·  §7Buch schlagen §fZurück§r  §8·  §7Schleichen §fKapitel springen
 
 eb.palette.enabled_notice=§e[EB] §fBlockpalette §eAN§f - §6%1§f.\n§7Deine Bauten §emischen jetzt mehrere Blockarten§7, statt nur den angeklickten Block zu nutzen.\n§7Ausschalten: §eBuch > Palette > Quelle > Aus§7.

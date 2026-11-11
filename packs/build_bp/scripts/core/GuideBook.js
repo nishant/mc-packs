@@ -100,11 +100,7 @@ function openBook(player) {
     const at  = spotForBook(player);
     const yaw = yawToward(at, player.location);
     let book;
-    try {
-        book = player.dimension.spawnEntity(GUIDE_ID, at, { initialRotation: yaw });
-    } catch {
-        try { book = player.dimension.spawnEntity(GUIDE_ID, at); } catch { return; }
-    }
+    try { book = player.dimension.spawnEntity(GUIDE_ID, at); } catch { return; }
     try { book.setProperty("eb:page", savedSpread(player)); } catch {}
     try { book.setProperty("eb:lang", languageIndex(player)); } catch {}
     try { book.setRotation({ x: 0, y: yaw }); } catch {}
@@ -207,6 +203,7 @@ export function cleanupGuideBook(playerId) {
 
 export function startGuideBook() {
     world.beforeEvents.playerInteractWithEntity.subscribe(ev => {
+        if (ev.cancel) return;
         if (ev.target?.typeId !== GUIDE_ID) return;
         ev.cancel = true;
         const player = ev.player;

@@ -12,7 +12,7 @@ export function applyArray(positions, cfg, cap = Infinity) {
             const k = `${x},${y},${z}`;
             if (seen.has(k)) continue;
             seen.add(k);
-            result.push({ x, y, z });
+            result.push({ ...p, x, y, z });
             if (seen.size > cap) return result;
         }
     }

@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rKamu telah mendapatkan §6akses admin§r sebagai pemain pertama di dunia ini.\n§7Buka Pengaturan (Jongkok + Klik kanan) untuk mengakses opsi admin.
 eb.join.no_left_click=§e[Effortless Building] §rKlik kiri (ayun) §ctidak didukung§r di versi Minecraft kamu.\n§7Gunakan §f/palette§7 daripada klik kiri pada §6Buku Bangunan§7 untuk membuka palet blok.
-eb.join.received_book=§a[Effortless Building] §rKamu mendapatkan §6Buku Bangunan§r!\n§7Klik kanan §runtuk membuka mode bangun §7| §rJongkok + Klik kanan §runtuk pengaturan.\n§c§l❗ §r§cHilang? §fKetik §a/getbook §f(biaya §e5 level XP§f).
+eb.join.received_book=§a[Effortless Building] §rKamu mendapatkan §6Buku Bangunan§r!\n§7Klik kanan §runtuk membuka mode bangun §7| §rJongkok + Klik kanan §runtuk pengaturan.\n§c§l❗ §r§cHilang? §fKetik §a/realm:build_book§f.
 
 eb.getbook.already_have=§c[EB] Anda sudah memiliki Buku Pembangun.
-eb.getbook.not_enough_xp=§c[EB] Anda membutuhkan setidaknya %1 level XP untuk mendapatkan buku baru. (Anda memiliki %2)
 
 eb.place.no_blocks=§c[EB] §rTidak ada blok di inventaris!
 eb.place.limited_blocks=§e[EB] §rHanya ada %1 blok – menempatkan yang ada.
@@ -144,7 +143,7 @@ eb.settings.player.zoom_max=Jarak Zoom Penuh (blok)\n§7Jarak saat zoom maksimum
 eb.settings.player.air_reach=Jangkauan Bangun Udara (blok)\n§7Jangkauan maksimum saat menempatkan di udara terbuka
 eb.settings.player.infinite_reach=Jangkauan Tak Terbatas\n§7Membangun melampaui jarak jangkauan normal
 eb.settings.player.inf_reach_dist=Jarak Jangkauan Tak Terbatas (blok)\n§7Seberapa jauh jangkauan tak terbatas meluas
-eb.settings.player.swap_book_actions=Tukar Aksi Buku\n§7Klik kanan buka Palet, Klik kiri buka Menu
+eb.settings.player.swap_book_actions=Tukar Aksi Buku\n§7Klik kanan buka Palet; Menu Mode: /realm:build
 eb.settings.player.undo_limit=Batas Urungkan\n§7Blok maksimum yang dilacak untuk diurungkan setelah hancur
 eb.settings.player.max_blocks=Blok Maksimum (1 – %1)\n§7Blok maksimum per operasi tunggal
 
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=Menengah
 eb.onboarding.tier.high=Tinggi
 eb.onboarding.tier_applied=§a[EB] §rPreset %1 diterapkan. Semuanya bisa disetel lagi di §ePengaturan§r kapan saja.
 eb.onboarding.capped_by_admin=§e[EB] §rBlok maksmu dibatasi ke §f%1§r oleh batas admin server.
+eb.onboarding.capped_raise_in_config=§e[EB] §rBatas blok tetap §f%1§r: naikkan dulu batas seluruh realm di /realm:config (Easy Building).
 eb.onboarding.complete=§a[EB] §rSemua siap! Klik kanan dengan §6Buku Bangunan§r untuk mulai. Pegang buku §6Tutorial§r untuk panduan, atau ketik §a/guide§r untuk tutorial langsung.
 
 eb.mode_select.btn.more_modes=§b+ Mode Lainnya§r
@@ -368,8 +368,8 @@ eb.preview.step_of=Langkah %1/%2
 eb.preview.idle_start=§7%1  §8·  §7Langkah %2/%3  §8·  §fKlik kanan sebuah blok untuk mulai
 eb.preview.idle_need_item=§7%1  §8·  §ePegang sebuah blok untuk mulai membangun
 
-eb.bar.book_controls=§6§lBuku Bangunan§r  §8|  §7Klik kanan §fMenu§r  §8·  §7Tahan §fGanti cepat§r  §8·  §7Klik kiri §fPalet\n§7Jongkok+Kanan §fPengaturan§r  §8·  §7Jongkok+Kiri §fPengubah§r  §8·  §7Jongkok dua kali §fMode nyala/mati
-eb.bar.book_controls_swapped=§6§lBuku Bangunan§r  §8|  §7Klik kanan §fPalet§r  §8·  §7Tahan §fGanti cepat§r  §8·  §7Klik kiri §fMenu\n§7Jongkok+Kanan §fPengaturan§r  §8·  §7Jongkok+Kiri §fPengubah§r  §8·  §7Jongkok dua kali §fMode nyala/mati
+eb.bar.book_controls=§6§lBuku Bangunan§r  §8|  §7Klik kanan §fMenu§r  §8·  §7Tahan §fGanti cepat§r\n§7Jongkok+Kanan §fPengaturan§r  §8·  §7Jongkok dua kali §fMode nyala/mati
+eb.bar.book_controls_swapped=§6§lBuku Bangunan§r  §8|  §7Klik kanan §fPalet§r  §8·  §7Tahan §fGanti cepat§r\n§7Jongkok+Kanan §fPengaturan§r  §8·  §7Jongkok dua kali §fMode nyala/mati
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Klik kanan §fHalaman berikut§r  §8·  §7Pukul bukunya §fKembali§r  §8·  §7Jongkok §fLompat satu bab
 
 eb.palette.enabled_notice=§e[EB] §fPalet Blok §eAKTIF§f - §6%1§f.\n§7Bangunanmu kini §emencampur beberapa jenis blok§7, bukan hanya blok yang kamu klik.\n§7Matikan: §eBuku > Palet > Sumber > Mati§7.

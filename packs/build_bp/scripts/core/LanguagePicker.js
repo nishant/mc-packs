@@ -84,14 +84,6 @@ function setCursor(player, picker) {
     try { picker.entity.setProperty("eb:aim", aim); } catch {}
 }
 
-function clientLanguage(player) {
-    let locale;
-    try { locale = player.clientSystemInfo?.locale; } catch { return 0; }
-    if (typeof locale !== "string") return 0;
-    const code = locale.toLowerCase().split(/[_-]/)[0];
-    return GUIDE_LANGUAGES.findIndex(language => language.id === code) + 1;
-}
-
 function sound(player, id, pitch, volume) {
     try { player.playSound(id, { pitch, volume }); } catch {}
 }
@@ -123,15 +115,11 @@ export function openPicker(player, { pinned = false } = {}) {
     const origin = spotInFront(player, DISTANCE, MIN_DISTANCE, DROP);
     const yaw    = yawToward(origin, player.location);
     let entity;
-    try {
-        entity = player.dimension.spawnEntity(PICKER_ID, origin, { initialRotation: yaw });
-    } catch {
-        try { entity = player.dimension.spawnEntity(PICKER_ID, origin); } catch { return; }
-    }
+    try { entity = player.dimension.spawnEntity(PICKER_ID, origin); } catch { return; }
     try { entity.setRotation({ x: 0, y: yaw }); } catch {}
     const selected = hasBookLanguage(player)
         ? GUIDE_LANGUAGES.findIndex(language => language.id === getBookLanguage(player)) + 1
-        : clientLanguage(player);
+        : 0; // locale preselect needs a newer @minecraft/server than 2.1.0 (no clientSystemInfo.locale)
     if (selected > 0) {
         try { entity.setProperty("eb:selected", selected); } catch {}
     }
@@ -197,6 +185,7 @@ function sweepStrays() {
 
 export function startLanguagePicker() {
     world.beforeEvents.playerInteractWithEntity.subscribe(ev => {
+        if (ev.cancel) return;
         if (ev.target?.typeId !== PICKER_ID) return;
         ev.cancel = true;
         const player = ev.player;

@@ -18,8 +18,8 @@ export const FloorMode = {
             };
         } catch { return null; }
     },
-    getPositions(anchor, target, player) {
-        const positions = floorRect(anchor, target, getMaxBlocks(player));
+    getPositions(anchor, target, player, secondAnchor, opts) {
+        const positions = floorRect(anchor, target, opts?.cap ?? getMaxBlocks(player));
         if (getModeOption(player, "floor", "fill") === "hollow") return smartOutline(positions);
         return positions;
     },

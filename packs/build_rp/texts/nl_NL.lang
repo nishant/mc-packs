@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rJe hebt §6beheerderstoegang§r gekregen als eerste speler op deze wereld.\n§7Open Instellingen (Sluipen + Rechtermuisklik) voor beheeropties.
 eb.join.no_left_click=§e[Effortless Building] §rLinkermuisklik (zwaaien) wordt §cniet ondersteund§r in jouw Minecraft-versie.\n§7Gebruik §f/palette§7 in plaats van linkermuisklik op het §6Bouwboek§7 om het blokpalet te openen.
-eb.join.received_book=§a[Effortless Building] §rJe hebt een §6Bouwboek§r ontvangen!\n§7Rechtermuisklik §rom bouwmodi te openen §7| §rSluipen + Rechtermuisklik §rvoor instellingen.\n§c§l❗ §r§cKwijt? §fTik §a/getbook §f(kost §e5 XP-niveaus§f).
+eb.join.received_book=§a[Effortless Building] §rJe hebt een §6Bouwboek§r ontvangen!\n§7Rechtermuisklik §rom bouwmodi te openen §7| §rSluipen + Rechtermuisklik §rvoor instellingen.\n§c§l❗ §r§cKwijt? §fTik §a/realm:build_book§f.
 
 eb.getbook.already_have=§c[EB] Je hebt het Bouwboek al.
-eb.getbook.not_enough_xp=§c[EB] Je hebt minimaal %1 XP-levels nodig om een nieuw boek te krijgen. (Je hebt er %2)
 
 eb.place.no_blocks=§c[EB] §rGeen blokken in inventaris!
 eb.place.limited_blocks=§e[EB] §rSlechts %1 blokken – plaatst wat je hebt.
@@ -144,7 +143,7 @@ eb.settings.player.zoom_max=Volledige zoomafstand (blokken)\n§7Afstand waarop m
 eb.settings.player.air_reach=Luchtbouwbewerksbereik (blokken)\n§7Maximaal bereik bij plaatsen in de open lucht
 eb.settings.player.infinite_reach=Oneindig Bereik\n§7Bouwen buiten de normale bereikafstand
 eb.settings.player.inf_reach_dist=Oneindig Bereik Afstand (blokken)\n§7Hoe ver het oneindige bereik reikt
-eb.settings.player.swap_book_actions=Boekacties omwisselen\n§7Rechtermuisklik opent Palet, Linkermuisklik opent Menu
+eb.settings.player.swap_book_actions=Boekacties omwisselen\n§7Rechtermuisklik opent Palet; Modusmenu: /realm:build
 eb.settings.player.undo_limit=Ongedaan maken Limiet\n§7Maximaal aantal blokken bijgehouden voor ongedaan maken
 eb.settings.player.max_blocks=Max Blokken (1 – %1)\n§7Maximaal aantal blokken per enkele operatie
 
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=Gemiddeld
 eb.onboarding.tier.high=Krachtig
 eb.onboarding.tier_applied=§a[EB] §rVoorinstelling %1 toegepast. Je kunt alles altijd bijstellen in §eInstellingen§r.
 eb.onboarding.capped_by_admin=§e[EB] §rJe blokkenlimiet is door de adminlimiet van de server begrensd op §f%1§r.
+eb.onboarding.capped_raise_in_config=§e[EB] §rBlokkenlimiet blijft §f%1§r: verhoog eerst de realmbrede limiet in /realm:config (Easy Building).
 eb.onboarding.complete=§a[EB] §rHelemaal klaar! Rechtsklik met het §6Bouwboek§r om te beginnen. Houd het §6Tutorial§r-boek vast voor de gids, of typ §a/guide§r voor de live tutorial.
 
 eb.mode_select.btn.more_modes=§b+ Meer modi§r
@@ -368,8 +368,8 @@ eb.preview.step_of=Stap %1/%2
 eb.preview.idle_start=§7%1  §8·  §7Stap %2/%3  §8·  §fRechtsklik op een blok om te beginnen
 eb.preview.idle_need_item=§7%1  §8·  §eHoud een blok vast om te gaan bouwen
 
-eb.bar.book_controls=§6§lBouwboek§r  §8|  §7Rechtsklik §fMenu§r  §8·  §7Vasthouden §fSnel wisselen§r  §8·  §7Linksklik §fPalet\n§7Sluipen+Rechts §fInstellingen§r  §8·  §7Sluipen+Links §fModifiers§r  §8·  §72× sluipen §fModus aan/uit
-eb.bar.book_controls_swapped=§6§lBouwboek§r  §8|  §7Rechtsklik §fPalet§r  §8·  §7Vasthouden §fSnel wisselen§r  §8·  §7Linksklik §fMenu\n§7Sluipen+Rechts §fInstellingen§r  §8·  §7Sluipen+Links §fModifiers§r  §8·  §72× sluipen §fModus aan/uit
+eb.bar.book_controls=§6§lBouwboek§r  §8|  §7Rechtsklik §fMenu§r  §8·  §7Vasthouden §fSnel wisselen§r\n§7Sluipen+Rechts §fInstellingen§r  §8·  §72× sluipen §fModus aan/uit
+eb.bar.book_controls_swapped=§6§lBouwboek§r  §8|  §7Rechtsklik §fPalet§r  §8·  §7Vasthouden §fSnel wisselen§r\n§7Sluipen+Rechts §fInstellingen§r  §8·  §72× sluipen §fModus aan/uit
 eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Rechtsklik §fVolgende pagina§r  §8·  §7Boek slaan §fTerug§r  §8·  §7Sluipen §fHoofdstuk overslaan
 
 eb.palette.enabled_notice=§e[EB] §fBlokkenpalet §eAAN§f - §6%1§f.\n§7Je bouwsels §emengen nu meerdere bloksoorten§7 in plaats van alleen het blok waarop je klikt.\n§7Uitzetten: §eBoek > Palet > Bron > Uit§7.

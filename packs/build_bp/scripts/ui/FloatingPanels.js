@@ -5,7 +5,7 @@ import {
     PANEL_MODIFIER_CONFIG,
 } from "../core/EntityPanelData.js";
 import { MODE_LIST } from "../modes/ModeRegistry.js";
-import { getSimpleModes, isModeComplexityLocked, setOnboarded } from "../core/Settings.js";
+import { nearestIndex, getSimpleModes, isModeComplexityLocked, setOnboarded } from "../core/Settings.js";
 import { getState, getMirrorState, getArrayState, getRadialState, setMirrorState, setArrayState, setRadialState } from "../core/PlayerState.js";
 import { getPaletteMode, getDistributionMode, getWeightMode, getSmartPattern, setSmartPattern } from "../core/Palette.js";
 import { PRESET_IDS, applyPreset, activePreset } from "../core/Presets.js";
@@ -290,7 +290,7 @@ function settingsPanel(category) {
                 if (row.kind === "toggle") {
                     if (value) out.flags += 2 ** i;
                 } else if (row.kind === "cycle") {
-                    out[`c${i}`] = Math.max(0, setting.values.indexOf(value));
+                    out[`c${i}`] = nearestIndex(setting.values, value);
                 } else if (row.kind === "number" || row.kind === "slide") {
                     out[`n${i}`] = Math.max(0, Math.min(row.max, Math.floor(Number(value) || 0)));
                 }
@@ -322,6 +322,7 @@ function settingsPanel(category) {
             }
             const setting = find(arg);
             if (!setting) return;
+            if (category === "admin" && !isOp(player)) return "deny";
             if (setting.visible && !setting.visible(player)) return "deny";
             if (setting.kind === "action") {
                 closePanel(player.id);
@@ -460,7 +461,6 @@ registerPanel("help", {
         closePanel(player.id);
         if (arg === "book")          offerTutorialBook(player);
         else if (arg === "language") changeBookLanguage(player);
-        else if (arg === "guided")   startCoach(player);
     },
 });
 

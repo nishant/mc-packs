@@ -14,6 +14,7 @@ import { ALWAYS_REPLACEABLE } from "./BlockPlacer.js";
 // Players whose undo or redo is waiting on the claims answer: a second one must not interleave.
 const busy = new Set();
 const MAX_HISTORY = 10;
+const MAX_SNAPSHOT_BLOCKS = 100000;
 const UNDO_CHUNK_SIZE = 64;
 const tempStacks = {
     undo: new Map(),
@@ -60,15 +61,31 @@ function clearPersistent(player, type) {
     for (let i = 0; i < n; i++) clearProp(player, type, i);
     setSize(player, type, 0);
 }
+/** Write the new entry first; only then drop the oldest. Returns null when the write failed, else true when the oldest was dropped. */
 function pushPersistent(player, type, entry) {
-    let n = getSize(player, type);
-    if (n >= MAX_HISTORY) {
-        for (let i = 0; i < n - 1; i++) setEntry(player, type, i, getEntry(player, type, i + 1));
-        clearProp(player, type, n - 1);
-        n = n - 1;
+    let n = 0;
+    try { n = getSize(player, type); } catch { return null; }
+    try {
+        setEntry(player, type, n, entry);
+    } catch {
+        try { clearProp(player, type, n); } catch { }
+        return null;
     }
-    setEntry(player, type, n, entry);
-    setSize(player, type, n + 1);
+    let dropped = false;
+    try {
+        if (n >= MAX_HISTORY) {
+            for (let i = 0; i < n; i++) setEntry(player, type, i, getEntry(player, type, i + 1));
+            clearProp(player, type, n);
+            dropped = true;
+            setSize(player, type, n);
+        } else {
+            setSize(player, type, n + 1);
+        }
+    } catch {
+        try { clearPersistent(player, type); } catch { }
+        return null;
+    }
+    return dropped;
 }
 function popPersistent(player, type) {
     const n = getSize(player, type);
@@ -78,9 +95,20 @@ function popPersistent(player, type) {
     setSize(player, type, n - 1);
     return entry;
 }
+const MAX_TEMP_BLOCKS = 200000;
+/** Pushes onto the in-memory stack, capped by entry count and total blocks; returns how many oldest entries were dropped. */
 function pushTemp(player, type, entry) {
     if (!tempStacks[type].has(player.id)) tempStacks[type].set(player.id, []);
-    tempStacks[type].get(player.id).push(entry);
+    const stack = tempStacks[type].get(player.id);
+    stack.push(entry);
+    let total = 0;
+    for (const e of stack) total += e.bef?.length ?? 0;
+    let dropped = 0;
+    while (stack.length > 1 && (stack.length > MAX_HISTORY || total > MAX_TEMP_BLOCKS)) {
+        total -= stack.shift().bef?.length ?? 0;
+        dropped++;
+    }
+    return dropped;
 }
 function popTemp(player, type) {
     const stack = tempStacks[type].get(player.id);
@@ -101,16 +129,34 @@ function popRouteOrder(player, type) {
 function clearRouteOrder(player, type) {
     routeOrder[type].delete(player.id);
 }
+function dropOldestMarker(player, type, source) {
+    const arr = routeOrder[type].get(player.id);
+    const i = arr ? arr.indexOf(source) : -1;
+    if (i >= 0) arr.splice(i, 1);
+}
+function routeTemp(player, type, entry) {
+    const dropped = pushTemp(player, type, entry);
+    pushRouteOrder(player, type, "mem");
+    for (let i = 0; i < dropped; i++) dropOldestMarker(player, type, "mem");
+}
 function routePush(player, type, entry) {
-    const threshold = getUndoThreshold(player);
-
-    if (threshold > 0 && entry.bef.length > threshold) {
-        pushTemp(player, type, entry);
-        pushRouteOrder(player, type, "mem");
-    } else {
-        pushPersistent(player, type, entry);
-        pushRouteOrder(player, type, "disk");
+    let threshold = 0;
+    try { threshold = getUndoThreshold(player); } catch { }
+    let persistent = false;
+    if (!(threshold > 0 && entry.bef.length > threshold)) {
+        let json = null;
+        try { json = JSON.stringify(entry); } catch { }
+        persistent = json !== null && json.length <= 30000;
     }
+    if (persistent) {
+        const r = pushPersistent(player, type, entry);
+        if (r !== null) {
+            pushRouteOrder(player, type, "disk");
+            if (r) dropOldestMarker(player, type, "disk");
+            return;
+        }
+    }
+    routeTemp(player, type, entry);
 }
 function routePop(player, type) {
     const source = popRouteOrder(player, type);
@@ -126,6 +172,7 @@ function routeClear(player, type) {
 }
 export function captureSnapshot(dim, toPlace, typeId, blockStates, perPosTypeIds, threshold = 200) {
     if (threshold === 0) return null;
+    if (toPlace.length > MAX_SNAPSHOT_BLOCKS) return null;
     const bef = toPlace.map(pos => {
         let t = "air", s = {};
         try {
@@ -144,8 +191,10 @@ export function captureSnapshot(dim, toPlace, typeId, blockStates, perPosTypeIds
 }
 export function recordSnapshot(player, snapshot) {
     if (!snapshot) return;
-    routePush(player, "undo", snapshot);
-    routeClear(player, "redo");
+    try {
+        routePush(player, "undo", snapshot);
+        routeClear(player, "redo");
+    } catch { }
 }
 function applyBlocks(dim, playerId, blocks) {
     reportPlaced(dim.id, blocks.filter((b) => unpack(b.t) !== "minecraft:air"), (b) => unpack(b.t));

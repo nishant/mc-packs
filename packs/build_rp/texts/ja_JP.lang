@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §rこのワールドの最初のプレイヤーとして §6管理者権限§r が付与されました。\n§7設定を開くには（スニーク + 右クリック）から管理者オプションにアクセスしてください。
 eb.join.no_left_click=§e[Effortless Building] §rあなたのMinecraftバージョンでは左クリック（スイング）は §cサポートされていません§r。\n§7ブロックパレットを開くには §6建築の書§7 を左クリックする代わりに §f/palette§7 を使用してください。
-eb.join.received_book=§a[Effortless Building] §r§6建築の書§r を受け取りました！\n§7右クリック §rで建築モード選択 §7| §rスニーク + 右クリック §rで設定。\n§c§l❗ §r§c紛失? §fType §a/getbook §f(§e5 XPレベル§f必要).
+eb.join.received_book=§a[Effortless Building] §r§6建築の書§r を受け取りました！\n§7右クリック §rで建築モード選択 §7| §rスニーク + 右クリック §rで設定。\n§c§l❗ §r§c紛失? §fType §a/realm:build_book§f。
 
 eb.getbook.already_have=§c[EB] すでに建築書を持っています。
-eb.getbook.not_enough_xp=§c[EB] 新しい本を入手するには、少なくとも %1 レベルの経験値が必要です。(現: %2)
 
 eb.place.no_blocks=§c[EB] §rインベントリにブロックがありません！
 eb.place.limited_blocks=§e[EB] §rブロックが %1 個しかありません – 持っている分を設置します。
@@ -144,7 +143,7 @@ eb.settings.player.zoom_max=最大ズーム距離 (ブロック)\n§7最大ま�
 eb.settings.player.air_reach=空中建築の射程 (ブロック)\n§7空中にブロックを置く際の最大射程
 eb.settings.player.infinite_reach=無限射程\n§7通常の射程距離を超えて建築を可能にする
 eb.settings.player.inf_reach_dist=無限射程の距離 (ブロック)\n§7無限射程が拡張される最大距離
-eb.settings.player.swap_book_actions=本の操作を入れ替え\n§7右クリックでパレット、左クリックでメニュー
+eb.settings.player.swap_book_actions=本の操作を入れ替え\n§7右クリックでパレット、モードメニューは /realm:build
 eb.settings.player.undo_limit=元に戻す制限\n§7破壊後に元に戻すことができる最大ブロック数
 eb.settings.player.max_blocks=最大ブロック数 (1 – %1)\n§71回の操作で配置できる最大ブロック数
 
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=中性能
 eb.onboarding.tier.high=高性能
 eb.onboarding.tier_applied=§a[EB] §r%1 のプリセットを適用しました。§e設定§rでいつでも細かく調整できます。
 eb.onboarding.capped_by_admin=§e[EB] §r最大ブロック数はサーバーの管理者上限により §f%1§r に制限されました。
+eb.onboarding.capped_raise_in_config=§e[EB] §rブロック上限は §f%1§r のままです。先に /realm:config (Easy Building) でレルム全体の上限を引き上げてください。
 eb.onboarding.complete=§a[EB] §r準備完了！§6建築の書§rを右クリックして始めましょう。§6チュートリアル§rの本を持つとガイドが、§a/guide§r と入力するとライブチュートリアルが始まります。
 
 eb.mode_select.btn.more_modes=§b+ モードを増やす§r
@@ -368,8 +368,8 @@ eb.preview.step_of=手順 %1/%2
 eb.preview.idle_start=§7%1  §8·  §7手順 %2/%3  §8·  §fブロックを右クリックして開始
 eb.preview.idle_need_item=§7%1  §8·  §eブロックを手に持つと建築を始められます
 
-eb.bar.book_controls=§6§l建築の書§r  §8|  §7右クリック §fメニュー§r  §8·  §7長押し §fクイック切替§r  §8·  §7左クリック §fパレット\n§7スニーク+右 §f設定§r  §8·  §7スニーク+左 §fモディファイア§r  §8·  §7スニーク2回 §fモードのオン/オフ
-eb.bar.book_controls_swapped=§6§l建築の書§r  §8|  §7右クリック §fパレット§r  §8·  §7長押し §fクイック切替§r  §8·  §7左クリック §fメニュー\n§7スニーク+右 §f設定§r  §8·  §7スニーク+左 §fモディファイア§r  §8·  §7スニーク2回 §fモードのオン/オフ
+eb.bar.book_controls=§6§l建築の書§r  §8|  §7右クリック §fメニュー§r  §8·  §7長押し §fクイック切替§r\n§7スニーク+右 §f設定§r  §8·  §7スニーク2回 §fモードのオン/オフ
+eb.bar.book_controls_swapped=§6§l建築の書§r  §8|  §7右クリック §fパレット§r  §8·  §7長押し §fクイック切替§r\n§7スニーク+右 §f設定§r  §8·  §7スニーク2回 §fモードのオン/オフ
 eb.bar.tutorial_book_controls=§6§lチュートリアル§r  §8|  §7右クリック §f次のページ§r  §8·  §7本をたたく §f戻る§r  §8·  §7スニーク §f章を飛ばす
 
 eb.palette.enabled_notice=§e[EB] §fブロックパレット §eオン§f - §6%1§f。\n§7クリックしたブロックだけでなく、§e複数のブロックを混ぜて§7建築します。\n§7オフにするには: §e本 > パレット > ソース > オフ§7。

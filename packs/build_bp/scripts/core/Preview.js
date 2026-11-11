@@ -10,7 +10,7 @@ import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPla
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
 import { beginVisualizationTick, markHolderDirty, visualizationHolders, visualizationIdle, visualizationReleased } from "../utils/tool-gate.js";
-import { getFlippedStates } from "../modifiers/MirrorModifier.js";
+import { modifiedStates } from "../modifiers/MirrorModifier.js";
 import { expandBeds, isBedType, directionFromYaw, directionFromStates, bedPartnerPos } from "./beds.js";
 
 /** Players the preview looks at every tick: a mode on, or a book in hand. The others every IDLE_EVERY ticks. */
@@ -339,7 +339,7 @@ function previewBedPositions(positions, typeId, player, blockStates) {
     try { yaw = player.getRotation().y; } catch { yaw = 0; }
     const { positions: expanded } = expandBeds(positions.map((p) => {
         const raw = p.states ?? p._resolvedStates ?? blockStates ?? {};
-        const flipped = (p._mx || p._my || p._mz) ? getFlippedStates(raw, !!p._mx, !!p._my, !!p._mz) : raw;
+        const flipped = modifiedStates(raw, p);
         return {
             x: p.x, y: p.y, z: p.z, typeId,
             direction: directionFromStates(flipped) ?? directionFromYaw(yaw),
@@ -949,9 +949,21 @@ export function startPreviewLoop() {
                     continue;
                 }
 
+                const maxBlocks = getMaxBlocks(player);
                 const rawPositions = handler.getPositions(
-                    state.anchor, target, player, state.secondAnchor ?? null
+                    state.anchor, target, player, state.secondAnchor ?? null, { cap: maxBlocks + 1 }
                 );
+                if (rawPositions?.oversize || rawPositions?.length > maxBlocks) {
+                    const last = previewCache.get(player.id);
+                    const stillRelevant = last?.contextKey === contextKey;
+                    const warnBar = t("eb.preview.exceeds_limit", maxBlocks.toLocaleString());
+                    if (stillRelevant) {
+                        previewCache.set(player.id, { ...last, key: cacheKey, settled: true, actionBar: warnBar });
+                        spawnParticles(dim, last.preview, last.particleId);
+                    }
+                    if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
+                    continue;
+                }
                 if (!rawPositions?.length) continue;
                 const allPositions = applyModifiers(player, rawPositions);
                 if (!allPositions?.length) continue;

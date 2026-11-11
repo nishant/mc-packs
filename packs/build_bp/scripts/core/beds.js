@@ -1,3 +1,4 @@
+import { rotateStates } from "../utils/BlockStates.js";
 // Bedrock beds are one item and two blocks. Java color ids are not Bedrock ids.
 // direction: south 0, west 1, north 2, east 3. The head sits one block that way.
 // Both halves share the facing. head_piece_bit tells them apart. occupied_bit stays
@@ -312,7 +313,7 @@ export function chargeUnits(typeId, states, headFlag) {
 
 /**
  * Expand bed feet before a claims or safe-zone filter. Other blocks pass through.
- * @param {Array<{x:number,y:number,z:number,typeId?:string,states?:BedStates,_mx?:boolean,_my?:boolean,_mz?:boolean,_resolvedStates?:BedStates}>} positions
+ * @param {Array<{x:number,y:number,z:number,typeId?:string,states?:BedStates,_mx?:boolean,_my?:boolean,_mz?:boolean,_resolvedStates?:BedStates,_alt?:boolean,_rot?:any}>} positions
  * @param {string} typeId
  * @param {BedStates | null | undefined} blockStates
  * @param {number} [yaw]
@@ -322,7 +323,9 @@ export function expandForClaims(positions, typeId, blockStates, yaw) {
     const dir = directionFromStates(blockStates) ?? directionFromYaw(yaw ?? 0);
     const entries = positions.map((p) => {
         const raw = p.states ?? p._resolvedStates ?? blockStates ?? {};
-        const states = (p._mx || p._mz) ? flipBedFacing(raw, !!p._mx, !!p._mz) : raw;
+        let states = (p._mx || p._mz) ? flipBedFacing(raw, !!p._mx, !!p._mz) : raw;
+        if (p._alt) states = flipBedFacing(states, true, false);
+        if (p._rot) states = rotateStates(states, p._rot);
         return {
             x: p.x, y: p.y, z: p.z,
             typeId: p.typeId && isBedType(p.typeId) ? p.typeId : typeId,

@@ -447,7 +447,6 @@ export function destroyBlocks(player, positions, onComplete) {
     const threshold = getUndoThreshold(player);
     const snapshot  = threshold > 0 ? { dim: dim.id, bef: [], aft: [], destroy: true, survival: !creative } : null;
 
-    const lootMgr      = world.getLootTableManager?.();
     const BULK_THRESHOLD = 500;
     const useBulk        = capped.length > BULK_THRESHOLD;
     const spawnDrops     = !creative;
@@ -462,7 +461,7 @@ export function destroyBlocks(player, positions, onComplete) {
     const pending  = [];
     const clearedBeds = new Set();
 
-    const blocksPerTick = Math.ceil(capped.length / getBuildSpeed(player));
+    const blocksPerTick = Math.min(64, Math.max(1, Math.ceil(capped.length / getBuildSpeed(player))));
 
     const runId = system.runInterval(() => {
         if (!player || player.isValid !== true) {
@@ -503,17 +502,12 @@ export function destroyBlocks(player, positions, onComplete) {
                 const block = dim.getBlock(pos);
                 if (!block) { pending.push(pos); continue; }
                 if (block.isAir || UNBREAKABLE.has(block.typeId)) continue;
-                if (!creative && !canMineWith(toolTypeId, block.typeId, !!lootMgr)) continue;
+                if (!creative && !canMineWith(toolTypeId, block.typeId, false)) continue;
 
                 const bedHead = isBedType(block.typeId) && (pos._bedHead === true || block.permutation.getAllStates()?.head_piece_bit === true);
-                let lootItems = null;
                 let drop      = null;
                 if (spawnDrops && !bedHead) {
-                    if (lootMgr) {
-                        lootItems = lootMgr.generateLootFromBlockPermutation(block.permutation, tool);
-                    } else {
-                        drop = getBlockDrop(block, hasSilkTouch, fortuneLevel);
-                    }
+                    drop = getBlockDrop(block, hasSilkTouch, fortuneLevel);
                 }
 
                 const xpGain = (!hasSilkTouch && SCULK_XP[block.typeId] ? SCULK_XP[block.typeId] : 0)
@@ -561,19 +555,7 @@ export function destroyBlocks(player, positions, onComplete) {
                 }
 
                 if (spawnDrops) {
-                    if (lootItems?.length) {
-                        if (drops) {
-                            for (const item of lootItems)
-                                drops.set(item.typeId, (drops.get(item.typeId) ?? 0) + item.amount);
-                        } else {
-                            for (const item of lootItems) {
-                                try {
-                                    const entity = dim.spawnItem(item, { x: pos.x + 0.5, y: pos.y + 1.0, z: pos.z + 0.5 });
-                                    if (entity) spawnedEntities.push(entity);
-                                } catch { }
-                            }
-                        }
-                    } else if (drop) {
+                    if (drop) {
                         if (drops) {
                             drops.set(drop.typeId, (drops.get(drop.typeId) ?? 0) + drop.amount);
                         } else {

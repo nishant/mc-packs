@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { rotateStates } from "../utils/BlockStates.js";
 const FLIP_FD_X = { 4: 5, 5: 4 };
 const FLIP_FD_Y = { 0: 1, 1: 0 };
 const FLIP_FD_Z = { 2: 3, 3: 2 };
@@ -20,7 +21,7 @@ function applyFlip(states, mx, my, mz) {
     if (!states || (!mx && !my && !mz)) return states;
     const s = { ...states };
 
-    if ("facing_direction" in s) {
+    if ("facing_direction" in s && typeof s.facing_direction === "number") {
         const v = s.facing_direction;
         if (mx && v in FLIP_FD_X) s.facing_direction = FLIP_FD_X[v];
         else if (my && v in FLIP_FD_Y) s.facing_direction = FLIP_FD_Y[v];
@@ -29,15 +30,35 @@ function applyFlip(states, mx, my, mz) {
 
     if ("minecraft:facing_direction" in s) {
         const v = s["minecraft:facing_direction"];
-        if (mx && v in FLIP_FD_X) s["minecraft:facing_direction"] = FLIP_FD_X[v];
+        if (typeof v === "string") {
+            let r = v;
+            if (mx) r = flipFacingX(r);
+            if (my) r = flipFacingY(r);
+            if (mz) r = flipFacingZ(r);
+            s["minecraft:facing_direction"] = r;
+        } else if (mx && v in FLIP_FD_X) s["minecraft:facing_direction"] = FLIP_FD_X[v];
         else if (my && v in FLIP_FD_Y) s["minecraft:facing_direction"] = FLIP_FD_Y[v];
         else if (mz && v in FLIP_FD_Z) s["minecraft:facing_direction"] = FLIP_FD_Z[v];
     }
 
-    if ("facing" in s) {
-        if (mx) s.facing = flipFacingX(s.facing);
-        if (my) s.facing = flipFacingY(s.facing);
-        if (mz) s.facing = flipFacingZ(s.facing);
+    if (typeof s["minecraft:block_face"] === "string") {
+        let r = s["minecraft:block_face"];
+        if (mx) r = flipFacingX(r);
+        if (my) r = flipFacingY(r);
+        if (mz) r = flipFacingZ(r);
+        s["minecraft:block_face"] = r;
+    }
+
+    if (typeof s.torch_facing_direction === "string") {
+        let r = s.torch_facing_direction;
+        if (mx) r = flipFacingX(r);
+        if (mz) r = flipFacingZ(r);
+        s.torch_facing_direction = r;
+    }
+
+    if (my && typeof s["minecraft:vertical_half"] === "string") {
+        const v = s["minecraft:vertical_half"];
+        s["minecraft:vertical_half"] = v === "top" ? "bottom" : v === "bottom" ? "top" : v;
     }
 
     if ("minecraft:cardinal_direction" in s) {
@@ -59,11 +80,21 @@ function applyFlip(states, mx, my, mz) {
 
     if (my && "upside_down_bit" in s) s.upside_down_bit = !s.upside_down_bit;
 
-    if (my && "top_slot_bit" in s) s.top_slot_bit = !s.top_slot_bit;
-
-    if ((mx || mz) && "door_hinge_bit" in s) s.door_hinge_bit = !s.door_hinge_bit;
+    if ((mx !== mz) && "door_hinge_bit" in s) s.door_hinge_bit = !s.door_hinge_bit;
 
     return s;
+}
+
+export function modifiedStates(raw, pos) {
+    if (!raw || !hasStateMods(pos)) return raw;
+    let s = (pos._mx || pos._my || pos._mz) ? applyFlip(raw, !!pos._mx, !!pos._my, !!pos._mz) : raw;
+    if (pos._alt) s = applyFlip(s, true, false, false);
+    if (pos._rot) s = rotateStates(s, pos._rot);
+    return s;
+}
+
+export function hasStateMods(pos) {
+    return !!(pos && (pos._mx || pos._my || pos._mz || pos._rot || pos._alt));
 }
 
 export function getFlippedStates(baseStates, flipX, flipY, flipZ) {

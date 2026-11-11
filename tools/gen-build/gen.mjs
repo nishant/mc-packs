@@ -1,6 +1,6 @@
 // Generates the pictures of the Easy Building Guides resource pack (packs/build_rp): the guide particle
-// textures (textures/particle/realm_guide.png: a one-block outline and a corner outline side by side;
-// realm_guide_dot.png), the Building Book icon (textures/items/realm_building_book.png), inventory page
+// textures (textures/particle/realm_guide.png: a one-block outline and a corner outline side by side),
+// the Building Book icon (textures/items/realm_building_book.png), inventory page
 // buttons (textures/items/inv_{prev,menu,next}.png), the Run Away music disc, and pack_icon.png.
 // The particles, item_texture.json, sound definitions, locale files and manifest are hand-written.
 // Deterministic (no Math.random), so the same code always writes the same files.
@@ -82,18 +82,6 @@ function guideTexture() {
       r(S - 1 - T, x0, S - 1 - T, x1, SHADE);
     }
   }
-  return img;
-}
-
-/** 16 x 16 round dot with a dark rim. */
-function dotTexture() {
-  const img = blank(16, 16);
-  for (let y = 0; y < 16; y++)
-    for (let x = 0; x < 16; x++) {
-      const d = Math.hypot(x + 0.5 - 8, y + 0.5 - 8);
-      if (d <= 5.2) put(img, x, y, WHITE);
-      else if (d <= 6.6) put(img, x, y, [0, 0, 0, Math.round(140 * Math.min(1, 6.6 - d + 0.3))]);
-    }
   return img;
 }
 
@@ -332,7 +320,6 @@ function fillQuad(img, pts, c) {
 /** @type {Map<string, Image>} */
 const outputs = new Map();
 outputs.set(`${RP}/textures/particle/realm_guide.png`, guideTexture());
-outputs.set(`${RP}/textures/particle/realm_guide_dot.png`, dotTexture());
 outputs.set(`${RP}/textures/items/realm_building_book.png`, bookIcon());
 outputs.set(`${RP}/textures/items/inv_prev.png`, inventoryIcon("prev"));
 outputs.set(`${RP}/textures/items/inv_menu.png`, inventoryIcon("menu"));

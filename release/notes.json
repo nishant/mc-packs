@@ -1,13 +1,10 @@
 {
   "notes": [
-    "Blocks you build with the Building Book no longer earn Skills XP, Guilds reputation or Daily Quest progress when broken, and towns leave them alone.",
-    "Land Claims pop back out pistons and slime or honey blocks placed beside someone else's claim, and break pistons that move blocks into or out of one afterwards (the move is not undone).",
-    "Town Projects no longer duplicate lecterns, barrels or smokers when a spot is removed or rebuilt, and a Treasure Map cairn's lantern no longer drops as a free item.",
-    "Many packs now recognize dead bushes, lily pads, item frames, note blocks and rooted dirt, so the Minimap draws them properly.",
-    "A creative player no longer gives party mates Defeat progress, Wanderers state real distances, and choosing an ordinary moon before a full moon sticks.",
-    "Only the server console or an operator can make a pack forget its saved data, and the Server size setup is saved as done only when every setting was applied.",
-    "Goals, Journal, Quests, Nicknames, Stash, Storm, Zones and the Saga story packs save and clean up more safely.",
-    "The realm page shows the Give <item> and Learn: <dish> buttons by name again, and its Townsfolk and Easy Building Guides cards no longer show notes meant for maintainers."
+    "Easy Building: Instant build speed is faster, Mirror now flips slabs, torches, observers and amethyst and works with Array and Radial, and Radial turns stairs and logs with each slice.",
+    "Easy Building: a shape bigger than your block limit shows the exceeds-limit warning and is refused, and Undo refunds the right number of items.",
+    "Easy Building: the Building Book no longer needs left-click shortcuts; open Modifiers and the Block Palette from the Mode Menu or their commands.",
+    "Expeditions: a Nightmare Sigil is no longer lost when the server restarts before your party goes in; it comes back to the leader in a parcel.",
+    "Townsfolk: gossip about a player is no longer repeated or told back to that player, and Undo for moving townsfolk remembers the right spots."
   ],
   "packNotes": {
     "admin_bp": {
@@ -27,8 +24,8 @@
       "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
     },
     "build_bp": {
-      "version": "3.0.15",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+      "version": "3.0.16",
+      "notes": "Fixes for build speed, Mirror, Radial, Array, oversize shapes, far anchors, Undo refunds and settings; the left-click book shortcuts are gone."
     },
     "calendar_bp": {
       "version": "1.0.25",
@@ -87,8 +84,8 @@
       "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
     },
     "expedition_bp": {
-      "version": "2.4.19",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+      "version": "2.4.20",
+      "notes": "A Nightmare Sigil survives a restart before the party goes in and comes back to the leader in a parcel."
     },
     "farm_bp": {
       "version": "1.4.12",
@@ -171,8 +168,8 @@
       "notes": "Hat Trick rabbits vanish on time even after a chunk reload. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
     },
     "npc_bp": {
-      "version": "1.9.3",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+      "version": "1.9.4",
+      "notes": "Gossip no longer repeats or reaches the player it is about; Undo of a townsfolk move remembers the right spots."
     },
     "party_bp": {
       "version": "1.2.12",
@@ -273,6 +270,10 @@
     "zones_bp": {
       "version": "1.0.14",
       "notes": "Zones handle edits and removals more safely. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+    },
+    "build_rp": {
+      "version": "2.1.16",
+      "notes": "Panel and coach particle fixes; holds name labels and quest outlines used by other Realm packs."
     }
   }
 }

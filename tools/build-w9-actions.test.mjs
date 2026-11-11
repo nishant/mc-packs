@@ -53,6 +53,7 @@ function player(mode, stacks = []) {
     name: "Tester",
     isValid: true,
     isOp: true,
+    commandPermissionLevel: 3,
     selectedSlotIndex: 0,
     dimension: mc.world.getDimension("minecraft:overworld"),
     location: { x: 0, y: 64, z: 0 },

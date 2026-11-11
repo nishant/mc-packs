@@ -32,12 +32,12 @@ export const DiagonalWallMode = {
             };
         } catch { return null; }
     },
-    getPositions(anchor, target, player, secondAnchor) {
+    getPositions(anchor, target, player, secondAnchor, opts) {
         const effectiveTarget = secondAnchor
             ? { x: secondAnchor.x, y: target.y, z: secondAnchor.z }
             : { x: target.x,       y: anchor.y,  z: target.z };
         if (getModeOption(player, "diagonal_wall", "fill") === "hollow")
             return hollowDiagonalWall(anchor, effectiveTarget);
-        return diagonalWall(anchor, effectiveTarget, getMaxBlocks(player));
+        return diagonalWall(anchor, effectiveTarget, opts?.cap ?? getMaxBlocks(player));
     },
 };

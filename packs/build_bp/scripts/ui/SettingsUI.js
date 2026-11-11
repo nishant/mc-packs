@@ -44,7 +44,7 @@ import { t } from "../utils/Text.js";
 import { MENU_STYLES, MENU_STYLE_LABELS, getMenuStyle, setMenuStyle, showForm } from "../utils/CustomUI.js";
 import { showHintOnce } from "../utils/Hints.js";
 import { isOp } from "../utils/Permissions.js";
-import { getBookLanguage } from "../core/Settings.js";
+import { getBookLanguage, nearestIndex } from "../core/Settings.js";
 import { GUIDE_LANGUAGES } from "../core/GuideBookData.js";
 import { changeBookLanguage } from "../core/GuideBook.js";
 import { usesFloatingUI } from "../utils/CustomUI.js";
@@ -167,6 +167,7 @@ export const SETTINGS = {
         toggle("admin_vanilla_menus", "eb.settings.admin_custom_ui_toggle", () => !getGlobalCustomUI(), (p, v) => setGlobalCustomUI(!v)),
     ],
 };
+for (const setting of SETTINGS.admin) setting.adminOnly = true;
 
 function visibleCategories(player) {
     return CATEGORIES.filter(cat => !cat.adminOnly || isOp(player));
@@ -184,7 +185,7 @@ function valueText(player, setting) {
     const value = setting.get(player);
     if (setting.kind === "toggle") return t(value ? "eb.common.on" : "eb.common.off");
     if (setting.kind === "cycle") {
-        const label = setting.labels[Math.max(0, setting.values.indexOf(value))];
+        const label = setting.labels[nearestIndex(setting.values, value)];
         return typeof label === "string" ? { text: `§e${label}` } : { rawtext: [{ text: "§e" }, label] };
     }
     return { text: `§e${typeof value === "number" ? value.toLocaleString() : value}` };
@@ -214,6 +215,7 @@ async function askValue(player, setting) {
 
     const res = await showForm(form, player);
     if (res.canceled || !res.formValues) return;
+    if (setting.adminOnly && !isOp(player)) return;
 
     const raw = res.formValues[0];
     if (setting.kind === "slider") {
@@ -231,6 +233,7 @@ async function askValue(player, setting) {
 }
 
 export async function changeSetting(player, setting, step = 1) {
+    if (setting.adminOnly && !isOp(player)) return;
     if (setting.locked?.(player)) {
         player.sendMessage(setting.lockedMessage(player));
         return;
@@ -239,7 +242,7 @@ export async function changeSetting(player, setting, step = 1) {
         setting.set(player, !setting.get(player));
     } else if (setting.kind === "cycle") {
         const count = setting.values.length;
-        const index = Math.max(0, setting.values.indexOf(setting.get(player)));
+        const index = nearestIndex(setting.values, setting.get(player));
         setting.set(player, setting.values[(index + step + count) % count]);
     } else {
         await askValue(player, setting);

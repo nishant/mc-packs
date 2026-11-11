@@ -2,12 +2,12 @@
   "format_version": 2,
   "header": {
     "name": "Easy Building Guides",
-    "description": "Effortless Building 3D floating panels, radial quick-switch wheel, tutorial book, live coach, UI sounds, and block outline particles. Goes with the Easy Building behavior pack.",
+    "description": "Effortless Building 3D floating panels, radial quick-switch wheel, tutorial book, live coach, UI sounds, and block outline particles. Goes with the Easy Building behavior pack. Also holds name labels, quest outlines and item assets used by other Realm packs.",
     "uuid": "e4166196-a525-46ea-aaaa-4a6fd77408ba",
     "version": [
       2,
       1,
-      15
+      16
     ],
     "min_engine_version": [
       1,

@@ -2655,7 +2655,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lNightmare Sigils§r dropped by bosses and champions open one exact run: use the sigil (right-click) or pick it under §lUse a Nightmare Sigil§r in §e/realm:expedition§r. It works even before you've unlocked its tier, and it's used up when the run starts (a run called off before anyone goes in, say because the site isn't safe, gives it back).",
+        "text": "§lNightmare Sigils§r dropped by bosses and champions open one exact run: use the sigil (right-click) or pick it under §lUse a Nightmare Sigil§r in §e/realm:expedition§r. It works even before you've unlocked its tier, and it's used up when the run starts (a run called off before anyone goes in, say because the site isn't safe, gives it back, and so is a run cut short by a restart before the party went in: the sigil comes back to its leader in a parcel).",
         "ops": false
       },
       {
@@ -2779,7 +2779,7 @@ export const PACKS = [
     "summary": "Effortless Building v5.0 ported directly into the Realm: build lines, walls, floors, diagonal lines and walls, sloped floors, cubes, circles, semicircles (flat, arch or dome), cylinders, spheres, cones and Bezier splines by clicking two or three anchor points in the world with a live 3D block outline preview. Includes floating 3D in-world UI panels, a hold-right-click radial Quick Switch Wheel, Mirror/Array/Radial modifiers (which also work on single hand-placed and broken blocks), multi-block Palettes with noise/gradient/structural patterns, Air Build and Infinite Reach, Copy/Cut/Paste with a multi-slot Clipboard, Destroy mode with digging tools, Undo/Redo, a 48-page illustrated 3D Tutorial Book, and an interactive Live Coach in 13 languages.",
     "steps": [
       {
-        "text": "Hold the §lBuilding Book§r (§e/realm:build_book§r, or craft one from a book and paper or a brick; its last lore line says §eHold it in your hand and use it§r):\n  - §lRight-click (tap):§r opens the floating 3D §lMode Menu§r (or §e/realm:build§r). Aim at any tile and click to pick a mode, toggle options (filled/hollow/skeleton, even/uneven, straight/bezier, horizontal/arch/dome), pin favorite modes, or open Tools.\n  - §lHold right-click:§r opens the floating §lQuick Switch Wheel§r right in front of you; aim at a slice and release right-click to switch modes on the fly.\n  - §lLeft-click (swing):§r opens the §lBlock Palette§r (§e/realm:build_palette§r).\n  - §lSneak + left-click:§r opens §lModifiers§r (§e/realm:build_modifiers§r: Mirror, Array, Radial).\n  - §lSneak + right-click:§r opens §lSettings§r (§e/realm:build_settings§r).\n  - §lDouble-sneak while holding the book:§r toggles between your active build mode and §eDisable§r.",
+        "text": "Hold the §lBuilding Book§r (§e/realm:build_book§r, or craft one from a book and paper or a brick; its last lore line says §eHold it in your hand and use it§r):\n  - §lRight-click (tap):§r opens the floating 3D §lMode Menu§r (or §e/realm:build§r). Aim at any tile and click to pick a mode, toggle options (filled/hollow/skeleton, even/uneven, straight/bezier, horizontal/arch/dome), pin favorite modes, or open Tools.\n  - §lHold right-click:§r opens the floating §lQuick Switch Wheel§r right in front of you; aim at a slice and release right-click to switch modes on the fly.\n  - §lSneak + right-click:§r opens §lSettings§r (§e/realm:build_settings§r).\n  - §lDouble-sneak while holding the book:§r toggles between your active build mode and §eDisable§r.",
         "ops": false
       },
       {
@@ -2803,11 +2803,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lModifiers§r (§e/realm:build_modifiers§r or Sneak + left-click with the Building Book): enable §lMirror§r (X, Y, Z axes, odd/even center, radius), §lArray§r (offset X/Y/Z and copy count, 1 to 64), and/or §lRadial§r (2 to 16 slices around a center, optional alternate slice mirroring). Modifiers never make more blocks than your block limit; a build that would is flagged as over the limit. Colored guide planes mark your active mirror and radial axes, and modifiers also copy single blocks you place or break by hand when build mode is §eDisable§r.",
+        "text": "§lModifiers§r (§e/realm:build_modifiers§r, or §lModifiers§r in the Mode Menu): enable §lMirror§r (X, Y, Z axes, odd/even center, radius), §lArray§r (offset X/Y/Z and copy count, 1 to 64), and/or §lRadial§r (2 to 16 slices around a center, optional alternate slice mirroring). Modifiers never make more blocks than your block limit; a build that would is flagged as over the limit. §lMirror§r also flips slabs, torches, observers and amethyst, and keeps working together with Array and Radial; §lRadial§r turns block states (stairs, logs and the like) with each slice. Colored guide planes mark your active mirror and radial axes, and modifiers also copy single blocks you place or break by hand when build mode is §eDisable§r.",
         "ops": false
       },
       {
-        "text": "§lPalette§r (§e/realm:build_palette§r or left-click with the Building Book): mix blocks from your §lHotbar§r, §lInventory§r, or §lBoth§r, weighted by item count, slot count, or unique block types, using Random, Spread, Gradients (X, Y, Z, Radial, Diagonal), Concentric Rings, Checkerboard, Noise (Value/Worley), Bricks, Pillars, or Frame patterns, plus smart Glazed Terracotta pinwheel tiling.",
+        "text": "§lPalette§r (§e/realm:build_palette§r, or §lBlock Palette§r in the Mode Menu): mix blocks from your §lHotbar§r, §lInventory§r, or §lBoth§r, weighted by item count, slot count, or unique block types, using Random, Spread, Gradients (X, Y, Z, Radial, Diagonal), Concentric Rings, Checkerboard, Noise (Value/Worley), Bricks, Pillars, or Frame patterns, plus smart Glazed Terracotta pinwheel tiling.",
         "ops": false
       },
       {

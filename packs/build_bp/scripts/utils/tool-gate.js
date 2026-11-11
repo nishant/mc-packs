@@ -143,10 +143,6 @@ export function beginVisualizationTick(players, holds, tick) {
     return gate.begin(players, holds, tick);
 }
 
-export function visualizationStats() {
-    return gate.stats();
-}
-
 /** True after the gate has closed and nobody has equipped, left, or changed mode. */
 export function visualizationIdle() {
     return gate.idle();

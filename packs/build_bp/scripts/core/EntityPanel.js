@@ -285,11 +285,7 @@ export function openPanel(player, name, { local = {}, pinned = false, centre = n
     }
 
     let entity;
-    try {
-        entity = player.dimension.spawnEntity(def.id, origin, { initialRotation: yaw });
-    } catch {
-        try { entity = player.dimension.spawnEntity(def.id, origin); } catch { return false; }
-    }
+    try { entity = player.dimension.spawnEntity(def.id, origin); } catch { return false; }
     try { entity.setRotation({ x: 0, y: yaw }); } catch {}
 
     const quiet = swap && !centre && old.def.group === def.group;
@@ -410,6 +406,7 @@ function sweepStrays() {
 
 export function startEntityPanels() {
     world.beforeEvents.playerInteractWithEntity.subscribe(ev => {
+        if (ev.cancel) return;
         if (!PANEL_TYPES.has(ev.target?.typeId)) return;
         ev.cancel = true;
         const player  = ev.player;

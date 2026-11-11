@@ -3,6 +3,25 @@ import { world } from "@minecraft/server";
 
 const activeTAs  = new Map();
 const CHUNK_BLOCKS = 16;
+const TA_PROP = "eb:tickingAreas";
+
+function readSaved() {
+    try {
+        const v = JSON.parse(world.getDynamicProperty(TA_PROP) ?? "[]");
+        return Array.isArray(v) ? v : [];
+    } catch { return []; }
+}
+function writeSaved(list) {
+    try { world.setDynamicProperty(TA_PROP, list.length ? JSON.stringify(list) : undefined); } catch {}
+}
+function saveAdd(name, dimensionId) {
+    const list = readSaved().filter((x) => !(x.name === name && x.dimensionId === dimensionId));
+    list.push({ name, dimensionId });
+    writeSaved(list);
+}
+function saveRemove(name, dimensionId) {
+    writeSaved(readSaved().filter((x) => !(x.name === name && x.dimensionId === dimensionId)));
+}
 
 function taName(playerId) {
     return `eb${String(playerId).replace(/[^a-zA-Z0-9]/g, "").slice(-6)}`;
@@ -41,6 +60,7 @@ export function ensureChunkLoaders(playerId, dimensionId, pendingItems) {
             world.getDimension(prev.dimensionId)
                 .runCommand(`tickingarea remove ${prev.name}`);
         } catch {}
+        saveRemove(prev.name, prev.dimensionId);
         activeTAs.delete(playerId);
     }
 
@@ -48,6 +68,7 @@ export function ensureChunkLoaders(playerId, dimensionId, pendingItems) {
         world.getDimension(dimensionId)
             .runCommand(`tickingarea add ${minX} ${minY} ${minZ} ${maxX} ${maxY} ${maxZ} ${name}`);
         activeTAs.set(playerId, { dimensionId, name, key });
+        saveAdd(name, dimensionId);
     } catch (e) {
         console.warn(`[EB] tickingarea add failed: ${e}`);
     }
@@ -60,11 +81,16 @@ export function releaseChunkLoaders(playerId) {
         world.getDimension(ta.dimensionId)
             .runCommand(`tickingarea remove ${ta.name}`);
     } catch {}
+    saveRemove(ta.name, ta.dimensionId);
     activeTAs.delete(playerId);
 }
 
+/** Removes ticking areas a previous run left behind (crash or restart), then clears the saved list. */
 export function cleanupAllChunkLoaders() {
-    for (const [playerId] of activeTAs) {
-        releaseChunkLoaders(playerId);
+    for (const { name, dimensionId } of readSaved()) {
+        try { world.getDimension(dimensionId).runCommand(`tickingarea remove ${name}`); } catch {}
     }
+    writeSaved([]);
+    activeTAs.clear();
 }
+world.afterEvents.worldLoad.subscribe(() => cleanupAllChunkLoaders());

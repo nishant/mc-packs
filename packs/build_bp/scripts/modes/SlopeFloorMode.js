@@ -32,12 +32,12 @@ export const SlopeFloorMode = {
             };
         } catch { return null; }
     },
-    getPositions(anchor, target, player, secondAnchor) {
+    getPositions(anchor, target, player, secondAnchor, opts) {
         const effectiveTarget = secondAnchor
             ? { x: secondAnchor.x, y: target.y, z: secondAnchor.z }
             : { x: target.x,       y: anchor.y,  z: target.z };
         const yaw = player?.getRotation?.()?.y ?? 0;
-        const cap = getMaxBlocks(player);
+        const cap = opts?.cap ?? getMaxBlocks(player);
         if (getModeOption(player, "slope_floor", "fill") === "hollow")
             return hollowSlopeFloor(anchor, effectiveTarget, yaw, cap);
         return slopeFloor(anchor, effectiveTarget, yaw, cap);

@@ -14,7 +14,6 @@ export const AUTO_SLOT = 0;
 function metaKey(slot)     { return `eb:cbm${slot}`; }
 function chunkKey(slot, i) { return `eb:cbc${slot}_${i}`; }
 
-export function getSlotCount() { return MAX_SLOTS; }
 export function isAutoSlot(slot) { return slot === AUTO_SLOT; }
 
 export function loadSlotMeta(player, slot) {

@@ -25,8 +25,8 @@ export function removeBlocks(player, typeId, amount) {
             remaining -= item.amount;
             container.setItem(i, undefined);
         } else {
-            const updated = new ItemStack(item.typeId, item.amount - remaining);
-            container.setItem(i, updated);
+            item.amount = item.amount - remaining;
+            container.setItem(i, item);
             remaining = 0;
         }
     }
@@ -36,13 +36,17 @@ export function giveBlocks(player, typeId, amount) {
     if (amount <= 0) return;
     const inv = player.getComponent("minecraft:inventory")?.container;
     let remaining = amount;
+    let max = 64;
+    try { max = new ItemStack(typeId, 1).maxAmount; } catch { return; }
+    if (!(max > 0)) max = 64;
     while (remaining > 0) {
-        const batch = Math.min(64, remaining);
-        remaining -= batch;
+        const batch = Math.min(max, remaining);
         try {
             const stack = new ItemStack(typeId, batch);
+            remaining -= stack.amount;
+            if (stack.amount <= 0) break;
             const leftover = inv ? inv.addItem(stack) : stack;
             if (leftover) player.dimension.spawnItem(leftover, player.location);
-        } catch {}
+        } catch { break; }
     }
 }

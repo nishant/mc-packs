@@ -23,7 +23,7 @@
                     0.25,
                     0.25
                 ],
-                "facing_camera_type": "lookat_xyz",
+                "facing_camera_mode": "lookat_xyz",
                 "uv": {
                     "texture_width": 8,
                     "texture_height": 8,

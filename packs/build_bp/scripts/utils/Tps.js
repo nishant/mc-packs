@@ -18,8 +18,6 @@ export function recordTick() {
     windowStart = now;
 }
 
-export function getTps() { return current; }
-
 export function tpsColour(tps = current) {
     if (tps >= 19) return "§a";
     if (tps >= 15) return "§e";

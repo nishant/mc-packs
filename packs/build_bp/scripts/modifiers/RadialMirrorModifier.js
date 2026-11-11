@@ -23,17 +23,16 @@ export function applyRadial(positions, cfg, cap = Infinity) {
             const angle = k * TWO_PI / slices;
             const cos = Math.cos(angle), sin = Math.sin(angle);
 
-            if (alternate && k % 2 === 1) {
-
-                const rx = cx + Math.round(-dx * cos - dz * sin);
-                const rz = cz + Math.round(-dx * sin + dz * cos);
-                add({ x: rx, y: p.y, z: rz });
-            } else {
-
-                const rx = cx + Math.round(dx * cos - dz * sin);
-                const rz = cz + Math.round(dx * sin + dz * cos);
-                add({ x: rx, y: p.y, z: rz });
-            }
+            const flipped = !!(alternate && k % 2 === 1);
+            const quad = ((Math.round(angle / (Math.PI / 2)) % 4) + 4) % 4;
+            const bx = flipped ? -dx : dx;
+            const rx = cx + Math.round(bx * cos - dz * sin);
+            const rz = cz + Math.round(bx * sin + dz * cos);
+            const q = ((p._rot ?? 0) + quad) % 4;
+            const q2 = { ...p, x: rx, z: rz };
+            if (q) q2._rot = q; else delete q2._rot;
+            if (flipped || p._alt) q2._alt = true; else delete q2._alt;
+            add(q2);
         }
     }
     return result;

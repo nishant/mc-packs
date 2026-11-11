@@ -8,8 +8,8 @@ export const WallMode = {
         if (!player || !anchor) return null;
         return getConstrainedTarget(player, anchor, player.getRotation().y);
     },
-    getPositions(anchor, target, player) {
-        const positions = wallAABB(anchor, target, getMaxBlocks(player));
+    getPositions(anchor, target, player, secondAnchor, opts) {
+        const positions = wallAABB(anchor, target, opts?.cap ?? getMaxBlocks(player));
         if (getModeOption(player, "wall", "fill") === "hollow") return smartOutline(positions);
         return positions;
     },

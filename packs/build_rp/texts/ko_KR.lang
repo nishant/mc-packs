@@ -1,9 +1,8 @@
 eb.join.admin_granted=§6[Effortless Building] §r이 세계의 첫 번째 플레이어로 §6관리자 권한§r을 받았습니다.\n§7설정을 열려면 웅크리기 + 우클릭 하세요 (관리자 옵션 포함).
 eb.join.no_left_click=§e[Effortless Building] §r좌클릭(스윙)은 현재 Minecraft 버전에서 §c지원되지 않습니다§r.\n§7블록 팔레트를 열려면 §6건축의 서§7에 좌클릭 대신 §f/palette§7 명령어를 사용하세요.
-eb.join.received_book=§a[Effortless Building] §r§6건축의 서§r를 받았습니다!\n§7우클릭 §r- 건축 모드 열기 §7| §r웅크리기 + 우클릭 §r- 설정 열기.\n§c§l❗ §r§c잃어버렸나요? §f/getbook §f을 입력하세요 §7(§eXP 레벨 5§7 소모).
+eb.join.received_book=§a[Effortless Building] §r§6건축의 서§r를 받았습니다!\n§7우클릭 §r- 건축 모드 열기 §7| §r웅크리기 + 우클릭 §r- 설정 열기.\n§c§l❗ §r§c잃어버렸나요? §a/realm:build_book §f을 입력하세요.
 
 eb.getbook.already_have=§c[EB] 이미 건축서를 가지고 있습니다.
-eb.getbook.not_enough_xp=§c[EB] 새 책을 얻으려면 적어도 %1 레벨의 경험치가 필요합니다. (현재: %2)
 
 eb.place.no_blocks=§c[EB] §r인벤토리에 블록이 없습니다!
 eb.place.limited_blocks=§e[EB] §r블록이 %1개뿐입니다 - 가진 것만 배치합니다.
@@ -144,7 +143,7 @@ eb.settings.player.zoom_max=최대 줌 거리 (블록)\n§7최대 줌에 도달�
 eb.settings.player.air_reach=공중 건축 도달 거리 (블록)\n§7공중에 블록을 배치할 때의 최대 거리
 eb.settings.player.infinite_reach=무한 도달\n§7일반적인 도달 거리를 넘어 건축을 가능하게 함
 eb.settings.player.inf_reach_dist=무한 도달 거리 (블록)\n§7무한 도달 거리가 연장되는 범위
-eb.settings.player.swap_book_actions=책 동작 교환\n§7우클릭: 팔레트 열기, 좌클릭: 메뉴 열기
+eb.settings.player.swap_book_actions=책 동작 교환\n§7우클릭: 팔레트 열기, 모드 메뉴: /realm:build
 eb.settings.player.undo_limit=되돌리기 제한\n§7블록 파괴 후 되돌릴 수 있는 최대 블록 수
 eb.settings.player.max_blocks=최대 블록 (1 – %1)\n§7단일 작업당 배치할 수 있는 최대 블록 수
 
@@ -356,6 +355,7 @@ eb.onboarding.tier.mid=중사양
 eb.onboarding.tier.high=고사양
 eb.onboarding.tier_applied=§a[EB] §r%1 프리셋을 적용했습니다. §e설정§r에서 언제든 세부 조정할 수 있습니다.
 eb.onboarding.capped_by_admin=§e[EB] §r최대 블록 수가 서버 관리자 한도에 따라 §f%1§r로 제한되었습니다.
+eb.onboarding.capped_raise_in_config=§e[EB] §r블록 한도가 §f%1§r로 유지되었습니다. 먼저 /realm:config (Easy Building)에서 렐름 전체 한도를 올리세요.
 eb.onboarding.complete=§a[EB] §r준비 완료! §6건축의 서§r를 들고 우클릭해 시작하세요. §6튜토리얼§r 책을 들면 가이드를, §a/guide§r 를 입력하면 실시간 튜토리얼을 볼 수 있습니다.
 
 eb.mode_select.btn.more_modes=§b+ 모드 더 보기§r
@@ -368,8 +368,8 @@ eb.preview.step_of=단계 %1/%2
 eb.preview.idle_start=§7%1  §8·  §7단계 %2/%3  §8·  §f블록을 우클릭해 시작
 eb.preview.idle_need_item=§7%1  §8·  §e블록을 들면 건축을 시작합니다
 
-eb.bar.book_controls=§6§l건축의 서§r  §8|  §7우클릭 §f메뉴§r  §8·  §7길게 누르기 §f빠른 전환§r  §8·  §7좌클릭 §f팔레트\n§7웅크리기+우클릭 §f설정§r  §8·  §7웅크리기+좌클릭 §f수정자§r  §8·  §7두 번 웅크리기 §f모드 켜기/끄기
-eb.bar.book_controls_swapped=§6§l건축의 서§r  §8|  §7우클릭 §f팔레트§r  §8·  §7길게 누르기 §f빠른 전환§r  §8·  §7좌클릭 §f메뉴\n§7웅크리기+우클릭 §f설정§r  §8·  §7웅크리기+좌클릭 §f수정자§r  §8·  §7두 번 웅크리기 §f모드 켜기/끄기
+eb.bar.book_controls=§6§l건축의 서§r  §8|  §7우클릭 §f메뉴§r  §8·  §7길게 누르기 §f빠른 전환§r\n§7웅크리기+우클릭 §f설정§r  §8·  §7두 번 웅크리기 §f모드 켜기/끄기
+eb.bar.book_controls_swapped=§6§l건축의 서§r  §8|  §7우클릭 §f팔레트§r  §8·  §7길게 누르기 §f빠른 전환§r\n§7웅크리기+우클릭 §f설정§r  §8·  §7두 번 웅크리기 §f모드 켜기/끄기
 eb.bar.tutorial_book_controls=§6§l튜토리얼§r  §8|  §7우클릭 §f다음 페이지§r  §8·  §7책 때리기 §f뒤로§r  §8·  §7웅크리기 §f장 건너뛰기
 
 eb.palette.enabled_notice=§e[EB] §f블록 팔레트 §e켜짐§f - §6%1§f.\n§7이제 클릭한 블록만이 아니라 §e여러 종류의 블록을 섞어§7 건축합니다.\n§7끄려면: §e책 > 팔레트 > 소스 > 끄기§7.
