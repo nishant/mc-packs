@@ -141,7 +141,7 @@ From two weeks of history (728 commits, 161 of them fixes): the same classes cam
 
 **Owner answer (October 20, 2026, player counts):** "The Realm will never have 100 players; 10 is the max. Performance testing uses 10 and 40 players only: 10 is the real Realm, 40 only shows how the packs scale. No 100-player (or 5-player) runs. Testing takes too long; keep it fast for all development." Later the same day: "dont even add the 5, i want this to move faster for all development, the testing simply takes way too long". Audit items that asked for 100-player runs are re-scoped to 40 players.
 
-What this audit left open is in `docs/audits/2026-10-deep-audit/OPEN.md` (open items only; the findings tables, triage, baseline and soak reports are beside it). Start follow-up work there, and delete an entry in the PR that finishes it (never mark it done).
+What this audit left open is in `docs/audits/2026-10-deep-audit/OPEN.md` (open items only; the findings tables, triage, baseline and soak reports are beside it). This folder is a closed record (see its `README.md`); open work lives in `ROADMAP.md`. Delete an entry in the PR that finishes it (never mark it done).
 
 The second full audit (after PR #38) judged everything against a public release: servers with 30 to 100+ players, strangers installing from the docs, worlds with no town. It found 5 blockers, 26 highs, 74 mediums and 125 lows; every blocker and high was fixed, and the deferred rest is triaged into docs-only, cheap fixes, follow-up tasks and won't-fix.
 

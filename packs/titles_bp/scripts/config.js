@@ -27,7 +27,7 @@ export const CONFIG = {
    * Titles this pack grants itself. `stat`: `distance` (blocks traveled, any way but teleporting),
    * `night` (seconds played while it's night in the Overworld) or `storm` (seconds outdoors in the
    * Overworld during a thunderstorm); `amount`: how much of it; `trail`: a trail unlocked with it
-   * (`cloud`, `leaves`, `ember` or `sparkle`).
+   * (one of `cloud`, `leaves`, `ember`, `sparkle`, `hearts`, `glyphs`, `confetti` or `notes`).
    * @type {{ title: string, stat: "distance" | "night" | "storm", amount: number, trail?: string }[]}
    */
   builtins: [

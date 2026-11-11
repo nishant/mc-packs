@@ -591,6 +591,7 @@ system.runInterval(() => {
 
 /** @type {Map<string, { gen: Generator<void, any, void>, player: Player, hunt: Hunt, missed: number, done: (value: any, missed: number) => void }>} key: player id/hunt id */
 const jobs = new Map();
+let searchStart = 0; // rotates which job the search budget feeds first
 
 /** Offsets to try around a spot: the spot itself, then rings outward. @param {number} radius */
 function candidates(radius) {
@@ -663,7 +664,11 @@ function* findSpot(dim, center, radius) {
 system.runInterval(() => {
   if (!jobs.size) return;
   let budget = READS_PER_RUN;
-  for (const [key, job] of jobs) {
+  // Start at a different job each run so one long search cannot starve the others.
+  const list = [...jobs];
+  const from = searchStart++ % list.length;
+  for (let n = 0; n < list.length; n++) {
+    const [key, job] = list[(from + n) % list.length];
     if (!job.player.isValid) {
       jobs.delete(key);
       continue;
@@ -895,9 +900,14 @@ function settled(player, hunt, final, r, missed = 0) {
     let ok = true;
     /** @type {Parameters<typeof record>[1]} */
     const placed = [];
-    for (const b of style.blocks(wool)) {
-      const block = blockAt(dim, r.spot.x + b.dx, r.spot.y + b.dy, r.spot.z + b.dz);
-      if (!block || !(block.isAir || SOFT.test(block.typeId))) continue; // something moved in meanwhile
+    const parts = style.blocks(wool);
+    // Build all of it or none of it: if anything moved in meanwhile, leave the marker out (the bottle path below).
+    const spot = r.spot;
+    const blocks = parts.map((b) => blockAt(dim, spot.x + b.dx, spot.y + b.dy, spot.z + b.dz));
+    if (blocks.some((block) => !block || !(block.isAir || SOFT.test(block.typeId)))) ok = false;
+    for (let i = 0; ok && i < parts.length; i++) {
+      const b = parts[i];
+      const block = /** @type {NonNullable<typeof blocks[number]>} */ (blocks[i]);
       try {
         const orig = kindOf(block);
         block.setType(b.type);

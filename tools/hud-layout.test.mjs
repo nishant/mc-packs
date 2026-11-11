@@ -14,7 +14,10 @@ import { CONFIG as saga } from "../packs/saga_bp/scripts/config.js";
 
 const ui = JSON.parse(fs.readFileSync(new URL("../packs/hud_rp/ui/hud_screen.json", import.meta.url), "utf8"));
 const area = Object.fromEntries(ui.realm_side_area.controls.map((c) => Object.entries(c)[0]));
-const stack = (side) => area[`realm_side_${side}`].controls[0][`realm_${side}_stack`];
+const rightColumn = area.realm_side_right.controls[0].realm_right_column;
+const rightGap = rightColumn.controls[0].realm_right_radar_gap;
+const rightRegion = rightColumn.controls[1].realm_right_region;
+const stack = (side) => (side === "right" ? rightRegion.controls[0].realm_right_stack : area.realm_side_left.controls[0].realm_left_stack);
 const names = (control) => control.controls.map((c) => Object.keys(c)[0].split("@")[0]);
 const hash = (value) => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 // Only generated image reads may target an isolated pre-integration tree; UI, wire and foreign HUD checks stay on root source.
@@ -45,12 +48,12 @@ test("the accepted minimap stays fixed at its exact top-right position", () => {
 });
 
 test("readout groups center inside separate unobstructed regions, never the minimap or compass", () => {
-  for (const [side, top, height] of [["left", 48, "100% - 52px"], ["right", 156, "100% - 160px"]]) {
+  for (const [side, top, height] of [["left", 48, "100% - 52px"], ["right", 48, "100% - 52px"]]) {
     const frame = area[`realm_side_${side}`];
     assert.equal(frame.type, "panel");
     assert.deepEqual(frame.size, ["100% - 8px", height]);
     assert.deepEqual(frame.offset, [side === "left" ? 4 : -4, top]);
-    assert.equal(frame.clips_children, true, "overflow stays below the compass and fixed map");
+    assert.equal(side === "left" ? frame.clips_children : rightRegion.clips_children, true, "overflow stays below the compass and fixed map");
     const group = stack(side);
     assert.equal(group.type, "stack_panel");
     assert.equal(group.orientation, "vertical");
@@ -61,6 +64,28 @@ test("readout groups center inside separate unobstructed regions, never the mini
     assert.equal(group.clips_children, undefined, "no half-width clip cuts natural-width content");
   }
   assert.ok(area.realm_side_middle.offset[1] >= 48);
+  assert.equal(rightColumn.type, "stack_panel");
+  assert.equal(rightColumn.orientation, "vertical");
+  assert.deepEqual(rightColumn.size, ["100%", "100%"]);
+  assert.deepEqual([rightColumn.anchor_from, rightColumn.anchor_to], ["top_right", "top_right"]);
+  assert.equal(rightColumn.controls.length, 2);
+  assert.equal(rightGap.type, "panel");
+  assert.deepEqual(rightGap.size, ["100%", ui.realm_radar_panel.size[1]], "the gap is as tall as the radar panel");
+  assert.equal(rightGap.size[1], 108);
+  assert.deepEqual(rightGap.bindings, ui.realm_radar_panel.bindings, "the gap shows exactly when the radar shows");
+  assert.deepEqual(rightRegion.size, ["100%", "fill"]);
+  assert.equal(rightRegion.clips_children, true);
+  assert.equal(rightRegion.controls.length, 1);
+  const group = stack("right");
+  assert.equal(group.type, "stack_panel");
+  assert.deepEqual(group.size, ["50%", "100%c"]);
+  assert.deepEqual(group.max_size, ["100%", "100%"]);
+  assert.deepEqual([group.anchor_from, group.anchor_to], ["right_middle", "right_middle"]);
+  assert.equal(group.use_child_anchors, true);
+  // With the radar shown the region starts at the radar offset + gap (156), as before; hidden, it starts at the compass bottom (48).
+  const radarFrame = area.realm_side_radar;
+  assert.equal(radarFrame.offset[1] + rightGap.size[1], 156);
+  assert.equal(area.realm_side_right.offset[1], radarFrame.offset[1], "right readouts start where the radar starts");
 });
 
 test("the full native rotating scoreboard joins the left group without a one-row budget", () => {
@@ -118,9 +143,9 @@ test("centering budgets the actual board and gives explicit finite-height bounda
   for (const height of [180, 240, 360, 480]) for (const board of [0, 40, 80, 120, 160]) {
     const leftAvailable = height - 52;
     const leftContent = (9 + 8) + (18 + 8) + board;
-    const rightAvailable = height - 160;
+    const rightAvailable = height - (area.realm_side_right.offset[1] + rightGap.size[1] + 4);
     const rightContent = (9 + 8) + (18 + 8);
-    for (const [top, available, content] of [[48, leftAvailable, leftContent], [156, rightAvailable, rightContent]]) {
+    for (const [top, available, content] of [[48, leftAvailable, leftContent], [area.realm_side_right.offset[1] + rightGap.size[1], rightAvailable, rightContent]]) {
       const measured = Math.min(available, content);
       const groupTop = top + (available - measured) / 2;
       assert.ok(groupTop >= top);
@@ -129,21 +154,29 @@ test("centering budgets the actual board and gives explicit finite-height bounda
     if (height >= 240 && board <= 140) assert.ok(leftContent <= leftAvailable, "normal default left group includes a full 140-unit board");
     if (height >= 240) assert.ok(rightContent <= rightAvailable, "two default right readouts fit below the fixed map");
   }
-  assert.ok(43 > 180 - 160, "severely short right viewport cannot display two full readouts");
-  assert.ok(43 + 160 > 240 - 52, "unbounded tall scoreboard has an explicit fallback, not a false fit claim");
-  assert.ok(2 * (26 + 8) + 120 <= 240 - 52, "even two maximum readouts budget the full 120-unit native board");
-  assert.ok(2 * (26 + 8) <= 240 - 160, "maximum-height right defaults still fit below the unchanged map");
+  // Right column room, read from the layout: with the radar hidden the region spans from the right frame's offset to 4 below the bottom.
+  const regionTop = (radar) => area.realm_side_right.offset[1] + (radar ? rightGap.size[1] : 0);
+  const regionHeight = (height, radar) => height - regionTop(radar) - 4;
+  const twoDefaults = (9 + 8) + (18 + 8);
+  assert.ok(regionHeight(180, false) >= twoDefaults, "a ~180-unit-tall UI shows two default right readouts when the radar is off");
+  assert.ok(regionHeight(180, true) < twoDefaults, "with the radar on, a ~180-unit-tall UI still clips (the radar owns the room)");
+  assert.ok(regionHeight(240, true) >= twoDefaults, "two default right readouts fit below the radar at 240 units");
+  assert.ok(regionHeight(240, false) > regionHeight(240, true), "hiding the radar returns its room to the readouts");
+  assert.equal(regionTop(true), 156, "radar shown: the readouts start exactly where they always did");
 });
 
 test("full-width clipping ancestors preserve natural-width side content and edge margins", () => {
   assert.equal(ui.realm_side_area.clips_children, true);
-  for (const width of [320, 480, 853, 1536]) for (const naturalWidth of [40, 206, 224]) {
-    assert.ok(naturalWidth <= width - 8);
-    const left = 4;
-    const right = width - 4;
-    assert.ok(left + naturalWidth <= right);
-    assert.ok(right - naturalWidth >= left);
+  // Every side frame spans the full width minus its two 4-unit margins and sits flush on its own edge, so natural-width content is never cut.
+  for (const side of ["left", "right"]) {
+    const frame = area[`realm_side_${side}`];
+    assert.equal(frame.size[0], "100% - 8px");
+    assert.equal(Math.abs(frame.offset[0]), 4);
+    assert.equal(Math.sign(frame.offset[0]), side === "left" ? 1 : -1);
+    assert.deepEqual([frame.anchor_from, frame.anchor_to], [`top_${side}`, `top_${side}`]);
   }
+  assert.deepEqual(rightColumn.size, ["100%", "100%"], "the column fills the full-width right frame");
+  assert.deepEqual(rightRegion.size[0], "100%", "the region keeps the full frame width");
 });
 
 test("the calibrated dense33 four-mesh map stays unchanged inside the exact approved external oak art", () => {
@@ -498,8 +531,10 @@ test("the empty radar the producer sends is the empty radar the HUD's visibility
   const side = loadSide();
   const emptyRadar = side.segment("", " ", side.RADAR_SEG_BYTES).slice(1);
   assert.equal(Buffer.byteLength(emptyRadar), side.RADAR_SEG_BYTES - 1, "the radar cut is the segment without its separator");
-  const sentinel = ui.realm_radar_panel["$radar_empty|default"];
-  assert.ok(sentinel === emptyRadar, `the radar's empty sentinel is ${Buffer.byteLength(sentinel)} bytes, the producer's empty radar is ${Buffer.byteLength(emptyRadar)}: it can never match`);
+  assert.equal(ui.realm_radar_panel["$radar_empty|default"], undefined, "the unused $radar_empty variable is gone");
+  const visible = ui.realm_radar_panel.bindings.find((b) => b.target_property_name === "#visible");
+  assert.ok(visible.source_property_name.includes("('%.1s' * #hud_subtitle_text_string) = 'R'"), "the radar's visibility binding uses the 'R' presence prefix");
+  assert.ok(emptyRadar.length > 0);
   for (const [panel, variable, bytes] of [[ui.realm_slot, "$slot_empty|default", side.SEG_BYTES]]) {
     const empty = side.segment("", " ", bytes).slice(1);
     assert.ok(panel[variable] === empty, `${variable} is the producer's empty segment (${Buffer.byteLength(empty)} bytes)`);

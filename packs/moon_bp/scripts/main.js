@@ -44,7 +44,7 @@ const BUILT_PAD = 4; // blocks around a spot that must hold nothing player-made
 const MOB_DIMENSIONS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"]; // where the world cap counts Blood Moon monsters
 
 /** @typedef {"blood" | "harvest" | "normal"} State */
-/** @typedef {{ d: number, s: State, a: number, alive: string[] }} Night */
+/** @typedef {{ d: number, s: State, a: number, alive: string[], op?: 1, p?: { d: number, s: State } }} Night op: an operator chose this night's moon; p: the previous night (for "never two moon nights in a row") */
 
 /** @type {State[]} */
 const STATES = ["blood", "harvest", "normal"];
@@ -81,7 +81,11 @@ function loadNight() {
   try {
     const raw = world.getDynamicProperty(PROP_NIGHT);
     const p = typeof raw === "string" ? JSON.parse(raw) : undefined;
-    if (p && Number.isFinite(p.d) && isState(p.s)) night = { d: p.d, s: p.s, a: p.a ? 1 : 0, alive: Array.isArray(p.alive) ? p.alive.filter((/** @type {unknown} */ x) => typeof x === "string") : [] };
+    if (p && Number.isFinite(p.d) && isState(p.s)) {
+      night = { d: p.d, s: p.s, a: p.a ? 1 : 0, alive: Array.isArray(p.alive) ? p.alive.filter((/** @type {unknown} */ x) => typeof x === "string") : [] };
+      if (p.op === 1) night.op = 1;
+      if (p.p && Number.isFinite(p.p.d) && isState(p.p.s)) night.p = { d: p.p.d, s: p.p.s };
+    }
   } catch {
     console.warn("[moon] moon:night is corrupt; starting over");
     night = undefined;
@@ -106,25 +110,26 @@ const isNight = (t) => {
 // Dusk and dawn
 // ---------------------------------------------------------------------------
 
-/** Tonight's moon: an operator's choice, else a roll on a full moon. @returns {State} */
+/** Tonight's moon: an operator's choice, else a roll on a full moon. @returns {{ state: State, op: boolean }} op: it came from an operator's daytime choice */
 function decide() {
   const pending = world.getDynamicProperty(PROP_PENDING);
   if (isState(pending)) {
     world.setDynamicProperty(PROP_PENDING, undefined);
-    return pending;
+    return { state: pending, op: true };
   }
-  if (get("enabled") !== true || world.getMoonPhase() !== 0) return "normal";
-  if (Math.random() < Number(get("bloodChance"))) return "blood";
-  if (Math.random() < Number(get("harvestChance"))) return "harvest";
-  return "normal";
+  if (get("enabled") !== true || world.getMoonPhase() !== 0) return { state: "normal", op: false };
+  if (Math.random() < Number(get("bloodChance"))) return { state: "blood", op: false };
+  if (Math.random() < Number(get("harvestChance"))) return { state: "harvest", op: false };
+  return { state: "normal", op: false };
 }
 
-/** @param {number} day @param {State} state */
-function startNight(day, state) {
+/** @param {number} day @param {State} state @param {boolean} [op] an operator chose this moon */
+function startNight(day, state, op = false) {
   if (night?.a) stopEffects(night.s);
   seenTonight.clear();
   const players = world.getAllPlayers();
-  night = { d: day, s: state, a: 1, alive: state === "blood" ? players.map((p) => p.id) : [] };
+  const prev = night && night.d !== day ? { d: night.d, s: night.s } : night?.p;
+  night = { d: day, s: state, a: 1, alive: state === "blood" ? players.map((p) => p.id) : [], ...(op ? { op: /** @type {const} */ (1) } : {}), ...(prev ? { p: prev } : {}) };
   saveNight();
   system.sendScriptEvent("realm:moon", JSON.stringify({ state }));
   if (state === "normal") return;
@@ -344,7 +349,10 @@ system.runInterval(() => {
     if (get("enabled") !== true) {
       if (night?.a) endNight(false);
     } else if (isNight(t)) {
-      if (!night || night.d !== day) startNight(day, decide());
+      if (!night || night.d !== day) {
+        const d = decide();
+        startNight(day, d.state, d.op);
+      }
       else if (night.a) during(night);
     } else if (night?.a) {
       // A natural dawn: a second ago it was just before dawn. Sleeping, /time or a long pause jump past it.
@@ -791,14 +799,14 @@ function report() {
   return `${tonight}\n§7Moon phase: §f${PHASES[phase] ?? "unknown"}§7. Next full moon: §f${next}§7.`;
 }
 
-/** @param {State} state @returns {string} what happened */
-function setMoon(state) {
+/** @param {State} state @param {boolean} [op] an operator chose it (a story request is not an operator) @returns {string} what happened */
+function setMoon(state, op = true) {
   if (get("enabled") !== true) return "Blood Moons and Harvest Moons are disabled: enable them in /realm:config first.";
   const t = world.getTimeOfDay();
   const day = world.getDay();
   if (isNight(t)) {
     if (night?.a && night.d === day && night.s === state) return `Tonight is already ${NAME[state]}.`;
-    startNight(day, state);
+    startNight(day, state, op);
     return `Tonight is now ${NAME[state]}.`;
   }
   world.setDynamicProperty(PROP_PENDING, state); // always kept, even "normal": a dawn-time choice before a full moon must survive the midnight phase rollover; decide() consumes it at dusk
@@ -912,7 +920,8 @@ const optText = (v, max) => v === undefined || (typeof v === "string" && v.lengt
 /**
  * Tonight becomes that moon, exactly like /realm:moon_set (now if it's night, else at nightfall). Ignored
  * silently when the pack or its Story events setting is disabled, tonight is already a Blood or Harvest Moon
- * (or an operator already chose tonight's moon), a moon night ended earlier this daylight, a request was
+ * (or an operator already chose tonight's moon, even an ordinary one), last night was a Blood or Harvest Moon
+ * (never two moon nights in a row, at dusk or by day), a request was
  * already honored this in-game day, or the message is malformed.
  * @param {string} message
  */
@@ -930,13 +939,14 @@ function skyRequest(message) {
   const day = world.getDay();
   if (world.getDynamicProperty(PROP_STORY) === day) return; // one honored request per in-game day
   if (isNight(world.getTimeOfDay())) {
-    if (night?.a && night.d === day && night.s !== "normal") return; // already a moon tonight
+    if (night?.a && night.d === day && (night.s !== "normal" || night.op)) return; // already a moon tonight, or an operator chose tonight
+    if (night?.a && night.d === day && night.p && night.p.s !== "normal" && night.p.d >= day - 1) return; // last night was a moon: not two in a row
   } else {
     if (isState(world.getDynamicProperty(PROP_PENDING))) return; // tonight's moon is already chosen
     if (night && night.s !== "normal" && night.d >= day - 1) return; // a moon night just ended: not two in a row
   }
   world.setDynamicProperty(PROP_STORY, day);
-  setMoon(/** @type {State} */ (state));
+  setMoon(/** @type {State} */ (state), false);
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.

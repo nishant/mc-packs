@@ -17,10 +17,16 @@ const ROOT = path.resolve(import.meta.dirname, "..");
  * pack-sim.mjs nests every import in its importer, which a pack with many shared modules can't survive). The sim's own
  * `load` runs a small pack first, only to build the stubs; `server` adds game exports the sim lacks.
  */
+const realDirs = [];
+test.after(() => {
+  for (const d of realDirs) fs.rmSync(d, { recursive: true, force: true });
+});
+
 async function loadReal(sim, folder, server = {}) {
   await sim.load("help_bp");
   Object.assign(sim.server, server); // game classes the pack needs that the sim lacks
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "o2-"));
+  realDirs.push(dir);
   const names = { "@minecraft/server": new Set(), "@minecraft/server-ui": new Set() };
   const copy = (from, to) => {
     fs.mkdirSync(to, { recursive: true });

@@ -540,6 +540,27 @@ function harvested(player, crop, dimension, at) {
   if (crop.seeds && luckyFor(player, "farming", "seeds")) drop(dimension, center(at), crop.seeds);
 }
 
+// Cobblestone and basalt generators refill the same spot, which is never "placed": the filler blocks (no `drop`)
+// give XP once per spot per player every FILLER_REPEAT_MS. Memory only.
+const FILLER_REPEAT_MS = 5 * 60 * 1000;
+const fillerSeen = new Map();
+/** @param {string} k */
+function fillerRepeat(k) {
+  const now = Date.now();
+  const until = fillerSeen.get(k);
+  if (until !== undefined && until > now) return true;
+  fillerSeen.delete(k);
+  fillerSeen.set(k, now + FILLER_REPEAT_MS);
+  if (fillerSeen.size > 4096) {
+    for (const [kk, t] of fillerSeen) if (t <= now) fillerSeen.delete(kk);
+    for (const kk of fillerSeen.keys()) {
+      if (fillerSeen.size <= 3072) break;
+      fillerSeen.delete(kk);
+    }
+  }
+  return false;
+}
+
 world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermutation, itemStackBeforeBreak }) => {
   try {
     const id = brokenBlockPermutation.type.id;
@@ -553,6 +574,7 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
     if (wasPlaced) placedDirty = true;
     if (wasPlaced && !(crop && crop.state !== undefined)) return;
     if (!active(player)) return;
+    if (mine && !mine.drop && fillerRepeat(`${player.id}|${key}`)) return;
     const at = center(block.location);
     if (mine) {
       // An ore mined with Silk Touch gives no XP (as in vanilla): it comes back as a block that

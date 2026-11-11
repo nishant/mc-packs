@@ -11,6 +11,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { coreFor, diagFor } from "./lib/diag-sync.mjs";
+import { after as afterAll } from "node:test";
+import { rmSync as rmTree } from "node:fs";
+
+/** Temp dirs made by this file, removed once every test has finished. */
+const tempDirs = /** @type {string[]} */ ([]);
+const track = (/** @type {string} */ dir) => (tempDirs.push(dir), dir);
+afterAll(() => {
+  for (const dir of tempDirs) rmTree(dir, { recursive: true, force: true });
+});
 
 const SRC = readFileSync(join(import.meta.dirname, "diag-shared.js"), "utf8");
 
@@ -88,7 +97,7 @@ test("two packs in one script context: keys, callbacks, profiling and forget sta
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   const { system, world } = mc;
   world.props.set("a:old", "x".repeat(30000)); // saved before this load, read by a at startup
   world.props.set("zz:stale", "1"); // nobody reads it: unclaimed
@@ -176,7 +185,7 @@ test("a pack alone in its context owns its whole storage and clears all of it", 
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   const { system, world } = mc;
   world.props.set("legacy_key_without_prefix", "1");
   await loadCopy(dir, "solo_bp");
@@ -209,7 +218,7 @@ test("a pack's forget cleanup runs after its properties are gone and its writes 
     delete globalThis.__realmDiag;
     delete globalThis.__realmDiagWrapped;
     delete globalThis.__realmDiagForgetHooks;
-    const dir = mkdtempSync(join(tmpdir(), "diag-"));
+    const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
     const { system, world } = mc;
     await loadCopy(dir, "solo_bp");
     mc.step(1);
@@ -235,7 +244,7 @@ test("forget includes untouched saved keys from a declared namespace, not anothe
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   mc.world.props.set("a:untouched", "saved before startup");
   mc.world.props.set("b:untouched", "another pack");
   mc.world.props.set("unknown:legacy", "no declared owner");
@@ -255,7 +264,7 @@ test("a foreign read during module startup cannot steal a declared namespace", a
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   mc.world.props.set("b:old", "owned by b");
   await loadCopy(dir, "b_bp", "1.0.0", ["b"]);
   await loadCopy(dir, "a_bp", "1.0.0", ["a"]);
@@ -271,7 +280,7 @@ test("a declared namespace collision never guesses the owner of an untouched key
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   mc.world.props.set("shared:untouched", "keep ambiguous data");
   await loadCopy(dir, "a_bp", "1.0.0", ["shared"]);
   await loadCopy(dir, "b_bp", "1.0.0", ["shared"]);
@@ -286,7 +295,7 @@ test("F23: a key in a namespace two packs declare stays unowned when one of them
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   await loadCopy(dir, "a_bp", "1.0.0", ["shared"]);
   await loadCopy(dir, "b_bp", "1.0.0", ["shared"]);
   // b's module is the one being evaluated: what it writes now is b's, unless the namespace says otherwise.
@@ -328,7 +337,7 @@ test("two packs registered through two copies of the core share one state and bo
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   await loadCopy(dir, "a_bp", "1.0.0", ["a"]);
   const state = globalThis.__realmDiag;
   await loadCopy(dir, "b_bp", "2.0.0", ["b"]);
@@ -350,7 +359,7 @@ test("F2: a frame in the bundle's _shared folder (no leading slash on BDS) is sk
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   const { system } = mc;
   await loadCopy(dir, "a_bp");
   await loadCopy(dir, "b_bp");
@@ -381,7 +390,7 @@ async function soloContext() {
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "diag-")));
   await loadCopy(dir, "solo_bp");
   mc.step(1);
   mc.world.setDynamicProperty("solo:x", "abc");

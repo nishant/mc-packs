@@ -340,7 +340,6 @@
       "100%",
       108
     ],
-    "$radar_empty|default": "§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
     "controls": [
       {
         "radar_widget": {
@@ -786,70 +785,119 @@
           "type": "panel",
           "size": [
             "100% - 8px",
-            "100% - 160px"
+            "100% - 52px"
           ],
-          "clips_children": true,
           "anchor_from": "top_right",
           "anchor_to": "top_right",
           "offset": [
             -4,
-            156
+            48
           ],
           "controls": [
             {
-              "realm_right_stack": {
+              "realm_right_column": {
                 "type": "stack_panel",
                 "orientation": "vertical",
-                "use_child_anchors": true,
                 "size": [
-                  "50%",
-                  "100%c"
-                ],
-                "max_size": [
                   "100%",
                   "100%"
                 ],
-                "anchor_from": "right_middle",
-                "anchor_to": "right_middle",
+                "anchor_from": "top_right",
+                "anchor_to": "top_right",
                 "controls": [
                   {
-                    "realm_right1@hud.realm_pinned_slot": {
-                      "$skip": "%.10s"
+                    "realm_right_radar_gap": {
+                      "type": "panel",
+                      "size": [
+                        "100%",
+                        108
+                      ],
+                      "bindings": [
+                        {
+                          "binding_name": "#hud_title_text_string",
+                          "binding_type": "global"
+                        },
+                        {
+                          "binding_name": "#hud_subtitle_text_string",
+                          "binding_type": "global"
+                        },
+                        {
+                          "binding_type": "view",
+                          "source_property_name": "((#hud_title_text_string = '§s§2§r') and (('%.1s' * #hud_subtitle_text_string) = 'R'))",
+                          "target_property_name": "#visible"
+                        }
+                      ]
                     }
                   },
                   {
-                    "realm_quest_right1@hud.realm_quest_slot": {
-                      "$quest_code": "§s§q§1"
-                    }
-                  },
-                  {
-                    "realm_right2@hud.realm_pinned_slot": {
-                      "$skip": "%.170s"
-                    }
-                  },
-                  {
-                    "realm_quest_right2@hud.realm_quest_slot": {
-                      "$quest_code": "§s§q§2"
-                    }
-                  },
-                  {
-                    "realm_right3@hud.realm_pinned_slot": {
-                      "$skip": "%.330s"
-                    }
-                  },
-                  {
-                    "realm_quest_right3@hud.realm_quest_slot": {
-                      "$quest_code": "§s§q§3"
-                    }
-                  },
-                  {
-                    "realm_right4@hud.realm_pinned_slot": {
-                      "$skip": "%.490s"
-                    }
-                  },
-                  {
-                    "realm_quest_right4@hud.realm_quest_slot": {
-                      "$quest_code": "§s§q§4"
+                    "realm_right_region": {
+                      "type": "panel",
+                      "size": [
+                        "100%",
+                        "fill"
+                      ],
+                      "clips_children": true,
+                      "controls": [
+                        {
+                          "realm_right_stack": {
+                            "type": "stack_panel",
+                            "orientation": "vertical",
+                            "use_child_anchors": true,
+                            "size": [
+                              "50%",
+                              "100%c"
+                            ],
+                            "max_size": [
+                              "100%",
+                              "100%"
+                            ],
+                            "anchor_from": "right_middle",
+                            "anchor_to": "right_middle",
+                            "controls": [
+                              {
+                                "realm_right1@hud.realm_pinned_slot": {
+                                  "$skip": "%.10s"
+                                }
+                              },
+                              {
+                                "realm_quest_right1@hud.realm_quest_slot": {
+                                  "$quest_code": "§s§q§1"
+                                }
+                              },
+                              {
+                                "realm_right2@hud.realm_pinned_slot": {
+                                  "$skip": "%.170s"
+                                }
+                              },
+                              {
+                                "realm_quest_right2@hud.realm_quest_slot": {
+                                  "$quest_code": "§s§q§2"
+                                }
+                              },
+                              {
+                                "realm_right3@hud.realm_pinned_slot": {
+                                  "$skip": "%.330s"
+                                }
+                              },
+                              {
+                                "realm_quest_right3@hud.realm_quest_slot": {
+                                  "$quest_code": "§s§q§3"
+                                }
+                              },
+                              {
+                                "realm_right4@hud.realm_pinned_slot": {
+                                  "$skip": "%.490s"
+                                }
+                              },
+                              {
+                                "realm_quest_right4@hud.realm_quest_slot": {
+                                  "$quest_code": "§s§q§4"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
                     }
                   }
                 ]

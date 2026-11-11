@@ -4,8 +4,8 @@
     "description": {
       "identifier": "custom:inv_prev",
       "menu_category": {
-        "category": "items",
-        "is_hidden_in_commands": false
+        "category": "none",
+        "is_hidden_in_commands": true
       }
     },
     "components": {

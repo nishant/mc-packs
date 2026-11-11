@@ -1,6 +1,7 @@
 import "./diag.js";
 import { createGossip } from "./gossip.js";
 import {
+  BlockVolume,
   CommandPermissionLevel,
   CustomCommandParamType,
   CustomCommandStatus,
@@ -32,7 +33,14 @@ const SHARD_NAME = "§r§dRelic Shard";
 const SHARD_LORE = "§7Bring 8 to a relicsmith";
 const FALLBACK_ITEM = "minecraft:brush"; // used if a relic's configured item stacks (and so can't carry data)
 const OVERWORLD = "minecraft:overworld";
-const DRY_GROUND = /sand|terracotta|snow|ice/; // deserts and badlands get no rain; snowy places get snow
+// Natural ground that gets no rain: sand, red sand, terracotta (plain or coloured), snow and ice. Glazed terracotta,
+// sandstone, stairs and slabs are built, never dry ground (same rule as Climate and Rain Extras).
+const DRY_GROUND = /^minecraft:(?:(?:red_)?sand|hardened_clay|(?!.*glazed)(?:[a-z]+_)*terracotta|snow|snow_layer|powder_snow|(?:packed_|blue_)?ice)$/;
+const SAND_TOP = /^minecraft:(?:red_)?sand$/;
+const BEACH_RADIUS = 8; // sand with water this close (17 x 17, at most BEACH_BELOW down) is a beach or riverbank: it rains
+const BEACH_BELOW = 3;
+const BEACH_EVERY = 100; // ticks (5 s) a player's beach lookup is reused
+const beachCache = new Map(); // player id -> { x, z, until, beach }
 const LORE_WIDTH = 40; // lore lines are kept short: the game limits their length
 const STORM_FRESH_TICKS = 100; // a storm cell report older than this (storm_bp sends one every 2 s) is gone
 const STORM_CELL_REACH = 160; // the Storm Staff also answers this close to a storm cell (Storm Chasing)
@@ -591,6 +599,18 @@ function release(player, wanted) {
   }
 }
 
+/** Sand with water beside it is a beach or riverbank, where it rains (as Climate decides); reused for 5 s. @param {Player} player @param {{x:number,y:number,z:number}} feet */
+function onBeach(player, feet) {
+  const x = Math.floor(feet.x), y = Math.floor(feet.y), z = Math.floor(feet.z);
+  const now = system.currentTick;
+  const c = beachCache.get(player.id);
+  if (c && now < c.until && c.x === x && c.z === z) return c.beach;
+  const r = BEACH_RADIUS;
+  const beach = player.dimension.containsBlock(new BlockVolume({ x: x - r, y: y - BEACH_BELOW, z: z - r }, { x: x + r, y, z: z + r }), { includeTypes: ["minecraft:water", "minecraft:flowing_water"] }, true);
+  beachCache.set(player.id, { x, z, until: now + BEACH_EVERY, beach });
+  return beach;
+}
+
 /** Highest block over the player: open sky (nothing 2+ blocks overhead) and dry ground. @param {Player} player */
 function sky(player) {
   try {
@@ -600,7 +620,9 @@ function sky(player) {
     // getTopmostBlock skips water: a sandy lake or sea bed under the player is no desert (rain falls on the water).
     const up = top.above();
     const wet = !!up && (up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId));
-    return { open: top.location.y - Math.floor(feet.y) < 2, dry: !wet && DRY_GROUND.test(top.typeId) };
+    let dry = !wet && DRY_GROUND.test(top.typeId);
+    if (dry && SAND_TOP.test(top.typeId)) dry = !onBeach(player, feet);
+    return { open: top.location.y - Math.floor(feet.y) < 2, dry };
   } catch {
     return undefined; // unloaded
   }
@@ -709,6 +731,7 @@ world.afterEvents.playerHotbarSelectedSlotChange?.subscribe(({ player }) => {
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   rescan.delete(playerId);
   lastScan.delete(playerId);
+  beachCache.delete(playerId);
 });
 
 /** @param {Player} player @returns {Carried} */

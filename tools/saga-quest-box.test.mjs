@@ -315,8 +315,8 @@ test("the content under test is all of it: every story, favor, stranger request 
   assert.equal(STORIES.length, 59);
   assert.equal(FAVORS.length, 48);
   assert.equal(HOSTILES.length, 4);
-  assert.equal(labels.filter((l) => l.source.includes("/")).length, 604, "every objective of every story");
-  assert.ok(labels.length >= 604 + 48 + 4, `${labels.length} step labels`);
+  assert.equal(labels.filter((l) => l.source.includes("/")).length, 607, "every objective of every story");
+  assert.ok(labels.length >= 607 + 48 + 4, `${labels.length} step labels`);
   for (const { obj } of labels) {
     assert.ok(/^[\x20-\x7e]+$/.test(obj.label), `"${obj.label}" is plain ASCII (the existing rule for game text)`);
     assert.ok(!/[{}~§]/.test(obj.label), `"${obj.label}" has no leftover token, filler or color code`);

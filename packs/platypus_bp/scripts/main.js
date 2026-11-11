@@ -31,10 +31,10 @@ function isPerry(e) {
 // A bite: the attack component already gives 5 s of poison; add the nausea.
 world.afterEvents.entityHurt.subscribe(
   ({ hurtEntity, damageSource }) => {
-    if (damageSource.damagingEntity?.typeId !== PLATYPUS) return;
-    const seconds = Number(get("nauseaSeconds"));
-    if (!(seconds > 0)) return;
     try {
+      if (damageSource.damagingEntity?.typeId !== PLATYPUS) return;
+      const seconds = Number(get("nauseaSeconds"));
+      if (!(seconds > 0)) return;
       if (hurtEntity.isValid) hurtEntity.addEffect("minecraft:nausea", Math.round(seconds * 20), { amplifier: 0, showParticles: true });
     } catch (e) {
       console.warn(`[platypus] ${e}`);

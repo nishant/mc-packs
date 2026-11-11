@@ -1,279 +1,67 @@
 {
   "notes": [
-    "Easy Building: Instant build speed is faster, Mirror now flips slabs, torches, observers and amethyst and works with Array and Radial, and Radial turns stairs and logs with each slice.",
-    "Easy Building: a shape bigger than your block limit shows the exceeds-limit warning and is refused, and Undo refunds the right number of items.",
-    "Easy Building: the Building Book no longer needs left-click shortcuts; open Modifiers and the Block Palette from the Mode Menu or their commands.",
-    "Expeditions: a Nightmare Sigil is no longer lost when the server restarts before your party goes in; it comes back to the leader in a parcel.",
-    "Townsfolk: gossip about a player is no longer repeated or told back to that player, and Undo for moving townsfolk remembers the right spots."
+    "Side HUD: the right-side boxes now show on short phone screens when the Minimap radar is hidden.",
+    "Rain Charm and Tide Boots now work on beaches and on sandstone paths in the rain.",
+    "Story Blood Moons and Harvest Moons never come two nights in a row, and never replace a moon an operator chose.",
+    "Mining the same stone spot again within 5 minutes gives no Mining XP, so cobblestone and basalt generators do not farm it.",
+    "The sky-wonder bonus in Frogs in Three Voices also works with Rainbows, Tornadoes or Storm Cells.",
+    "Town Projects residents can no longer breed."
+  ],
+  "resourceNotes": [
+    "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
   ],
   "packNotes": {
-    "admin_bp": {
-      "version": "1.6.17",
-      "notes": "Server size waits a fixed 5 seconds for every setting and is saved as done only when all were applied; the setup checklist waits once more for long answers; the diagnostics screen is tidier. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "afk_bp": {
-      "version": "1.3.15",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "atlas_bp": {
-      "version": "1.1.16",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "bounty_bp": {
-      "version": "1.3.14",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "build_bp": {
-      "version": "3.0.16",
-      "notes": "Fixes for build speed, Mirror, Radial, Array, oversize shapes, far anchors, Undo refunds and settings; the left-click book shortcuts are gone."
-    },
-    "calendar_bp": {
-      "version": "1.0.25",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "caravan_bp": {
-      "version": "1.2.13",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "chairs_bp": {
-      "version": "1.3.16",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "claims_bp": {
-      "version": "1.5.12",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "cleanup_bp": {
-      "version": "1.2.11",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "climate_bp": {
-      "version": "1.0.14",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "cooking_bp": {
-      "version": "1.1.19",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "crowns_bp": {
-      "version": "1.1.15",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "death_bp": {
-      "version": "1.3.11",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "dolphin_bp": {
-      "version": "1.2.13",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "domt_bp": {
-      "version": "1.1.19",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "durability_bp": {
-      "version": "1.2.15",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "elite_bp": {
-      "version": "1.3.21",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "elytra_bp": {
-      "version": "1.3.25",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "expedition_bp": {
-      "version": "2.4.20",
-      "notes": "A Nightmare Sigil survives a restart before the party goes in and comes back to the leader in a parcel."
-    },
-    "farm_bp": {
-      "version": "1.4.12",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "find_bp": {
-      "version": "1.4.12",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "fishing_bp": {
-      "version": "1.1.18",
-      "notes": "Caught-fish setting description reworded. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "goals_bp": {
-      "version": "1.1.14",
-      "notes": "A goal whose save fails is retried on the next tick, and the player is told when a gift is in the chest but progress is not saved yet. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "guard_bp": {
-      "version": "1.4.13",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "guilds_bp": {
-      "version": "1.1.18",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "harvest_bp": {
-      "version": "1.3.12",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "hud_bp": {
-      "version": "1.3.13",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
     "hud_rp": {
-      "version": "1.6.2",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "journal_bp": {
-      "version": "1.1.15",
-      "notes": "Places and weather are checked less often, and distance walked is saved in steps of 10 blocks. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "leaves_bp": {
-      "version": "1.0.11",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "mail_bp": {
-      "version": "1.2.12",
-      "notes": "The setting for how long a pack letter is kept now says it can be 1 to 365 days and cannot be turned off. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "map_bp": {
-      "version": "1.5.7",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "maps_bp": {
-      "version": "1.8.18",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "meteor_bp": {
-      "version": "1.2.16",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "milestones_bp": {
-      "version": "1.0.11",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "mobhp_bp": {
-      "version": "1.2.21",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "moon_bp": {
-      "version": "1.2.18",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "nick_bp": {
-      "version": "1.1.13",
-      "notes": "Nicknames and titles are put back at once when another pack changes the name tag, keep the [AFK] prefix, and old name keys are moved to the new one. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "night_bp": {
-      "version": "1.1.11",
-      "notes": "Hat Trick rabbits vanish on time even after a chunk reload. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "npc_bp": {
-      "version": "1.9.4",
-      "notes": "Gossip no longer repeats or reaches the player it is about; Undo of a townsfolk move remembers the right spots."
-    },
-    "party_bp": {
-      "version": "1.2.12",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "phantom_bp": {
-      "version": "1.2.11",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "platypus_bp": {
-      "version": "1.1.10",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "quests_bp": {
-      "version": "1.3.12",
-      "notes": "Daily quests save and retry more safely, and lit or inverted block variants count as the same block. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "rain_bp": {
-      "version": "1.5.20",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "rainbow_bp": {
-      "version": "1.4.12",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "refill_bp": {
-      "version": "1.1.9",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+      "version": "1.6.3",
+      "notes": "The right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
     },
     "relics_bp": {
-      "version": "1.2.20",
-      "notes": "Story relics are always kept; other relics stop at 20 per player. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+      "version": "1.2.21",
+      "notes": "Rain Charm and Tide Boots count natural sand, red sand, terracotta, snow and ice as dry ground only; sandstone, glazed terracotta, stairs and slabs do not, and sand next to water (a beach) counts as rained on."
     },
-    "saga_bp": {
-      "version": "1.16.22",
-      "notes": "Story camps and builds clean up their spawned entities when removed, Peak Camp has more room, and several story steps are more reliable. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "settings_bp": {
-      "version": "1.4.8",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "silly_bp": {
-      "version": "1.2.16",
-      "notes": "Hyper Jump needs a recent ground touch, so it can no longer re-launch in mid-air. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+    "moon_bp": {
+      "version": "1.2.19",
+      "notes": "A story request never overrides a moon an operator chose tonight (even an ordinary one) and never follows a moon night; moon:night now saves op and p."
     },
     "skills_bp": {
-      "version": "1.1.15",
-      "notes": "Skills handles block-placement reports more safely. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "slots_bp": {
-      "version": "1.0.16",
-      "notes": "Slot machine spins report errors to the player instead of failing silently. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "stash_bp": {
-      "version": "1.9.5",
-      "notes": "Stash pages save and load more safely. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "stats_bp": {
-      "version": "1.4.16",
-      "notes": "The sidebar tells the player who started a change when it could not be applied. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "storm_bp": {
       "version": "1.1.16",
-      "notes": "Storm effects are handled more safely when players leave or chunks unload. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "titles_bp": {
-      "version": "1.2.17",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "tornado_bp": {
-      "version": "1.2.15",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+      "notes": "Breaking a stone-type block at the same spot again within 5 minutes gives no Mining XP, so cobblestone and basalt generators do not farm it."
     },
     "town_bp": {
-      "version": "1.7.6",
-      "notes": "A removed town's id is remembered, so a new town of the same name gets a fresh id. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+      "version": "1.7.7",
+      "notes": "Residents can no longer breed; leftovers from Remove spot are capped apart from the town limit; the realm:town_test hook needs the realm_test_hooks objective."
     },
-    "translucent_bp": {
-      "version": "1.0.10",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+    "saga_bp": {
+      "version": "1.16.23",
+      "notes": "The sky-wonder bonus in Frogs in Three Voices works with Rainbows, Tornadoes or Storm Cells too, and Mara mentions the sky when any of them is installed."
+    },
+    "maps_bp": {
+      "version": "1.8.19",
+      "notes": "Searches take turns so one long search cannot starve the others, a marker is built whole or not at all, and a record whose hunt owner never comes back is let go after 60 days."
+    },
+    "platypus_bp": {
+      "version": "1.1.11",
+      "notes": "A bite no longer throws an error when the event data is missing."
+    },
+    "party_bp": {
+      "version": "1.2.13",
+      "notes": "Removed an unused import."
+    },
+    "stash_bp": {
+      "version": "1.9.6",
+      "notes": "The inventory page buttons are hidden from the creative inventory and the give command."
+    },
+    "npc_bp": {
+      "version": "1.9.5",
+      "notes": "Setting crownedGain to 0 now means no gain below Friend for the Hollow-Crowned."
     },
     "wander_bp": {
-      "version": "1.2.24",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
+      "version": "1.2.25",
+      "notes": "A wrongly accused friendly wanderer no longer adds to an unused counter; small comment fixes."
     },
-    "waystone_bp": {
-      "version": "1.3.12",
-      "notes": "Waystones handle unloaded chunks and removed players more safely. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "weather_bp": {
-      "version": "1.3.14",
-      "notes": "Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "welcome_bp": {
-      "version": "1.5.15",
-      "notes": "The welcome popup body text default is built from the installed packs. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "zones_bp": {
-      "version": "1.0.14",
-      "notes": "Zones handle edits and removals more safely. Diagnostics: only the server console or an operator player can send the forget request, and wrapped callbacks are tracked per event signal."
-    },
-    "build_rp": {
-      "version": "2.1.16",
-      "notes": "Panel and coach particle fixes; holds name labels and quest outlines used by other Realm packs."
+    "titles_bp": {
+      "version": "1.2.18",
+      "notes": "The config comment lists every trail a built-in title can unlock."
     }
   }
 }

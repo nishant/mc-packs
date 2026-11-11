@@ -199,8 +199,8 @@ test("villager_v2.json: vanilla plus one group, one event and one property", () 
   assert.deepEqual(Object.keys(e.events).filter(ours), ["realm:become_resident"]);
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "packs", "town_bp", "manifest.json"), "utf8"));
   assert.ok(manifest.modules.some((m) => m.type === "data"), "a data module, so the entity file is loaded");
-  // No vanilla event adds our group or sets our property.
-  for (const [k, ev] of Object.entries(e.events)) if (!ours(k)) assert.ok(!JSON.stringify(ev).includes("realm:"), k);
+  // No vanilla event adds our group or sets our property; the schedule events only read it (a resident never breeds).
+  for (const [k, ev] of Object.entries(e.events)) if (!ours(k)) assert.ok(!JSON.stringify(ev).replace(/"domain":s*"realm:resident"/g, "").includes("realm:"), k);
 });
 
 /** The first argument of a call `<callee>(...)` at the top level of main.js, as source. */

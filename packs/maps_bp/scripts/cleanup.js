@@ -13,6 +13,7 @@ const CLEAR_DELAY = 30000; // ms after the hunt is done with the blocks
 const CLEAR_RADIUS = 32; // blocks: nobody this close
 const CLEAR_FORCE = 10 * 60000; // ms after it was due: put back even with a player near (never a chest with items)
 const CHEST_KEEP = 30 * 24 * 3600000; // ms: a chest still holding items is left in the ground for good after this
+const ORPHAN_KEEP = 60 * 24 * 3600000; // ms: a record whose owner has not been online this long is released (a player who quit for good)
 const ANY_WOOL = "*wool"; // a flag's cloth on a marker recorded before 1.3.0 (its color wasn't saved)
 
 /**
@@ -23,6 +24,7 @@ const ANY_WOOL = "*wool"; // a flag's cloth on a marker recorded before 1.3.0 (i
  * @property {string} owner the player whose hunt placed it
  * @property {string} hunt the hunt id
  * @property {"mark" | "chest"} what
+ * @property {number} [made] when the record was created (ms since 1970); missing on old saves, stamped by sweep()
  * @property {number} due when the hunt let go of it (ms since 1970); 0 while the hunt still needs it
  * @property {Kind[]} types the block kinds `blocks` uses
  * @property {number[][]} blocks [x, y, z, placed kind, original kind]
@@ -92,7 +94,7 @@ export function record(at, list) {
   };
   const blocks = list.map((b) => [b.x, b.y, b.z, index({ t: b.placed }), index(b.orig)]);
   const id = `${Date.now().toString(36)}${(seq++).toString(36)}`;
-  save({ id, ...at, due: 0, types, blocks });
+  save({ id, ...at, made: Date.now(), due: 0, types, blocks });
   return id;
 }
 
@@ -189,7 +191,12 @@ export function sweep(live) {
     try {
       if (!r.due) {
         const held = live(r.owner);
-        if (held && !held.includes(r.id)) release(r.id);
+        if (held) {
+          if (!held.includes(r.id)) release(r.id);
+        } else if (!r.made) {
+          r.made = Date.now(); // old save: start the orphan clock now
+          save(r);
+        } else if (Date.now() - r.made > ORPHAN_KEEP) release(r.id); // owner offline for good
         continue;
       }
       if (Date.now() < r.due) continue;

@@ -196,6 +196,7 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
   } else if (ev.id === "harness:start") {
     let cfg = {};
     try { cfg = JSON.parse(ev.message || "{}"); } catch (e) { /* ignore */ }
+    try { if (!world.scoreboard.getObjective("realm_test_hooks")) world.scoreboard.addObjective("realm_test_hooks", "realm_test_hooks"); } catch {}
     system.run(() => run(cfg));
   }
 });

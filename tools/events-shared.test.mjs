@@ -12,6 +12,15 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
+import { after as afterAll } from "node:test";
+import { rmSync as rmTree } from "node:fs";
+
+/** Temp dirs made by this file, removed once every test has finished. */
+const tempDirs = /** @type {string[]} */ ([]);
+const track = (/** @type {string} */ dir) => (tempDirs.push(dir), dir);
+afterAll(() => {
+  for (const dir of tempDirs) rmTree(dir, { recursive: true, force: true });
+});
 
 const root = join(import.meta.dirname, "..");
 const SHARED = join(root, "tools", "events-shared.js");
@@ -120,7 +129,7 @@ let fresh = 0;
 async function router() {
   const mc = fakeServer();
   globalThis.__mcFake = mc;
-  const dir = mkdtempSync(join(tmpdir(), "events-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "events-")));
   const api = await loadRouter(dir, `p${fresh++}_bp`);
   return { mc, ...api };
 }
@@ -408,7 +417,7 @@ test("in one script context each pack keeps one listener, diag's protocol rides 
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "events-bundle-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "events-bundle-")));
   const { system } = mc;
 
   await loadDiag(dir, "a_bp");
@@ -462,7 +471,7 @@ test("a handler registered from a continuation after startup is still attributed
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "events-late-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "events-late-")));
   const { system } = mc;
   await loadDiag(dir, "a_bp");
   const a = await loadRouter(dir, "a_bp");
@@ -492,7 +501,7 @@ test("dropping a pack's last handler hands the diagnostics protocol back to diag
   globalThis.__mcFake = mc;
   delete globalThis.__realmDiag;
   delete globalThis.__realmDiagWrapped;
-  const dir = mkdtempSync(join(tmpdir(), "events-carrier-"));
+  const dir = track(mkdtempSync(join(tmpdir(), "events-carrier-")));
   const { system } = mc;
   await loadDiag(dir, "solo_bp");
   const solo = await loadRouter(dir, "solo_bp");
@@ -616,7 +625,7 @@ async function runPack(folder, into) {
 }
 
 test("every behavior pack runs against a fake game with exactly one native script event listener, which answers /realm:help", async () => {
-  const into = mkdtempSync(join(root, "tools", ".tmp-events-test-"));
+  const into = track(mkdtempSync(join(tmpdir(), "events-test-")));
   const problems = [];
   let loaded = 0;
   try {

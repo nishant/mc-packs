@@ -2,20 +2,28 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { zip } from "../lib/zip.mjs";
 import { bundleMembers, loadBundle } from "./lib/packs.mjs";
 import { realmBehaviorFolders, stageFullBundleProtocols } from "./full-bundle-protocols.mjs";
+import { after as afterAll } from "node:test";
+import { rmSync as rmTree } from "node:fs";
+
+/** Temp dirs made by this file, removed once every test has finished. */
+const tempDirs = /** @type {string[]} */ ([]);
+const track = (/** @type {string} */ dir) => (tempDirs.push(dir), dir);
+afterAll(() => {
+  for (const dir of tempDirs) rmTree(dir, { recursive: true, force: true });
+});
 
 const harness = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(harness, "..", "..");
 
 function scratch(name) {
-  const cache = path.join(harness, ".cache");
-  fs.mkdirSync(cache, { recursive: true });
-  return fs.mkdtempSync(path.join(cache, name));
+  return track(fs.mkdtempSync(path.join(os.tmpdir(), name)));
 }
 
 function sha(file) {

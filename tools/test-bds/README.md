@@ -125,7 +125,7 @@ Headers that build a test copy with a plain shell recipe (the lines just above t
 run in the quoting context it sits in (unquoted, inside `'...'`, inside `"..."`, in a here-document), and `$S` quoted, so
 a folder with spaces, apostrophes or Windows backslashes works. A folder path with `"`, `$`, a backtick or a line break
 is refused with a clear message. `node tools/test-bds/suite.mjs --prepare-only [--filter <regex>] [--json out]` stages every
-recipe and checks the folder each run command points at, **without starting BDS** (about 3 s for all 17).
+recipe and checks the folder each run command points at, **without starting BDS** (about 3 s for every recipe).
 Test hooks that a scenario needs inside a pack (packs can't read each other's dynamic properties) live in
 `hooks/` and are appended to the test copy by the recipe (`hooks/maps-rvtest.js` for maps-cleanup and
 maps-leave, `hooks/rainbow-rvtest.js` for rainbow-race, the `hooks/limit_bp` probe pack for
@@ -143,11 +143,9 @@ playerSpawn listeners; owed-legacy-restart, owed-legacy-consumers, party-moderat
 false; claims-animals, claims-own-pet). `probe-hooks.test.mjs` checks them offline. The suite builds each header recipe's copy in a
 fresh folder, retries included. A header whose
 command runs another scenario file fails (and `npm run check` catches it too). A few have no plain command and are listed in
-`SPECIAL` in `suite.mjs` (smoke and restart with every pack, forms, domt-champion, the
-npc-name-capability probe, saga-lighthouse, bundle-smoke (builds `dist/realm_bundle.mcpack` first and runs it as one
-script context), and stash-pages-persistence through `stash-persistence.mjs`).
+`SPECIAL` in `suite.mjs`, which has the current entries: smoke and restart (every pack), forms, domt-champion, npc-name-capability, saga-lighthouse, the perf scenarios (perf-soak, build-holders-perf, gear-perf), the stash scenarios and build-beds scenarios that use their own runner (`stash-persistence.mjs`, `build-beds.mjs`), bundle-smoke (builds `dist/realm_bundle.mcpack` first and runs it as one script context), and the full-bundle scenarios (full-bundle-protocols, welcome-generic-bundle).
 Options: `--jobs N` (default 2; each run is CPU bound), `--filter <regex>` (scenario names),
-`--retry`, `--json <out>`, `--list` (print each plan and exit), `--prepare-only` (above). Logs go to
+`--retry`, `--json <out>`, `--list` (print each plan and exit), `--prepare-only` (above), and `--perf 10,40` with `--perf-seconds <n>` (default 120), `--perf-only <a_bp,b_bp>` or `--perf-bundle <mcpack>` (run perf-soak once per player count against the budget). Logs go to
 `logs/suite-<time>/<scenario>.out` (run.mjs output) and `.log` (full BDS log). The exit code is 1 when
 anything failed or timed out. The whole suite takes a few hours at `--jobs 2`.
 
@@ -326,7 +324,7 @@ Players and commands
   `"spectator"`), `op` (`true` = operator, i.e. `GameDirectors`, or a level name like `"admin"`),
   `settle` (ticks to wait after spawning, 10), `area` (`false`: the caller already loaded the column with
   `t.loadArea`, so the player adds no ticking area of its own; `timeout`, 400, bounds the wait for that column).
-  Otherwise the chunk is loaded first with a ticking area (`harness_<n>`), which stays. Returns a gametest `SimulatedPlayer` (a `Player`), so everything
+  Otherwise the chunk is loaded first with a ticking area (`harness_<phase>_<n>`, see t.loadArea), which stays until the phase ends (removed before a t.restart and at the next phase's start). Returns a gametest `SimulatedPlayer` (a `Player`), so everything
   is available: `p.location`, `p.teleport()`, `p.getComponent("inventory")`, `p.giveItem()`,
   `p.breakBlock()`, `p.interactWithBlock()`, `p.useItemInSlot()`, `p.moveToLocation()`,
   `p.navigateToLocation()`, `p.lookAtBlock()`, `p.attackEntity()`, `p.jump()`, `p.disconnect()`...

@@ -11,12 +11,12 @@ decisions or the backlog. Finish every workstream, or record in `OPEN.md` why an
 
 - `CLAUDE.md` in both repos (mc-packs and hosting): the ship rules, hard rules, commands, the performance budget,
   diag.js first in every main.js, sync-diag after every version bump, and never `world.clearDynamicProperties()`.
-- `docs/WORKING.md`: finishing order, subagents and worktrees, API quirks, the recurring bug checklist C1-C28 (apply
+- `docs/WORKING.md`: finishing order, subagents and worktrees, API quirks, the recurring bug checklist C1-C29 (apply
   it to every pack you touch), and keeping a session cheap. `docs/PACKS.md` is about 1 MB: read one `## ` section
   at a time, and never open the generated catalogs.
 - This folder: `OPEN.md` (the same items with ids), `notes/<track>.md` (findings tables with file:line from the
   audit), `deferred.md` (the triage), `phase3-report.md` and `phase3-recheck.md` (suites and soaks after),
-  `baseline.md` and `perf-tables.md` (before), `history.md`, `brief.md` (what the owner is going for) and
+  `baseline.md` and `perf-tables.md` (before), `history.md` (the fix classes; its checklist moved to `docs/WORKING.md`), `brief.md` (what the owner is going for) and
   `common-brief.md` (the per-track brief the audit used: reuse it for your subagents). Paths like
   `/home/user/wt/<track>` in the notes were the audit's worktrees; that work is all on `master` now.
 

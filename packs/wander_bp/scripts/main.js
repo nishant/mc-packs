@@ -106,7 +106,7 @@ const PILGRIM_PLACES = new Set(["old_chapel", "observatory", "starfall"]);
  * @property {number} [far] the player has been far since (ms)
  */
 /** @typedef {{ d: string, x: number, y: number, z: number, e?: string }} Camp where a camp's wanderer stands */
-/** @typedef {{ cd?: number, lh?: number, ac?: number, q?: number }} PlayerData cooldown until, last hostile, accused, last bounty/map */
+/** @typedef {{ cd?: number, lh?: number, q?: number }} PlayerData cooldown until, last hostile, last bounty/map */
 /** @typedef {{ ch: Record<string, string>, h: string[], s: number, q: number }} WanderState */
 
 const NAMED_BY_ID = new Map(NAMED.map((n) => [n.id, n]));
@@ -596,7 +596,7 @@ function roll(player, opts = {}) {
   const deep = player.dimension.id === NETHER || (ar === "miner" && player.location.y < 0);
   let spot = findSpot(player, deep);
   if (spot && hostile === "sailor" && !opts.force && !waterNear(player.dimension, spot)) {
-    // A lost sailor stands by water: try again, else a friendly Stranger of the same kind comes instead.
+    // A lost sailor stands by water: try one more spot, else the hostile is dropped and a friendly Stranger of the same archetype comes instead.
     spot = findSpot(player, deep);
     if (spot && !waterNear(player.dimension, spot)) hostile = undefined;
   }
@@ -1200,9 +1200,6 @@ async function accuseForm(player, wid) {
     turn(now, true);
     return;
   }
-  const pd = pdata(player);
-  pd.ac = (pd.ac ?? 0) + 1;
-  savePdata(player);
   player.sendMessage(`§7[Wanderers] ${now.n} stares at you, hurt, and walks away without a word.`);
   leave(wid, "accused");
 }
