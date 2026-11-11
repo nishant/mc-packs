@@ -13,7 +13,7 @@ of the repo before a usage cut, and fixed the critical, high and most medium fin
   of when vanilla death drops exist in the `entityDie` after-event).
 - **Phase 3 findings (2026-11-09):** about 180 of the 470 are still open, all low or nit except MCP-113 (the release and merge jobs
   `npm install` hosting's tools with no lockfile, then run them with `HOSTING_TOKEN` in the environment; pin or vendor a lockfile in
-  `nishant/hosting`). Full list with evidence and fixes: `C:Code.audit6-11-08mc-packs.md`, section "Phase 3 findings" (PC only).
+  `nishant/hosting`). Full list with evidence and fixes: `C:\Code\.audit\2026-11-08\mc-packs.md`, section "Phase 3 findings" (PC only).
   They are mostly test hygiene, docs drift, small bugs in shared modules (`tools/*-shared.js`, which fan out to many packs),
   duplicated helpers and dead code.
 - **Audit lenses not run:** pack-data, live site at 360/840/1440 px, and inventory. Chunk lists are in
