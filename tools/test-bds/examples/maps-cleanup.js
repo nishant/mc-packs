@@ -219,8 +219,8 @@ export default async function (t) {
     }
     a.teleport({ x: s3.x + 0.5, y: s3.y + 1, z: s3.z + 40.5 });
     b.teleport({ x: s3.x + 2.5, y: s3.y + 1, z: s3.z + 40.5 });
-    await t.waitMessage(a, /ink darkens/i, { timeout: 200 });
-    await t.waitMessage(b, /ink darkens/i, { timeout: 200 });
+    // The search budget rotates between jobs, so either hunter can finish first: wait for both at once.
+    await Promise.all([t.waitMessage(a, /ink darkens/i, { timeout: 200 }), t.waitMessage(b, /ink darkens/i, { timeout: 200 })]);
     ha = (await hunts("Alice"))[0]; hb = (await hunts("Bob"))[0];
     t.log(`Alice: ${JSON.stringify(ha.mark)} ${ha.style}; Bob: ${JSON.stringify(hb.mark)} ${hb.style}`);
     const all = await undo();
