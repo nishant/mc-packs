@@ -49,7 +49,8 @@ export default async function (t) {
   const stand = async (x, z, y = Y) => { p.teleport({ x: x + 0.5, y, z: z + 0.5 }); await t.wait(3); };
   /** A real click on a block (the anchor gaps are 200 ms, so wait 6 ticks after). */
   const click = async (pos, face = Direction.Up) => {
-    p.useItemInSlotOnBlock(0, pos, face);
+    const used = p.useItemInSlotOnBlock(0, pos, face);
+    if (!used) t.log(`click on ${pos.x},${pos.y},${pos.z} ${face}: not used`);
     p.stopUsingItem();
     p.stopInteracting();
     await t.wait(6);
@@ -110,17 +111,26 @@ export default async function (t) {
 
   // copy: sneak-clicks pick the blocks themselves as corners (the low corner, the far low corner, the far top corner)
   await pickMode(/Copy/i);
+  // Corner 1 (sneaking picks the clicked block itself: the low corner of the box), then from the top of the box
+  // corner 2 (only its x and z count: the face cell above the far top corner) and the height (the y of the face cell
+  // beside that corner).
   const selectBox = async () => {
+    t.echoActionBar = true;
     p.isSneaking = true;
     await stand(a.x, a.z - 2);
+    let at = t.tick;
     await click({ x: a.x, y: Y, z: a.z }, Direction.North);
-    await stand(b.x + 2, b.z);
-    await click({ x: b.x, y: Y, z: b.z }, Direction.East);
+    await waitBar(/copy_corner1/, at, 60);
+    p.isSneaking = false;
+    await t.wait(4);
     await stand(b.x - 1, b.z - 1, TOP + 1);
+    at = t.tick;
+    await click({ x: b.x, y: TOP, z: b.z }, Direction.Up);
+    await waitBar(/copy_corner2/, at, 60);
+    t.echoActionBar = false;
     const formP = t.waitForm(p, { timeout: 100 });
     p.setRotation({ x: 30, y: 0 });
-    await click({ x: b.x, y: TOP, z: b.z }, Direction.Up);
-    p.isSneaking = false;
+    await click({ x: b.x, y: TOP, z: b.z }, Direction.East);
     return formP;
   };
   let form = await selectBox();
