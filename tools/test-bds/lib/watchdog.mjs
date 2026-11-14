@@ -13,7 +13,7 @@ export function watchdogKind(text) {
     if (/memory/i.test(text)) return "memory";
     if (/\bhang|hung\b/i.test(text)) return "hang";
     if (/spike/i.test(text)) return "spike";
-    if (/\bslow\b/i.test(text)) return "slow";
+    if (/\bslow/i.test(text)) return "slow"; // also "Slowdown from 'Realm Bundle' (12ms average)"
     return "other";
   }
   if (/can'?t keep up|running behind|server is overloaded|ticks? behind/i.test(text)) return "slow-tick";

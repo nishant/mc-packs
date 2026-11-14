@@ -10,6 +10,7 @@ test("watchdog lines are classified by kind; other lines are not", () => {
   assert.equal(watchdogKind("[Scripting] [Watchdog] Script hang detected in map_bp"), "hang");
   assert.equal(watchdogKind("[Scripting] [Watchdog] Spike of 63 ms in realm_bundle"), "spike");
   assert.equal(watchdogKind("[Scripting] [Watchdog] Slow script: 12 ms over 20 ticks"), "slow");
+  assert.equal(watchdogKind("[Scripting] [Watchdog] Slowdown from 'Realm Bundle' (12ms average)"), "slow");
   assert.equal(watchdogKind("[Scripting] [Watchdog] something new"), "other");
   assert.equal(watchdogKind("Can't keep up! Is the server overloaded?"), "slow-tick");
   assert.equal(watchdogKind("[Scripting] [elite] TypeError: x is undefined"), null);
