@@ -125,3 +125,16 @@ test("profileDetails prints CPU, watchdog, the tick histogram, the worst ticks, 
   assert.match(md, /\| map_bp \| 0\.900 \| 3\.00 \| 9 \| 12 \|/);
   assert.deepEqual(profileDetails(undefined), []);
 });
+
+test("flaky scenarios are named with both durations, and the history keeps the last 20 runs (PIPE-16)", async () => {
+  const { flakyHistory } = await import("./validate-report.mjs");
+  const s = suiteSummary([{ results: [{ name: "town-life", result: "flaky", seconds: 300, failure: "villager\n not placed", retry: { seconds: 280 } }] }]);
+  assert.deepEqual(s.flaky, ["town-life: failed in 300 s, passed alone in 280 s - villager not placed"]);
+  assert.equal(s.red, false);
+  const previous = { flakyRuns: Array.from({ length: 20 }, (_, i) => ({ date: "d", ran: 300, flaky: i % 2 ? ["a"] : ["a", "b"] })) };
+  const h = flakyHistory(previous, ["b"], 314);
+  assert.equal(h.runs.length, 20);
+  assert.deepEqual(h.runs.at(-1).flaky, ["b"]);
+  assert.deepEqual(h.top, [{ name: "a", times: 19 }, { name: "b", times: 10 }]);
+  assert.deepEqual(flakyHistory(null, [], 10).top, []);
+});

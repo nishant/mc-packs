@@ -108,21 +108,11 @@ Size is the amount of work: S (one sitting), M (a day of agent work with tests),
 
 ### W0 Make the measurement trustworthy and fast (harness and CI only; no pack changes)
 
-Three PRs, in this order. None changes a pack, so none needs a pack release; each still merges through the normal
+Two PRs, in this order. None changes a pack, so none needs a pack release; each still merges through the normal
 flow and is proven by one `validate.yml` dispatch. The validation report already keeps the full profiles, the tick
-histograms by `tick % 20` to `% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts and the
-bundle's per-pack table by `scripts/<pack>/` path.
-
-**W0b Validate every merge, in a third of the time** (S). Findings: PIPE-05, PIPE-06, PIPE-24, PIPE-13, PIPE-16.
-- `max-parallel` 14 and 8 suite shards (PIPE-05, PIPE-13). Move `memory-40-*` to a nightly schedule plus a dispatch
-  input, as WORKING.md "Fast testing" already describes; reuse the previous run's head RSS as the next base
-  (PIPE-24). A merge is then validated in about 31 minutes.
-- Take the A/B base from the last master commit that has a finished validation, not `HEAD^1`, and say how many
-  commits the pair spans (PIPE-06).
-- Name the flaky scenarios in the report and give each scenario a hard time limit so a hang cannot take a shard
-  (PIPE-16).
-- Update CLAUDE.md "Performance" and WORKING.md "Testing in CI" in the same PR (the lead edits those).
-- Proof: the next merge's validation wall time; a run that follows a canceled one compares against the right base.
+histograms by `tick % 20` to `% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts, flaky
+scenarios and the bundle's per-pack table by `scripts/<pack>/` path; a merge is validated in about 31 minutes against
+the last master commit with a finished validation, and the memory soak runs nightly.
 
 **W0c Phases and a pinned world** (M). Findings: PIPE-04, UTL-01, PIPE-10, UTL-07 (confirm), and the measurement
 halves of XC-02, XC-06, XC-07, HUD-01, BSE-27, PRG-16.
@@ -528,17 +518,17 @@ Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
 
 ## 5. Order and what can run together
 
-1. Hosting H1 (CI minutes), then W0b here. These unblock cheap, fast, trustworthy measurement for all the rest.
-2. W0c and W0d. From here every workstream has phases to measure with.
-3. W1, then W2 (both bump every pack: never in flight together, and nothing else merges between a start and its
+1. Hosting H1 (CI minutes), then W0c and W0d here. From here every workstream has cheap, fast, trustworthy
+   measurement with phases.
+2. W1, then W2 (both bump every pack: never in flight together, and nothing else merges between a start and its
    release).
-4. W3 as soon as two validation runs with histograms exist.
-5. In parallel, at most four at a time, with no overlapping packs: W5 (map_bp), W7 then W8 (build_bp), W9
+3. W3 as soon as two validation runs with histograms exist.
+4. In parallel, at most four at a time, with no overlapping packs: W5 (map_bp), W7 then W8 (build_bp), W9
    (stash_bp), W10 (npc, town, wander, caravan), W11 (elite, bounty, dolphin), W15 (fishing and four others), W16
    (saga), W17 (weather packs).
-6. W12, W13, W14, W18: each touches many packs lightly, so run them when the per-pack workstreams above are merged,
+5. W12, W13, W14, W18: each touches many packs lightly, so run them when the per-pack workstreams above are merged,
    grouped by track.
-7. W6, W19, W4, W20 any time their inputs exist (W6 after the owner's device is available; W4 after W1).
+6. W6, W19, W4, W20 any time their inputs exist (W6 after the owner's device is available; W4 after W1).
 
 Releases: each merge here opens a hosting PR and a new Realm Bundle for the owner to upload. Group the small ones
 (W18) and leave at least the release run's length between merges.
