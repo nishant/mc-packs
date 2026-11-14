@@ -1,6 +1,6 @@
 import "./diag.js";
 import { createGossip } from "./gossip.js";
-import { CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
+import { BlockTypes, CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
@@ -194,27 +194,51 @@ function topAt(dim, x, z) {
   }
 }
 
+/** @param {Dimension} dim @param {number} x @param {number} y @param {number} z @returns {string} the block's id, "" when unreadable */
+function idAt(dim, x, y, z) {
+  try {
+    return blockAt(dim, x, y, z)?.typeId ?? "";
+  } catch {
+    return ""; // unloaded since
+  }
+}
+
+const PLACES_TTL = MINUTE;
+/** placesAt's answers per 16 x 16 column and water surface, for a minute: a fisher catches in the same spot again and again. @type {Map<string, { at: number, places: Set<string> }>} */
+const placesCache = new Map();
+
 /**
- * The places that describe the water at `at` (about 100 block reads, once per catch).
+ * The places that describe the water at `at` (about 80 block reads, once per catch; then the answer is reused for a
+ * minute for every catch in the same 16 x 16 column at the same water surface).
  * @param {Dimension} dim @param {Vector3} at @returns {Set<string>}
  */
 function placesAt(dim, at) {
-  /** @type {Set<string>} */
-  const places = new Set();
   // The water surface: the bobber floats in the top water block, or just above it.
   let y = Math.floor(at.y);
-  let b = blockAt(dim, at.x, y, at.z);
-  if (!b || !WATERY.test(b.typeId)) {
-    const below = blockAt(dim, at.x, y - 1, at.z);
-    if (!below || !WATERY.test(below.typeId)) return places;
+  if (!WATERY.test(idAt(dim, at.x, y, at.z))) {
+    if (!WATERY.test(idAt(dim, at.x, y - 1, at.z))) return new Set();
     y--;
   } else {
     for (let i = 0; i < 6; i++) {
-      const up = blockAt(dim, at.x, y + 1, at.z);
-      if (!up || !WATERY.test(up.typeId)) break;
+      if (!WATERY.test(idAt(dim, at.x, y + 1, at.z))) break;
       y++;
     }
   }
+  const key = `${dim.id}|${Math.floor(at.x / 16)}|${Math.floor(at.z / 16)}|${y}`;
+  const now = Date.now();
+  const hit = placesCache.get(key);
+  if (hit && now - hit.at < PLACES_TTL) return hit.places;
+  const places = readPlaces(dim, at, y);
+  if (placesCache.size >= 256) for (const [k, v] of placesCache) if (now - v.at >= PLACES_TTL) placesCache.delete(k);
+  if (placesCache.size >= 256) placesCache.clear();
+  placesCache.set(key, { at: now, places });
+  return places;
+}
+
+/** The blocks around a water surface at height `y`. @param {Dimension} dim @param {Vector3} at @param {number} y @returns {Set<string>} */
+function readPlaces(dim, at, y) {
+  /** @type {Set<string>} */
+  const places = new Set();
   const top = topAt(dim, at.x, at.z);
   if (y < CONFIG.caveBelowY && top && top.location.y > y + 2) places.add("cave");
 
@@ -224,16 +248,17 @@ function placesAt(dim, at) {
     for (const r of [4, 8, 12, 16]) {
       const x = at.x + d.x * r;
       const z = at.z + d.z * r;
-      const here = blockAt(dim, x, y, z);
-      if (!here) continue;
+      const id = idAt(dim, x, y, z);
+      if (!id) continue;
       seen++;
-      if (WATERY.test(here.typeId)) water++;
-      if (FROZEN.test(here.typeId)) places.add("frozen");
-      if (SWAMPY.test(here.typeId)) places.add("swamp");
-      if (r <= 8) {
-        const above = blockAt(dim, x, y + 1, z);
-        if (above && FROZEN.test(above.typeId)) places.add("frozen");
-        if (above && SWAMPY.test(above.typeId)) places.add("swamp");
+      if (WATERY.test(id)) water++;
+      if (FROZEN.test(id)) places.add("frozen");
+      if (SWAMPY.test(id)) places.add("swamp");
+      // The block above only adds frozen or swamp: once both are known it can't change the answer.
+      if (r <= 8 && !(places.has("frozen") && places.has("swamp"))) {
+        const above = idAt(dim, x, y + 1, z);
+        if (FROZEN.test(above)) places.add("frozen");
+        if (SWAMPY.test(above)) places.add("swamp");
       }
     }
   }
@@ -244,9 +269,15 @@ function placesAt(dim, at) {
       for (const r of [6, 12]) {
         const t = topAt(dim, at.x + DIRS[i].x * r, at.z + DIRS[i].z * r);
         if (!t) continue;
-        if (FROZEN.test(t.typeId)) places.add("frozen");
-        if (SWAMPY.test(t.typeId)) places.add("swamp");
-        if (JUNGLY.test(t.typeId)) places.add("jungle");
+        let id = "";
+        try {
+          id = t.typeId;
+        } catch {
+          continue; // a column that isn't ticking (C16)
+        }
+        if (FROZEN.test(id)) places.add("frozen");
+        if (SWAMPY.test(id)) places.add("swamp");
+        if (JUNGLY.test(id)) places.add("jungle");
       }
     }
   }
@@ -542,9 +573,24 @@ function caught(player, sp, size) {
 /** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number, born: number, nudged: number }>} */
 const hooks = new Map();
 
+/** A hook's first ticks: the only time it can be inside a light block next to its player (below). */
+const LIGHT_TICKS = 20;
+/** Whether this world has Dynamic Lightning's light blocks: asked once, on the first hook. @type {boolean | undefined} */
+let lightBlocks;
+function hasLightBlocks() {
+  if (lightBlocks !== undefined) return lightBlocks;
+  try {
+    lightBlocks = BlockTypes.getAll().some((t) => t.id.startsWith("rdl:light_block"));
+  } catch {
+    return true; // can't tell yet: scan, and ask again next time
+  }
+  return lightBlocks;
+}
+
 /**
  * Dynamic Lightning (rdl) puts light blocks around a player holding a torch; a bobber that spawns in one stops in
- * midair. Gives such blocks back their base block. @param {Entity} hook
+ * midair. Gives such blocks back their base block. Only for a hook's first LIGHT_TICKS ticks, and only in a world
+ * where that add-on's blocks exist. @param {Entity} hook
  */
 function clearLightBlocksNearHook(hook) {
   try {
@@ -597,7 +643,7 @@ function droppedByPlayer(item) {
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
-      clearLightBlocksNearHook(entity);
+      if (hasLightBlocks()) clearLightBlocksNearHook(entity);
       const owner = hookOwner(entity);
       if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick, born: system.currentTick, nudged: 0 });
       return;
@@ -713,11 +759,11 @@ system.runInterval(() => {
   for (const [id, h] of hooks) {
     if (h.hook.isValid) {
       try {
-        clearLightBlocksNearHook(h.hook);
+        const age = system.currentTick - h.born;
+        if (age <= LIGHT_TICKS && hasLightBlocks()) clearLightBlocksNearHook(h.hook);
         h.at = h.hook.location;
         h.seen = system.currentTick;
         // A bobber that stopped in the air right after the cast (snagged on something next to the player) gets the cast again.
-        const age = system.currentTick - h.born;
         if (age >= 1 && age <= 5 && h.nudged < 2 && h.owner.isValid && h.owner.dimension.id === h.dim) {
           const v = h.hook.getVelocity();
           const o = h.owner.location;
