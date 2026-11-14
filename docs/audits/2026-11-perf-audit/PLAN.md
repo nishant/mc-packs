@@ -261,18 +261,12 @@ Findings: XC-08, XC-09, PIPE-17, PIPE-22, HUD-41, XC-10, XC-11.
 - Diagnostics: do not keep an entry per world property key when its prefix has one owner (XC-10).
 - Proof: bundle size, startup time and memory before and after; `bundle-smoke.js`; `check-pipeline`.
 
-### W5 Minimap (L: three PRs)
+### W5 Minimap (L: two PRs left)
 
-Findings: HUD-01, HUD-29, HUD-07, HUD-30, HUD-06, HUD-02, HUD-03, HUD-08, HUD-14, HUD-31, HUD-36, HUD-37, HUD-38,
+Findings: HUD-01, HUD-06, HUD-02, HUD-03, HUD-08, HUD-14, HUD-31, HUD-36, HUD-37, HUD-38,
 HUD-16, HUD-17, HUD-20, HUD-21. Packs: `map_bp` (and `hud_rp` only through W6).
 
-**W5a Measure the radar and fix the cap** (M). Write `map-radar-perf` (W0c) first: standing, walking, flying, with
-the store empty and at its cap. Then: the store-wide eviction counter that switches off the incremental planner once
-a store holds 6,000 columns, so the full 2,166-candidate plan runs on every check (HUD-29); a store over its cap
-refusing new columns and draining one a tick, which any player can cause with `/realm:minimap scan` (HUD-07: evict
-in batches, cap the radius for non-operators, free stores nobody views); the 2-minute full re-read of a standing
-radar in one 25-tick burst (HUD-30: spread it or re-read only columns a block event marked).
-**W5b Budgets** (M). With W5a's numbers, set the scan, rebuild and draw ceilings (6 + 2 + 1 ms today) so one flier
+**W5b Budgets** (M). With the numbers from `map-radar-perf` (`tools/test-bds/examples/`), set the scan, rebuild and draw ceilings (6 + 2 + 1 ms today) so one flier
 costs 2 ms or less and several share a per-tick envelope that carries overruns into the next tick (HUD-01). Make
 `config.js`, PACKS.md and CLAUDE.md's "about 1 ms" say what is true. Finish or delete the planner's idle skip and
 its dead limits (HUD-08). The radar fills more slowly at the same budget: a NEWS line.

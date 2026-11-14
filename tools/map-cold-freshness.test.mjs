@@ -27,10 +27,12 @@ for (const profile of [SPEED, BALANCED]) for (const count of [10, 40]) {
     };
     const allMappedSince = tick => keys.every(key => { const sample = store.cols.get(key); return sample?.valid !== false && sample?.source === "native" && sample.tick >= tick; });
     const allDrained = () => f.api.scanPlans.size === count && [...f.api.scanPlans.values()].every(p => p.pos >= p.picks.length);
-    const drain = start => {
+    // A cold fill drains at the full operation rate; a TTL renewal waits up to STALE_BATCH (200) ticks after the first
+    // expiry and then re-reads at STALE_OPS (8) operations a tick, so it gets a longer window (HUD-30).
+    const drain = (start, window = 240) => {
       const before = f.api.queue.nativeAttempt;
       let completed = false;
-      for (let tick = start; tick < start + 240; tick++) {
+      for (let tick = start; tick < start + window; tick++) {
         step(tick);
         if (allMappedSince(start) && allDrained() && f.api.pendingTerrain.size === 0) { completed = true; break; }
       }
@@ -53,9 +55,9 @@ for (const profile of [SPEED, BALANCED]) for (const count of [10, 40]) {
     assert.ok(f.api.queue.nativeAttempt > 0, "real native-thunk acquisition ran for active viewers");
     // Jump beyond the newest sample so ALL entries are stale, then renew identical underlying terrain.
     const visualBeforeRenewal = store.ver;
-    const refreshedLatest = drain(coldLatest + 2401);
+    const refreshedLatest = drain(coldLatest + 2401, 800);
     assert.equal(store.ver, visualBeforeRenewal, "equal-value TTL renewal must not depend on invented visual invalidation");
-    drain(refreshedLatest + 2401);
+    drain(refreshedLatest + 2401, 800);
     assert.equal(store.ver, visualBeforeRenewal);
     assert.deepEqual(f.warnings.filter(warning => !warning.includes("[map-lab]") && !warning.startsWith("[map] Oak terrain with marked display estimates")), []);
   });

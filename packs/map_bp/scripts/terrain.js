@@ -15,7 +15,7 @@ export const PREVIEW = 4;
 /** `since`: stored at or after this tick counts as done (default: when the plan was made). @typedef {{ wx: number, wz: number, key: number, resolution?: number, store?: Store, since?: number, stale?: boolean, queuedAt?: number }} Pick */
 /** @typedef {{ kind: string, y: number, depth: number, palette?: number, tick: number, valid?: boolean, source?: string, acquiredAtMs?: number, persistedRevision?: number, glyph?: string, wx?: number, wz?: number, visible?: boolean }} Col */
 /** @typedef {{ glyph: string, tick: number, wx: number, wz: number, visible?: boolean }} PreviewCol */
-/** `regions`: visual versions by region. `demandVer`: per-Store availability losses only; acquisition never restarts a partial scan. @typedef {{ id: string, cols: Map<number, Col>, preview: Map<number, PreviewCol>, previewCap: number, fine: Set<number>, coarse: Set<number>, ver: number, demandVer: number, used: number, miss: Map<number, number>, previewMiss: Map<number, number>, regions: Map<number, number> }} Store */
+/** `regions`: visual versions by region. `demandVer`: per-Store availability losses only; acquisition never restarts a partial scan. `demandRegions`: the same losses by region (demandVerAt), so a loss far from a plan leaves it alone. `viewedAt`: the last tick a radar used it. @typedef {{ id: string, cols: Map<number, Col>, preview: Map<number, PreviewCol>, previewCap: number, fine: Set<number>, coarse: Set<number>, ver: number, demandVer: number, demandRegions: Map<number, number>, used: number, viewedAt?: number, miss: Map<number, number>, previewMiss: Map<number, number>, regions: Map<number, number> }} Store */
 
 /** Ticks before a column whose chunk wasn't loaded is read again. */
 export const MISS_RETRY = 5;
@@ -28,6 +28,14 @@ function bumpStoreRegions(s, wx, wz, resolution) {
   s.ver++;
   for (const k of new Set([regionKey(wx, wz), regionKey(wx + resolution, wz), regionKey(wx, wz + resolution)])) s.regions.set(k, (s.regions.get(k) ?? 0) + 1);
 }
+/** A column that was available is not any more (evicted or invalidated): the store's and its region's demand versions go up. @param {Store} s @param {number} wx @param {number} wz */
+function loseDemand(s, wx, wz) {
+  s.demandVer++;
+  const k = regionKey(wx, wz);
+  s.demandRegions.set(k, (s.demandRegions.get(k) ?? 0) + 1);
+}
+/** Evictions a store over its cap makes at most per trim() call (HUD-07: one a tick left radars blank for minutes). */
+export const TRIM_BATCH = 256;
 
 const BIAS = 2 ** 24; // the world is 60 million blocks wide: 7.5 million columns a side, far less than 2^24
 const SPAN = 2 ** 25;
@@ -104,8 +112,12 @@ export class TerrainWorld {
   makeRoom(s,wx,wz,resolution,tick){
     if(s.cols.has(colKey(wx,wz,resolution)))return true;
     if(this.maxCols<=0||this.maxTotalCols<=0)return false;
-    if(s.cols.size>=this.maxCols)this.#evictNative(s,resolution===COL?COL:1,tick);
-    if(s.cols.size>=this.maxCols)return false;
+    if(s.cols.size>=this.maxCols){
+      // Over the cap (a scan ended, players left): one eviction makes room for this column and trim() brings the
+      // store back under the cap in batches, instead of refusing every new column until it drains (HUD-07).
+      const before=s.cols.size;this.#evictNative(s,resolution===COL?COL:1,tick);
+      if(s.cols.size>=before)return false;
+    }
     if(this.totalCols<this.maxTotalCols)return true;
     const stores=[...this.stores.values()];
     for(let i=0;i<Math.min(4,stores.length);i++){const other=stores[this.evictionCursor++%stores.length];this.#evictNative(other,COL,tick);if(this.totalCols<this.maxTotalCols)return true;}
@@ -118,7 +130,7 @@ export class TerrainWorld {
     let s = this.stores.get(id);
     if (!s) {
       if (altitude !== undefined && !this.#dropOldLayer()) throw new Error("All terrain layer slots are retained");
-      s = { id, cols: new Map(), preview: new Map(), previewCap: this.maxPreview, fine: new Set(), coarse: new Set(), ver: 0, demandVer: 0, used: 0, miss: new Map(), previewMiss: new Map(), regions: new Map() };
+      s = { id, cols: new Map(), preview: new Map(), previewCap: this.maxPreview, fine: new Set(), coarse: new Set(), ver: 0, demandVer: 0, demandRegions: new Map(), used: 0, miss: new Map(), previewMiss: new Map(), regions: new Map() };
       this.stores.set(id, s);
     }
     s.used = ++this.clock;
@@ -264,7 +276,7 @@ export class TerrainWorld {
     (preview ? s.previewMiss : s.miss).delete(fallback);
     if (value) {
       // Fine-only and already invalid native records were not available canonical demand.
-      if (preview || (fallback < 2 ** 52 && (!("valid" in value) || value.valid !== false))) s.demandVer++;
+      if (preview || (fallback < 2 ** 52 && (!("valid" in value) || value.valid !== false))) loseDemand(s, value.wx ?? 0, value.wz ?? 0);
       if (!preview) this.#shadeNeighbors(s, value.wx ?? 0, value.wz ?? 0, fallback >= 2 ** 52 ? 1 : COL);
       this.#bump(s, value.wx ?? 0, value.wz ?? 0, preview ? PREVIEW : (fallback >= 2 ** 52 ? 1 : COL));
     }
@@ -290,7 +302,7 @@ export class TerrainWorld {
     const value = s.preview.get(fallback);
     s.preview.delete(fallback);
     s.previewMiss.delete(fallback);
-    if (value) { s.demandVer++; this.#bump(s, value.wx, value.wz, PREVIEW); }
+    if (value) { loseDemand(s, value.wx, value.wz); this.#bump(s, value.wx, value.wz, PREVIEW); }
   }
   /** A changed sample and the east/south glyphs shaded from it bump their own regions. @param {Store} s @param {number} wx @param {number} wz @param {number} resolution */
   #bump(s, wx, wz, resolution) { bumpStoreRegions(s, wx, wz, resolution); }
@@ -304,6 +316,55 @@ export class TerrainWorld {
     const x0 = Math.floor((x - reach) / REGION), x1 = Math.floor((x + reach) / REGION);
     const z0 = Math.floor((z - reach) / REGION), z1 = Math.floor((z + reach) / REGION);
     for (let rx = x0; rx <= x1; rx++) for (let rz = z0; rz <= z1; rz++) n += s.regions.get((rx + 2 ** 20) * 2 ** 21 + (rz + 2 ** 20)) ?? 0;
+    return n;
+  }
+  /**
+   * What a plan around (x, z) depends on for availability: the sum of the region demand versions within `reach`
+   * blocks. A column evicted or invalidated far away (the oldest columns, behind a traveler) leaves it alone, so the
+   * planner keeps its incremental path at the store cap (HUD-29).
+   * @param {Store} s @param {number} x @param {number} z @param {number} reach
+   */
+  demandVerAt(s, x, z, reach) {
+    let n = 0;
+    const x0 = Math.floor((x - reach) / REGION), x1 = Math.floor((x + reach) / REGION);
+    const z0 = Math.floor((z - reach) / REGION), z1 = Math.floor((z + reach) / REGION);
+    for (let rx = x0; rx <= x1; rx++) for (let rz = z0; rz <= z1; rz++) n += s.demandRegions.get((rx + 2 ** 20) * 2 ** 21 + (rz + 2 ** 20)) ?? 0;
+    return n;
+  }
+  /**
+   * Brings every store over the cap back under it, at most `limit` evictions a call (oldest columns first, a column
+   * on a radar after the rest, never a retained one). Returns the evictions made.
+   * @param {number} tick @param {number} [limit]
+   */
+  trim(tick, limit = TRIM_BATCH) {
+    let n = 0;
+    for (const s of this.stores.values()) {
+      while (n < limit && s.cols.size > this.maxCols) {
+        const before = s.cols.size;
+        this.#evictNative(s, COL, tick);
+        if (s.cols.size >= before) break; // everything left is retained
+        n++;
+      }
+      if (n >= limit) break;
+    }
+    return n;
+  }
+  /**
+   * Frees the stores no radar has used for `idle` ticks (none retained, none in `inUse`): their columns are memory
+   * nobody looks at, and a returning viewer reads the land again. Returns the stores freed.
+   * @param {number} tick @param {number} idle @param {Set<Store>} inUse
+   */
+  releaseIdle(tick, idle, inUse) {
+    let n = 0;
+    for (const s of [...this.stores.values()]) {
+      if (inUse.has(s)) { s.viewedAt = tick; continue; }
+      if (s.viewedAt === undefined) { s.viewedAt = tick; continue; }
+      if (tick - s.viewedAt < idle) continue;
+      if ([...this.retained.values()].some((p) => p.store === s)) continue;
+      if (s.cols.size || s.preview.size) s.demandVer++;
+      this.stores.delete(s.id);
+      n++;
+    }
     return n;
   }
   /**
@@ -341,7 +402,7 @@ export class TerrainWorld {
         this.#bump(s, entry.wx ?? sampleCoord(wx, resolution), entry.wz ?? sampleCoord(wz, resolution), resolution);
         changed = true;
       }
-      if (demandChanged) s.demandVer++;
+      if (demandChanged) loseDemand(s, wx, wz);
       if (changed) n++;
     }
     return n;
