@@ -6,7 +6,8 @@
     "Story Blood Moons and Harvest Moons never come two nights in a row, and never replace a moon an operator chose.",
     "Mining the same stone spot again within 5 minutes gives no Mining XP, so cobblestone and basalt generators do not farm it.",
     "The sky-wonder bonus in Frogs in Three Voices also works with Rainbows, Tornadoes or Storm Cells.",
-    "Town Projects residents can no longer breed."
+    "Town Projects residents can no longer breed.",
+    "Easy Building: a resting preview no longer flips between the box and the shape, big previews no longer stall the server, and survival blocks that could not reach an unloaded chunk are handed back instead of lost."
   ],
   "resourceNotes": [
     "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
@@ -75,6 +76,10 @@
     "quests_bp": {
       "version": "1.3.13",
       "notes": "Fish quests count the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
+    },
+    "build_bp": {
+      "version": "3.0.17",
+      "notes": "The deferred preview solves a shape once while the aim rests (it re-solved about every 13 ticks) and reads big shapes over a few ticks; queued blocks open a chunk loader only once one comes back unloaded (at most two), wait up to a minute for one, and are refunded to survival players when given up."
     }
   }
 }

@@ -330,7 +330,9 @@ export async function executePaste(player, origin) {
             for (const [k, v] of Object.entries(e.permStates)) {
                 try { perm = perm.withState(k, v); } catch {}
             }
-            enqueue(player.id, dim.id, e.pos, perm);
+            // A survival player paid for this block (or cut it): given back if the queue finally gives it up.
+            const refund = !creative && chargeUnits(e.typeId, e.permStates) > 0 ? e.typeId : undefined;
+            enqueue(player.id, dim.id, e.pos, perm, refund);
         } catch { }
     }
 

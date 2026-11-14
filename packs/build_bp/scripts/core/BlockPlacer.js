@@ -279,16 +279,23 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                 }
             }
         }
+        // What a survival player paid for this block: given back if the queue finally gives the write up (BSE-12).
+        const refund = survival && !pos._bedHead
+            ? (assignments ? (posTypeMap.get(`${pos.x},${pos.y},${pos.z}`) ?? typeId) : (pos.typeId ?? typeId))
+            : undefined;
         try {
             const block = dim.getBlock(pos);
             if (block) {
                 block.setPermutation(perm);
             } else {
-                enqueue(playerId, dim.id, pos, perm);
+                enqueue(playerId, dim.id, pos, perm, refund);
             }
         } catch (e) {
             const msg = String(e);
-            if (!msg.includes("LocationOutOfWorldBoundaries")) {
+            // An unloaded chunk waits in the queue like a missing block (it used to be lost after the charge).
+            if (e?.name === "LocationInUnloadedChunkError" || /unloaded chunk/i.test(msg)) {
+                enqueue(playerId, dim.id, pos, perm, refund);
+            } else if (!msg.includes("LocationOutOfWorldBoundaries")) {
                 console.warn(`[EB] place failed @ ${pos.x},${pos.y},${pos.z} - ${e}`);
             }
         }
