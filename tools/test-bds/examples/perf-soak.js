@@ -100,7 +100,10 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
     t.server(`/time set ${TIME}`);
   }
   if (WEATHER !== "none") setWeather(WEATHER);
-  const weatherNow = () => { try { return String(over.getWeather()); } catch (e) { return "unknown"; } };
+  // Dimension.getWeather is not in the stable API this harness runs: the last weatherChange seen stands in for it.
+  let weatherSeen = WEATHER === "none" ? "unknown" : `${WEATHER} (set)`;
+  try { t.world.afterEvents.weatherChange.subscribe((/** @type {any} */ ev) => { if (ev.dimension === "minecraft:overworld" || ev.dimension === "overworld") weatherSeen = String(ev.newWeather); }); } catch (e) { /* no event */ }
+  const weatherNow = () => { try { return String(over.getWeather()); } catch (e) { return weatherSeen; } };
   const worldNow = () => { let timeOfDay = -1; try { timeOfDay = t.world.getTimeOfDay(); } catch (e) { /* unknown */ } return { timeOfDay, weather: weatherNow() }; };
   t.log(`world pinned: time ${TIME >= 0 ? TIME : "running"}, weather ${WEATHER} (now ${JSON.stringify(worldNow())})`);
   /** Named windows the profiler reports one by one. @type {{ name: string, startTick: number, endTick: number, players: number }[]} */
@@ -428,19 +431,29 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
     const { ItemStack, Direction } = t.mc;
     const op = players[0];
     const land = players.filter((s) => s.kind === "land" && s !== op);
-    // Deaths, travels and leaves each get players of their own while there are enough (8 land players besides the
-    // operator); the block loops take the next four, sharing with the leavers in a small crowd.
-    const dying = land.slice(0, 2), travelers = land.slice(2, 4);
-    const blockers = land.length >= 8 ? land.slice(4, 8) : land.slice(-4);
-    // Leavers: one every 5 s, each rejoining (same name, same spot) 5 s after it left.
-    const leavers = land.length >= 9 ? land.slice(8) : land.length > 4 ? land.slice(4) : land.slice(-1);
-    const roles = new Set([...blockers, ...dying, ...travelers]);
+    // No player has two parts that clash (a block loop's spot must stay where its player stands): two land players
+    // die (3 s and 18 s) and travel (8 s to 13 s), the next four run the block loops (the operator stands in while
+    // the crowd is small), and the leavers are the rest: spare land players, then the pool's and the Nether's.
+    const dying = land.slice(0, 2), travelers = dying;
+    const blockers = land.slice(2, 6);
+    if (blockers.length < 4 && op) blockers.push(op);
+    const roles = new Set([...blockers, ...dying, op]);
+    const leavers = [...land.slice(6), ...players.filter((s) => s.kind !== "land")].filter((s) => !roles.has(s));
     churn = { seconds: CHURN_S, left: 0, rejoined: 0, rejoinFailed: 0, deaths: 0, respawns: 0, dimensionChanges: 0, placed: 0, broken: 0, mobsSummoned: 0, mobsKilled: 0, menus: /** @type {string[]} */ ([]), minValid: Infinity, endValid: 0 };
-    const spots = blockers.map((s) => {
-      const l = s.p.location;
-      const at = { x: Math.floor(l.x) + 1, y: Math.floor(l.y), z: Math.floor(l.z) };
+    // The block loops run side by side near the spawn, under a ticking area of the soak's own for the phase: a
+    // simulated player's own chunks were "not loaded and ticking" when its block events reached the packs (the first
+    // W0c run). Each player stands 1.5 blocks off its spot (a block can't be placed where its player stands).
+    const c0 = groupSpot(0), bx = Math.floor(c0.x) + 6, bz = Math.floor(c0.z) - 6;
+    t.server(`/tickingarea add circle ${bx + 4} 0 ${bz} 1 soak_churn true`);
+    await t.waitUntil(() => { try { return !!over.getTopmostBlock({ x: bx, z: bz }); } catch (e) { return false; } }, { timeout: 400 }).catch(() => t.log("churn: the block loops' area did not load in 400 ticks"));
+    await t.wait(10);
+    const spots = blockers.map((s, k) => {
+      let y = Math.floor(s.home.y);
+      try { y = (over.getTopmostBlock({ x: bx + 3 * k, z: bz })?.location.y ?? y - 1) + 1; } catch (e) { /* unloaded: the player's height */ }
+      const at = { x: bx + 3 * k, y, z: bz };
       try {
         s.p.stopMoving();
+        s.p.teleport({ x: at.x + 0.5, y: at.y, z: at.z - 1.5 }, { dimension: over });
         s.p.getComponent("minecraft:inventory").container.setItem(1, new ItemStack("minecraft:dirt", 64));
         t.server(`/setblock ${at.x} ${at.y} ${at.z} dirt`);
       } catch (e) { /* left already */ }
@@ -483,7 +496,7 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
       }
       // Two deaths, each respawned 2 s later.
       dying.forEach((s, k) => {
-        const at = 3 + 10 * k;
+        const at = 3 + 15 * k;
         try {
           if (sec === at && valid(s.p)) { s.p.kill(); churn.deaths++; }
           if (sec === at + 2 && valid(s.p)) { s.p.respawn(); churn.respawns++; }
@@ -517,6 +530,7 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
             if (id === "minecraft:air") {
               churn.broken++;
               s.p.useItemInSlotOnBlock(1, { x: at.x, y: at.y - 1, z: at.z }, Direction.Up);
+              t.system.runTimeout(() => { try { s.p.stopInteracting(); } catch (e) { /* gone */ } }, 5);
             }
           }
         } catch (e) { /* a player in an odd spot: ignore */ }
@@ -549,6 +563,7 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
       churn.minValid = Math.min(churn.minValid, validNow);
     }
     killMobs();
+    t.server("/tickingarea remove soak_churn");
     if (away) { await rejoin(away); away = null; }
     for (const s of dying) { try { if (valid(s.p) && s.p.getComponent("minecraft:health")?.currentValue <= 0) { s.p.respawn(); churn.respawns++; } } catch (e) { /* alive */ } }
     churn.endValid = players.filter((x) => valid(x.p)).length;

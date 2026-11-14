@@ -274,7 +274,7 @@ test("phases=1: empty, one, ramp, steady and churn; churned players never fail r
   assert.equal(by.one.endTick - by.one.startTick, 600);
   assert.equal(by.one.players, 1);
   assert.deepEqual([by.steady.startTick, by.steady.endTick], [w.soak.startTick, w.soak.endTick]);
-  assert.equal(by.churn.endTick - by.churn.startTick, 1200);
+  assert.ok(by.churn.endTick - by.churn.startTick >= 1200 && by.churn.endTick - by.churn.startTick <= 1300);
   assert.equal(by.night.endTick - by.night.startTick, 100);
   assert.ok(by.ramp.startTick >= by.one.endTick && by.ramp.endTick <= by.steady.startTick);
   assert.equal(w.retention.minValid, 12);
