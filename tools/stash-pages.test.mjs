@@ -402,6 +402,7 @@ const source = readFileSync(new URL("../packs/stash_bp/scripts/pages.js", import
   .replace('"./settings.js"', JSON.stringify(settingsUrl))
   .replace('"./page-store.js"', JSON.stringify(storeUrl));
 const pages = await import(dataUrl(source));
+const storeModule = await import(storeUrl);
 const { STORAGE_SLOTS, BUTTON_SLOTS, BTN_PREV, BTN_MENU, BTN_NEXT, switchPage, curPage, enforcePageCount } = pages;
 
 // ---------------------------------------------------------------------------
@@ -577,7 +578,7 @@ test("restoring an old active layout into a joined player is migration, not queu
   p.container.setItem(17, stack(BTN_NEXT));
   const notes = p.bar.length;
   fire("playerInventoryItemChange", { player: p, slot: 15, beforeItemStack: stack(BTN_PREV), itemStack: p.container.getItem(15) });
-  advance(3);
+  advance(24); // the look an inventory change asks for comes at most a second after the player's last look
   assert.equal(curPage(p), 5);
   assert.equal(JSON.parse(p.getDynamicProperty("stash:native")).layout, 2);
   assert.ok(!p.bar.slice(notes).some((line) => /Page #\d+\//.test(line)), "migration never commits a navigation request");
@@ -1229,11 +1230,11 @@ test("the script's own button writes are not clicks", () => {
   assert.equal(curPage(p), 2);
 });
 
-test("a button left on the cursor is cleared within 5 s even without an event", () => {
+test("a button left on the cursor is cleared within 30 s even without an event", () => {
   const p = joined();
   advance(40);
   p.cursor.item = stack(BTN_MENU);
-  advance(100);
+  advance(600);
   assert.equal(p.cursor.item, undefined);
 });
 
@@ -1301,7 +1302,10 @@ function census(/** @type {any} */ p) {
 const liveView = (/** @type {any} */ p) => p.container.slots.map((i) => (i ? `${i.typeId}:${i.amount}:${i.nameTag ?? ""}:${JSON.stringify(i.contents ?? null)}` : ""));
 const structureIds = () => new Set(mc.structures.keys());
 /** Snapshots waiting in stash:retired (deleted 120 minutes after they were replaced). */
-const retiredIds = () => new Set(JSON.parse(mc.worldProps.get("stash:retired") ?? "[]").map((/** @type {[number, number]} */ [n]) => `stash:page_${n}`));
+const retiredIds = () => {
+  storeModule.flushRetired(); // the queue is written at most once a second; read what it holds now
+  return new Set(JSON.parse(mc.worldProps.get("stash:retired") ?? "[]").map((/** @type {[number, number]} */ [n]) => `stash:page_${n}`));
+};
 /** Gone, or retired and so deleted later. @param {string} id */
 const discarded = (id) => !mc.structures.has(id) || retiredIds().has(id);
 /** Structures this player's index doesn't reference, not retired, that were not there before: leaks. */
@@ -2540,6 +2544,32 @@ test("PR86: a genuine pickup on a nearly full page 3 goes to the earliest page w
   assertIndexExact(p, "after routing");
 });
 
+test("W9 auto-store: pickups every 5 ticks on a nearly full page move at most once a second, and none is lost or doubled", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 2: { 9: stack("minecraft:emerald", 3) } });
+  switchPage(p, 3);
+  p.container.setItem(20, stack("minecraft:iron_ingot", 10)); // the player's own stack, with room: pickups top it up
+  nearlyFull(p, [20, 21]);
+  advance(40);
+  const before = census(p);
+  const saves = mc.saves;
+  const iron = () => [...census(p)].filter(([k]) => k.startsWith("minecraft:iron_ingot|")).reduce((n, [, v]) => n + v, 0);
+  for (let i = 0; i < 20; i++) {
+    const have = p.container.getItem(20);
+    p.container.setItem(20, stack("minecraft:iron_ingot", (have?.amount ?? 0) + 1));
+    advance(5);
+  }
+  advance(60);
+  const commits = (mc.saves - saves) / 3; // a commit saves the page and both inventory images
+  assert.ok(commits >= 3 && commits <= 7, `${commits} auto-store moves for 20 pickups over 5 s (one a second at most)`);
+  assert.equal(iron(), 30, "the 10 the player had and the 20 picked up, once each");
+  const after = census(p);
+  for (const [k, v] of before) if (!k.startsWith("minecraft:iron_ingot|")) assert.equal(after.get(k), v, `${k} unchanged`);
+  assert.ok((savedPage(p, 1).get(9)?.amount ?? 0) >= 15, "the pickups went to page 1");
+  assertIndexExact(p, "after batched auto-store");
+});
+
 test("PR86: moving stacks between page, hotbar, cursor and worn gear is not a pickup", () => {
   const p = joined();
   mc.players = [p];
@@ -3494,10 +3524,14 @@ test("F49: storedCount reads an old JSON page property once, never one a snapsho
 
 test("a replaced page snapshot is retired, still loadable, and deleted 120 minutes later", () => {
   const p = joined();
-  mc.worldProps.delete("stash:retired"); // earlier tests' retirements
+  const realNow = Date.now;
+  // Earlier tests' retirements: let the sweep (32 a minute) delete them all first.
+  Date.now = () => realNow() + 10 * 24 * 60 * 60000;
+  for (let i = 0; i < 400 && retiredIds().size; i++) advance(2);
+  Date.now = realNow;
+  assert.equal(retiredIds().size, 0, "no earlier retirement is left");
   arrange(p, { 1: { 10: stack("minecraft:apple", 2) }, 2: { 9: stack("minecraft:diamond", 4) } });
   const oldRef = nativeIndex(p).pages[2];
-  const realNow = Date.now;
   try {
     assert.equal(switchPage(p, 2), true);
     assert.equal(switchPage(p, 1), true);
@@ -3528,7 +3562,7 @@ test("a snapshot sequence a crash rolled back steps past the snapshots still on 
 });
 
 test("a beat walks only the players changing and the quiet ones whose turn it is, not everyone", () => {
-  // 40 settled players: each still gets its quiet look about once in 50 beats, but a beat no longer reads every
+  // 40 settled players: each still gets its quiet look once in 300 beats (30 s), but a beat no longer reads every
   // player's id from the game (four reads a player a beat before, most of the loop's cost with 40 online).
   const was = mc.players;
   const crowd = [...Array(40)].map(() => joined());
@@ -3545,10 +3579,11 @@ test("a beat walks only the players changing and the quiet ones whose turn it is
     p.getComponent = (name) => (name === "minecraft:inventory" && looks.set(p, looks.get(p) + 1), get(name));
   }
   try {
-    advance(100); // 50 beats
+    advance(600); // 300 beats
     const n = [...looks.values()];
     assert.ok(n.every((k) => k >= 1), "every quiet player is still looked at");
-    assert.ok(reads <= 40 * 10, `${reads} id reads in 50 beats for 40 quiet players`);
+    // One quiet look each (about 10 reads) and the roster's re-read every 100 ticks (one read a player each time).
+    assert.ok(reads <= 40 * 20, `${reads} id reads in 300 beats for 40 quiet players`);
   } finally {
     for (const p of crowd) p.getComponent = gets.get(p);
     mc.players = was;

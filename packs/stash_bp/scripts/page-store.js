@@ -12,21 +12,62 @@ const ENTITY = "realm:stash_page_store";
 
 export class InventoryRecoveryError extends Error {}
 
+/** @type {((entity: import("@minecraft/server").Entity) => void) | undefined} */
+let itemSpawned;
+/** The pack's one entitySpawn listener also hands dropped items to pages.js (its dropped-button check). @param {(entity: import("@minecraft/server").Entity) => void} handler */
+export function onItemSpawn(handler) {
+  itemSpawned = handler;
+}
+
 // Storage entities exist only inside one synchronous save or load, so any that spawns or loads later
 // is a stray (older versions leaked them into the Overworld from the Nether and the End).
-for (const signal of [world.afterEvents.entityLoad, world.afterEvents.entitySpawn]) {
-  signal?.subscribe(({ entity }) => {
+world.afterEvents.entityLoad?.subscribe(({ entity }) => {
+  try {
+    if (entity.typeId === ENTITY) removeStage(entity);
+  } catch {
+    // already gone
+  }
+});
+world.afterEvents.entitySpawn.subscribe(({ entity }) => {
+  let type;
+  try {
+    type = entity.typeId;
+  } catch {
+    return; // already gone
+  }
+  if (type === ENTITY) {
     try {
-      if (entity.isValid && entity.typeId === ENTITY) removeStage(entity);
+      removeStage(entity);
     } catch {
       // already gone
     }
-  });
+  } else if (type === "minecraft:item") itemSpawned?.(entity);
+});
+
+/**
+ * The parsed index per player, so the many reads of one look parse it once: the property is still read every time
+ * (whatever wrote it), and parsed again only when its text changed. writeState drops the entry before every write. The
+ * cached state is frozen: callers copy it before changing anything (`{ ...old, ... }`), so a stray write throws instead
+ * of changing what later reads see. Keyed by the player object (the same one every tick), so a read costs no id lookup.
+ * @type {WeakMap<Player, { raw: string, state: State }>}
+ */
+const stateCache = new WeakMap();
+
+/** @template T @param {T} value @returns {T} */
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value)) deepFreeze(v);
+  }
+  return value;
 }
 
 /** @param {Player} player @returns {State} */
 export function stateOf(player) {
   const raw = player.getDynamicProperty(STATE);
+  const known = stateCache.get(player);
+  if (known && raw === known.raw) return known.state;
+  stateCache.delete(player);
   if (raw === undefined) {
     const cur = player.getDynamicProperty("stash:cur");
     if (cur !== undefined && (typeof cur !== "number" || !Number.isInteger(cur) || cur < 1 || cur > 25)) throw new Error("invalid legacy active page");
@@ -39,6 +80,7 @@ export function stateOf(player) {
   for (const ref of Object.values(state.pages)) {
     if (!ref || (ref.layout !== undefined && ref.layout !== 2)) throw new Error("unsupported saved page layout");
   }
+  stateCache.set(player, { raw, state: deepFreeze(state) });
   return state;
 }
 
@@ -197,6 +239,7 @@ function fitIndex(state) {
 /** A single property is the commit point for every page changed in an operation. @param {Player} player @param {State} state */
 function writeState(player, state) {
   const text = JSON.stringify(fitIndex(state));
+  stateCache.delete(player);
   player.setDynamicProperty(STATE, text);
   if (player.getDynamicProperty(STATE) !== text) throw new Error("page index readback failed");
 }
@@ -330,21 +373,40 @@ const RETIRE_MAX = 1500;
 const RETIRE_PER_SWEEP = 32;
 const minutesNow = () => Math.floor(Date.now() / 60000);
 
+/**
+ * The queue lives in memory: read from the world once (on first use, after the world has loaded) and written back at
+ * most once a second. A busy page used to read, parse and rewrite up to 1,500 entries for every replaced snapshot. A
+ * retirement not yet written when the server stops leaves one unreferenced structure behind, as a crash always could.
+ * @type {[number, number][] | undefined} [snapshot number, minute retired]
+ */
+let retired;
+let retiredDirty = false;
+
 /** @returns {[number, number][]} [snapshot number, minute retired] */
 function retiredQueue() {
+  if (retired) return retired;
   try {
     const raw = world.getDynamicProperty(RETIRED);
     const list = typeof raw === "string" ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list.filter((e) => Array.isArray(e) && Number.isSafeInteger(e[0]) && Number.isSafeInteger(e[1])) : [];
+    retired = Array.isArray(list) ? list.filter((e) => Array.isArray(e) && Number.isSafeInteger(e[0]) && Number.isSafeInteger(e[1])) : [];
   } catch {
-    return [];
+    retired = [];
   }
+  return retired;
 }
 
-/** @param {[number, number][]} list */
-function writeRetired(list) {
-  world.setDynamicProperty(RETIRED, list.length ? JSON.stringify(list) : undefined);
+/** Writes the queue now if it changed since the last write (every second anyway). */
+export function flushRetired() {
+  if (!retiredDirty || !retired) return;
+  retiredDirty = false;
+  try {
+    world.setDynamicProperty(RETIRED, retired.length ? JSON.stringify(retired) : undefined);
+  } catch (e) {
+    retiredDirty = true;
+    console.warn(`[stash] retired snapshot queue not saved yet: ${e}`);
+  }
 }
+system.runInterval(flushRetired, 20);
 
 /**
  * A committed page's replaced snapshot: deleted RETIRE_MINUTES later by the sweep, so an index restored from an older
@@ -359,7 +421,7 @@ export function retireSnapshot(ref) {
     const list = retiredQueue();
     list.push([Number(n), minutesNow()]);
     while (list.length > RETIRE_MAX) discardSnapshot({ id: `stash:page_${/** @type {[number, number]} */ (list.shift())[0]}`, slots: [] });
-    writeRetired(list);
+    retiredDirty = true;
   } catch (e) {
     console.warn(`[stash] snapshot ${ref.id} kept, not retired: ${e}`);
   }
@@ -367,8 +429,8 @@ export function retireSnapshot(ref) {
 
 system.runInterval(() => {
   const list = retiredQueue();
-  if (!list.length) return;
   const now = minutesNow();
+  if (!list.length || now - list[0][1] < RETIRE_MINUTES) return; // the oldest is not due yet, so none is
   let done = 0;
   try {
     while (done < list.length && done < RETIRE_PER_SWEEP && now - list[done][1] >= RETIRE_MINUTES) {
@@ -379,7 +441,11 @@ system.runInterval(() => {
   } catch (e) {
     console.warn(`[stash] retired snapshot sweep: ${e}`);
   }
-  if (done) writeRetired(list.slice(done));
+  if (done) {
+    list.splice(0, done);
+    retiredDirty = true;
+    flushRetired();
+  }
 }, 1200);
 
 /** @param {Player} player @param {Entry[]} entries @returns {Ref} */

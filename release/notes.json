@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Quick Stack & Sort costs the server much less while you mine on a nearly full inventory page: auto-store moves pickups at most once a second, all together.",
     "Fishing costs the server much less: one pack follows each bobber and shares every catch with Skills, the Journal, Daily Quests and Story Questlines.",
     "Side HUD: the right-side boxes now show on short phone screens when the Minimap radar is hidden.",
     "Rain Charm and Tide Boots now work on beaches and on sandstone paths in the rain.",
@@ -49,8 +50,8 @@
       "notes": "Removed an unused import."
     },
     "stash_bp": {
-      "version": "1.9.6",
-      "notes": "The inventory page buttons are hidden from the creative inventory and the give command."
+      "version": "1.9.7",
+      "notes": "Auto-store moves pickups to your other pages at most once a second (several pickups in one save) and looks only after an inventory change; a lost page button is put back within 30 s instead of 5 s. The pack reads and saves its page index and retired-snapshot list far less often."
     },
     "npc_bp": {
       "version": "1.9.5",
