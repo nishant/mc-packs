@@ -765,7 +765,10 @@ export function startPreviewLoop() {
                 const paletteOn   = paletteSrc && paletteSrc !== "disable";
                 const paletteDist = paletteOn ? getDistributionMode(player) : "";
 
-                const contextKey = `${state.mode}|${state.anchor.x},${state.anchor.y},${state.anchor.z}|${state.secondAnchor ? `${state.secondAnchor.x},${state.secondAnchor.y},${state.secondAnchor.z}` : "~"}|${state.blockTypeId}|${previewMode}|${creative ? 1 : 0}|${replaceBlocks ? 1 : 0}|${totalDurabRemaining}|${yawQ}|${paletteSrc}|${paletteDist}|${drawQ}|${getModifierCacheKey(player)}`;
+                // No draw cadence (drawQ) in the key: the solve itself changes the cadence (previewTierQ), so a key
+                // with it never found its own solve again and re-solved about every 13 ticks while the aim rested
+                // (BSE-28). Each cached entry keeps its own particle id.
+                const contextKey = `${state.mode}|${state.anchor.x},${state.anchor.y},${state.anchor.z}|${state.secondAnchor ? `${state.secondAnchor.x},${state.secondAnchor.y},${state.secondAnchor.z}` : "~"}|${state.blockTypeId}|${previewMode}|${creative ? 1 : 0}|${replaceBlocks ? 1 : 0}|${totalDurabRemaining}|${yawQ}|${paletteSrc}|${paletteDist}|${getModifierCacheKey(player)}`;
 
                 const cacheKey = `${contextKey}|${targetKey}`;
                 const cached   = previewCache.get(player.id);
