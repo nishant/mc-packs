@@ -15,7 +15,7 @@ export const PREVIEW = 4;
 /** `since`: stored at or after this tick counts as done (default: when the plan was made). @typedef {{ wx: number, wz: number, key: number, resolution?: number, store?: Store, since?: number, stale?: boolean, queuedAt?: number }} Pick */
 /** @typedef {{ kind: string, y: number, depth: number, palette?: number, tick: number, valid?: boolean, source?: string, acquiredAtMs?: number, persistedRevision?: number, glyph?: string, wx?: number, wz?: number, visible?: boolean }} Col */
 /** @typedef {{ glyph: string, tick: number, wx: number, wz: number, visible?: boolean }} PreviewCol */
-/** `regions`: visual versions by region. `demandVer`: per-Store availability losses only; acquisition never restarts a partial scan. `demandRegions`: the same losses by region (demandVerAt), so a loss far from a plan leaves it alone. `viewedAt`: the last tick a radar used it. @typedef {{ id: string, cols: Map<number, Col>, preview: Map<number, PreviewCol>, previewCap: number, fine: Set<number>, coarse: Set<number>, ver: number, demandVer: number, demandRegions: Map<number, number>, used: number, viewedAt?: number, miss: Map<number, number>, previewMiss: Map<number, number>, regions: Map<number, number> }} Store */
+/** `regions`: visual versions by region. `demandVer`: per-Store availability losses only; acquisition never restarts a partial scan. `lossX`/`lossZ`/`lossSeq`: where the last LOSS_LOG losses were (lostNear), so a loss outside a plan's circle leaves it alone. `viewedAt`: the last tick a radar used it. @typedef {{ id: string, cols: Map<number, Col>, preview: Map<number, PreviewCol>, previewCap: number, fine: Set<number>, coarse: Set<number>, ver: number, demandVer: number, lossSeq: number, lossX?: Float64Array, lossZ?: Float64Array, used: number, viewedAt?: number, miss: Map<number, number>, previewMiss: Map<number, number>, regions: Map<number, number> }} Store */
 
 /** Ticks before a column whose chunk wasn't loaded is read again. */
 export const MISS_RETRY = 5;
@@ -28,11 +28,14 @@ function bumpStoreRegions(s, wx, wz, resolution) {
   s.ver++;
   for (const k of new Set([regionKey(wx, wz), regionKey(wx + resolution, wz), regionKey(wx, wz + resolution)])) s.regions.set(k, (s.regions.get(k) ?? 0) + 1);
 }
-/** A column that was available is not any more (evicted or invalidated): the store's and its region's demand versions go up. @param {Store} s @param {number} wx @param {number} wz */
+/** Losses a store remembers by place (lostNear): a planner checked every few ticks looks at far fewer. */
+export const LOSS_LOG = 4096;
+/** A column that was available is not any more (evicted or invalidated): the demand version goes up and the place is logged. @param {Store} s @param {number} wx @param {number} wz */
 function loseDemand(s, wx, wz) {
   s.demandVer++;
-  const k = regionKey(wx, wz);
-  s.demandRegions.set(k, (s.demandRegions.get(k) ?? 0) + 1);
+  const i = s.lossSeq++ % LOSS_LOG;
+  (s.lossX ??= new Float64Array(LOSS_LOG))[i] = wx;
+  (s.lossZ ??= new Float64Array(LOSS_LOG))[i] = wz;
 }
 /** Evictions a store over its cap makes at most per trim() call (HUD-07: one a tick left radars blank for minutes). */
 export const TRIM_BATCH = 256;
@@ -130,7 +133,7 @@ export class TerrainWorld {
     let s = this.stores.get(id);
     if (!s) {
       if (altitude !== undefined && !this.#dropOldLayer()) throw new Error("All terrain layer slots are retained");
-      s = { id, cols: new Map(), preview: new Map(), previewCap: this.maxPreview, fine: new Set(), coarse: new Set(), ver: 0, demandVer: 0, demandRegions: new Map(), used: 0, miss: new Map(), previewMiss: new Map(), regions: new Map() };
+      s = { id, cols: new Map(), preview: new Map(), previewCap: this.maxPreview, fine: new Set(), coarse: new Set(), ver: 0, demandVer: 0, lossSeq: 0, used: 0, miss: new Map(), previewMiss: new Map(), regions: new Map() };
       this.stores.set(id, s);
     }
     s.used = ++this.clock;
@@ -319,17 +322,21 @@ export class TerrainWorld {
     return n;
   }
   /**
-   * What a plan around (x, z) depends on for availability: the sum of the region demand versions within `reach`
-   * blocks. A column evicted or invalidated far away (the oldest columns, behind a traveler) leaves it alone, so the
-   * planner keeps its incremental path at the store cap (HUD-29).
-   * @param {Store} s @param {number} x @param {number} z @param {number} reach
+   * Did a column within `reach` blocks of (x, z) stop being available (evicted or invalidated) since loss number
+   * `since` (a plan's store.lossSeq when it was made)? A column evicted outside the circle (the oldest ones, behind a
+   * traveler) leaves the plan alone, so the planner keeps its incremental path at the store cap (HUD-29). True when
+   * the log no longer reaches back that far.
+   * @param {Store} s @param {number} since @param {number} x @param {number} z @param {number} reach
    */
-  demandVerAt(s, x, z, reach) {
-    let n = 0;
-    const x0 = Math.floor((x - reach) / REGION), x1 = Math.floor((x + reach) / REGION);
-    const z0 = Math.floor((z - reach) / REGION), z1 = Math.floor((z + reach) / REGION);
-    for (let rx = x0; rx <= x1; rx++) for (let rz = z0; rz <= z1; rz++) n += s.demandRegions.get((rx + 2 ** 20) * 2 ** 21 + (rz + 2 ** 20)) ?? 0;
-    return n;
+  lostNear(s, since, x, z, reach) {
+    if (!(since >= 0) || since > s.lossSeq || s.lossSeq - since > LOSS_LOG) return true;
+    const lx = s.lossX, lz = s.lossZ, r2 = reach * reach;
+    if (!lx || !lz) return false;
+    for (let n = since; n < s.lossSeq; n++) {
+      const i = n % LOSS_LOG, dx = lx[i] - x, dz = lz[i] - z;
+      if (dx * dx + dz * dz <= r2) return true;
+    }
+    return false;
   }
   /**
    * Brings every store over the cap back under it, at most `limit` evictions a call (oldest columns first, a column
