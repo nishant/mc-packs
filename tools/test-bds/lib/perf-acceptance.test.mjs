@@ -4,25 +4,30 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "node:test";
-import { evaluateLegacyLog, evaluatePerf, evaluatePerfBudgets, WORKLOAD_SCHEMA } from "./perf-acceptance.mjs";
+import { evaluateLegacyLog, evaluatePerf, evaluatePerfBudgets, perfSoakArgs, phaseSeconds, WORKLOAD_SCHEMA } from "./perf-acceptance.mjs";
 import { Profile } from "./profile-report.mjs";
 
 const soakFile = path.join(import.meta.dirname, "..", "examples", "perf-soak.js");
 const soak = (await import(pathToFileURL(soakFile).href)).default;
 
 /** A stand-in for the harness's `t`: instant time, simulated players that can fail to spawn or drop out. */
-function fakeHarness({ players, seconds, failSpawn = () => false, dropAt = () => Infinity, group = 5 }) {
+function fakeHarness({ players, seconds, failSpawn = () => false, dropAt = () => Infinity, group = 5, args = {}, packs = [] }) {
   let tick = 0;
-  const reports = [], checks = [], logs = [];
+  const reports = [], checks = [], logs = [], server = [], cmds = [], actions = [];
   let spawnedIndex = 0;
-  const dim = { runCommand: () => ({ successCount: 1 }), getBlock: () => ({}) };
+  const dim = {
+    runCommand: () => ({ successCount: 1 }), getBlock: () => ({}), getWeather: () => "Clear",
+    getTopmostBlock: () => ({ location: { y: 63 } }),
+    spawnEntity: () => { actions.push("summon"); let alive = true; return { get isValid() { return alive; }, kill() { alive = false; actions.push("mobKill"); } }; },
+  };
   const t = {
-    args: { players: String(players), seconds: String(seconds), group: String(group), water: "2", nether: "2", commands: "0" },
-    packs: [],
+    args: { players: String(players), seconds: String(seconds), group: String(group), water: "2", nether: "2", commands: "0", ...args },
+    packs,
+    mc: { ItemStack: class { constructor(id, n) { Object.assign(this, { id, n }); } }, Direction: { Up: "Up" } },
     get tick() { return tick; },
-    world: { getDimension: () => dim, getDefaultSpawnLocation: () => ({ x: 163, y: 70, z: 170 }), getDynamicProperty: () => undefined },
-    server: () => ({ ok: true }),
-    cmd: () => ({ ok: true }),
+    world: { getDimension: () => dim, getDefaultSpawnLocation: () => ({ x: 163, y: 70, z: 170 }), getDynamicProperty: () => undefined, getTimeOfDay: () => 6000 },
+    server: (c) => { server.push(c); return { ok: true }; },
+    cmd: (p, c) => { cmds.push(c); return { ok: true }; },
     log: (...a) => logs.push(a.join(" ")),
     report: (name, data) => reports.push({ name, data: JSON.parse(JSON.stringify(data)) }),
     wait: async (n) => { tick += n; },
@@ -31,16 +36,22 @@ function fakeHarness({ players, seconds, failSpawn = () => false, dropAt = () =>
     async player(name, o) {
       if (failSpawn(name)) throw new Error(`chunk at ${o.x},${o.z} did not load in 400 ticks`);
       const index = ++spawnedIndex;
+      let gone = false;
       return {
-        location: { x: o.x ?? 0, y: o.y ?? 64, z: o.z ?? 0 },
-        get isValid() { return tick < dropAt(index); },
+        name, location: { x: o.x ?? 0, y: o.y ?? 64, z: o.z ?? 0 },
+        get isValid() { return !gone && tick < dropAt(index); },
         moveToLocation() {}, lookAtLocation() {}, jump() {}, stopMoving() {}, isSneaking: false,
+        getComponent: () => ({ container: { setItem() {} }, currentValue: 20 }),
+        disconnect() { gone = true; actions.push(`leave ${name}`); },
+        kill() { actions.push(`kill ${name}`); }, respawn() { actions.push(`respawn ${name}`); },
+        teleport(_, d) { actions.push(`teleport ${name}`); },
+        lookAtBlock() {}, breakBlock() {}, stopBreakingBlock() {}, useItemInSlotOnBlock() {},
       };
     },
     assert(cond, msg) { if (!cond) throw new Error(`assert: ${msg}`); },
     check(cond, msg) { checks.push({ cond: !!cond, msg }); return !!cond; },
   };
-  return { t, reports, checks, logs, now: () => tick };
+  return { t, reports, checks, logs, server, cmds, actions, now: () => tick };
 }
 
 const profileFor = (h, extra = {}) => ({ ticks: h.now(), packs: [{ pack: "x_bp", startTick: 0, endTick: h.now() }], ...extra });
@@ -237,4 +248,56 @@ test("perf budgets: the Realm Bundle profiled as one context is judged by the wh
   const v = run([[40, report({ bundle: 2.772, packs: { realm_bundle: 2.772 } })]]);
   assert.equal(v.ok, true, [...v.invalid, ...v.over].join("\n"));
   assert.match(run([[40, report({ bundle: 5.2, packs: { realm_bundle: 5.2 } })]]).over.join("\n"), /whole bundle @40/);
+});
+
+test("the soak pins noon and clear weather, and reports the world it measured (UTL-01)", async () => {
+  const h = fakeHarness({ players: 6, seconds: 10 });
+  await soak(h.t);
+  for (const c of ["/gamerule dodaylightcycle false", "/time set 6000", "/gamerule doweathercycle false", "/weather clear 1000000"]) assert.ok(h.server.includes(c), `${c} in ${h.server.join(", ")}`);
+  const w = h.reports.at(-1).data;
+  assert.deepEqual(w.world, { time: 6000, weather: "clear", start: { timeOfDay: 6000, weather: "Clear" }, end: { timeOfDay: 6000, weather: "Clear" } });
+  assert.equal(w.phases, undefined, "no phases without phases=1");
+  const free = fakeHarness({ players: 6, seconds: 10, args: { time: "-1", weather: "none" } });
+  await soak(free.t);
+  assert.ok(!free.server.some((c) => /^\/time|^\/weather/.test(c)), free.server.join(", "));
+});
+
+test("phases=1: empty, one, ramp, steady and churn; churned players never fail retention, and acceptance judges the steady window (PIPE-04)", async () => {
+  const h = fakeHarness({ players: 12, seconds: 10, args: { phases: "1", night: "5" }, packs: ["help_bp", "settings_bp"] });
+  await soak(h.t);
+  assert.ok(h.checks.every((c) => c.cond), JSON.stringify(h.checks.filter((c) => !c.cond)));
+  const w = h.reports.at(-1).data;
+  assert.deepEqual(w.phases.map((p) => p.name), ["empty", "one", "ramp", "steady", "churn", "night"]);
+  const by = Object.fromEntries(w.phases.map((p) => [p.name, p]));
+  assert.equal(by.empty.endTick - by.empty.startTick, 400);
+  assert.equal(by.empty.players, 0);
+  assert.equal(by.one.endTick - by.one.startTick, 600);
+  assert.equal(by.one.players, 1);
+  assert.deepEqual([by.steady.startTick, by.steady.endTick], [w.soak.startTick, w.soak.endTick]);
+  assert.equal(by.churn.endTick - by.churn.startTick, 1200);
+  assert.equal(by.night.endTick - by.night.startTick, 100);
+  assert.ok(by.ramp.startTick >= by.one.endTick && by.ramp.endTick <= by.steady.startTick);
+  assert.equal(w.retention.minValid, 12);
+  assert.equal(w.retention.endValid, 12);
+  const c = w.churn;
+  assert.ok(c.left >= 10 && c.rejoined === c.left && c.rejoinFailed === 0, JSON.stringify(c));
+  assert.ok(c.minValid < 12, "a player was out during the churn");
+  assert.equal(c.endValid, 12, "every churned player came back");
+  assert.deepEqual([c.deaths, c.respawns, c.dimensionChanges], [2, 2, 4]);
+  assert.equal(c.mobsSummoned, 400);
+  assert.equal(c.mobsKilled, 400);
+  assert.deepEqual(c.menus, ["/realm:help", "/realm:prefs", "/realm:config"]);
+  assert.ok(h.server.includes("/time set 18000") && h.server.includes("/weather thunder 1000000"), "the night is a thunderstorm");
+  const verdict = evaluatePerf({ args: h.t.args, workload: w, profile: profileFor(h) });
+  assert.deepEqual(verdict.reasons, []);
+});
+
+test("suite --perf: extra perf-soak arguments and the seconds their phases add to the time limit", () => {
+  assert.deepEqual(perfSoakArgs(["phases=1"], " night=60  "), ["phases=1", "night=60"]);
+  assert.deepEqual(perfSoakArgs(undefined, undefined), []);
+  assert.throws(() => perfSoakArgs(["phases"], ""), /not key=value/);
+  assert.equal(phaseSeconds([]), 0);
+  assert.equal(phaseSeconds(["phases=1"]), 120);
+  assert.equal(phaseSeconds(["phases=1", "night=60", "churn=30"]), 150);
+  assert.equal(phaseSeconds(["night=60"]), 60);
 });

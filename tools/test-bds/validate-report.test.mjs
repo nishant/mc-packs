@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { missingJobs, profileDetails, rssSummary, suiteSummary } from "./validate-report.mjs";
+import { missingJobs, phaseTable, profileDetails, rssSummary, scenarioPerfTables, suiteSummary } from "./validate-report.mjs";
+import { scenarioPerf } from "./lib/profile-report.mjs";
 
 test("rssSummary reads start, 10 minutes, end, max and growth in MB", () => {
   const lines = Array.from({ length: 121 }, (_, i) => `${1000 + i * 10} ${1024 * (1000 + (i === 50 ? 900 : i))}`).join("\n");
@@ -137,4 +138,40 @@ test("flaky scenarios are named with both durations, and the history keeps the l
   assert.deepEqual(h.runs.at(-1).flaky, ["b"]);
   assert.deepEqual(h.top, [{ name: "a", times: 19 }, { name: "b", times: 10 }]);
   assert.deepEqual(flakyHistory(null, [], 10).top, []);
+});
+
+test("phaseTable shows every phase with the head's percentiles, the base's average, the pinned world and the churn (PIPE-04)", () => {
+  const win = (avg, max) => ({ ticks: 400, avg, p50: avg, p95: avg * 2, p99: avg * 3, max, over50: 0 });
+  const head = {
+    bundle: { phases: ["empty", "one", "ramp", "steady", "churn", "night"].map((name, i) => ({ name, players: [0, 1, 40, 40, 39, 40][i], bundle: win(0.5 + i, 10 + i) })) },
+    workload: { world: { time: 6000, weather: "clear", start: { timeOfDay: 6000, weather: "Clear" }, end: { timeOfDay: 6000, weather: "Clear" } }, churn: { left: 11, rejoined: 11, rejoinFailed: 0, deaths: 2, respawns: 2, dimensionChanges: 4, broken: 50, placed: 48, mobsSummoned: 400, mobsKilled: 400, menus: ["/realm:help"], minValid: 39, endValid: 40 } },
+  };
+  const base = { bundle: { steadyWindow: { avg: 3.25 } } };
+  const text = phaseTable(head, base).join("\n");
+  for (const name of ["empty", "one", "ramp", "steady (judged)", "churn", "night"]) assert.ok(text.includes(`| ${name} |`), name);
+  assert.match(text, /\| steady \(judged\) \| 40 \| 400 \| 3\.250 \| 3\.500 \| 3\.5 \| 7 \| 10\.5 \| 13 \| 0 \|/, text);
+  assert.match(text, /\| churn \| 39 \| 400 \| - \| 4\.500 \|/);
+  assert.match(text, /World: time 6000, weather clear; over the steady window the time went 6000 -> 6000/);
+  assert.match(text, /Churn \(not judged.*11 left and 11 rejoined, 2 deaths/);
+  assert.deepEqual(phaseTable({ bundle: {} }), [], "no phases, no table");
+});
+
+test("profiled suite scenarios keep their figures: one table each, against the previous validation (PIPE-10)", () => {
+  const prof = {
+    ticks: 2400, acceptance: { ok: true }, process: { cpuMsPerTick: 9.5 },
+    bundle: { msPerTick: 0.9, perTick: { ticks: 2400, avg: 0.9, p50: 0.5, p95: 2, p99: 4, max: 12, over50: 0 }, steadyWindow: { ticks: 1200, avg: 0.8, p50: 0.5, p95: 2, p99: 3, max: 9, over50: 0 }, phases: [{ name: "dusk", bundle: { ticks: 100, avg: 0.2, p95: 1, max: 2 } }] },
+    packs: [{ pack: "a_bp", msPerTick: 0.1, steadyMsPerTick: 0.05, p95TickMs: 1, maxTickMs: 2 }, { pack: "b_bp", msPerTick: 0.2, steadyMsPerTick: 0.3, p95TickMs: 2, maxTickMs: 5 }],
+  };
+  const perf = scenarioPerf(prof);
+  assert.equal(perf.steady.avg, 0.8);
+  assert.deepEqual(perf.packs.map((p) => p.pack), ["b_bp", "a_bp"], "dearest first by the steady figure");
+  assert.equal(scenarioPerf({ packs: [] }), null);
+  const s = suiteSummary([{ results: [{ name: "night-soak", result: "pass", seconds: 200, perf }, { name: "town-perf", result: "flaky", seconds: 100, perf: { ...perf, msPerTick: 9 }, retry: { seconds: 90, perf: { ...perf, msPerTick: 1.5 } } }, { name: "smoke", result: "pass", seconds: 5 }] }]);
+  assert.equal(s.results.find((r) => r.name === "town-perf").perf.msPerTick, 1.5, "the clean rerun's figures");
+  const text = scenarioPerfTables(s.results, { results: [{ name: "night-soak", perf: { steady: { avg: 0.7 } } }] }).join("\n");
+  assert.match(text, /\*\*night-soak\*\*: 0\.800 ms\/tick over the steady window \(p95 2 \/ p99 3 \/ max 9 ms, 1200 ticks\); whole run 0\.900; previous validation 0\.700; bedrock_server 9\.500/);
+  assert.match(text, /Phases: dusk 0\.200/);
+  assert.match(text, /\| b_bp \| 0\.200 \| 0\.300 \| 2 \| 5 \|/);
+  assert.match(text, /\*\*town-perf\*\*.*previous validation -/);
+  assert.ok(!text.includes("smoke"), "unprofiled scenarios have no table");
 });
