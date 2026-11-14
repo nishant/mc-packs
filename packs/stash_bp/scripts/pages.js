@@ -1082,7 +1082,7 @@ world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
     const buttonish = onPage && (BUTTON_SLOTS.includes(slot) || isButton(event.beforeItemStack) || isButton(event.itemStack));
     // A hotbar change matters to auto-store only on a page down to its last few free slots, whose look also totals
     // everything carried: a stack dropped from the hotbar must be seen before the next pickup is counted against it.
-    if (onPage || snapshots.get(id)?.live) wake(player, buttonish);
+    if (onPage || nearFull(id)) wake(player, buttonish);
     if (!buttonish) return;
     if (!player.isValid || dead.has(id) || reconciling.has(id) || switching.has(id)) return;
     if (buttonState.get(id) !== true || !buttonsWanted(player) || !inventoryReady(player)) return;
@@ -1758,9 +1758,9 @@ const storedAt = new Map();
 /**
  * The players with a look due. An inventory change asks for a look on the next beat (the layout, the page count and the
  * buttons: a few native calls) and one more FOLLOW_TICKS after the last change, which sees a button slot that changed
- * after its event. Only one look in STORE_GAP also runs auto-store (the page and, near a full page, everything carried:
- * 40 to 60 item reads), so a miner's pickups are looked at once a second, not every 10 ticks as before, and none is
- * missed: a change that only a look without auto-store saw asks for one when the second is up. A player without their
+ * after its event. On a page near full (see nearFull) only one look in STORE_GAP also runs auto-store (the page and
+ * everything carried: 40 to 60 item reads), so a miner's pickups are looked at once a second, not every 10 ticks as
+ * before, and none is missed: a change that only a look without auto-store saw asks for one when the second is up. A player without their
  * buttons yet (a new player, a respawn, a page count change) is looked at every beat until they have them. Button clicks
  * themselves are handled by the inventory event at once (above). Before, every player whose inventory changed in the
  * last second was looked at every 2 ticks.
@@ -1776,9 +1776,16 @@ function dueOf(player, id) {
   return d;
 }
 /**
- * The player's inventory (or a setting of this pack) changed: look with auto-store as soon as its second allows, and
- * once more a second later. `urgent` (a button slot or a button changed, a setting, a spawn), or a player without their
- * buttons in place, gets a look on the next beat even when auto-store has to wait.
+ * Was the player's page down to LIVE_MARGIN free slots or fewer at the last auto-store look? Only then is auto-store held
+ * to one look a second: a page with more room is looked at after every change, as before, so the look before a burst
+ * of new stacks (the baseline its pickups are told apart by) is never skipped. @param {string} id
+ */
+const nearFull = (id) => !!snapshots.get(id)?.live;
+/**
+ * The player's inventory (or a setting of this pack) changed: look on the next beat, with auto-store unless the page is
+ * near full and its second since the last auto-store look is not up (then that look comes when it is), and once more a
+ * second later. `urgent` (a button slot or a button changed, a setting, a spawn), or a player without their buttons in
+ * place, gets a look on the next beat even when auto-store has to wait.
  * @param {Player} player @param {boolean} [urgent]
  */
 function wake(player, urgent = true) {
@@ -1786,7 +1793,7 @@ function wake(player, urgent = true) {
   const id = player.id;
   const d = dueOf(player, id);
   d.change = now;
-  d.at = Math.min(d.at, urgent || !buttonState.has(id) ? now + 1 : Math.max(now + 1, d.store + STORE_GAP));
+  d.at = Math.min(d.at, urgent || !buttonState.has(id) || !nearFull(id) ? now + 1 : Math.max(now + 1, d.store + STORE_GAP));
 }
 /** A look at this tick (or the next beat after it), without counting as a change. @param {Player} player @param {number} at */
 function lookAt(player, at) {
@@ -1875,7 +1882,7 @@ system.runInterval(() => {
     }
     if (now < d.at) continue;
     d.at = Infinity;
-    const store = now >= d.store + STORE_GAP;
+    const store = now >= d.store + STORE_GAP || !nearFull(id);
     if (store) d.store = now;
     look(id, d.player, store, now);
     if (!buttonState.has(id)) d.at = Math.min(d.at, now + 2);
