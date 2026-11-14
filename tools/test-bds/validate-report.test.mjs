@@ -106,7 +106,7 @@ test("a planned suite shard with no artifact counts as a failure in the report",
 
 test("profileDetails prints CPU, watchdog, the tick histogram, the worst ticks, phases and per-pack rows", () => {
   const mod = (m) => Array.from({ length: m }, (_, i) => (i === 0 ? 4 : 1));
-  const histogram = { mod20: mod(20), mod40: mod(40), mod100: mod(100), mod200: mod(200), over5: 10, over5On20: 7, shareOver5On20: 0.7 };
+  const histogram = { mod20: mod(20), mod40: mod(40), mod100: mod(100), mod200: mod(200), over5: 10, over5On20: 7, shareOver5On20: 0.7, peak20: 0, over5OnPeak20: 7, shareOver5OnPeak20: 0.7 };
   const worst = [{ tick: 120, ms: 14, calls: [{ pack: "realm_bundle", key: "runInterval(20) tick @ map_bp/main.js:10", ms: 9 }] }];
   const head = {
     process: { cpuMsPerTick: 12.5 }, watchdog: { count: 3, byKind: { spike: 3 }, first: ["[scenario] spike"] },
@@ -117,7 +117,7 @@ test("profileDetails prints CPU, watchdog, the tick histogram, the worst ticks, 
   assert.match(md, /CPU ms\/tick .*base 12\.000 \/ head 12\.500/);
   assert.match(md, /base 0 \/ head 3 \(3 spike\)/);
   assert.match(md, /4 over 50 ms \(2 over 55\)/);
-  assert.match(md, /10 ticks over 5 ms, 7 of them on a multiple of 20 \(70%\)/);
+  assert.match(md, /10 ticks over 5 ms, 7 of them on a multiple of 20 \(70%\), 7 on the busiest residue 0 \(70%\)/);
   assert.match(md, /\| ms \| 4\.00 \| 1\.00/);
   assert.match(md, /`% 200`: 0 4\.00/);
   assert.match(md, /\| 120 \| 14 \| realm_bundle: `runInterval\(20\) tick @ map_bp\/main\.js:10` 9 \|/);

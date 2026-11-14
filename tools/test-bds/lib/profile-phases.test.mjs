@@ -61,6 +61,8 @@ test("tick histograms, the worst ticks with their heavy calls, and per-pack figu
   assert.equal(whole.histogram.mod200.length, 200);
   assert.equal(whole.histogram.over5, 3);
   assert.equal(whole.histogram.over5On20, 2);
+  assert.equal(whole.histogram.peak20, 0, "the busiest residue");
+  assert.equal(whole.histogram.over5OnPeak20, 2);
   assert.deepEqual(whole.worst.slice(0, 3).map((w) => [w.tick, w.ms]), [[100, 8], [120, 8], [105, 6]]);
   assert.deepEqual(whole.worst[2].calls, [{ pack: "realm_bundle", key: callbacks[1].key, ms: 6 }]);
   assert.deepEqual(out.bundle.byPath.map((p) => [p.pack, p.ms]), [["(other)", 38], ["map_bp", 16], ["stats_bp", 6]]);

@@ -21,9 +21,12 @@ export function tickHistogram(per, start) {
     per.forEach((v, i) => { const r = (((start + i) % m) + m) % m; sum[r] += v; n[r]++; });
     byMod[`mod${m}`] = sum.map((s, r) => (n[r] ? Math.round((1000 * s) / n[r]) / 1000 : 0));
   }
-  let over5 = 0, over5On20 = 0;
-  per.forEach((v, i) => { if (v > 5) { over5++; if ((start + i) % 20 === 0) over5On20++; } });
-  return { ...byMod, over5, over5On20, shareOver5On20: over5 ? over5On20 / over5 : 0 };
+  // The comb of 20-tick timers has a fixed offset against currentTick, not always 0: also name the busiest residue
+  // and the share of slow ticks that fall on it.
+  const peak20 = byMod.mod20.reduce((best, v, r, a) => (v > a[best] ? r : best), 0);
+  let over5 = 0, over5On20 = 0, over5OnPeak20 = 0;
+  per.forEach((v, i) => { if (v > 5) { over5++; const r = (start + i) % 20; if (r === 0) over5On20++; if (r === peak20) over5OnPeak20++; } });
+  return { ...byMod, over5, over5On20, shareOver5On20: over5 ? over5On20 / over5 : 0, peak20, over5OnPeak20, shareOver5OnPeak20: over5 ? over5OnPeak20 / over5 : 0 };
 }
 
 /**
@@ -375,7 +378,7 @@ export class Profile {
     const slow = steady ?? bundle;
     if (slow?.histogram) {
       const h = slow.histogram;
-      L.push(`  ${steady ? "steady window" : "whole run"}, ms by tick % 20: ${h.mod20.map((v) => v.toFixed(2)).join(" ")}; ${h.over5} ticks over 5 ms, ${h.over5On20} of them on a multiple of 20 (${(100 * h.shareOver5On20).toFixed(0)}%)`);
+      L.push(`  ${steady ? "steady window" : "whole run"}, ms by tick % 20: ${h.mod20.map((v) => v.toFixed(2)).join(" ")}; ${h.over5} ticks over 5 ms, ${h.over5On20} of them on a multiple of 20 (${(100 * h.shareOver5On20).toFixed(0)}%), ${h.over5OnPeak20} on the busiest residue ${h.peak20} (${(100 * h.shareOver5OnPeak20).toFixed(0)}%)`);
       for (const w of slow.worst.slice(0, 3)) L.push(`  worst tick ${w.tick} (${w.ms} ms): ${w.calls.slice(0, 4).map((c) => `${c.key} ${c.ms}`).join("; ") || "no single call of 1 ms or more"}`);
     }
     const events = scriptEventTotals(rows, ticks);

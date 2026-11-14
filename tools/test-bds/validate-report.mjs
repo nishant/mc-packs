@@ -90,7 +90,7 @@ export function profileDetails(head, base = null) {
   const steady = head.bundle?.steadyWindow ?? head.bundle?.perTick;
   const h = steady?.histogram;
   if (h) {
-    L.push("", `Steady window (${steady.ticks} ticks), average ms by \`tick % 20\`; ${h.over5} ticks over 5 ms, ${h.over5On20} of them on a multiple of 20 (${(100 * h.shareOver5On20).toFixed(0)}%):`, "");
+    L.push("", `Steady window (${steady.ticks} ticks), average ms by \`tick % 20\`; ${h.over5} ticks over 5 ms, ${h.over5On20} of them on a multiple of 20 (${(100 * h.shareOver5On20).toFixed(0)}%)${h.peak20 !== undefined ? `, ${h.over5OnPeak20} on the busiest residue ${h.peak20} (${(100 * h.shareOver5OnPeak20).toFixed(0)}%)` : ""}:`, "");
     L.push(`| % 20 | ${h.mod20.map((/** @type {number} */ _, /** @type {number} */ i) => i).join(" | ")} |`, `|---|${h.mod20.map(() => "---:").join("|")}|`, `| ms | ${h.mod20.map((/** @type {number} */ v) => v.toFixed(2)).join(" | ")} |`);
     const tops = ["mod40", "mod100", "mod200"].filter((k) => Array.isArray(h[k])).map((k) => `\`% ${k.slice(3)}\`: ${h[k].map((/** @type {number} */ v, /** @type {number} */ i) => [i, v]).sort((/** @type {number[]} */ a, /** @type {number[]} */ b) => b[1] - a[1]).slice(0, 5).map((/** @type {number[]} */ [i, v]) => `${i} ${v.toFixed(2)}`).join(", ")}`);
     if (tops.length) L.push("", `Highest residues (residue ms): ${tops.join("; ")}`);
