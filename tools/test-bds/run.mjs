@@ -3,6 +3,7 @@
 // See README.md. Exit codes: 0 pass, 1 scenario failed, 2 script errors, 3 timeout,
 // 4 server or harness problem, 64 bad arguments.
 import { isCaughtErrorWarning } from "./lib/caught.mjs";
+import { isPerfWarning, watchdogKind, watchdogSummary } from "./lib/watchdog.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -134,7 +135,7 @@ try {
   reservation = await reservePort(extra["server-port"] ? { fixed: Number(extra["server-port"]) } : {});
   port = reservation.port;
   if (extra["server-portv6"] && Number(extra["server-portv6"]) !== port + 1) throw new Error(`server-portv6 must be server-port + 1 (${port + 1}), not ${extra["server-portv6"]}`);
-  writeProps(serverDir, baseProps(port, extra));
+  writeProps(serverDir, baseProps(port, extra, { players: Number(scenarioArgs.players) || 0 }));
   const world = path.join(serverDir, "worlds", "world");
   copyTemplate(template, world, { flat: args.flat });
   const bpList = bps.map((p) => installBehaviorPack(p, serverDir, { shim: !args["no-shim"], profile: !!profile, relay: !args["no-relay"] }));
@@ -203,7 +204,13 @@ function onHarness(obj) {
       }
       done = obj;
       timings.scenarioDone = secs();
-      if (profile) { profile.finalDump(); setTimeout(finish, 5000); } else setTimeout(finish, 1000);
+      if (profile) {
+        // Finish as soon as every profiled pack's final row and all its parts (and the tick meter) have arrived; 5 s at most.
+        profile.finalDump();
+        const until = Date.now() + 5000;
+        const profiled = bps.filter((p) => (p.manifest?.modules || []).some((m) => m.type === "script" && m.entry)).length;
+        const poll = setInterval(() => { if (profile.complete(profiled) || Date.now() > until) { clearInterval(poll); finish(); } }, 100);
+      } else setTimeout(finish, 1000);
       return `[scenario] done: ${obj.ok ? "PASS" : "FAIL"} - ${obj.msg}`;
     default: return `[scenario] ${JSON.stringify(obj)}`;
   }
@@ -249,7 +256,15 @@ function onLine(raw) {
   }
   if (/may be in use by another process|Exiting program/.test(text)) fatal = text;
   let show = !args.quiet;
+  const wd = watchdogKind(text);
+  if (wd && isPerfWarning(wd)) {
+    // Spikes, slow scripts and slow ticks are measurements, not errors, whatever level BDS logs them at.
+    watchdog.push({ phase, kind: wd, text });
+    if (show) console.log(line);
+    return;
+  }
   if (level === "ERROR" && !BENIGN_ERRORS.some((r) => r.test(text))) {
+    if (wd) watchdog.push({ phase, kind: wd, text });
     show = true;
     if (text.startsWith(`[Scripting] Plugin [${HARNESS_PACK.name} - `)) {
       fatal = `the scenario or test pack failed to load: ${text}`;
@@ -265,9 +280,10 @@ function onLine(raw) {
   } else if (level === "WARN" && isCaughtErrorWarning(text)) {
     lastRecord = { phase, pack: attribute(text), text };
     warnErrors.push(lastRecord);
+    if (wd) watchdog.push({ phase, kind: wd, text });
     show = true;
-  } else if (/watchdog/i.test(text)) {
-    watchdog.push({ phase, text });
+  } else if (wd) {
+    watchdog.push({ phase, kind: wd, text });
     show = true;
   } else if (level === "WARN" && !text.startsWith("[Scripting]")) {
     show = true;
@@ -310,6 +326,7 @@ function summary(reason) {
   const allowed = (e) => allowPatterns.some((r) => r.test(e.text));
   const errs = scriptErrors.filter((e) => !allowed(e));
   const ignored = scriptErrors.length - errs.length;
+  if (profile) profile.setWatchdog(watchdogSummary(watchdog));
   const profileLines = profile ? profile.report() : [];
   let code = 0, verdict = "PASS";
   if (reason === "timeout") { code = 3; verdict = `TIMEOUT after ${timeoutS} s${startSent ? "" : " (scenario never started)"}`; }
@@ -347,7 +364,8 @@ function summary(reason) {
     for (const e of contentErrors.slice(0, 15)) L.push(`    [${e.phase}] ${short(e.text)}`);
   }
   if (watchdog.length) {
-    L.push(`watchdog: ${watchdog.length}`);
+    const s = watchdogSummary(watchdog);
+    L.push(`watchdog: ${watchdog.length} (${Object.entries(s.byKind).map(([k, n]) => `${n} ${k}`).join(", ")})`);
     for (const e of watchdog.slice(0, 5)) L.push(`    [${e.phase}] ${short(e.text)}`);
   }
   if (scenarioLines.length) {

@@ -15,7 +15,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
-/** @typedef {{ valid: boolean, bundle: number | null, tps: number | null, packs: Map<string, number>, incomplete: Set<string> }} Side */
+/** @typedef {{ valid: boolean, bundle: number | null, tps: number | null, cpu: number | null, packs: Map<string, number>, incomplete: Set<string> }} Side */
 
 /**
  * One player count from several suite --perf --json reports: valid when any report's soak was accepted; figures are
@@ -30,8 +30,10 @@ export function sideOf(reports, count) {
   const packs = new Map();
   /** Pack names a run lists, with or without a finite steady figure. */
   const listed = new Set();
-  let bundle = null, tps = null;
+  let bundle = null, tps = null, cpu = null;
   for (const run of runs) {
+    const c = run.process?.cpuMsPerTick;
+    if (Number.isFinite(c)) cpu = cpu === null ? c : Math.min(cpu, c);
     const b = run.bundle?.steadyWindow?.avg;
     if (Number.isFinite(b)) bundle = bundle === null ? b : Math.min(bundle, b);
     const t = run.server?.tps;
@@ -43,7 +45,7 @@ export function sideOf(reports, count) {
     }
   }
   const incomplete = new Set([...listed].filter((n) => !packs.has(n)));
-  return { valid: runs.length > 0 && bundle !== null, bundle, tps, packs, incomplete };
+  return { valid: runs.length > 0 && bundle !== null, bundle, tps, cpu, packs, incomplete };
 }
 
 /**
@@ -82,7 +84,7 @@ export function markdown(count, base, head, result, top = 15) {
     if (result.reason) L.push(`Reason: ${result.reason}`, "");
     return L.join("\n");
   }
-  L.push(`TPS base ${f(base.tps)} / head ${f(head.tps)}; steady soak window, lowest of the runs on each side.`, "");
+  L.push(`TPS base ${f(base.tps)} / head ${f(head.tps)}; bedrock_server CPU ms/tick (engine included, whole run) base ${f(base.cpu ?? null)} / head ${f(head.cpu ?? null)}; steady soak window, lowest of the runs on each side.`, "");
   L.push("| | base ms/tick | head ms/tick | change | |", "|---|---:|---:|---:|---|");
   for (const r of result.rows.slice(0, top + 1)) {
     const d = r.head - r.base;

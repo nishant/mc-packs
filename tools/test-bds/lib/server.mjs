@@ -74,8 +74,26 @@ export function writeProps(dir, props) {
   fs.writeFileSync(file, outLines.join("\n"));
 }
 
-/** Properties every harness run uses. Nethernet listens on TCP server-port (raknet needs IPv6 here). */
-export function baseProps(port, extra = {}) {
+/**
+ * The script watchdog's settings, written out so a BDS update cannot change them silently: BDS 1.26's documented
+ * defaults. The spike and slow-script warnings are off unless set (the perf soaks set them: suite.mjs --perf).
+ */
+export const WATCHDOG_PROPS = {
+  "script-watchdog-enable": "true",
+  "script-watchdog-enable-exception-handling": "true",
+  "script-watchdog-enable-shutdown": "true",
+  "script-watchdog-hang-exception": "true",
+  "script-watchdog-hang-threshold": 10000,
+  "script-watchdog-memory-warning": 100,
+  "script-watchdog-memory-limit": 250,
+};
+
+/**
+ * Properties every harness run uses. Nethernet listens on TCP server-port (raknet needs IPv6 here). `players` (the
+ * scenario's players argument) raises max-players to match: simulated players don't count against it, but the
+ * properties then describe the run.
+ */
+export function baseProps(port, extra = {}, { players = 0 } = {}) {
   return {
     "server-name": "BDS Harness",
     "level-name": "world",
@@ -90,12 +108,13 @@ export function baseProps(port, extra = {}) {
     "enable-lan-visibility": "false",
     "view-distance": 10,
     "tick-distance": 4,
-    "max-players": 20,
+    "max-players": Math.max(20, Math.floor(players) || 0),
     "player-idle-timeout": 0,
     "content-log-console-output-enabled": "true",
     "content-log-level": "info",
     "default-player-permission-level": "member",
     "emit-server-telemetry": "false",
+    ...WATCHDOG_PROPS,
     ...extra,
   };
 }
