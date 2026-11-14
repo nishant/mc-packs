@@ -111,11 +111,17 @@ export default async function (t) {
   // copy: sneak-clicks pick the blocks themselves as corners (the low corner, the far low corner, the far top corner)
   await pickMode(/Copy/i);
   const selectBox = async () => {
+    t.echoActionBar = true;
     p.isSneaking = true;
     await stand(a.x, a.z - 2);
+    let at = t.tick;
     await click({ x: a.x, y: Y, z: a.z }, Direction.North);
+    await waitBar(/copy_corner1/, at, 60);
     await stand(b.x + 2, b.z);
+    at = t.tick;
     await click({ x: b.x, y: Y, z: b.z }, Direction.East);
+    await waitBar(/copy_corner2/, at, 60);
+    t.echoActionBar = false;
     await stand(b.x - 1, b.z - 1, TOP + 1);
     const formP = t.waitForm(p, { timeout: 100 });
     p.setRotation({ x: 30, y: 0 });
