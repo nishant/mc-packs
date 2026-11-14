@@ -78,16 +78,3 @@ test("non-operators' manual scans stop at radius 128; operators keep the full ra
   assert.equal(f.api.manualScans.host.maxRadius(p), MANUAL_SCAN_MAX_RADIUS);
 });
 
-test("a mover with a long unread queue is rolled at most every 8 ticks, not every tick (map-radar-perf)", () => {
-  const f = fixture(1, { profile: { ...SPEED, ops: 1 } });
-  const p = f.roster[0];
-  const first = f.api.planFor(p, 1);
-  assert.ok(first.picks.length > 2 * 96, "a fresh circle is a long queue");
-  const before = f.api.counters().plansMade;
-  for (let tick = 2; tick <= 41; tick++) {
-    p.state.at = { ...p.state.at, z: p.state.at.z + 1 };
-    f.api.planFor(p, tick);
-  }
-  const made = f.api.counters().plansMade - before;
-  assert.ok(made >= 4 && made <= 6, `plans and rolls over 40 ticks of flight: ${made}`);
-});

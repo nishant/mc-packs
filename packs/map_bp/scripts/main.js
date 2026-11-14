@@ -106,11 +106,11 @@ class LabDisabledPersistence {
 }
 function experimentNative() { return EXP.palette === "native"; }
 /** @typedef {import("./terrain.js").Pick & {d:number,stale:boolean,queuedAt:number,visible?:boolean}} LabPick */
-/** @type {Map<string,{key:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,lossSeq?:number,rolledAt?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
+/** @type {Map<string,{key:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,lossSeq?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
 const labPlans = new Map();
 /** @type {Map<string,{storeId:string,x:number,z:number,sample:import("./detail-persistence.js").Raw,wall:number}>} */
 const labPendingWrites = new Map();
-const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rollDeferred:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
+const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
 const LAB_SAVE_LIMIT = 2048;
 
 /** Sorts fresh work without losing its original request age. Native4 can only seed one genuine2 anchor. */
@@ -1038,10 +1038,6 @@ const retryAt = new Map();
 /** Where each viewer was at their last check (their speed when the game reports none, as for a teleporting flier). @type {Map<string, { x: number, z: number, tick: number }>} */
 const lastPose = new Map();
 const PLAN_MIN_AGE = 4;
-/** A moving viewer's queue longer than this (picks still unread) is rolled again only ROLL_DEFER ticks after the last
- * roll or plan, or after ROLL_DEFER blocks of movement, whichever comes first. */
-const ROLL_BACKLOG = 2 * EXP.ops;
-const ROLL_DEFER = 8;
 /** Columns kept per store at least, and per viewer of it (40 viewers spread out need more than the minimum). */
 const STORE_MIN = 6000;
 const STORE_PER_VIEWER = 1200;
@@ -1462,15 +1458,12 @@ function planFor(player, now,trustedRoster=false) {
   let version="";
   const sameFootprint = state && state.key === geometryKey && state.x === at.x && state.z === at.z;
   if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*.75)**2&&keptDemand(store,state,pr.revealRadius)){
-    // A long queue still unread and a short move: keep reading it (picks that left the circle are skipped as they
-    // come up) instead of rolling the whole queue again now. A roll walks every queued pick, about 7 ms with a
-    // thousand of them on BDS, and rolling a flier every tick left no time to read anything (map-radar-perf).
-    if(old.picks.length-old.pos>ROLL_BACKLOG&&now-(state.rolledAt??old.at)<ROLL_DEFER&&(at.x-state.x)**2+(at.z-state.z)**2<ROLL_DEFER**2){labStats.rollDeferred++;return old;}
+    // The rounded position (and so the geometry) is often the same as last time for a walker.
     const geometry=state.key===geometryKey?state.geometry:northUpRadarGeometry(store.id,Math.round(at.x),Math.round(at.z),pr.radarRadius,R,state.geometry);
     const rerank=now>=(state.reorderAt??Infinity);
     const rolled=rollTerrainDemand({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,geometry,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed,rerank});
     if(rolled){old.picks=rolled.picks;old.pos=0;old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;old.rangeDeleted=undefined;
-      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.rolledAt=now;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh+STALE_BATCH);
+      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh+STALE_BATCH);
       if(rerank)state.reorderAt=now+80;if(rolled.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,rolled.nextRetry);retryAt.set(idOf(player),Math.min(retryAt.get(idOf(player))??Infinity,rolled.nextRetry));}
       labStats.rolled++;labStats.rollTail+=rolled.stats.tailVisited;labStats.rollEntered+=rolled.stats.entered;labStats.rollRawChecks+=rolled.stats.rawChecks;planTurn.made++;return old;
     }
