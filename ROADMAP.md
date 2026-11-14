@@ -2,6 +2,14 @@
 
 Open work only. Delete an entry in the PR that finishes it. (Items needed before a public release live in `docs/RELEASE_TODO.md`.)
 
+## Performance plan (November 2026)
+
+The performance audit of 2026-11-14 (244 findings: packs, bundle, resource packs, harness and CI) is in
+`docs/audits/2026-11-perf-audit/`. Its `PLAN.md` lists the open workstreams (W0 measurement first, then the shared
+modules, then per pack), their order and the targets; delete each workstream there in the PR that finishes it, and
+this entry with the last one. Implementation runs on Opus at medium effort. The website's half is in
+`nishant/hosting`, `minecraft/docs/perf-audit-2026-11/PLAN.md`.
+
 ## Finish the November 2026 audit
 
 The overnight audit of 2026-11-08 (report: `C:\Code\.audit\2026-11-08\mc-packs.md` on the PC, finding ids `MCP-nnn`) read only part
