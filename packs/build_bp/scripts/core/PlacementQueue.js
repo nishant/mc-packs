@@ -47,17 +47,32 @@ export function removePlayerBuildSpeed(playerId) {
  * item the player was charged for this block, given back if the write is finally given up. With `expect` (a cut), the
  * cell is written only while it still holds that type.
  */
-export function enqueue(playerId, dimensionId, pos, permutation, refund, expect) {
+export function enqueue(playerId, dimensionId, pos, permutation, refund, expect, jid) {
     let q = queues.get(playerId);
     if (!q) {
         q = { items: [], head: 0, sx: 0, sy: 0, sz: 0, miss: null, missDim: dimensionId, loader: null };
         queues.set(playerId, q);
     }
-    q.items.push({ dimensionId, pos, permutation, refund, expect, attempts: 0, tried: -1 });
+    q.items.push({ dimensionId, pos, permutation, refund, expect, jid, attempts: 0, tried: -1 });
     q.sx += pos.x; q.sy += pos.y; q.sz += pos.z;
     totalPending++;
 }
 export function queueSize() { return totalPending; }
+/** Drops the player's waiting writes of one job (an undo of a cut whose air is still queued). */
+export function cancelQueued(playerId, jid) {
+    const q = queues.get(playerId);
+    if (!q || jid === undefined) return;
+    const kept = [];
+    for (let i = q.head; i < q.items.length; i++) {
+        const e = q.items[i];
+        if (!e) continue;
+        if (e.jid === jid) {
+            totalPending--;
+            q.sx -= e.pos.x; q.sy -= e.pos.y; q.sz -= e.pos.z;
+        } else kept.push(e);
+    }
+    if (kept.length) { q.items = kept; q.head = 0; } else queues.delete(playerId);
+}
 function isUnloaded(e) {
     return e?.name === "LocationInUnloadedChunkError" || /unloaded chunk/i.test(String(e?.message ?? e));
 }

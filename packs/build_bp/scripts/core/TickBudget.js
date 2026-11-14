@@ -59,7 +59,7 @@ export function ownerHere(player, dimId) {
     try {
         if (!player.isValid || player.dimension.id !== dimId) return false;
         const health = /** @type {any} */ (player.getComponent("minecraft:health"));
-        return !health || health.currentValue > 0;
+        return typeof health?.currentValue !== "number" || health.currentValue > 0;
     } catch { return false; }
 }
 

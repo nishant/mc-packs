@@ -4,9 +4,9 @@ import { getState } from "./PlayerState.js";
 import { isCreative, countBlocks, removeBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 import { getMaxBlocks, getUndoThreshold, getReplaceBlocks, getAllowDestroy, getDestroyCreativeOnly } from "./Settings.js";
-import { captureSnapshot, recordSnapshot, pack } from "./UndoRedo.js";
+import { captureSnapshot, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
 import { sliceDue, runJobAsync, ownerHere, inTurn } from "./TickBudget.js";
-import { enqueue } from "./PlacementQueue.js";
+import { enqueue, cancelQueued } from "./PlacementQueue.js";
 import { reportPlaced } from "../utils/PlacedReport.js";
 import { ALWAYS_REPLACEABLE, UNPLACEABLE } from "./BlockPlacer.js";
 import { rotateStates } from "../utils/BlockStates.js";
@@ -255,15 +255,19 @@ export async function cutAndCapture(player, corner1, corner2) {
     clipboard.cutId = clipboard.version;
     const undoThreshold = getUndoThreshold(player);
     const snapshot = captureSnapshot(dim, cutPositions, "minecraft:air", {}, null, undoThreshold);
+    // The cells go to air through the placement queue, within the shared tick budget (it was every cell in one
+    // tick). A cell that holds something else by its turn is left as it is, and an undo drops the air still waiting.
+    const playerId = player.id;
+    let jid;
     if (snapshot) {
         snapshot.isCutSource = true;
         snapshot.survival = !creative;
         snapshot.cutId = clipboard.cutId;
+        trackWrites(snapshot, () => cancelQueued(playerId, jid));
+        jid = snapshot.jid;
         recordSnapshot(player, snapshot);
     }
-    // The cells go to air through the placement queue, within the shared tick budget (it was every cell in one
-    // tick). A cell that holds something else by its turn is left as it is.
-    for (const pos of cutPositions) enqueue(player.id, dimId, { x: pos.x, y: pos.y, z: pos.z }, air(), undefined, pos._t);
+    for (const pos of cutPositions) enqueue(playerId, dimId, { x: pos.x, y: pos.y, z: pos.z }, air(), undefined, pos._t, jid);
     return cutBlocks.length;
 }
 

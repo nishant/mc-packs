@@ -141,6 +141,8 @@ export const system = {
     return id;
   },
   runTimeout(fn) { return nextId++; },
+  /** A job runs to the end at once here (the game gives it a slice a tick). */
+  runJob(gen) { const id = nextId++; for (let step = gen.next(); !step.done; step = gen.next()); return id; },
   run(fn) { fn(); },
   clearRun(id) { intervals.delete(id); },
   sendScriptEvent() {},

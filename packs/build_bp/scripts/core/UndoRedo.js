@@ -336,9 +336,12 @@ async function undoOne(player) {
             const b = entry.bef[i];
             const aftId = unpack(a.t);
             const cur = types[i];
-            if (cur && cur !== aftId) continue;
+            // Written by the build (or unreadable), or never written because the writes were stopped above (it
+            // still holds what it held before): both undo. Anything else was built over since and is kept.
+            const written = !cur || cur === aftId;
+            if (!written && cur !== unpack(b.t)) continue;
             filteredBef.push(b);
-            if (checkRefund && itemUnits(a) && unpack(b.t) !== aftId) {
+            if (written && checkRefund && itemUnits(a) && unpack(b.t) !== aftId) {
                 refund.set(aftId, (refund.get(aftId) ?? 0) + 1);
             }
         }
