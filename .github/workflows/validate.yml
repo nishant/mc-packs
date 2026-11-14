@@ -11,6 +11,7 @@
 # per entry, each the scenario's own plan profiled on the base and the head tree back to back on one runner
 # (tools/test-bds/scenario-soak.mjs), `repeat` pairs in alternating order; for per-pack perf scenarios such as
 # gear-perf that the soaks don't exercise.
+# Soak and bundle jobs also upload each side's full profile JSON and run.mjs output (<side>.perf-<n>.json / .out).
 # Then one report: a job summary and an issue labeled perf-report with every table, and the scenario seconds cached
 # for pr-tests.yml's shards. Budgets are reported, not enforced here: the run is red only for a failed scenario or a
 # same-runner regression (tools/test-bds/perf-compare.mjs). Fixes go on a perf branch and ship as a later release.
@@ -130,13 +131,20 @@ jobs:
           OUT="$RUNNER_TEMP/out"; mkdir -p "$OUT"
           echo "$NAME" > "$OUT/name.txt"
           head="$GITHUB_WORKSPACE" base="$RUNNER_TEMP/base"
-          rss() { # bedrock_server's VmRSS (kB) every 10 s into $1 until the job step ends
-            while sleep 10; do pid=$(pgrep -x bedrock_server | head -1); [ -n "$pid" ] && echo "$(date +%s) $(awk '/VmRSS/{print $2}' /proc/$pid/status 2>/dev/null)" >> "$1"; done
+          rss() { # "epoch pid kB" for every bedrock_server every 10 s into $1 until the job step ends (the report judges the
+            # pid sampled longest: a cold runner's template generator runs first)
+            while sleep 10; do for pid in $(pgrep -x bedrock_server); do kb=$(awk '/VmRSS/{print $2}' /proc/$pid/status 2>/dev/null); [ -n "$kb" ] && echo "$(date +%s) $pid $kb" >> "$1"; done; done
+          }
+          keep() { # the full profile JSON and run.mjs output of the side's newest suite --perf run, as <side>.perf-<n>.*
+            d=$(ls -td "$BDS_HARNESS_LOGS"/suite-* 2>/dev/null | head -1)
+            [ -n "$d" ] && for f in "$d"/perf-*.json "$d"/perf-*.out; do [ -f "$f" ] && cp "$f" "$OUT/$1.$(basename "$f")"; done
+            return 0
           }
           case "$KIND" in
             soak)
               for side in base head; do
                 (cd "${!side}" && node tools/test-bds/suite.mjs --perf "$PLAYERS" --perf-seconds "$SECONDS_" --json "$OUT/$side.json" > "$OUT/$side.out" 2>&1) || true
+                keep "$side"
                 tail -25 "$OUT/$side.out"
               done ;;
             bundle)
@@ -144,6 +152,7 @@ jobs:
               for side in base head; do
                 (cd "${!side}" && node tools/bundle.mjs --all > /dev/null)
                 node tools/test-bds/suite.mjs --perf "$PLAYERS" --perf-seconds "$SECONDS_" --perf-bundle "${!side}/dist/realm_bundle.mcpack" --json "$OUT/$side.json" > "$OUT/$side.out" 2>&1 || true
+                keep "$side"
                 tail -25 "$OUT/$side.out"
               done ;;
             memory)
@@ -201,8 +210,9 @@ jobs:
         id: report
         env:
           BASE_SHA: ${{ needs.plan.outputs.base }}
+          MATRIX: ${{ needs.plan.outputs.matrix }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node tools/test-bds/validate-report.mjs --dir "$RUNNER_TEMP/results" --base "$BASE_SHA" --head "$GITHUB_SHA" --run "$RUN_URL" --out report.md --times suite-times.json
+        run: node tools/test-bds/validate-report.mjs --dir "$RUNNER_TEMP/results" --base "$BASE_SHA" --head "$GITHUB_SHA" --run "$RUN_URL" --matrix "$MATRIX" --out report.md --times suite-times.json
       - name: Keep the scenario seconds for pr-tests.yml's shards
         if: always() && hashFiles('suite-times.json') != ''
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0

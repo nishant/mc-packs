@@ -32,6 +32,7 @@ import { fileURLToPath } from "node:url";
 import { findBash, runRecipe, stageRecipe, stageWord } from "./lib/recipe.mjs";
 import { findPacks } from "./lib/packs.mjs";
 import { BUDGET_PLAYERS, BUNDLE_BUDGET_MS, evaluatePerfBudgets, packBudget } from "./lib/perf-acceptance.mjs";
+import { reducedReport } from "./lib/profile-report.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
@@ -271,7 +272,8 @@ async function perf() {
     const json = path.join(logDir, `perf-${n}.json`);
     // Spawning takes about a second per player on top of the soak itself; ticks run slow under load.
     const timeout = Math.round(120 + n * 2 + seconds * 6);
-    const p = { name: `perf-${n}`, args: ["--quiet", "--no-relay", "--profile", "--profile-every", "0", "--profile-json", json, ...(args["perf-bundle"] ? ["--bundle", path.resolve(args["perf-bundle"])] : args["perf-only"] ? ["--only", args["perf-only"]] : []), "--arg", `players=${n}`, "--arg", `seconds=${seconds}`, "--timeout", String(timeout), "--scenario", soak], notes: [] };
+    // The watchdog's spike and slow-script warnings are off unless set: on for the soaks, so their lines are counted.
+    const p = { name: `perf-${n}`, args: ["--quiet", "--no-relay", "--profile", "--profile-every", "0", "--profile-json", json, "--prop", "script-watchdog-spike-threshold=50", "--prop", "script-watchdog-slow-threshold=10", ...(args["perf-bundle"] ? ["--bundle", path.resolve(args["perf-bundle"])] : args["perf-only"] ? ["--only", args["perf-only"]] : []), "--arg", `players=${n}`, "--arg", `seconds=${seconds}`, "--timeout", String(timeout), "--scenario", soak], notes: [] };
     console.log(`[suite] perf: ${n} players, ${seconds} s of game time${args["perf-bundle"] ? `, bundle ${args["perf-bundle"]}` : args["perf-only"] ? `, packs ${args["perf-only"]}` : ""}`);
     const r = await runOne(p, logDir);
     console.log(`[suite] perf ${n}: ${r.result} (${r.seconds.toFixed(0)} s)${r.failure ? ` - ${r.failure.slice(0, 160)}` : ""}`);
@@ -299,7 +301,7 @@ async function perf() {
   console.log(L.join("\n"));
   if (args.json) {
     fs.mkdirSync(path.dirname(path.resolve(args.json)), { recursive: true });
-    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, invalid: verdict.invalid, over: verdict.over, perf: Object.fromEntries([...reports].map(([n, { report: r }]) => [n, r ? { acceptance: r.acceptance ?? null, bundle: r.bundle, server: r.server, packs: Object.fromEntries((r.packs ?? []).map((x) => [x.pack, { whole: x.msPerTick, steady: x.steadyMsPerTick ?? null }])) } : null])) }, null, 2));
+    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, invalid: verdict.invalid, over: verdict.over, perf: Object.fromEntries([...reports].map(([n, { report: r }]) => [n, r ? reducedReport(r) : null])) }, null, 2));
   }
   for (const line of verdict.invalid) console.log(`INVALID (not a budget result, not a pass): ${line}`);
   for (const line of verdict.over) console.log(`OVER BUDGET: ${line}`);

@@ -85,8 +85,14 @@ time and memory from `/proc`.
 
 The summary then lists, per pack sorted by cost: ms/tick (average), the p95 and max of a tick's ms,
 calls/tick, `setDynamicProperty`, `setActionBar`, `setTitle` and `runCommand` per tick and the top
-callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, its 5 longest single calls (`slowest`: a hitch such as one `runJob` step, by `max` ms), and the
-whole-bundle per-tick total (packs summed tick by tick: p50, p95, p99, max).
+callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, its 5 longest single calls (`slowest`: a hitch such as one `runJob` step, by `max` ms), every callback that took any time (`callbackList`, sent as `PROFILE_CALLBACKS` parts), and the
+whole-bundle per-tick total (packs summed tick by tick: p50, p95, p99, max) for the whole run (`bundle.perTick`), the
+steady window and each phase, each with `histogram` (average ms by `tick % 20`, `% 40`, `% 100` and `% 200`, and how
+many ticks over 5 ms fall on a multiple of 20) and `worst` (the 10 slowest ticks with every single call of 1 ms or more
+in them, sent as `PROFILE_HEAVY` parts). With one script context (`--bundle`), `bundle.byPath` splits its callbacks by
+the `<pack>_bp/` folder in their `file:line`, so the Realm Bundle has per-pack figures of its own. `watchdog` counts the
+watchdog and slow-tick lines of the server log by kind (`lib/watchdog.mjs`). `run.mjs` stops waiting for the final dump
+as soon as every pack's announced parts have arrived (5 s at most).
 
 Limits: Bedrock scripting has no high-resolution clock, so times are `Date.now()` differences: a
 single call reads 0 or 1 ms, but sums over many calls are unbiased, and per-tick p95 values are whole
@@ -473,7 +479,10 @@ Examples: `examples/smoke.js` (help menu, commands from several packs), `example
   starts right after `Server started.`); an error a pack logs on its first ticks may be listed under
   "scenario".
 - **Watchdog.** With every pack installed, BDS logs `[Watchdog] High memory usage detected` once at
-  startup (also without the shim). It is listed, not failed.
+  startup (also without the shim). It is listed, not failed. Every run writes the watchdog settings into
+  `server.properties` (`WATCHDOG_PROPS` in `lib/server.mjs`: BDS 1.26's defaults, hang 10,000 ms, memory warning 100 MB,
+  memory limit 250 MB); the spike and slow-script warnings are off unless set, and `suite.mjs --perf` sets them (spike
+  50 ms, slow 10 ms) so the soaks count them. Spike, slow-script and slow-tick lines are measurements, never errors.
 - **Network.** `transport=nethernet` signs in to Microsoft's signaling service at startup (needs
   internet; nothing else does once BDS is installed).
 
