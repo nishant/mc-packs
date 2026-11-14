@@ -129,13 +129,14 @@ export default async function (t) {
     await waitBar(/copy_corner2/, at, 60);
     t.echoActionBar = false;
     const formP = t.waitForm(p, { timeout: 100 });
-    p.setRotation({ x: 30, y: 0 });
+    await lookAt({ x: b.x + 0.5, y: TOP + 1, z: b.z + 0.5 });
     p.isSneaking = true;
     await click({ x: b.x, y: TOP, z: b.z }, Direction.Up);
     p.isSneaking = false;
     return formP;
   };
   let form = await selectBox();
+  p.setRotation({ x: 30, y: 0 }); // the copy keeps this facing; the paste below uses the same
   begin("copy");
   since = t.tick;
   form.answer(0);
@@ -159,6 +160,7 @@ export default async function (t) {
   p.isSneaking = false;
   await t.wait(6);
   form = await selectBox();
+  p.setRotation({ x: 30, y: 0 });
   begin("cut");
   since = t.tick;
   form.answer(1);
