@@ -465,14 +465,18 @@ export function saveSnapshot(player, entries) {
   const { dim, at } = stageAt(player);
   const entity = dim.spawnEntity(ENTITY, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
   const ref = { id, slots: entries.map((e) => e.s) };
+  /** @type {string[]} each entry's signature, worked out once for both readbacks (about 14 native calls each) */
+  const wants = [];
   try {
     const box = inventory(entity);
     const occupied = new Set();
     for (const e of entries) {
       if (!Number.isInteger(e.s) || e.s < 0 || e.s >= 36 || occupied.has(e.s)) throw new Error("invalid or duplicate storage slot");
       occupied.add(e.s);
+      const want = signature(e.item);
+      wants.push(want);
       box.setItem(e.s, e.item);
-      if (signature(box.getItem(e.s)) !== signature(e.item)) throw new Error("native storage item readback failed");
+      if (signature(box.getItem(e.s)) !== want) throw new Error("native storage item readback failed");
     }
     world.structureManager.createFromWorld(id, dim, at, { ...at, y: at.y + 1 }, { includeBlocks: false, includeEntities: true, saveMode: StructureSaveMode.World });
   } finally {
@@ -480,7 +484,7 @@ export function saveSnapshot(player, entries) {
   }
   try {
     const restored = loadSnapshot(player, ref);
-    if (restored.some((e, i) => e.s !== entries[i]?.s || signature(e.item) !== signature(entries[i]?.item))) throw new Error("snapshot metadata readback failed");
+    if (restored.length !== entries.length || restored.some((e, i) => e.s !== entries[i].s || signature(e.item) !== wants[i])) throw new Error("snapshot metadata readback failed");
     return ref;
   } catch (e) {
     discardSnapshot(ref);
