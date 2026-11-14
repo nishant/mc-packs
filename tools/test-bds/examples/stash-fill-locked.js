@@ -53,7 +53,7 @@ export default async function (t) {
     const out = {};
     for (const slots of all.values()) for (const e of slots.values()) out[`${e.id}|${e.name ?? ""}`] = (out[`${e.id}|${e.name ?? ""}`] ?? 0) + e.n;
     for (let s = 0; s < 9; s++) { const it = inv.getItem(s); if (it) out[`hotbar ${it.typeId}`] = (out[`hotbar ${it.typeId}`] ?? 0) + it.amount; }
-    return out;
+    return Object.fromEntries(Object.entries(out).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
   };
   const fill = async () => {
     const since = t.tick;

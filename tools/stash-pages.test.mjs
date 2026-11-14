@@ -578,7 +578,7 @@ test("restoring an old active layout into a joined player is migration, not queu
   p.container.setItem(17, stack(BTN_NEXT));
   const notes = p.bar.length;
   fire("playerInventoryItemChange", { player: p, slot: 15, beforeItemStack: stack(BTN_PREV), itemStack: p.container.getItem(15) });
-  advance(24); // the look an inventory change asks for comes at most a second after the player's last look
+  advance(3);
   assert.equal(curPage(p), 5);
   assert.equal(JSON.parse(p.getDynamicProperty("stash:native")).layout, 2);
   assert.ok(!p.bar.slice(notes).some((line) => /Page #\d+\//.test(line)), "migration never commits a navigation request");

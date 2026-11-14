@@ -1079,11 +1079,11 @@ world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
     const id = player.id;
     const slot = event.slot;
     const onPage = event.inventoryType === PlayerInventoryType.Inventory && Number.isInteger(slot) && slot >= 9 && slot <= 35;
+    const buttonish = onPage && (BUTTON_SLOTS.includes(slot) || isButton(event.beforeItemStack) || isButton(event.itemStack));
     // A hotbar change matters to auto-store only on a page down to its last few free slots, whose look also totals
     // everything carried: a stack dropped from the hotbar must be seen before the next pickup is counted against it.
-    if (onPage || snapshots.get(id)?.live) wake(player);
-    if (!onPage) return;
-    if (!BUTTON_SLOTS.includes(slot) && !isButton(event.beforeItemStack) && !isButton(event.itemStack)) return;
+    if (onPage || snapshots.get(id)?.live) wake(player, buttonish);
+    if (!buttonish) return;
     if (!player.isValid || dead.has(id) || reconciling.has(id) || switching.has(id)) return;
     if (buttonState.get(id) !== true || !buttonsWanted(player) || !inventoryReady(player)) return;
     // Old control positions are storage in layout 2; finish migration before interpreting gestures.
@@ -1749,35 +1749,44 @@ const backoff = new Map();
 const RETRY_TICKS = 40;
 const WARN_TICKS = 1200;
 
-/** Ticks between two auto-store moves for one player (at most one a second), and between two looks at a changing inventory. */
+/** Ticks between two auto-store moves for one player (at most one a second), and between two auto-store looks at a changing inventory. */
 const STORE_GAP = 20;
 /** A look this long after the last inventory change sees what an event reported late. */
 const FOLLOW_TICKS = 20;
 /** @type {Map<string, number>} player id -> tick of the last auto-store move */
 const storedAt = new Map();
 /**
- * The players with a look due. An inventory change asks for a look on the next beat (no sooner than STORE_GAP after the
- * player's last look, so a miner is looked at once a second, not every 2 ticks as before), and one more FOLLOW_TICKS
- * after the last change, which sees a button slot that changed after its event. A player without their buttons yet (a
- * new player, a respawn, a page count change) is looked at every beat until they have them. Button clicks themselves
- * are handled by the inventory event at once (above). A look costs 0.1 to 0.4 ms, so it happens only when needed.
- * `change` is the tick of the last inventory change, `last` of the last look, `at` when the next is due.
- * @type {Map<string, { player: Player, at: number, last: number, change: number }>}
+ * The players with a look due. An inventory change asks for a look on the next beat (the layout, the page count and the
+ * buttons: a few native calls) and one more FOLLOW_TICKS after the last change, which sees a button slot that changed
+ * after its event. Only one look in STORE_GAP also runs auto-store (the page and, near a full page, everything carried:
+ * 40 to 60 item reads), so a miner's pickups are looked at once a second, not every 10 ticks as before, and none is
+ * missed: a change that only a look without auto-store saw asks for one when the second is up. A player without their
+ * buttons yet (a new player, a respawn, a page count change) is looked at every beat until they have them. Button clicks
+ * themselves are handled by the inventory event at once (above). Before, every player whose inventory changed in the
+ * last second was looked at every 2 ticks.
+ * `change` is the tick of the last inventory change, `store` of the last look with auto-store, `at` when the next is due.
+ * @type {Map<string, { player: Player, at: number, store: number, change: number }>}
  */
 const due = new Map();
 /** @param {Player} player @param {string} id */
 function dueOf(player, id) {
   let d = due.get(id);
-  if (!d) due.set(id, (d = { player, at: Infinity, last: -Infinity, change: -Infinity }));
+  if (!d) due.set(id, (d = { player, at: Infinity, store: -Infinity, change: -Infinity }));
   d.player = player;
   return d;
 }
-/** The player's inventory (or a setting of this pack) changed: look soon, and once more a second later. @param {Player} player */
-function wake(player) {
+/**
+ * The player's inventory (or a setting of this pack) changed: look with auto-store as soon as its second allows, and
+ * once more a second later. `urgent` (a button slot or a button changed, a setting, a spawn), or a player without their
+ * buttons in place, gets a look on the next beat even when auto-store has to wait.
+ * @param {Player} player @param {boolean} [urgent]
+ */
+function wake(player, urgent = true) {
   const now = system.currentTick;
-  const d = dueOf(player, player.id);
+  const id = player.id;
+  const d = dueOf(player, id);
   d.change = now;
-  d.at = Math.min(d.at, Math.max(now + 1, d.last + STORE_GAP));
+  d.at = Math.min(d.at, urgent || !buttonState.has(id) ? now + 1 : Math.max(now + 1, d.store + STORE_GAP));
 }
 /** A look at this tick (or the next beat after it), without counting as a change. @param {Player} player @param {number} at */
 function lookAt(player, at) {
@@ -1866,10 +1875,14 @@ system.runInterval(() => {
     }
     if (now < d.at) continue;
     d.at = Infinity;
-    d.last = now;
-    look(id, d.player, true, now);
+    const store = now >= d.store + STORE_GAP;
+    if (store) d.store = now;
+    look(id, d.player, store, now);
     if (!buttonState.has(id)) d.at = Math.min(d.at, now + 2);
-    else if (now < d.change + FOLLOW_TICKS) d.at = Math.min(d.at, Math.max(d.change + FOLLOW_TICKS, now + STORE_GAP));
+    // A change auto-store hasn't looked at yet gets that look when its second is up.
+    if (d.change > d.store) d.at = Math.min(d.at, d.store + STORE_GAP);
+    // The follow-up runs auto-store too, so it also takes the baseline the next pickup is counted against.
+    if (now < d.change + FOLLOW_TICKS) d.at = Math.min(d.at, Math.max(d.change + FOLLOW_TICKS, d.store + STORE_GAP));
     if (d.at === Infinity) due.delete(id);
   }
   // The quiet players whose turn it is: player i is looked at when (beat + i) is a multiple of QUIET_BEATS.
