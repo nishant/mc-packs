@@ -41,7 +41,10 @@ export default async function (t) {
     const i = form.buttons.findIndex((b) => re.test(b));
     t.assert(i >= 0, `mode ${re} is in the menu (${form.buttons.join(" | ")})`);
     form.answer(i);
-    await t.wait(6);
+    // Some modes open their options next (Copy / Paste: the clipboard or Done): close it with its last button.
+    await t.wait(10);
+    for (const f of t.forms(p)) if (!f.answered && f.buttons?.length) f.answer(f.buttons.length - 1);
+    await t.wait(4);
   };
   const stand = async (x, z, y = Y) => { p.teleport({ x: x + 0.5, y, z: z + 0.5 }); await t.wait(3); };
   /** A real click on a block (the anchor gaps are 200 ms, so wait 6 ticks after). */

@@ -169,7 +169,7 @@ export async function finishCopyCut(player, corner1, corner2, isCut) {
     if (copyTooBig(player, corner1, corner2)) return;
     const count = isCut
         ? await cutAndCapture(player, corner1, corner2)
-        : captureClipboard(player, corner1, corner2);
+        : await captureClipboard(player, corner1, corner2);
     if (!player.isValid) return;
 
     const clip = getState(player).clipboard;

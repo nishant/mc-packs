@@ -47,6 +47,7 @@ import { visualizationHolders } from "./utils/tool-gate.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 import { bedPartnerPos, dropIncompleteBeds, expandDestroyForClaims, expandForClaims, isBedType } from "./core/beds.js";
 import { onScriptEvent } from "./script-events.js";
+import { runJobAsync, sliceDue, ownerHere } from "./core/TickBudget.js";
 
 const GETBOOK_COST = 5;
 const anchoredAtMs = new Map();
@@ -202,11 +203,37 @@ export function readPlaced(player, pos) {
         return isBedType(typeId) ? { typeId, states: block.permutation.getAllStates() } : { typeId };
     } catch { return null; }
 }
-export async function filterBuildPositions(player, positions, typeId, blockStates, isDestroy) {
-    const ready = isDestroy
-        ? expandDestroyForClaims(positions, (pos) => readPlaced(player, pos))
-        : expandForClaims(positions, typeId, blockStates, yawOf(player));
+/** What a destroy would break in every cell, read in a job a slice a tick; null when the owner left meanwhile. */
+function* readCells(player, dimId, positions) {
+    if (!ownerHere(player, dimId)) return null;
+    const out = new Map();
+    for (const pos of positions) {
+        if (sliceDue()) {
+            yield;
+            if (!ownerHere(player, dimId)) return null;
+        }
+        out.set(`${pos.x},${pos.y},${pos.z}`, readPlaced(player, pos));
+    }
+    return out;
+}
+/**
+ * The cells a build may touch (claims, safe zones, whole beds). A destroy reads its cells once, in a job (BSE-01), and
+ * `known` (a Map) receives those reads for destroyBlocks.
+ */
+export async function filterBuildPositions(player, positions, typeId, blockStates, isDestroy, known) {
     const dimId = player.dimension.id;
+    let ready;
+    if (isDestroy) {
+        const reads = await runJobAsync(readCells(player, dimId, positions));
+        if (!reads || !ownerHere(player, dimId)) return [];
+        if (known) for (const [k, v] of reads) known.set(k, v);
+        ready = expandDestroyForClaims(positions, (pos) => {
+            const k = `${pos.x},${pos.y},${pos.z}`;
+            return reads.has(k) ? reads.get(k) : readPlaced(player, pos);
+        });
+    } else {
+        ready = expandForClaims(positions, typeId, blockStates, yawOf(player));
+    }
     const filtered = await filterAllowedPositionsAsync(player, dimId, ready, true);
     if (!player.isValid || player.dimension.id !== dimId) return [];
     return dropIncompleteBeds(filtered ?? []);
@@ -280,7 +307,8 @@ export function confirmPlacement(player, fallbackTarget) {
             if (!modPositions?.length) return;
             const positions = await filterBuildPositions(player, modPositions, typeId, blockStates, false);
             if (!positions?.length) return;
-            const placed = placeBlocks(player, positions, anchor, typeId, blockStates);
+            const placed = await placeBlocks(player, positions, anchor, typeId, blockStates);
+            if (!player.isValid) return;
             if (placed > 0) {
                 lockActionBar(player.id, 2500);
                 player.onScreenDisplay.setActionBar(t("eb.bar.placed", placed, mode));
@@ -307,10 +335,11 @@ export function confirmPlacement(player, fallbackTarget) {
         if (!rawPositions?.length) return;
         const modPositions = applyModifiers(player, rawPositions);
         if (!modPositions?.length) return;
-        const positions = await filterBuildPositions(player, modPositions, typeId, blockStates, isDestroy);
+        const known = new Map();
+        const positions = await filterBuildPositions(player, modPositions, typeId, blockStates, isDestroy, known);
         if (!positions?.length) return;
         if (isDestroy) {
-            destroyBlocks(player, positions, (destroyed) => {
+            destroyBlocks(player, positions, known, (destroyed) => {
                 if (destroyed > 0) {
                     lockActionBar(player.id, 2500);
                     player.onScreenDisplay.setActionBar(t("eb.bar.destroyed", destroyed, mode));
@@ -318,7 +347,8 @@ export function confirmPlacement(player, fallbackTarget) {
                 }
             });
         } else {
-            const placed = placeBlocks(player, positions, anchor, typeId, blockStates);
+            const placed = await placeBlocks(player, positions, anchor, typeId, blockStates);
+            if (!player.isValid) return;
             if (placed > 0) {
                 lockActionBar(player.id, 2500);
                 player.onScreenDisplay.setActionBar(t("eb.bar.placed", placed, mode));

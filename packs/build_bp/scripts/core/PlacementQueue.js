@@ -44,15 +44,16 @@ export function removePlayerBuildSpeed(playerId) {
 }
 /**
  * Queues one block write for a cell that could not be written yet (an unloaded chunk) or for a paste. `refund` is the
- * item the player was charged for this block, given back if the write is finally given up.
+ * item the player was charged for this block, given back if the write is finally given up. With `expect` (a cut), the
+ * cell is written only while it still holds that type.
  */
-export function enqueue(playerId, dimensionId, pos, permutation, refund) {
+export function enqueue(playerId, dimensionId, pos, permutation, refund, expect) {
     let q = queues.get(playerId);
     if (!q) {
         q = { items: [], head: 0, sx: 0, sy: 0, sz: 0, miss: null, missDim: dimensionId, loader: null };
         queues.set(playerId, q);
     }
-    q.items.push({ dimensionId, pos, permutation, refund, attempts: 0, tried: -1 });
+    q.items.push({ dimensionId, pos, permutation, refund, expect, attempts: 0, tried: -1 });
     q.sx += pos.x; q.sy += pos.y; q.sz += pos.z;
     totalPending++;
 }
@@ -129,7 +130,9 @@ export function startPlacementQueue() {
                     let result = "drop";
                     try {
                         const block = dimOf(entry.dimensionId).getBlock(entry.pos);
-                        if (block) {
+                        if (block && entry.expect && block.typeId !== entry.expect) {
+                            result = "skip";
+                        } else if (block) {
                             block.setPermutation(entry.permutation);
                             result = "placed";
                         } else {
@@ -153,7 +156,7 @@ export function startPlacementQueue() {
                     if (result === "placed") {
                         done++;
                         totalPlaced++;
-                    } else if (entry.refund) {
+                    } else if (result !== "skip" && entry.refund) {
                         // Given up: hand back what the player was charged for this block.
                         let byType = refunds.get(playerId);
                         if (!byType) { byType = new Map(); refunds.set(playerId, byType); }

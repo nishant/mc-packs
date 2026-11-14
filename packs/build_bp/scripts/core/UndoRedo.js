@@ -11,6 +11,7 @@ import { filterAllowedPositionsAsync } from "./Protection.js";
 import { getState } from "./PlayerState.js";
 import { dropCutSlots } from "../utils/ClipboardStore.js";
 import { ALWAYS_REPLACEABLE } from "./BlockPlacer.js";
+import { runJobAsync, sliceDue, overBudget } from "./TickBudget.js";
 // Players whose undo or redo is waiting on the claims answer: a second one must not interleave.
 const busy = new Set();
 const MAX_HISTORY = 10;
@@ -31,7 +32,7 @@ export function clearPlayerTempStacks(playerId) {
     routeOrder.undo.delete(playerId);
     routeOrder.redo.delete(playerId);
 }
-function pack(typeId) { return typeId.startsWith("minecraft:") ? typeId.slice(10) : typeId; }
+export function pack(typeId) { return typeId.startsWith("minecraft:") ? typeId.slice(10) : typeId; }
 function unpack(t)    { return t.includes(":") ? t : "minecraft:" + t; }
 function itemUnits(block) {
     if (!block || block.u === 0) return 0;
@@ -170,10 +171,15 @@ function routeClear(player, type) {
     clearPersistent(player, type);
     clearRouteOrder(player, type);
 }
+/**
+ * The before and after images of a build. A position that carries what its cell held (`_bt`, the packed type, and
+ * `_bs`, its states: read once with the filter, BSE-01) is not read again.
+ */
 export function captureSnapshot(dim, toPlace, typeId, blockStates, perPosTypeIds, threshold = 200) {
     if (threshold === 0) return null;
     if (toPlace.length > MAX_SNAPSHOT_BLOCKS) return null;
     const bef = toPlace.map(pos => {
+        if (pos._bt !== undefined) return { x: pos.x, y: pos.y, z: pos.z, t: pos._bt, s: pos._bs ?? {} };
         let t = "air", s = {};
         try {
             const block = dim.getBlock(pos);
@@ -188,6 +194,23 @@ export function captureSnapshot(dim, toPlace, typeId, blockStates, perPosTypeIds
         u: pos._bedHead || pos._resolvedStates?.head_piece_bit === true ? 0 : 1,
     }));
     return { dim: dim.id, bef, aft };
+}
+/** snapshot id -> stops that build's remaining scheduled writes (and refunds them), while they run */
+const writing = new Map();
+let nextJid = 1;
+/** Ties a build's scheduled writes to its undo entry, so an undo while they run stops the rest first. */
+export function trackWrites(snapshot, stop) {
+    if (!snapshot) return () => {};
+    // Unique across restarts too (a saved entry keeps it): the time and a counter.
+    const jid = snapshot.jid ?? (snapshot.jid = Date.now() * 1000 + (nextJid++ % 1000));
+    writing.set(jid, stop);
+    return () => { if (writing.get(jid) === stop) writing.delete(jid); };
+}
+function stopWrites(entry) {
+    const stop = entry?.jid !== undefined ? writing.get(entry.jid) : undefined;
+    if (!stop) return;
+    writing.delete(entry.jid);
+    try { stop(); } catch { }
 }
 export function recordSnapshot(player, snapshot) {
     if (!snapshot) return;
@@ -221,12 +244,25 @@ function applyBlocks(dim, playerId, blocks) {
     let idx = UNDO_CHUNK_SIZE;
     const runId = system.runInterval(() => {
         const end = Math.min(idx + UNDO_CHUNK_SIZE, blocks.length);
-        for (; idx < end; idx++) applyOne(blocks[idx]);
+        let n = 0;
+        for (; idx < end; idx++) {
+            if ((++n & 15) === 0 && overBudget()) break;
+            applyOne(blocks[idx]);
+        }
         if (idx >= blocks.length) system.clearRun(runId);
     }, 1);
 }
 function currentType(dim, c) {
     try { return dim.getBlock({ x: c.x, y: c.y, z: c.z })?.typeId ?? null; } catch { return null; }
+}
+/** The current type of every cell, read in a job a slice a tick (an undo of 50,000 blocks read them in one tick). */
+function* currentTypes(dim, cells) {
+    const out = new Array(cells.length);
+    for (let i = 0; i < cells.length; i++) {
+        if (sliceDue()) yield;
+        out[i] = currentType(dim, cells[i]);
+    }
+    return out;
 }
 /** Keep the cells Land Claims and safe zones allow, in their original order (each entry keeps its own fields). */
 async function allowedCells(player, dim, cells) {
@@ -260,11 +296,15 @@ async function undoOne(player) {
         return;
     }
     const dim = world.getDimension(entry.dim);
+    // The rest of a build still being written stops here (and is refunded), so the undo is the last word.
+    stopWrites(entry);
     let toApply = entry.bef ?? [];
     if (entry.destroy) {
         // Put back only into cells that are still empty and that the player may build in.
-        const empty = toApply.filter((b) => {
-            const cur = currentType(dim, b);
+        const types = (await runJobAsync(currentTypes(dim, toApply))) ?? [];
+        if (!player.isValid) { pushBack(player, "undo", entry); return; }
+        const empty = toApply.filter((b, i) => {
+            const cur = types[i] ?? null;
             return cur === null || ALWAYS_REPLACEABLE.has(cur);
         });
         toApply = await allowedCells(player, dim, empty);
@@ -289,16 +329,14 @@ async function undoOne(player) {
         const refund = new Map();
         const filteredBef = [];
         const checkRefund = entry.survival && !isCreative(player);
+        const types = (await runJobAsync(currentTypes(dim, entry.aft))) ?? [];
+        if (!player.isValid) { pushBack(player, "undo", entry); return; }
         for (let i = 0; i < entry.aft.length; i++) {
             const a = entry.aft[i];
             const b = entry.bef[i];
             const aftId = unpack(a.t);
-            let unchangedSinceBuild = true;
-            try {
-                const cur = dim.getBlock({ x: a.x, y: a.y, z: a.z });
-                if (cur && cur.typeId !== aftId) unchangedSinceBuild = false;
-            } catch {}
-            if (!unchangedSinceBuild) continue;
+            const cur = types[i];
+            if (cur && cur !== aftId) continue;
             filteredBef.push(b);
             if (checkRefund && itemUnits(a) && unpack(b.t) !== aftId) {
                 refund.set(aftId, (refund.get(aftId) ?? 0) + 1);
@@ -345,9 +383,11 @@ async function redoOne(player) {
     // Redo writes only into cells that still hold what the undo left there, and that the player may build in.
     const aft = entry.aft ?? [];
     const same = [];
+    const types = (await runJobAsync(currentTypes(dim, aft))) ?? [];
+    if (!player.isValid) { pushBack(player, "redo", entry); return; }
     for (let i = 0; i < aft.length; i++) {
         const b = entry.bef?.[i];
-        const cur = currentType(dim, aft[i]);
+        const cur = types[i] ?? null;
         if (b && cur !== null && cur !== unpack(b.t)) continue;
         same.push({ x: aft[i].x, y: aft[i].y, z: aft[i].z, _i: i });
     }
