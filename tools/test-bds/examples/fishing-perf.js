@@ -2,8 +2,9 @@
 // perf-soak.js casts no rod, so their hook loops and catch paths never run there. Here every player stands on the rim
 // of a pool with a bobber out for the whole window, and every `catch` seconds each player (staggered) lands a catch:
 // a single cod appears where its hook is as the hook goes (the way a reeled-in catch looks to the packs), then the
-// player casts again. Meant for run.mjs --profile, and reports perf-workload like perf-soak.js:
-//   node tools/test-bds/run.mjs --quiet --no-relay --profile --profile-json <out> --only fishing_bp,saga_bp,skills_bp,journal_bp,quests_bp --scenario tools/test-bds/examples/fishing-perf.js --timeout 900
+// player casts again. Meant for run.mjs --profile (add --profile-json <file> to keep the figures), and reports
+// perf-workload like perf-soak.js:
+//   node tools/test-bds/run.mjs --quiet --no-relay --profile --only fishing_bp,saga_bp,skills_bp,journal_bp,quests_bp --scenario tools/test-bds/examples/fishing-perf.js --timeout 900
 // Arguments (--arg key=value): players (default 10, at most 10: they share one pool's rim), seconds (default 60),
 // catch (seconds between one player's catches, default 15; 0 = none, only bobbers out).
 export default async function (t) {

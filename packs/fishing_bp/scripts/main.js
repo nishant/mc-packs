@@ -566,12 +566,27 @@ function caught(player, sp, size) {
 }
 
 // ---------------------------------------------------------------------------
-// Catches: a hook belongs to the player nearest to where it appears; an item that appears where a
-// hook just was is that player's catch (as Daily Quests recognizes it: there is no fishing event).
+// Catches: a hook belongs to the player who cast it (else the nearest); there is no fishing event, so a catch is an
+// item that appears where that hook is, from a hook that was out a moment and touched water, as the hook goes (within
+// CATCH_TICKS, either order). An item a player drops appears at their head instead and never counts. Every catch,
+// fish or not, is sent once as realm:fish_caught, so Skills, Journal, Daily Quests and Story Questlines don't each
+// follow every hook themselves.
 // ---------------------------------------------------------------------------
 
-/** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number, born: number, nudged: number }>} */
+/** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number, born: number, nudged: number, wet: boolean }>} */
 const hooks = new Map();
+const CATCH_TICKS = 4; // the hook goes and the catch appears within this many ticks of each other
+const MIN_HOOK_TICKS = 30; // a hook out for less than this can't have caught anything
+/** Items this pack spawned (the measured fish), never a catch themselves. @type {Set<string>} */
+const mine = new Set();
+
+/** @param {Dimension} dim @param {Vector3} at */
+function isWater(dim, at) {
+  const b = blockAt(dim, at.x, at.y, at.z);
+  if (!b) return false;
+  const id = b.typeId;
+  return id === "minecraft:water" || id === "minecraft:flowing_water" || b.isWaterlogged;
+}
 
 /** A hook's first ticks: the only time it can be inside a light block next to its player (below). */
 const LIGHT_TICKS = 20;
@@ -642,40 +657,47 @@ function droppedByPlayer(item) {
 
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
-    if (entity.typeId === "minecraft:fishing_hook") {
+    const type = entity.typeId;
+    if (type === "minecraft:fishing_hook") {
       if (hasLightBlocks()) clearLightBlocksNearHook(entity);
       const owner = hookOwner(entity);
-      if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick, born: system.currentTick, nudged: 0 });
+      const now = system.currentTick;
+      if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: now, born: now, nudged: 0, wet: false });
       return;
     }
-    if (entity.typeId !== "minecraft:item" || !hooks.size) return;
-    const stack = entity.getComponent("minecraft:item")?.itemStack;
-    // A catch is one unnamed fish (our own replacements are named). A stack of several, or a fish a player
-    // drops near their bobber (it appears at their head), is never a catch.
-    if (!stack || stack.nameTag || !FISH_ITEMS.has(stack.typeId) || stack.amount !== 1) return;
-    if (droppedByPlayer(entity)) return;
+    if (type !== "minecraft:item" || !hooks.size || mine.has(entity.id)) return;
     const at = entity.location;
+    const dimId = entity.dimension.id;
+    const now = system.currentTick;
     for (const [id, h] of hooks) {
-      if (h.dim !== entity.dimension.id) continue;
+      if (h.dim !== dimId) continue;
       if (Math.abs(h.at.x - at.x) > 2 || Math.abs(h.at.y - at.y) > 2 || Math.abs(h.at.z - at.z) > 2) continue;
       // The catch appears as the hook is reeled in: the hook must be gone now or within a few ticks. An item
       // that turns up next to a hook that stays in the water (a fish mob killed by the bobber) isn't a catch.
-      if (!h.hook.isValid && system.currentTick - h.seen > 3) continue;
-      if (get("enabled") !== true) return;
+      if (!h.hook.isValid && now - h.seen > CATCH_TICKS) continue;
+      if (!h.wet || now - h.born < MIN_HOOK_TICKS || droppedByPlayer(entity)) return;
+      const stack = entity.getComponent("minecraft:item")?.itemStack;
+      if (!stack) return;
+      const item = stack.typeId;
+      const amount = stack.amount;
+      // A fish that can become a species: one unnamed fish (a stack of several is never one).
+      const measurable = amount === 1 && FISH_ITEMS.has(item) && !stack.nameTag;
       const owner = h.owner;
       const hookAt = h.at;
       const hook = h.hook;
       let waited = 0;
-      // From the next tick, so every other pack's entitySpawn listener (Daily Quests counts fish) sees the vanilla item first.
+      // From the next tick, once the hook has gone.
       const check = () => {
         try {
           if (hook.isValid) {
-            if (++waited <= 3) system.run(check);
+            if (++waited < CATCH_TICKS) system.run(check);
             return; // the hook is still out: not a catch
           }
           if (!hooks.has(id)) return; // another item already took this catch
           hooks.delete(id);
-          replace(entity, owner, hookAt);
+          if (!owner.isValid) return;
+          send("realm:fish_caught", { player: owner.id, item, amount, dim: dimId, x: Math.floor(hookAt.x), y: Math.floor(hookAt.y), z: Math.floor(hookAt.z) });
+          if (measurable && get("enabled") === true) replace(entity, owner, hookAt);
         } catch (e) {
           console.warn(`[fishing] catch: ${e}`);
         }
@@ -687,6 +709,15 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
     console.warn(`[fishing] ${e}`);
   }
 });
+
+// Packs that count catches ask once whether this pack is here to send them (realm:fish_caught); until it answers
+// they follow the hooks themselves.
+onScriptEvent(
+  "realm:fish_ping",
+  ({ id }) => {
+    if (id === "realm:fish_ping") system.sendScriptEvent("realm:fish_pong", PACK);
+  },
+);
 
 /**
  * Swaps the vanilla fish for a species: a new item where it is, flying the same way, and the old one removed.
@@ -725,6 +756,9 @@ function replace(entity, owner, hookAt) {
     // keep zero
   }
   const made = dim.spawnItem(fish, loc); // throws in an unloaded chunk: then the vanilla fish stays
+  const madeId = made.id;
+  mine.add(madeId);
+  system.runTimeout(() => mine.delete(madeId), 40);
   try {
     entity.remove();
   } catch (e) {
@@ -763,6 +797,11 @@ system.runInterval(() => {
         if (age <= LIGHT_TICKS && hasLightBlocks()) clearLightBlocksNearHook(h.hook);
         h.at = h.hook.location;
         h.seen = system.currentTick;
+        // A floating hook sits at the top of the water block, or just above it.
+        if (!h.wet && h.seen % 4 === 0) {
+          const dim = h.hook.dimension;
+          h.wet = isWater(dim, h.at) || isWater(dim, { x: h.at.x, y: h.at.y - 0.5, z: h.at.z });
+        }
         // A bobber that stopped in the air right after the cast (snagged on something next to the player) gets the cast again.
         if (age >= 1 && age <= 5 && h.nudged < 2 && h.owner.isValid && h.owner.dimension.id === h.dim) {
           const v = h.hook.getVelocity();

@@ -567,7 +567,8 @@ function caught(owner, item) {
   if (fish && owner.isValid) addEntry(owner, "fish", fish);
 }
 
-world.afterEvents.entitySpawn.subscribe(({ entity }) => {
+/** @param {import("@minecraft/server").EntitySpawnAfterEvent} ev */
+function onSpawn({ entity }) {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
       if (get("enabled") !== true) return;
@@ -593,9 +594,10 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   } catch (e) {
     console.warn(`[journal] ${e}`);
   }
-});
+}
+world.afterEvents.entitySpawn.subscribe(onSpawn);
 
-system.runInterval(() => {
+const hookLoop = system.runInterval(() => {
   if (!hooks.size) return;
   const now = system.currentTick;
   for (const [id, h] of hooks) {
@@ -615,6 +617,33 @@ system.runInterval(() => {
     } else if (now - h.gone > CATCH_TICKS) hooks.delete(id);
   }
 }, 1);
+
+// Fishing Rewards, when installed, follows every hook and sends each catch once (realm:fish_caught { player, item,
+// amount, dim, x, y, z }): then this pack stops following hooks itself. It answers realm:fish_ping.
+let sharedCatch = false;
+onScriptEvent(
+  ["realm:fish_pong", "realm:fish_caught"],
+  ({ id, message }) => {
+    if (!sharedCatch) {
+      sharedCatch = true;
+      world.afterEvents.entitySpawn.unsubscribe(onSpawn);
+      system.clearRun(hookLoop);
+      hooks.clear();
+    }
+    // A pong only says Fishing Rewards is here; a catch is also counted.
+    if (id === "realm:fish_caught" && get("enabled") === true) {
+      try {
+        const m = JSON.parse(message);
+        if (typeof m?.player !== "string" || typeof m.item !== "string" || !fishItems.has(m.item)) return;
+        const owner = world.getAllPlayers().find((p) => p.id === m.player);
+        if (owner) caught(owner, m.item);
+      } catch {
+        // not JSON: ignore
+      }
+    }
+  },
+);
+world.afterEvents.worldLoad.subscribe(() => system.sendScriptEvent("realm:fish_ping", "journal_bp"));
 
 // ---------------------------------------------------------------------------
 // Other packs: realm:journal, realm:sky_event, realm:moon

@@ -1487,7 +1487,8 @@ function droppedAt(dim, at) {
   return false;
 }
 
-world.afterEvents.entitySpawn.subscribe(({ entity }) => {
+/** @param {import("@minecraft/server").EntitySpawnAfterEvent} ev */
+function onFishSpawn({ entity }) {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
       const [owner] = entity.dimension.getPlayers({ location: entity.location, maxDistance: 4, closest: 1 });
@@ -1507,15 +1508,21 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
       hooks.delete(id);
       const type = stack.typeId;
       const amount = stack.amount;
-      if (h.owner.isValid) advance(h.owner, "fish", (obj) => (!obj.items?.length || obj.items.includes(type) ? amount : 0));
+      if (h.owner.isValid) fished(h.owner, type, amount);
       break;
     }
   } catch (e) {
     console.warn(`[saga] ${e}`);
   }
-});
+}
+world.afterEvents.entitySpawn.subscribe(onFishSpawn);
 
-system.runInterval(() => {
+/** @param {Player} owner @param {string} type @param {number} amount */
+function fished(owner, type, amount) {
+  advance(owner, "fish", (obj) => (!obj.items?.length || obj.items.includes(type) ? amount : 0));
+}
+
+const hookLoop = system.runInterval(() => {
   if (!hooks.size) return;
   for (const [id, h] of hooks) {
     if (h.hook.isValid) {
@@ -1528,6 +1535,34 @@ system.runInterval(() => {
     } else if (system.currentTick - h.seen > 20) hooks.delete(id);
   }
 }, 2);
+
+// Fishing Rewards, when installed, follows every hook and sends each catch once (realm:fish_caught { player, item,
+// amount, dim, x, y, z }): then this pack stops following hooks itself. It answers realm:fish_ping.
+let sharedCatch = false;
+onScriptEvent(
+  ["realm:fish_pong", "realm:fish_caught"],
+  ({ id, message }) => {
+    if (!sharedCatch) {
+      sharedCatch = true;
+      world.afterEvents.entitySpawn.unsubscribe(onFishSpawn);
+      system.clearRun(hookLoop);
+      hooks.clear();
+    }
+    // A pong only says Fishing Rewards is here; a catch is also counted.
+    if (id === "realm:fish_caught") {
+      try {
+        const m = JSON.parse(message);
+        if (typeof m?.player !== "string" || typeof m.item !== "string") return;
+        const amount = Math.max(1, Math.floor(Number(m.amount) || 1));
+        const owner = online(m.player);
+        if (owner && open(owner, "fish").length) fished(owner, m.item, amount);
+      } catch {
+        // not JSON: ignore
+      }
+    }
+  },
+);
+world.afterEvents.worldLoad.subscribe(() => system.sendScriptEvent("realm:fish_ping", PACK));
 
 /** Animals each player fed or tamed for an objective (each animal counts once). @type {Map<string, Set<string>>} */
 const tended = new Map();
