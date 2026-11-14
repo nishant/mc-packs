@@ -338,7 +338,7 @@ BSE-04 in W2). Packs: `build_bp`, `build_rp`.
 Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
 - #229 (stash_bp 1.9.7) batched auto-store to one move a second, drove the looks from inventory events and did
   BSE-10, BSE-11, BSE-35, BSE-17 and BSE-26. `stash-miner-perf` (two miners, four pickups a second each) went from
-  about 3.0 to 1.4 ms/tick at 10 players: about 0.65 ms a miner, still over the 0.3 target. What is left is the cost
+  3.66 to 1.50 ms/tick at 10 players and 3.51 to 1.62 at 40 (#239): about 0.75 ms a miner, still over the 0.3 target. What is left is the cost
   of one move, about 13 ms: three verified snapshot saves (the page and both whole-inventory images) and a page read.
 - Options, each needing a review against C3 before it ships: keep each page snapshot's verified readback in memory
   (a snapshot never changes and its id is never reused), so a move does not restore the page it saved one move
