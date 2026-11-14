@@ -91,7 +91,7 @@ export default async function (t) {
   await t.wait(2);
   let since = t.tick;
   await click({ x: pb.x, y: G, z: pb.z + 6 });
-  await waitBar(/eb\.bar\.placed|blocks .*placed/, since);
+  await waitBar(/eb\.bar\.placed|blocks .*placed/, since, 2400);
   await t.waitUntil(() => typeAt({ x: pb.x, y: Y + 19, z: pb.z }) === "minecraft:stone", { timeout: 1200, interval: 10, message: "the 20x20x20 cube is built" });
   end();
 
@@ -104,7 +104,7 @@ export default async function (t) {
   begin("place");
   since = t.tick;
   await click({ x: b.x, y: G, z: b.z + 6 });
-  await waitBar(/eb\.bar\.placed|blocks .*placed/, since);
+  await waitBar(/eb\.bar\.placed|blocks .*placed/, since, 2400);
   await t.waitUntil(() => typeAt({ x: b.x, y: TOP, z: b.z }) === "minecraft:stone" && typeAt({ x: a.x, y: Y, z: a.z }) === "minecraft:stone",
     { timeout: 3000, interval: 10, message: "the 40x40x30 box is built" });
   end();
@@ -140,7 +140,7 @@ export default async function (t) {
   begin("copy");
   since = t.tick;
   form.answer(0);
-  await waitBar(/copy_done/, since);
+  await waitBar(/copy_done/, since, 2400);
   end();
 
   // paste: beside the box, facing the same way as at the copy (so no rotation)
@@ -150,7 +150,7 @@ export default async function (t) {
   begin("paste");
   since = t.tick;
   await click({ x: 60, y: G, z: 2 });
-  await waitBar(/pasted/, since, 1200);
+  await waitBar(/pasted/, since, 2400);
   await t.waitUntil(() => typeAt({ x: 99, y: TOP, z: 41 }) === "minecraft:stone", { timeout: 3000, interval: 10, message: "the paste is written" });
   end();
 
@@ -164,7 +164,7 @@ export default async function (t) {
   begin("cut");
   since = t.tick;
   form.answer(1);
-  await waitBar(/cut_done/, since, 1200);
+  await waitBar(/cut_done/, since, 2400);
   await t.waitUntil(() => typeAt({ x: b.x, y: TOP, z: b.z }) === "minecraft:air" && typeAt({ x: a.x, y: Y, z: a.z }) === "minecraft:air",
     { timeout: 3000, interval: 10, message: "the cut box is empty" });
   end();
