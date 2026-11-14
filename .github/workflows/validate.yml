@@ -1,12 +1,16 @@
 # Full validation after a release (docs/WORKING.md "Testing in CI"): every merge to master runs the long work that no
-# longer blocks a release, spread over parallel runners (4 at a time by default; the repository variable
-# VALIDATE_PARALLEL or the run's `parallel` input sets 1-8):
-#   soak-10, soak-40 (15 min each; 10 and 40 players only, owner answer October 20, 2026): the profiled perf soak, the previous master and this one back
-#     to back on the same runner (runners differ by 10-40%, so only a same-runner pair shows a change);
+# longer blocks a release, every job at once (14 runners by default; the repository variable VALIDATE_PARALLEL or the
+# run's `parallel` input sets 1-20; the repo is public, so GitHub-hosted minutes are free), in about 31 minutes:
+#   soak-10, soak-40 (15 min each; 10 and 40 players only, owner answer October 20, 2026): the profiled perf soak, the
+#     base and this commit back to back on the same runner (runners differ by 10-40%, so only a same-runner pair shows
+#     a change). The base is the newest master commit whose push validation finished (not canceled), so merges whose
+#     runs were canceled are still compared (tools/test-bds/lib/validate-base.mjs); the report says how many commits
+#     the pair spans;
 #   bundle-10, bundle-40 (5 min each): the genuine one-context Realm Bundle under the same soak, both trees built, one harness;
-#   memory-40-base, memory-40-head (60 min each, unprofiled, in parallel: RSS doesn't depend on runner speed the way
-#     ms/tick does): bedrock_server RSS every 10 s (F74);
-#   suite-1..4: the whole BDS scenario suite, split by the last run's seconds.
+#   suite-1..8: the whole BDS scenario suite, split by the last run's seconds.
+# The memory soak (memory-40-head, 60 min unprofiled, bedrock_server RSS every 10 s, F74) runs nightly instead, when
+# master moved: its base is the previous nightly's head RSS (memory doesn't depend on runner speed the way ms/tick
+# does), and memory-40-base runs only when that artifact is gone. A dispatch with `memory` adds both memory sides.
 # Started by hand with `scenarios` (on any branch, against `base`), it runs only scenario A/B pairs instead: one job
 # per entry, each the scenario's own plan profiled on the base and the head tree back to back on one runner
 # (tools/test-bds/scenario-soak.mjs), `repeat` pairs in alternating order; for per-pack perf scenarios such as
@@ -19,17 +23,23 @@ name: validate
 on:
   push:
     branches: [master]
+  schedule:
+    - cron: "17 8 * * *" # the nightly memory soak, 02:17 CST / 03:17 CDT
   workflow_dispatch:
     inputs:
       parallel:
-        description: "Runners at a time (1-8)"
-        default: "4"
+        description: "Runners at a time (1-20)"
+        default: "14"
       quick:
         description: "60 s soaks and a 10 min memory soak (to try the workflow itself)"
         type: boolean
         default: false
+      memory:
+        description: "Also run the memory soaks at 40 players (both sides; otherwise they run nightly)"
+        type: boolean
+        default: false
       base:
-        description: "Base branch or commit for the A/B pairs (default: the first parent of the run's commit)"
+        description: "Base branch or commit for the A/B pairs (default on master: the last commit with a finished validation; elsewhere the first parent)"
         default: ""
       scenarios:
         description: "Only these scenario A/B pairs, separated by ';': name [run.mjs args], e.g. gear-perf --arg players=40 --arg seconds=120 --timeout 3000"
@@ -39,16 +49,22 @@ on:
         default: "1"
 permissions: { contents: read }
 concurrency:
-  group: validate-${{ github.ref }}
+  # The nightly memory soak has its own group, so it never cancels a merge's queued validation.
+  group: validate-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
   cancel-in-progress: false
 jobs:
   plan:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: { contents: read, actions: read } # earlier validate runs and their artifacts
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       parallel: ${{ steps.plan.outputs.parallel }}
       base: ${{ steps.plan.outputs.base }}
+      span: ${{ steps.plan.outputs.span }}
+      from: ${{ steps.plan.outputs.from }}
+      reuse: ${{ steps.plan.outputs.reuse }}
+      skip: ${{ steps.plan.outputs.skip }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -63,41 +79,77 @@ jobs:
           restore-keys: suite-times-
       - id: plan
         env:
-          PARALLEL: ${{ inputs.parallel || vars.VALIDATE_PARALLEL || '4' }}
+          PARALLEL: ${{ inputs.parallel || vars.VALIDATE_PARALLEL || '14' }}
           QUICK: ${{ inputs.quick && '1' || '' }}
+          MEMORY: ${{ inputs.memory && '1' || '' }}
+          NIGHTLY: ${{ github.event_name == 'schedule' && '1' || '' }}
           BASE: ${{ inputs.base }}
           SCENARIOS: ${{ inputs.scenarios }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          node tools/test-bds/affected.mjs --all --shards 4 --times suite-times.json > plan.json
-          node > matrix.json <<'EOF'
+          runs() { gh api "repos/$REPO/actions/workflows/validate.yml/runs?branch=master&event=$1&status=completed&per_page=30" > runs.json || echo '{}' > runs.json; }
+          field() { node -e 'console.log(JSON.parse(process.argv[1])[process.argv[2]] ?? "")' "$1" "$2"; }
+          skip="" reuse="" from="" span=""
+          if [ -n "$NIGHTLY" ]; then
+            # The nightly memory soak: nothing to do when master has not moved since the last one; its head RSS is
+            # tonight's base when that artifact still exists.
+            runs schedule
+            prev=$(node tools/test-bds/lib/validate-base.mjs --memory --runs runs.json)
+            if [ "$(field "$prev" same)" = true ]; then skip=true; echo "master has not moved since the last nightly memory soak"; fi
+            run=$(field "$prev" run)
+            if [ -n "$run" ] && [ "$(gh api "repos/$REPO/actions/runs/$run/artifacts?name=validate-memory-40-head" --jq '[.artifacts[] | select(.expired == false)] | length' 2>/dev/null || echo 0)" != 0 ]; then
+              reuse=$run; base=$(field "$prev" base); from="the previous nightly memory soak (run $run)"
+            else
+              base=$(git rev-parse HEAD^1); from="first parent"
+            fi
+          elif [ -n "$BASE" ]; then
+            # A branch name resolves on origin first (a dispatch's base is usually another branch).
+            base=$(git rev-parse --verify --quiet "origin/$BASE^{commit}" || git rev-parse --verify "$BASE^{commit}"); from="the base input"
+          elif [ "$GITHUB_REF" = refs/heads/master ]; then
+            runs push
+            info=$(node tools/test-bds/lib/validate-base.mjs --runs runs.json)
+            base=$(field "$info" base); from=$(field "$info" from)
+          else
+            base=$(git rev-parse HEAD^1); from="first parent"
+          fi
+          span=$(git rev-list --first-parent --count "$base..HEAD" 2>/dev/null || echo "")
+          echo "base $base ($from), $span commit(s) on the first-parent line"
+          node tools/test-bds/affected.mjs --all --shards 8 --times suite-times.json > plan.json
+          REUSE="$reuse" node > matrix.json <<'EOF'
           const q = process.env.QUICK === "1";
           const s = (long) => (q ? 60 : long);
+          const mem = (side) => ({ name: `memory-40-${side}`, kind: "memory", side, players: 40, seconds: q ? 600 : 3600 });
           const specs = (process.env.SCENARIOS || "").split(";").map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean);
           // The name is a dispatch input that reaches job names and artifact names: letters, digits, _ . - only.
           for (const spec of specs) if (!/^[A-Za-z0-9_.-]+$/.test(spec.split(" ")[0])) throw new Error(`Bad scenario name in "${spec}": use only letters, digits, _ . -`);
-          const jobs = specs.length
-            ? specs.map((spec, i) => ({ name: `scenario-${i + 1}-${spec.split(" ")[0]}`, kind: "scenario", spec }))
-            : [
-                { name: "soak-10", kind: "soak", players: 10, seconds: s(900) },
-                { name: "soak-40", kind: "soak", players: 40, seconds: s(900) },
-                { name: "bundle-10", kind: "bundle", players: 10, seconds: s(300) },
-                { name: "bundle-40", kind: "bundle", players: 40, seconds: s(300) },
-                { name: "memory-40-base", kind: "memory", side: "base", players: 40, seconds: q ? 600 : 3600 },
-                { name: "memory-40-head", kind: "memory", side: "head", players: 40, seconds: q ? 600 : 3600 },
-                ...require("./plan.json").shards.map((x) => ({ name: `suite-${x.index}`, kind: "suite", filter: x.filter })),
-              ];
+          const jobs = process.env.NIGHTLY
+            ? [mem("head"), ...(process.env.REUSE ? [] : [mem("base")])]
+            : specs.length
+              ? specs.map((spec, i) => ({ name: `scenario-${i + 1}-${spec.split(" ")[0]}`, kind: "scenario", spec }))
+              : [
+                  { name: "soak-10", kind: "soak", players: 10, seconds: s(900) },
+                  { name: "soak-40", kind: "soak", players: 40, seconds: s(900) },
+                  { name: "bundle-10", kind: "bundle", players: 10, seconds: s(300) },
+                  { name: "bundle-40", kind: "bundle", players: 40, seconds: s(300) },
+                  ...(process.env.MEMORY ? [mem("base"), mem("head")] : []),
+                  ...require("./plan.json").shards.map((x) => ({ name: `suite-${x.index}`, kind: "suite", filter: x.filter })),
+                ];
           console.log(JSON.stringify({ include: jobs }));
           EOF
-          # A branch name resolves on origin first (a dispatch's base is usually another branch).
-          if [ -n "$BASE" ]; then base=$(git rev-parse --verify --quiet "origin/$BASE^{commit}" || git rev-parse --verify "$BASE^{commit}"); else base=$(git rev-parse HEAD^1); fi
           {
             echo "matrix=$(cat matrix.json)"
-            echo "parallel=$(node -e 'console.log(Math.max(1, Math.min(8, Math.floor(Number(process.env.PARALLEL)) || 4)))')"
+            echo "parallel=$(node -e 'console.log(Math.max(1, Math.min(20, Math.floor(Number(process.env.PARALLEL)) || 14)))')"
             echo "base=$base"
+            echo "span=$span"
+            echo "from=$from"
+            echo "reuse=$reuse"
+            echo "skip=$skip"
           } >> "$GITHUB_OUTPUT"
 
   validate:
     needs: plan
+    if: needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     strategy:
@@ -119,6 +171,13 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/bds
+      # The last run's scenario seconds: each scenario's hard time limit is 3x its usual time (300 s at least).
+      - if: matrix.kind == 'suite'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: suite-times.json
+          key: suite-times-${{ github.sha }}
+          restore-keys: suite-times-
       - name: Base tree
         if: matrix.kind != 'suite'
         run: |
@@ -172,7 +231,7 @@ jobs:
                 done
               done ;;
             suite)
-              node tools/test-bds/suite.mjs --jobs 2 --retry --filter "$FILTER" --json "$OUT/suite.json" | tail -40 ;;
+              node tools/test-bds/suite.mjs --jobs 2 --retry --filter "$FILTER" --times suite-times.json --json "$OUT/suite.json" | tail -40 ;;
           esac
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -193,10 +252,10 @@ jobs:
 
   report:
     needs: [plan, validate]
-    if: always() && needs.plan.result == 'success'
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: read, issues: write }
+    permissions: { contents: read, issues: write, actions: read }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -206,13 +265,35 @@ jobs:
         with:
           pattern: validate-*
           path: ${{ runner.temp }}/results
+      # The nightly memory soak's base: the previous nightly's head RSS, read as this run's base side.
+      - if: needs.plan.outputs.reuse != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: validate-memory-40-head
+          run-id: ${{ needs.plan.outputs.reuse }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/reused
+      - if: needs.plan.outputs.reuse != ''
+        run: |
+          d="$RUNNER_TEMP/results/validate-memory-40-base"; mkdir -p "$d"
+          echo memory-40-base > "$d/name.txt"
+          for x in rss exit out; do [ -f "$RUNNER_TEMP/reused/head.$x" ] && cp "$RUNNER_TEMP/reused/head.$x" "$d/base.$x"; done
+          ls -l "$d"
+      # The flaky history of earlier runs (suite-times.json keeps the last 20).
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: suite-times.json
+          key: suite-times-${{ github.sha }}
+          restore-keys: suite-times-
       - name: Report
         id: report
         env:
           BASE_SHA: ${{ needs.plan.outputs.base }}
+          BASE_FROM: ${{ needs.plan.outputs.from }}
+          SPAN: ${{ needs.plan.outputs.span }}
           MATRIX: ${{ needs.plan.outputs.matrix }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node tools/test-bds/validate-report.mjs --dir "$RUNNER_TEMP/results" --base "$BASE_SHA" --head "$GITHUB_SHA" --run "$RUN_URL" --matrix "$MATRIX" --out report.md --times suite-times.json
+        run: node tools/test-bds/validate-report.mjs --dir "$RUNNER_TEMP/results" --base "$BASE_SHA" --base-from "$BASE_FROM" --span "$SPAN" --head "$GITHUB_SHA" --run "$RUN_URL" --matrix "$MATRIX" --out report.md --times suite-times.json
       - name: Keep the scenario seconds for pr-tests.yml's shards
         if: always() && hashFiles('suite-times.json') != ''
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -223,13 +304,16 @@ jobs:
         if: always() && hashFiles('report.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          # The nightly memory report is its own series: it never closes a merge's full report.
+          WHAT: ${{ github.event_name == 'schedule' && 'Memory' || 'Validation' }}
+          SERIES: ${{ github.event_name == 'schedule' && format('{0} nightly', github.ref_name) || github.ref_name }}
         run: |
           gh label create perf-report --color 5319e7 --description "Post-release validation (validate.yml)" --force > /dev/null
-          url=$(gh issue create --title "Validation ${GITHUB_SHA::7} (${GITHUB_REF_NAME})" --body-file report.md --label perf-report)
+          url=$(gh issue create --title "$WHAT ${GITHUB_SHA::7} ($SERIES)" --body-file report.md --label perf-report)
           new=${url##*/}
-          # One open report per branch: close this branch's older perf-report issues, superseded by the new one.
+          # One open report per series: close this series' older perf-report issues, superseded by the new one.
           gh issue list --label perf-report --state open --limit 200 --json number,title \
-            --jq ".[] | select(.number != ${new}) | select(.title | endswith(\"(${GITHUB_REF_NAME})\")) | .number" |
+            --jq ".[] | select(.number != ${new}) | select(.title | endswith(\"(${SERIES})\")) | .number" |
             while read -r old; do gh issue close "$old" --comment "Superseded by #${new}." > /dev/null; done
       - name: Red when a scenario failed or a pair regressed
         if: always()

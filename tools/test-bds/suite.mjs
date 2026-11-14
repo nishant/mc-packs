@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Runs every scenario in examples/ with the command from its own header comment, a few at a time,
 // and prints a table: scenario | result | seconds | first failure line.
-//   node tools/test-bds/suite.mjs [--jobs 2] [--filter <regex>] [--retry] [--json <out>] [--list] [--prepare-only]
+//   node tools/test-bds/suite.mjs [--jobs 2] [--filter <regex>] [--retry] [--json <out>] [--times <suite json>] [--list] [--prepare-only]
+//   (--times: the last run's seconds; a scenario is killed at 3x its usual time, 300 s at least, lib/suite-limits.mjs)
 //   node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp | --perf-bundle <mcpack>] [--json <out>]
 //   (--perf default = 10,40: 10 is the real Realm, 40 shows how the packs scale; 120 s for development, 300 s for release)
 // Results: pass, fail, flaky (failed, then passed when rerun alone with --retry), timeout, skipped.
@@ -33,6 +34,7 @@ import { findBash, runRecipe, stageRecipe, stageWord } from "./lib/recipe.mjs";
 import { findPacks } from "./lib/packs.mjs";
 import { BUDGET_PLAYERS, BUNDLE_BUDGET_MS, evaluatePerfBudgets, packBudget } from "./lib/perf-acceptance.mjs";
 import { reducedReport } from "./lib/profile-report.mjs";
+import { hardLimitSeconds, readTimes } from "./lib/suite-limits.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
@@ -45,7 +47,7 @@ try {
       jobs: { type: "string", default: "2" }, filter: { type: "string" }, retry: { type: "boolean", default: false },
       json: { type: "string" }, list: { type: "boolean", default: false }, help: { type: "boolean", short: "h", default: false },
       perf: { type: "string" }, "perf-seconds": { type: "string", default: "120" }, "perf-only": { type: "string" },
-      "perf-bundle": { type: "string" },
+      "perf-bundle": { type: "string" }, times: { type: "string" },
       "prepare-only": { type: "boolean", default: false },
     },
   }).values;
@@ -54,7 +56,7 @@ try {
   process.exit(64);
 }
 if (args.help) {
-  console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 15).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+  console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 16).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(0);
 }
 const JOBS = Math.max(1, Number(args.jobs) || 2);
@@ -210,11 +212,12 @@ function stageScenario(p) {
   }
 }
 
-/** Timeout (s) the run asked for, plus slack for setup, to kill a hung run. */
+const knownSeconds = args.times ? readTimes(args.times) : new Map();
+
+/** Timeout (ms) to kill a hung run (lib/suite-limits.mjs): the header's plus slack, capped by the usual seconds. */
 function hardLimit(p) {
   const i = p.args ? p.args.indexOf("--timeout") : -1;
-  const s = i >= 0 ? Number(p.args[i + 1]) : p.runner ? 240 : 180;
-  return (s + 120) * 1000;
+  return hardLimitSeconds(i >= 0 ? Number(p.args[i + 1]) : p.runner ? 240 : 180, knownSeconds.get(p.name)) * 1000;
 }
 
 function runOne(p, logDir, tag = "") {

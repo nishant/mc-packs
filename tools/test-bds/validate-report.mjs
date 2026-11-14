@@ -47,6 +47,7 @@ export function suiteSummary(reports) {
   /** @type {Record<string, number>} */
   const counts = {};
   const failures = [];
+  const flaky = [];
   const results = [];
   let wall = 0;
   for (const r of reports) {
@@ -55,10 +56,27 @@ export function suiteSummary(reports) {
       if (!x) continue;
       counts[x.result] = (counts[x.result] ?? 0) + 1;
       results.push({ name: x.name, seconds: x.seconds });
-      if (x.result === "fail" || x.result === "timeout") failures.push(`${x.name}: ${x.result}${x.failure ? ` - ${String(x.failure).replace(/\s+/g, " ").slice(0, 160)}` : ""}`);
+      const why = (/** @type {any} */ f) => (f ? ` - ${String(f).replace(/\s+/g, " ").slice(0, 160)}` : "");
+      if (x.result === "fail" || x.result === "timeout") failures.push(`${x.name}: ${x.result}${why(x.failure)}`);
+      // A flaky scenario failed, then passed when rerun alone: both durations and the first failure.
+      if (x.result === "flaky") flaky.push(`${x.name}: failed in ${Math.round(x.seconds ?? 0)} s, passed alone in ${Math.round(x.retry?.seconds ?? 0)} s${why(x.failure)}`);
     }
   }
-  return { counts, failures, results, wall, red: failures.length > 0 };
+  return { counts, failures, flaky, results, wall, red: failures.length > 0 };
+}
+
+/**
+ * The flaky history kept in the cached times file: this run's flaky names appended to the last 20 runs, and the
+ * scenarios flaky most often over them.
+ * @param {any} previous the times file as it was (or null) @param {string[]} flakyNames @param {number} ran scenarios this run
+ */
+export function flakyHistory(previous, flakyNames, ran) {
+  const runs = [...(Array.isArray(previous?.flakyRuns) ? previous.flakyRuns : []), { date: new Date().toISOString(), ran, flaky: flakyNames }].slice(-20);
+  /** @type {Map<string, number>} */
+  const n = new Map();
+  for (const r of runs) for (const name of r.flaky ?? []) n.set(name, (n.get(name) ?? 0) + 1);
+  const top = [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([name, times]) => ({ name, times }));
+  return { runs, top };
 }
 
 const n3 = (/** @type {any} */ v) => (typeof v === "number" && Number.isFinite(v) ? v.toFixed(3) : "-");
@@ -128,10 +146,12 @@ const json = (/** @type {string} */ f) => {
 };
 
 function main() {
-  const { values: a } = parseArgs({ options: { dir: { type: "string" }, base: { type: "string", default: "" }, head: { type: "string", default: "" }, run: { type: "string", default: "" }, out: { type: "string", default: "report.md" }, times: { type: "string" }, matrix: { type: "string" } } });
+  const { values: a } = parseArgs({ options: { dir: { type: "string" }, base: { type: "string", default: "" }, head: { type: "string", default: "" }, run: { type: "string", default: "" }, out: { type: "string", default: "report.md" }, times: { type: "string" }, matrix: { type: "string" }, span: { type: "string", default: "" }, "base-from": { type: "string", default: "" } } });
   const dir = path.resolve(a.dir ?? ".");
   const jobs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((d) => d.startsWith("validate-")).sort() : [];
-  const L = [`## Validation ${a.head.slice(0, 7)}`, "", `Base ${a.base.slice(0, 7) || "?"} vs head ${a.head.slice(0, 7) || "?"}, each pair back to back on one runner.${a.run ? ` [Run](${a.run})` : ""}`, ""];
+  const span = Number(a.span);
+  const spanText = Number.isFinite(span) && span > 0 ? ` The pair spans ${span} commit${span === 1 ? "" : "s"} on master's first-parent line${span > 1 ? " (merges whose own validation was canceled are included)" : ""}.` : "";
+  const L = [`## Validation ${a.head.slice(0, 7)}`, "", `Base ${a.base.slice(0, 7) || "?"}${a["base-from"] ? ` (${a["base-from"]})` : ""} vs head ${a.head.slice(0, 7) || "?"}, each pair back to back on one runner.${spanText}${a.run ? ` [Run](${a.run})` : ""}`, ""];
   let red = false;
   const suites = [];
   // The plan's matrix (--matrix, its JSON): a job that uploaded nothing is named, and a missing suite shard counts as a failure.
@@ -202,7 +222,10 @@ function main() {
     L.push(`### Scenarios: ${["pass", "flaky", "fail", "timeout", "skipped"].map((k) => `${s.counts[k] ?? 0} ${k}`).join(", ")} (${suites.length} shard(s), longest ${(s.wall / 60).toFixed(1)} min)`, "");
     for (const x of s.failures) L.push(`- ${x}`);
     if (s.failures.length) L.push("");
-    if (a.times) fs.writeFileSync(a.times, JSON.stringify({ date: new Date().toISOString(), results: s.results }));
+    if (s.flaky.length) L.push("Flaky (failed, then passed rerun alone):", "", ...s.flaky.map((x) => `- ${x}`), "");
+    const history = flakyHistory(a.times ? json(a.times) : null, s.flaky.map((x) => x.split(":")[0]), s.results.length);
+    if (history.top.length) L.push(`Flaky most often over the last ${history.runs.length} validation(s): ${history.top.map((t) => `${t.name} (${t.times})`).join(", ")}`, "");
+    if (a.times) fs.writeFileSync(a.times, JSON.stringify({ date: new Date().toISOString(), results: s.results, flakyRuns: history.runs }));
   }
   if (!jobs.length) {
     L.push("No results: every validation job failed before writing its artifact.");
