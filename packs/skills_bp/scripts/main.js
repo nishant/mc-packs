@@ -668,7 +668,8 @@ const treasure = new Set(CONFIG.fishing.treasure);
 const CATCH_TICKS = 4; // the hook goes and the catch appears within this many ticks of each other
 const MIN_HOOK_TICKS = 30; // a hook out for less than this can't have caught anything
 
-world.afterEvents.entitySpawn.subscribe(({ entity }) => {
+/** @param {import("@minecraft/server").EntitySpawnAfterEvent} ev */
+function onSpawn({ entity }) {
   try {
     if (!enabled()) return;
     if (entity.typeId === "minecraft:fishing_hook") {
@@ -696,7 +697,8 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   } catch (e) {
     console.warn(`[skills] ${e}`);
   }
-});
+}
+world.afterEvents.entitySpawn.subscribe(onSpawn);
 
 /** @param {Dimension} dimension @param {Vector3} at */
 function isWater(dimension, at) {
@@ -730,7 +732,7 @@ function caught(player, item) {
 
 // Follow live hooks (and whether they're in water); when one goes, an item that appeared just
 // before is the catch. Forgotten a few ticks after they're gone.
-system.runInterval(() => {
+const hookLoop = system.runInterval(() => {
   if (!hooks.size) return;
   const now = system.currentTick;
   for (const [id, h] of hooks) {
@@ -753,6 +755,33 @@ system.runInterval(() => {
     } else if (now - h.gone > CATCH_TICKS) hooks.delete(id);
   }
 }, 1);
+
+// Fishing Rewards, when installed, follows every hook and sends each catch once (realm:fish_caught { player, item,
+// amount, dim, x, y, z }): then this pack stops following hooks itself. It answers realm:fish_ping.
+let sharedCatch = false;
+onScriptEvent(
+  ["realm:fish_pong", "realm:fish_caught"],
+  ({ id, message }) => {
+    if (!sharedCatch) {
+      sharedCatch = true;
+      world.afterEvents.entitySpawn.unsubscribe(onSpawn);
+      system.clearRun(hookLoop);
+      hooks.clear();
+    }
+    // A pong only says Fishing Rewards is here; a catch is also counted.
+    if (id === "realm:fish_caught" && enabled()) {
+      try {
+        const m = JSON.parse(message);
+        if (typeof m?.player !== "string" || typeof m.item !== "string") return;
+        const owner = world.getAllPlayers().find((p) => p.id === m.player);
+        if (owner) caught(owner, m.item);
+      } catch {
+        // not JSON: ignore
+      }
+    }
+  },
+);
+world.afterEvents.worldLoad.subscribe(() => system.sendScriptEvent("realm:fish_ping", "skills_bp"));
 
 // ---------------------------------------------------------------------------
 // Exploration

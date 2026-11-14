@@ -439,18 +439,6 @@ PRG-27, PRG-31, PRG-44, PRG-24, PRG-42, HUD-10, HUD-24, BSE-07, BSE-08, BSE-14, 
 - Risk: saved formats. One pack per commit, old format read forever, a scenario that loads data written by the
   previous version.
 
-### W15 Fishing and the shared catch (S)
-
-Findings: PRG-01, PRG-06, PRG-39. Packs: `fishing_bp`, `saga_bp`, `skills_bp`, `journal_bp`, `quests_bp`.
-- Every live bobber gets a 27-block scan every tick for a third-party add-on's light blocks: 58 native calls per
-  tick per fishing player, about 20,000 per catch (PRG-01). Skip it when that block type is not registered, and
-  otherwise scan only while the hook is new. This is the cheapest high-impact fix in the audit: do it first.
-- Five packs each follow every fishing hook and inspect item spawns for the same catch, 13 calls per entity spawn
-  (PRG-06): `fishing_bp` sends one `realm:fish_caught` and the others listen; each keeps its own tracking only when
-  Fishing Rewards is absent (packs stay independent).
-- About 190 native calls in the tick of each catch to work out where it happened (PRG-39).
-- Proof: `fishing-perf` (10 bobbers out), the fishing scenarios of all five packs with and without `fishing_bp`.
-
 ### W16 Saga with a quest active (M)
 
 Findings: PRG-30, PRG-05, PRG-40, PRG-47, PRG-16 (after W2). Packs: `saga_bp`.
@@ -524,7 +512,7 @@ Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
    release).
 3. W3 as soon as two validation runs with histograms exist.
 4. In parallel, at most four at a time, with no overlapping packs: W5 (map_bp), W7 then W8 (build_bp), W9
-   (stash_bp), W10 (npc, town, wander, caravan), W11 (elite, bounty, dolphin), W15 (fishing and four others), W16
+   (stash_bp), W10 (npc, town, wander, caravan), W11 (elite, bounty, dolphin), W16
    (saga), W17 (weather packs).
 5. W12, W13, W14, W18: each touches many packs lightly, so run them when the per-pack workstreams above are merged,
    grouped by track.
