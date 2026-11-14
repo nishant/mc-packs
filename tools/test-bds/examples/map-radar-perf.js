@@ -106,7 +106,7 @@ export default async function (t) {
 
   // The soak: movers step every tick; one presence sample a second; the store's size every 5 s.
   const valid = (p) => { try { return p.isValid; } catch { return false; } };
-  await ask({ player: players[0].p.id, action: "cost" }, (m) => !!m.cost); // resets the cost counters
+  await ask({ player: players[0].p.id, action: "cost" }, (m) => !!m.cost); // resets the cost and queue counters
   const labAtStart = await lab();
   const start = t.tick;
   const phaseAt = [["fill", 0], ["cap", 20], ["refresh", 110], ["late", 140]].filter(([, s]) => s < SECONDS);
@@ -140,7 +140,8 @@ export default async function (t) {
     }
   }
   const end = t.tick;
-  const cost = await ask({ player: players[0].p.id, action: "cost" }, (m) => !!m.cost);
+  const queue = (await ask({ action: "queue" }, (m) => !!m.queue))?.queue ?? {};
+  const cost = await ask({ player: players[0].p.id, action: "cost" }, (m) => !!m.cost); // also resets the queue counters
   const labAtEnd = await lab();
   const alive = players.filter((s) => valid(s.p)).length;
   const ticks = end - start;
@@ -148,12 +149,14 @@ export default async function (t) {
   const d = (key) => (labAtEnd?.counters?.[key] ?? 0) - (labAtStart?.counters?.[key] ?? 0);
   t.log(`soak done: ${SECONDS} s, ${alive}/${N} players, ${steps} steps; store ${sizes.join(", ")}; peak ${peakCols} columns, at its cap from ${capAt === null ? "never" : capAt + " s"}`);
   t.log(`radar work over the window: ${c.scanReads ?? "?"} reads, scanner ${c.scanMs ?? "?"} ms (planning ${c.scanPlanMs ?? "?"} ms), ${d("planned")} full plans, ${d("rolled")} rolled, ${c.rebuilds ?? "?"} picture rebuilds, ${c.turnSends ?? "?"} titles`);
+  const q = (key) => queue[key] ?? "?";
+  t.log(`scanner time over the window (ms): retries ${q("candidateRetryMs")}, plans ${q("planForMs")}, viewer checks ${q("viewerPruneMs")}, reads ${q("dispatchMs")}, cleanup ${q("cleanupMs")}; ${q("nativeAttempt")} read operations (${q("nativeMiss")} missed), ${q("admissionVisited")} picks looked at, ${q("rangeSkips")} out of range, ${q("deferredPlans")} plans deferred, longest queue ${q("remainingPeak")}; rolled tails ${d("rollTail")}, entered ${d("rollEntered")}`);
   t.report("perf-workload", {
     schema: 1, declared, spawned: made, spawnGameSeconds, kinds,
     soak: { startTick: start, endTick: end, ticks, seconds: ticks / 20 },
     retention: { samples, minValid: samples ? minValid : 0, endValid: alive },
     phases,
-    radar: { steps, peakCols, capAt, sizes, scanReads: c.scanReads, scanMs: c.scanMs, scanPlanMs: c.scanPlanMs, planned: d("planned"), rolled: d("rolled"), rebuilds: c.rebuilds, turnSends: c.turnSends, stores: labAtEnd?.cache?.stores },
+    radar: { steps, peakCols, capAt, sizes, scanReads: c.scanReads, scanMs: c.scanMs, scanPlanMs: c.scanPlanMs, planned: d("planned"), rolled: d("rolled"), rollTail: d("rollTail"), queue, rebuilds: c.rebuilds, turnSends: c.turnSends, stores: labAtEnd?.cache?.stores },
   });
   t.check(samples > 0 && minValid === N && alive === N, `all ${N} players stayed in the world for the whole ${SECONDS} s soak`);
   t.check(ticks >= SECONDS * 20, `the steady window ran its full ${SECONDS} s (${(ticks / 20).toFixed(1)} s)`);
