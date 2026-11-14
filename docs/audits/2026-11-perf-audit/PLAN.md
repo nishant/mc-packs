@@ -108,36 +108,11 @@ Size is the amount of work: S (one sitting), M (a day of agent work with tests),
 
 ### W0 Make the measurement trustworthy and fast (harness and CI only; no pack changes)
 
-Four PRs, in this order. None changes a pack, so none needs a pack release; each still merges through the normal
-flow and is proven by one `validate.yml` dispatch.
-
-**W0a Keep the data** (S). Findings: PIPE-01, PIPE-02, PIPE-09, PIPE-19, PIPE-20, PIPE-23, PIPE-25, PIPE-26.
-- Upload the full profile JSON and `.out` for soak and bundle jobs; keep `process`, `workload` and each pack's
-  `top`, `slowest` and counters in the reduced JSON; emit every callback with time as chunked `PROFILE_CALLBACKS`
-  lines and build a per-pack table by `scripts/<pack>/` path when there is one context, so the bundle run finally has
-  per-pack figures of its own (PIPE-01).
-- Host side: histograms of ms by `tick % 20`, `% 40`, `% 100`, `% 200`, and the share of ticks over 5 ms that fall on
-  a multiple of 20; in the profiler, the 10 worst ticks with the callbacks of 1 ms or more that ran in them, for the
-  steady window and for each phase (PIPE-02). Print both in the report issue.
-- Count watchdog and slow-tick lines from the server log in the report, and write the watchdog settings the harness
-  runs with into `server.properties` explicitly (PIPE-09).
-- Fix the small report bugs in the same PR: the "over 50 ms" counter that counts over 55 (PIPE-19), the wrapper map
-  that loses a callback subscribed twice (PIPE-20), the fixed 5 s wait for the final dump (PIPE-23), a suite shard
-  with no artifact not being counted (PIPE-25), the RSS sampler picking the template generator's pid (PIPE-26),
-  `max-players` 20 while soaks spawn 40 (PIPE-27).
-- Proof: `lib/profile-*.test.mjs` and `validate-report.test.mjs` extended; a `quick` dispatch whose issue shows the
-  histogram, the worst ticks and a per-pack table for the bundle.
-
-**W0b Validate every merge, in a third of the time** (S). Findings: PIPE-05, PIPE-06, PIPE-24, PIPE-13, PIPE-16.
-- `max-parallel` 14 and 8 suite shards (PIPE-05, PIPE-13). Move `memory-40-*` to a nightly schedule plus a dispatch
-  input, as WORKING.md "Fast testing" already describes; reuse the previous run's head RSS as the next base
-  (PIPE-24). A merge is then validated in about 31 minutes.
-- Take the A/B base from the last master commit that has a finished validation, not `HEAD^1`, and say how many
-  commits the pair spans (PIPE-06).
-- Name the flaky scenarios in the report and give each scenario a hard time limit so a hang cannot take a shard
-  (PIPE-16).
-- Update CLAUDE.md "Performance" and WORKING.md "Testing in CI" in the same PR (the lead edits those).
-- Proof: the next merge's validation wall time; a run that follows a canceled one compares against the right base.
+Two PRs, in this order. None changes a pack, so none needs a pack release; each still merges through the normal
+flow and is proven by one `validate.yml` dispatch. The validation report already keeps the full profiles, the tick
+histograms by `tick % 20` to `% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts, flaky
+scenarios and the bundle's per-pack table by `scripts/<pack>/` path; a merge is validated in about 31 minutes against
+the last master commit with a finished validation, and the memory soak runs nightly.
 
 **W0c Phases and a pinned world** (M). Findings: PIPE-04, UTL-01, PIPE-10, UTL-07 (confirm), and the measurement
 halves of XC-02, XC-06, XC-07, HUD-01, BSE-27, PRG-16.
@@ -164,7 +139,7 @@ halves of XC-02, XC-06, XC-07, HUD-01, BSE-27, PRG-16.
 - Bundle pair as base, head, head, base; compare means as well as lows (PIPE-07 (1)). A weekly A/A dispatch (base
   equals head) whose spread is printed next to every later comparison (2). A drift table against a pinned baseline
   (3). The per-pack bar scaled to the clock noise instead of a flat 0.1 ms (4). The PR perf check measures the
-  bundle, with the per-pack table from W0a (5).
+  bundle, with the per-pack table by path that the validation report has (5).
 - An always-on meter (`--meter`): tick interval percentiles and bedrock_server CPU ms/tick without the profiler, so
   profiled and unprofiled runs of one workload can be compared (PIPE-03 (1)).
 - The differential listener scenario: an idle bundle for 60 s twice in one job, once sending 5 no-op `realm:` events
@@ -230,11 +205,11 @@ Findings: XC-04, XC-05, PRG-16, HUD-11, HUD-39, BSE-35, BSE-04, UTL-05. Packs: a
   W0c; the A/B soak at 40.
 - Release: all packs bumped again; combine with nothing else.
 
-### W3 Spread the timers (S after W0a's histogram)
+### W3 Spread the timers (S)
 
 Findings: XC-03, BSE-31, UTL-19, HUD-35, HUD-18. Packs: decided by the histogram.
 
-1. Read W0a's `tick % 200` histogram and worst-tick lists from two validation runs. If the worst ticks are not on
+1. Read the validation report's `tick % 200` histogram and worst-tick lists from two validation runs. If the worst ticks are not on
    multiples of 20, stop: record what they are in `cross-cutting.md` XC-03 and reorder this plan by what they show.
 2. If they are: a small shared `every(ticks, fn, { phase })` (`tools/phase-shared.js`, synced like `spread.js`, in
    the bundle's shared list) that starts an interval after a stable per-pack offset. Convert intervals of 20 ticks
@@ -525,17 +500,17 @@ Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
 
 ## 5. Order and what can run together
 
-1. Hosting H1 (CI minutes), then W0a, W0b here. These unblock cheap, fast, trustworthy measurement for all the rest.
-2. W0c and W0d. From here every workstream has phases to measure with.
-3. W1, then W2 (both bump every pack: never in flight together, and nothing else merges between a start and its
+1. Hosting H1 (CI minutes), then W0c and W0d here. From here every workstream has cheap, fast, trustworthy
+   measurement with phases.
+2. W1, then W2 (both bump every pack: never in flight together, and nothing else merges between a start and its
    release).
-4. W3 as soon as two validation runs with histograms exist.
-5. In parallel, at most four at a time, with no overlapping packs: W5 (map_bp), W7 then W8 (build_bp), W9
+3. W3 as soon as two validation runs with histograms exist.
+4. In parallel, at most four at a time, with no overlapping packs: W5 (map_bp), W7 then W8 (build_bp), W9
    (stash_bp), W10 (npc, town, wander, caravan), W11 (elite, bounty, dolphin), W16
    (saga), W17 (weather packs).
-6. W12, W13, W14, W18: each touches many packs lightly, so run them when the per-pack workstreams above are merged,
+5. W12, W13, W14, W18: each touches many packs lightly, so run them when the per-pack workstreams above are merged,
    grouped by track.
-7. W6, W19, W4, W20 any time their inputs exist (W6 after the owner's device is available; W4 after W1).
+6. W6, W19, W4, W20 any time their inputs exist (W6 after the owner's device is available; W4 after W1).
 
 Releases: each merge here opens a hosting PR and a new Realm Bundle for the owner to upload. Group the small ones
 (W18) and leave at least the release run's length between merges.

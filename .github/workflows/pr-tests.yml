@@ -1,5 +1,5 @@
 # The fast pre-merge game tests (docs/WORKING.md "Testing in CI"): only the BDS scenarios a PR touches, split over up
-# to 4 runners, and a short perf check that runs the PR's base and the PR back to back on the same runner, failing
+# to 8 runners, and a short perf check that runs the PR's base and the PR back to back on the same runner, failing
 # only on a clear slowdown (tools/test-bds/perf-compare.mjs). The full suite, the long soaks, the Realm Bundle soak and
 # the memory soak run after release in validate.yml. check.yml (check, build, bundle smoke) is unchanged.
 # A follow-up push to the same PR (same base, no force-push) reruns only the scenarios the last run didn't pass and
@@ -65,7 +65,7 @@ jobs:
           PREV_PERF: ${{ steps.prev.outputs.perf }}
         run: |
           base="${{ github.event.pull_request.base.sha }}"
-          node tools/test-bds/affected.mjs --base "$base" ${SINCE:+--since "$SINCE" --prev prev} --shards 4 --per-shard 8 --times suite-times.json > plan.json
+          node tools/test-bds/affected.mjs --base "$base" ${SINCE:+--since "$SINCE" --prev prev} --shards 8 --per-shard 8 --times suite-times.json > plan.json
           mkdir -p carried && node -e 'console.log(JSON.stringify(require("./plan.json").carried))' > carried/carried.json && echo "$base" > carried/base.txt
           node -e 'const p=require("./plan.json");console.log(`${p.reason}: ${p.scenarios.length} scenario(s) in ${p.shards.length} shard(s)`)'
           {
@@ -96,7 +96,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 8
       matrix:
         shard: ${{ fromJSON(needs.plan.outputs.shards) }}
     name: scenarios ${{ matrix.shard.index }}/${{ matrix.shard.of }}
@@ -105,10 +105,16 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/bds
+      # The last validation's scenario seconds: a hung scenario is killed at 3x its usual time (300 s at least).
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: suite-times.json
+          key: suite-times-${{ github.sha }}
+          restore-keys: suite-times-
       - name: Scenarios (2 at a time, failures retried alone)
         env:
           FILTER: ${{ matrix.shard.filter }}
-        run: node tools/test-bds/suite.mjs --jobs 2 --retry --filter "$FILTER" --json "$RUNNER_TEMP/suite.json"
+        run: node tools/test-bds/suite.mjs --jobs 2 --retry --filter "$FILTER" --times suite-times.json --json "$RUNNER_TEMP/suite.json"
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
