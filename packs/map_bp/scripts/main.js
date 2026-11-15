@@ -44,7 +44,7 @@ import { CONFIG } from "./config.js";
 import { G, overlayGlyph, SELF_ARROWS } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
-import { aheadPicks, colKey, COL, glyphAt, hydratePreview, MISS_RETRY, PREVIEW, previewGlyph, radarGeometry, northUpRadarGeometry, readColumn, retainVisible, sampleCoord, scanQueueCounters, spendBudget, TerrainWorld, TerrainUnavailableError } from "./terrain.js";
+import { colKey, COL, glyphAt, hydratePreview, MISS_RETRY, PREVIEW, previewGlyph, radarGeometry, northUpRadarGeometry, readColumn, retainVisible, sampleCoord, scanQueueCounters, spendBudget, TerrainWorld, TerrainUnavailableError } from "./terrain.js";
 import { PreviewPersistence } from "./preview-persistence.js";
 import { onScriptEvent } from "./script-events.js";
 import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetPlayer, staleForm, WORLD_GEN } from "./reset.js";
@@ -993,18 +993,13 @@ world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
   }
 });
 
-// Terrain scanner, every tick like the compass. Each viewer's missing columns are read from a reading budget the
-// viewers share evenly (at most SCAN_TOTAL a tick and SCAN_EACH for one, within scanBudget's time). A column read for
-// one is stored for all viewers of that store, and the version of its region bumps, so every viewer near it redraws.
-// Which columns a viewer needs (the plan, kept and resumed tick after tick): walking or standing, the list their
-// radar made of what its picture misses when it was last built (radarOf: nothing extra to work out; exact near-field
-// columns only once they stop); moving fast, that list alternating with the ground ahead (aheadPicks: the radar's
-// whole reach around the point `lead` blocks ahead; at most PLAN_EACH_TICK viewers a tick, not sooner than
-// PLAN_MIN_AGE ticks after their last plan). A viewer is
-// checked right after their radar was built or when they move fast (planNow), else every PLAN_EVERY ticks
-// (the roof probe, reads that failed).
-const SCAN_TOTAL = 48;
-const SCAN_EACH = 24;
+// Terrain scanner, every tick like the compass. Each viewer's missing columns are read from one reading budget the
+// viewers share in turns (EXP.ops operations a tick, within scanBudget's time). A column read for one is stored for
+// all viewers of that store, and the version of its region bumps, so every viewer near it redraws. Which columns a
+// viewer needs (the plan, kept and resumed tick after tick): every unknown or stale column of their circle, nearest
+// first; as they move the plan is rolled (rolling-demand.js: a long queue only gets the columns the move brought in).
+// A viewer is checked when they move fast or their reads failed (planNow, at most PLAN_EACH_TICK of those a tick),
+// else every PLAN_EVERY ticks in turns.
 /** The scanner's time: planning checks and reads (a read is one native block query or ray, ~0.1 ms). */
 const scanBudget = new LabBudget(EXP.scanMs,EXP.scanMs,EXP.scanMs);
 // Bounded per-tick experiment admission replaces the episode controller.
@@ -1026,9 +1021,6 @@ const PLAN_EVERY = EXP.checkEvery;
 const planNow = new Set();
 /** Viewers whose reads failed (unloaded chunks), and when to check them again. @type {Map<string, number>} */
 const retryAt = new Map();
-/** Where each viewer was at their last check (their speed when the game reports none, as for a teleporting flier). @type {Map<string, { x: number, z: number, tick: number }>} */
-const lastPose = new Map();
-const PLAN_MIN_AGE = 4;
 /** Columns kept per store at least, and per viewer of it (40 viewers spread out need more than the minimum). */
 const STORE_MIN = 6000;
 const STORE_PER_VIEWER = 1200;
@@ -1209,7 +1201,6 @@ function scanFrame() {
     scanPlans.delete(id);
     playerStore.delete(id);
     retryAt.delete(id);
-    lastPose.delete(id);
     planNow.delete(id);
   }
   planTurn.left = PLAN_EACH_TICK;
@@ -1232,8 +1223,9 @@ function scanFrame() {
   /** @type {Map<string, Player> | undefined} */
   let playersById;
   for (const id of planNow) {
-    if(!scanBudget.ok||!scanTimeLeft())break;
-    planNow.delete(id);
+    // At most PLAN_EACH_TICK a tick; the rest keep their place in the set and go first next tick.
+    if(!scanBudget.ok||!scanTimeLeft()||planTurn.left<=0)break;
+    planNow.delete(id);planTurn.left--;
     if (!candidateIds.has(id)) continue;
     let player;
     if (indexPlanNow) {
@@ -1259,7 +1251,7 @@ function scanFrame() {
     const t = Date.now();
     try {
       const p = candidates[(checked + scanFirst) % n];
-      if (!planIdle(idOf(p), now)) planFor(p, now,true);
+      planFor(p, now, true);
     } catch {
       // unloaded chunk or player left
     }
@@ -1390,15 +1382,7 @@ function scanFrame() {
   scanTicks++;
 }
 system.runInterval(() => { const started = featureEnvelope.begin(system.currentTick); try { scanFrame(); } finally { featureEnvelope.end(started); } }, 1);
-/** Blocks a viewer moves before the rotating check plans them again (their own radar asks sooner when it needs land). */
-const IDLE_MOVE = 16;
-/**
- * Can the rotating check skip this viewer (no game reads)? They haven't moved IDLE_MOVE blocks (a chunk), changed height
- * or dimension since their plan was made (their last draw says where they are), their radar listed nothing newer and
- * their roof probe isn't due. A plan still being read goes on being read as it is; one whose reads failed is asked again
- * by retryAt, a radar's new list by planNow, a fast mover by the turn check (planNow).
- * @param {string} id @param {import("./terrain.js").Store} store @param {{x:number,z:number}} at @param {number} radius
- */
+/** @param {string} id @param {import("./terrain.js").Store} store @param {{x:number,z:number}} at @param {number} radius */
 function requestDetailFootprint(id, store, at, radius) {
   if (!EXP.persistence) return;
   const x0 = Math.floor((at.x - radius) / 64), x1 = Math.floor((at.x + radius) / 64);
@@ -1412,10 +1396,6 @@ function requestDetailFootprint(id, store, at, radius) {
   }
 }
 const detailFootprints = new Map();
-
-/** Independent of raster construction: scanning can begin before the first HUD frame. */
-/** @param {string} _id @param {number} _now */
-function planIdle(_id, _now) { return false; }
 
 /**
  * Is everything a plan knew about still there: no column within its circle evicted or invalidated since the plan
@@ -1795,7 +1775,6 @@ function hidePlayerHud(player) {
   scanPlans.delete(id);
   retryAt.delete(id);
   playerStore.delete(id);
-  lastPose.delete(id);
   if (lastSent.has(id)) {
     side.clear(player, "", false);
     side.clear(player, "radar", false);
@@ -2185,17 +2164,6 @@ const passBudget = new Budget(0.2, 4, 2);
 /** Player id -> tick of their last pass. @type {Map<string, number>} */
 const passAt = new Map();
 
-/**
- * budgetLevel: each budget's [perTick, max, tickMax] (ms), in the order drawing, terrain pictures, passes, scanner.
- * "normal" is about 1 ms a tick in all (the owner's budget for the Minimap): with many players moving, strips and
- * radars come a little later, mob dots and land a few seconds later. "high" is the earlier normal (about 2.9 ms a
- * tick), for a server with time to spare; "low" about 0.7 ms. A title about to fade is drawn again whatever the level.
- */
-const BUDGET_LEVELS = /** @type {Record<string, [number, number, number][]>} */ ({
-  low: [[0.3, 5, 2], [0.1, 3, 2], [0.14, 3, 2], [0.17, 10, 3]],
-  normal: [[0.4, 6, 2], [0.15, 4, 2], [0.2, 4, 2], [0.25, 15, 3]],
-  high: [[1, 8, 3], [0.4, 6, 2], [0.5, 6, 2], [1, 30, 4]],
-});
 const BUDGETS = [drawBudget, rebuildBudget, passBudget, scanBudget];
 let budgetLevel = "";
 /** Sets the budgets to budgetLevel's share (at load and when an operator changes it). */
@@ -2274,7 +2242,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   if (roster.delete(playerId)) playersList = [...roster.values()];
   manualScans.cancel(playerId,"Player left",false);
   labPlans.delete(playerId); detailFootprints.delete(playerId);
-  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, costPassBy, retryAt, lastPose]) m.delete(playerId);
+  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, costPassBy, retryAt]) m.delete(playerId);
   planNow.delete(playerId);
 });
 
