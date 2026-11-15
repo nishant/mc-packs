@@ -49,6 +49,7 @@ import { choose, clearBox, currentPage, finishStepFor, hintOps, missingPlaces, o
 import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
 import { PACK, busy, cancelInteractions, online, send } from "./util.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 
 const LOOP_TICKS = 20; // the player loop runs once a second
 const TRACKER_RUNS = 2; // the tracker every 2 runs
@@ -59,8 +60,6 @@ function idSlot(id) {
   return (h >>> 16) % TRACKER_RUNS;
 }
 const SAVE_RUNS = 5; // unsaved progress is written every 5 seconds
-const PACK_SCAN_TICKS = 40; // installed packs: answers to realm:help_ping are collected for 2 seconds
-const PACK_SCAN_EVERY = 12000; // ...every 10 minutes
 
 // ---------------------------------------------------------------------------
 // The player loop
@@ -293,50 +292,14 @@ function onCalendar(msg) {
 // Installed packs, for `pack:<folder>` flags: the same ping /realm:help uses
 // ---------------------------------------------------------------------------
 
-/** The answers of the scan in progress. @type {Set<string> | undefined} */
-let scanAnswers;
-
-/** Rescans in a row each installed pack has not answered since the first scan. @type {Map<string, number>} */
-const packMisses = new Map();
-
-/** Asks every pack to answer realm:help_ping; after 2 seconds the answers are the installed packs. */
-function scanPacks() {
-  const answers = new Set([PACK]);
-  scanAnswers = answers;
-  try {
-    system.sendScriptEvent("realm:help_ping", "");
-  } catch (e) {
-    console.warn(`[saga] help_ping: ${e}`);
-  }
-  system.runTimeout(() => {
-    if (scanAnswers !== answers) return;
-    scanAnswers = undefined;
-    // The first scan is taken as it is. After it a pack is dropped only when it misses two scans in a row (a laggy
-    // Realm answers late), so `pack:` flags don't flip off mid-session; one that answers is there at once.
-    if (installed.ready) {
-      for (const f of answers) packMisses.delete(f);
-      for (const f of [...installed.set]) {
-        if (answers.has(f)) continue;
-        const n = (packMisses.get(f) ?? 0) + 1;
-        if (n >= 2) {
-          packMisses.delete(f);
-          installed.set.delete(f);
-        } else packMisses.set(f, n);
-      }
-      for (const f of answers) installed.set.add(f);
-    } else installed.set = answers;
-    installed.ready = true;
-  }, PACK_SCAN_TICKS);
-}
-
-/** realm:help_pong: a pack's folder name (any time: a pack that answers someone else's ping counts at once). @param {string} folder */
-function onPong(folder) {
-  if (!/^[a-z0-9_]{1,40}$/.test(folder)) return;
-  scanAnswers?.add(folder);
-  installed.set.add(folder);
-}
-
-system.runInterval(scanPacks, PACK_SCAN_EVERY);
+// One census for the whole script context (scripts/census.js): this context's packs at once, packs installed beside
+// it from the realm:help_ping a few seconds after the world loads (and any answer to anyone's ping later). Packs can't
+// change while the scripts run, so nothing repeats it.
+const census = createCensus(PACK, onScriptEvent);
+census.whenReady().then((set) => {
+  installed.set = set;
+  installed.ready = true;
+});
 
 // ---------------------------------------------------------------------------
 // Townsfolk: offers, talk and deliver objectives
@@ -446,7 +409,6 @@ function debugFlags(player, st, flags) {
 onScriptEvent(
   [
     "realm:seals_ping",
-    "realm:help_pong",
     "realm:npc_flags_ping",
     "realm:saga_progress_ping",
     "realm:wander_ping",
@@ -472,10 +434,6 @@ onScriptEvent(
   ({ id, message, sourceEntity }) => {
     if (id === "realm:seals_ping") {
       for (const p of world.getAllPlayers()) sendSeals(p, true);
-      return;
-    }
-    if (id === "realm:help_pong") {
-      onPong(message);
       return;
     }
     if (id === "realm:npc_flags_ping") {
@@ -724,7 +682,6 @@ world.afterEvents.worldLoad.subscribe(() => {
   sweep();
   sweepChampions();
   checkStories();
-  system.runTimeout(scanPacks, 60);
   system.runTimeout(() => send("realm:calendar_ping", {}), 80); // the calendar's live flags, if Townsfolk (or Realm Calendar) is here
   system.runTimeout(() => send("realm:calling_ping", {}), 90); // Callings (Skills), for The Calling
   system.runTimeout(() => send("realm:weather_ask", {}), 95); // the Weather Almanac's plan, for "due in" times

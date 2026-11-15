@@ -8,6 +8,7 @@ async function world() {
   const sim = createSim();
   await sim.load("admin_bp");
   sim.boot();
+  sim.game.emit("world.after.worldLoad", {}); // the installed-packs census starts when the world loads
   return sim;
 }
 

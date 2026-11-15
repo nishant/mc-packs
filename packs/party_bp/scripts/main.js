@@ -416,12 +416,35 @@ onScriptEvent(
   },
 );
 
+/** The party line each player has under the Coordinates HUD: an unchanged one is renewed late, not every 2 s. @type {Map<string, { text: string, at: number }>} */
+const hudSent = new Map();
+const HUD_LINE_TICKS = 300;
+const HUD_RENEW_TICKS = 240;
+/** @param {string} player @param {string} text */
+const hudLine = (player, text) => system.sendScriptEvent("realm:hud_line", JSON.stringify({ player, key: "party", text, ticks: HUD_LINE_TICKS }));
+
 // The HUD, every 2 seconds: mates within hudRange, nearest first. Nothing is written when nobody is
 // near, so the HUD doesn't cover other notes for nothing. Tags are put right at the same time.
 system.runInterval(() => {
   const players = world.getAllPlayers();
   for (const player of players) syncTag(player);
-  if (!enabled() || !parties().size) return;
+  /** @type {Set<string>} the players whose party line under the HUD stays this time */
+  const shown = new Set();
+  try {
+    if (enabled() && parties().size) hudPass(players, shown);
+  } finally {
+    // A line under the HUD lasts HUD_LINE_TICKS: take it off as soon as it has nothing to show.
+    for (const id of [...hudSent.keys()]) {
+      if (shown.has(id)) continue;
+      hudSent.delete(id);
+      hudLine(id, "");
+    }
+  }
+}, HUD_TICKS);
+
+/** @param {import("@minecraft/server").Player[]} players @param {Set<string>} shown */
+function hudPass(players, shown) {
+  const now = system.currentTick;
   for (const player of players) {
     try {
       const code = partyOf(player.id);
@@ -444,8 +467,13 @@ system.runInterval(() => {
         .join(" §7| ");
       // The Coordinates HUD is on for this player: the party line goes under it (realm:hud_line), as Stats' does,
       // so the two don't fight over the bar (it waits for notes itself).
-      if (hudPlayers.has(player.id) && system.currentTick - hudHeard < HUD_STALE_TICKS) {
-        system.sendScriptEvent("realm:hud_line", JSON.stringify({ player: player.id, key: "party", text, ticks: HUD_TICKS + 20 }));
+      if (hudPlayers.has(player.id) && now - hudHeard < HUD_STALE_TICKS) {
+        const last = hudSent.get(player.id);
+        if (!last || last.text !== text || now - last.at >= HUD_RENEW_TICKS) {
+          hudLine(player.id, text);
+          hudSent.set(player.id, { text, at: now });
+        }
+        shown.add(player.id);
         continue;
       }
       if ((barHeld.get(player.id) ?? 0) > system.currentTick) continue;
@@ -457,7 +485,7 @@ system.runInterval(() => {
       console.warn(`[party] hud: ${e}`);
     }
   }
-}, HUD_TICKS);
+}
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return void bump(player.id);
@@ -512,6 +540,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   bump(playerId);
+  hudSent.delete(playerId); // the HUD drops a leaver's lines itself
   // An active one-a-second cooldown outlives leaving and rejoining; an expired one is dropped.
   if (system.currentTick - (lastChat.get(playerId) ?? -Infinity) >= 20) lastChat.delete(playerId);
   invites.delete(playerId);

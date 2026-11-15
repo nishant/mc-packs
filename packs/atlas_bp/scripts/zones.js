@@ -6,8 +6,8 @@
 //
 //   realm:zones       { src, part, parts, zones: [{ id, name, dim, x, z, r, shape? }] }
 //                     A provider's full list ("zones" = Safe Zones, "town" = Town Projects, "claims" =
-//                     Land Claims), sent when it changes, about 5 s after the world loads and in reply to
-//                     a ping. Split into parts under 2048 characters; parts 0 or an empty list clears it.
+//                     Land Claims), sent when it changes (a save that changes nothing sent is not
+//                     sent again), about 5 s after the world loads and in reply to a ping. Split into parts under 2048 characters; parts 0 or an empty list clears it.
 //                     shape: "circle" (default: within r of x, z) or "square" (x - r to x + r, z - r to z + r).
 //                     Zones reach from the bottom of the world to the top.
 //   realm:zones_ping  {}   Asks every provider to send its list again.
@@ -44,6 +44,8 @@ const bySrc = new Map();
 const arriving = new Map();
 /** @type {(() => void)[]} */
 const zoneListeners = [];
+/** Every zone from every provider, rebuilt when a list changes. @type {SafeZone[] | undefined} */
+let flat;
 
 /** "overworld" and "minecraft:overworld" are the same dimension. @param {unknown} d */
 const fullDim = (d) => {
@@ -69,6 +71,7 @@ function cleanZone(src, z) {
 }
 
 function zonesChanged() {
+  flat = undefined;
   for (const fn of zoneListeners) {
     try {
       fn();
@@ -115,9 +118,9 @@ export function zoneHolds(zone, x, z) {
   return zone.shape === "square" ? Math.abs(dx) <= zone.r && Math.abs(dz) <= zone.r : dx * dx + dz * dz <= zone.r * zone.r;
 }
 
-/** Every zone from every provider. @returns {SafeZone[]} */
+/** Every zone from every provider (one array shared by the callers until a list changes: do not change it). @returns {SafeZone[]} */
 export function allZones() {
-  return [...bySrc.values()].flat();
+  return (flat ??= [...bySrc.values()].flat());
 }
 
 /** The providers heard from since the world loaded (even with an empty list), e.g. "zones". */
@@ -219,6 +222,7 @@ export function pingZones() {
 
 /** UTF-8 length, so a message is under the limit however the game counts it. @param {string} s */
 function utf8Length(s) {
+  if (!/[^\x00-\x7f]/.test(s)) return s.length; // the common case, without a character loop in script
   let n = 0;
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
@@ -236,44 +240,68 @@ const round1 = (n) => Math.round(n * 10) / 10;
  * @returns {string[]}
  */
 export function zoneMessages(src, list) {
-  /** @param {object[]} zones @param {number} part @param {number} parts */
-  const envelope = (zones, part, parts) => JSON.stringify({ src, part, parts, zones });
-  /** @type {object[][]} */
+  // The envelope {src, part, parts, zones} with each zone stringified once and the parts cut by adding byte lengths:
+  // the same messages as stringifying the whole envelope again for every zone added, without the quadratic work.
+  /** @param {number} part @param {number} parts */
+  const head = (part, parts) => JSON.stringify({ src, part, parts, zones: [] }).slice(0, -2);
+  const fixed = utf8Length(head(999, 999)) + 2; // the head and the closing "]}"
+  /** @type {string[][]} */
   const parts = [[]];
+  let size = fixed;
   for (const z of list) {
-    const zone = { id: z.id, name: z.name, dim: z.dim, x: round1(z.x), z: round1(z.z), r: round1(z.r), shape: z.shape === "square" ? "square" : undefined };
-    const last = /** @type {object[]} */ (parts.at(-1));
-    if (last.length && utf8Length(envelope([...last, zone], 999, 999)) > ZONES_MESSAGE_LIMIT) parts.push([zone]);
-    else last.push(zone);
+    const s = JSON.stringify({ id: z.id, name: z.name, dim: z.dim, x: round1(z.x), z: round1(z.z), r: round1(z.r), shape: z.shape === "square" ? "square" : undefined });
+    const n = utf8Length(s);
+    const last = /** @type {string[]} */ (parts.at(-1));
+    if (last.length && size + 1 + n > ZONES_MESSAGE_LIMIT) {
+      parts.push([s]);
+      size = fixed + n;
+    } else {
+      size += (last.length ? 1 : 0) + n;
+      last.push(s);
+    }
   }
-  return parts.map((zones, i) => envelope(zones, i + 1, parts.length));
+  return parts.map((zones, i) => `${head(i + 1, parts.length)}${zones.join(",")}]}`);
 }
 
 /**
  * Makes this pack a provider: its list is sent about 5 s after the world loads and in reply to each
- * ping (once per tick however many pings come). Call the returned function when the list changes.
+ * ping (once per tick however many pings come). Call the returned function when the list may have changed: a list
+ * whose messages are the same as the last ones sent is not sent again (a claim saved with a new share or door switch
+ * changes nothing the zones carry).
  * @param {string} src @param {() => { id: string, name: string, dim: string, x: number, z: number, r: number, shape?: "circle" | "square" }[]} getList
  * @returns {() => void}
  */
 export function provideZones(src, getList) {
   let queued = false;
-  const publish = () => {
+  /** Send even when unchanged: an answer to a ping, or the world-load list. */
+  let force = false;
+  /** @type {string | undefined} the messages last sent, joined */
+  let sent;
+  /** @param {boolean} always */
+  const publish = (always) => {
+    force ||= always;
     if (queued) return;
     queued = true;
     system.run(() => {
       queued = false;
+      const always = force;
+      force = false;
       try {
-        for (const m of zoneMessages(src, getList())) system.sendScriptEvent("realm:zones", m);
+        const messages = zoneMessages(src, getList());
+        const joined = messages.join("\n");
+        if (!always && joined === sent) return;
+        sent = joined;
+        for (const m of messages) system.sendScriptEvent("realm:zones", m);
       } catch (e) {
         console.warn(`[zones] ${src}: ${e}`);
       }
     });
   };
   onScriptEvent("realm:zones_ping", ({ id }) => {
-    if (id === "realm:zones_ping") publish();
+    if (id === "realm:zones_ping") publish(true);
   });
-  world.afterEvents.worldLoad.subscribe(() => system.runTimeout(publish, 100));
-  return publish;
+  world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => publish(true), 100));
+  return () => publish(false);
 }
 
 onScriptEvent("realm:zones", ({ id, message }) => {
@@ -285,9 +313,9 @@ onScriptEvent("realm:zones", ({ id, message }) => {
   }
 });
 
+// Every provider sends its list about 5 s after the world loads, so a consumer needn't ask then (each of the 15 copies
+// in a bundle used to); it asks only if no list has come 10 s after the load.
 world.afterEvents.worldLoad.subscribe(() => {
-  pingZones();
-  // Once more a little later, in case a provider wasn't ready to answer the first time.
   system.runTimeout(() => {
     if (!bySrc.size) pingZones();
   }, 200);

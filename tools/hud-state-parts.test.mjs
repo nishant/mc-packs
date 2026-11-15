@@ -52,10 +52,10 @@ async function party(count) {
 }
 
 const send = (sim, msg) => sim.game.deliver(STATE, typeof msg === "string" ? msg : JSON.stringify(msg));
+/** Is the player's stats line under the HUD now: the last line sent for them has text (an unchanged line isn't re-sent). */
 const statsHud = (sim, id, steps = 45) => {
-  sim.game.sent.length = 0;
   sim.step(steps);
-  return lines(sim, "stats").some((m) => m.player === id && m.text);
+  return !!lines(sim, "stats").filter((m) => m.player === id).at(-1)?.text;
 };
 
 test("producer: 250 viewing players are all published in parts, each message under 2048 bytes", async () => {
@@ -188,7 +188,7 @@ test("stats: old one-message state and an empty list still work, and a lost HUD 
   send(sim, { players: [all[0]] });
   assert.ok(statsHud(sim, all[0]));
   send(sim, { part: 1, parts: 1, players: [] });
-  assert.equal(statsHud(sim, all[0], 5), false);
+  assert.equal(statsHud(sim, all[0]), false);
   send(sim, { players: [all[0]] });
   sim.step(260);
   assert.equal(statsHud(sim, all[0]), false, "no state for 10 seconds: back to the bar");
@@ -205,9 +205,8 @@ test("stats: malformed parts are ignored without clearing the state", async () =
 test("party: the party line goes under the HUD only for players in the joined parts, and parts replace stale state", async () => {
   const { sim } = await party(0);
   const seen = (steps = 45) => {
-    sim.game.sent.length = 0;
     sim.step(steps);
-    return lines(sim, "party").some((m) => m.player === "a");
+    return !!lines(sim, "party").filter((m) => m.player === "a").at(-1)?.text;
   };
   send(sim, { part: 2, parts: 2, seq: 1, players: ["a"] });
   assert.equal(seen(), false, "one part alone is not a state");
@@ -265,9 +264,8 @@ test("stats: part and parts must be real integers; malformed messages leave an i
 test("party: late older replay is rejected, malformed fields are ignored", async () => {
   const { sim } = await party(0);
   const seen = () => {
-    sim.game.sent.length = 0;
     sim.step(45);
-    return lines(sim, "party").some((m) => m.player === "a");
+    return !!lines(sim, "party").filter((m) => m.player === "a").at(-1)?.text;
   };
   send(sim, { part: 1, parts: 2, seq: 3, players: ["z"] });
   send(sim, { part: "2", parts: 2, seq: 3, players: ["a"] });

@@ -85,8 +85,8 @@ pairs, and read differences against the A/A spread the report prints next to eac
 | Measure (Realm Bundle unless said) | Today | Target | Workstream |
 |---|---:|---:|---|
 | Validation wall time after a merge | 100 min | about 31 min | W0 |
-| Callbacks per tick at 40 | 109 | 45 or less | W1 |
-| Slowest tick caused by one `/realm:help` or `/realm:prefs` | not measured (about 4,500 callbacks) | under 5 ms | W1, W2 |
+| Callbacks per tick at 40 | 109 (97 on 2026-11-14); 58 after #288 | 45 or less | W3, W12 |
+| Slowest tick caused by one `/realm:help` or `/realm:prefs` | `/realm:prefs` 237 ms at 10, 289 at 40; after #288 11 at 10, under the churn's other ticks at 40; `/realm:help` sends no events | under 5 ms | W2 |
 | p95 / p99 / max per tick at 40, steady window | 9 / 14 / 32 ms | 5 / 8 / 20 or less | W3, W1 |
 | Average at 10 players | 1.06 ms | 0.8 or less | W5, W8, W1 |
 | Slowest tick of a join, a respawn, a leave | not measured | measured in W0, then halved | W13 |
@@ -125,38 +125,12 @@ walking, flying; W5), `stash-miner-perf` (a nearly full page and a stream of pic
 copy and cut a 40x40x30 box, preview held; W7), `fishing-perf` (10 bobbers out), and a check that `saga-perf-quests`
 has a quest active for every player (W16).
 
-### W1 One script event listener per context (M)
+### W1 What is left after the census PR (S)
 
-Findings: XC-01, XC-02, UTL-11, UTL-10, HUD-32, HUD-40, UTL-34, PRG-33, PRG-36. Packs: all 67 (the synced
-`script-events.js`), plus `help_bp`, `atlas_bp`, `map_bp`, `saga_bp`, `calendar_bp`, `stats_bp`, `party_bp`,
-`zones_bp` and the zone consumers for the census parts.
-
-1. `tools/events-shared.js`: a hub on `globalThis.__realmEvents` that owns the single native subscription and an
-   index from id to the pack dispatchers that have a handler for it. Each pack's copy keeps its own handler table
-   (order, "*" handlers, error handling as today) and registers its dispatcher with the hub. Pack order is hub
-   registration order, which is today's subscription order. A pack installed alone is a hub with one member.
-2. `tools/diag-shared.js`: expose `wrapCallback(fn, label)` on `globalThis.__realmDiag`; the hub wraps each pack's
-   dispatcher with it while that pack's modules are evaluated, so `/realm:diag` still times script events per pack
-   and the `realm:diag_ping` carrier still rides the one native listener. The test profiler (`lib/profile.js`)
-   wraps the same way: check `handledPerTick` still attributes per pack.
-3. `tools/sync-events.mjs --check` and `check-events`: "one native listener per context".
-4. Census protocols: `/realm:help` reads the context's pack list when the hub is present and uses the event census
-   only for packs outside it (XC-02 (b)); the packs that each run their own installed-packs census share one cached
-   answer and stop repeating it (UTL-11, HUD-32; saga and calendar re-run theirs on timers that coincide every 10
-   minutes, about 9,200 callbacks in one tick, PRG-33); an unchanged HUD line is not re-sent as an event every 2 s
-   per player (PRG-36); pings meant for one pack carry `pack` and the others stay silent
-   (XC-02 (a), used by W2); the zones protocol sends a change, not every zone, and splits without quadratic work
-   (UTL-10); the join pings of the Minimap and Atlas are answered from caches (HUD-40).
-5. Docs: "How the packs work together" in PACKS.md and the quirk in WORKING.md ("In a bundle every native script
-   event listener wakes on every event") change with it.
-- Proof: unit tests for the hub (order across packs, "*", a throwing handler, register and unregister during
-  delivery, the last handler dropping the native listener); `bundle-smoke.js`; the whole suite (every protocol goes
-  through this); the bundle soaks: callbacks per tick 109 to 45 or less at 40, the `/realm:help` worst tick from
-  W0c, tick interval p95 and p99; the wake-up cost from `validate.yml`'s `listener` job before and after.
-- Risk: ordering between packs on the same event, and standalone packs talking to the bundle. Run the two-pack mini
-  bundle scenarios (`storm-rod-claims.js`, `diag-bundle`) and one scenario with a pack installed beside the bundle.
-- Release: every behavior pack's copy changes, so every pack is bumped: one release, one line of notes each
-  ("Internal: cheaper script events"). Space it from other releases.
+The census part shipped in #288 (XC-02, UTL-11, HUD-32, PRG-33, UTL-10, PRG-36, UTL-34 and XC-05's `answer()`).
+Left: HUD-40, the Minimap's 4 join pings (`map_bp/scripts/main.js` `ping(player)`): about 5 events per join, and
+answering from caches would mean keeping a leaver's sites, waystones, tracks and death point, which the Minimap now
+drops on leave (HUD-16). Do it with W13 (joins) if the join tick measures it.
 
 ### W2 The shared settings helper (S to M)
 
@@ -166,9 +140,9 @@ Findings: XC-04, XC-05, PRG-16, HUD-11, HUD-39, BSE-35, BSE-04, UTL-05. Packs: a
    player preferences per player id, updated in `setFor` and dropped on `playerLeave`; validate when a value is saved
    or first read, not on every read (XC-04). Before caching options that use their own `prop`, grep every `prop:`
    name for writes outside `setFor` and route those through it.
-2. `answer()`: stringify each option once and add lengths to find where a part ends (XC-05); answer only when the
-   ping names this pack or names none (W1's `pack` field), and have `settings_bp` and `admin_bp` ask one pack at a
-   time when a page is opened.
+2. Done in #288: `answer()` stringifies each option once, `realm:cfg_ping` takes `pack`, `packs` and `scope`
+   (Realm Settings asks by scope, Server size by pack). Left: `settings_bp` asking one pack when a pack's own page
+   opens, if the `/realm:config` tick still measures it.
 3. Call sites the readers found paying for the old behavior: Coordinates HUD's per-player read (HUD-11), the
    Minimap's 7 uncached reads on a first pass (HUD-39), Quick Stack's handlers reading settings before their cheap
    tests (BSE-35), Easy Building's 7 to 8 reads a tick per drawing player (BSE-04), elytra's preference read 10
@@ -203,8 +177,9 @@ Findings: XC-08, XC-09, PIPE-17, PIPE-22, HUD-41, XC-10, XC-11.
 - Measure first: world start to first tick (the server log's timings, or `run.mjs --meter` around startup) and
   bedrock_server RSS, with the bundle and without. BDS 1.26.52 has no script memory figure (`script watchdog
   exportstats` does not exist; see the harness README), so RSS is the memory measure.
-- After W1, `script-events.js` can join the bundle's shared list; give `zones.js` and `side.js` the same factory
-  shape so they can too (67, 15 and 7 copies today).
+- Give `script-events.js`, `zones.js` and `side.js` a factory shape (per-pack state in the factory, as
+  `settings-core.js` has) so they can join the bundle's shared list (67, 15 and 7 copies today; the hub that would
+  have done it for `script-events.js` is not planned, section 7).
 - Comment stripping at bundle time with every line number kept, only if the measurement shows startup or memory
   worth having (PIPE-17's assessment: likely small). No minification.
 - Dormant Minimap modules that are shipped and evaluated but never used (HUD-41): delete or stop importing.
@@ -390,7 +365,7 @@ Findings: PRG-30, PRG-05, PRG-40, PRG-47, PRG-16 (after W2). Packs: `saga_bp`.
 
 Findings: UTL-04, UTL-05, UTL-07, UTL-08, UTL-13, UTL-14, UTL-20, UTL-21, UTL-22, UTL-23, UTL-24, UTL-28, UTL-29,
 UTL-30, UTL-33, UTL-38, HUD-09, HUD-12, HUD-15, HUD-22, HUD-23, HUD-25, HUD-26, HUD-33, HUD-34, BSE-39, BSE-41,
-BSE-42, BSE-43, PRG-34, PRG-35, PRG-12, PRG-14, PRG-25, PRG-26, PRG-36, PRG-41, PRG-43, PRG-45, PRG-46, ENT-18,
+BSE-42, BSE-43, PRG-34, PRG-35, PRG-12, PRG-14, PRG-25, PRG-26, PRG-41, PRG-43, PRG-45, PRG-46, ENT-18,
 ENT-35.
 - Each is a few lines: a poll replaced by an event (elytra's `isGliding` every 5 ticks, UTL-04), a per-second probe
   that only needs to run when something is due (night stars, UTL-13), a synchronous sweep sliced (cleanup's dropped
@@ -430,15 +405,15 @@ Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
 
 1. Hosting H1 (CI minutes). Every workstream has cheap, fast, trustworthy measurement with phases, A/A spreads and
    the listener cost.
-2. W1, then W2 (both bump every pack: never in flight together, and nothing else merges between a start and its
-   release).
+2. W2 after the census PR (#288) is released (both bump every pack: never in flight together, and nothing else
+   merges between a start and its release).
 3. W3 as soon as two validation runs with histograms exist.
 4. In parallel, at most four at a time, with no overlapping packs: W5 (map_bp), W7 then W8 (build_bp), W9
    (stash_bp), W10 (npc, town, wander, caravan), W11 (elite, bounty, dolphin), W16
    (saga), W17 (weather packs).
 5. W12, W13, W14, W18: each touches many packs lightly, so run them when the per-pack workstreams above are merged,
    grouped by track.
-6. W6, W19, W4, W20 any time their inputs exist (W6 after the owner's device is available; W4 after W1).
+6. W6, W19, W4, W20 any time their inputs exist (W6 after the owner's device is available).
 
 Releases: each merge here opens a hosting PR and a new Realm Bundle for the owner to upload. Group the small ones
 (W18) and leave at least the release run's length between merges.
@@ -459,6 +434,10 @@ rest of its workstream.
 
 ## 7. Not planned, and why
 
+- The single native script event listener per context (XC-01, the old W1 hub): after #288 the bundle at 40 players
+  sends 0.26 script events a tick (0.84 before; `realm:help_pong` 0.58 to 0.014), about 17 listener wake-ups a tick
+  at the 1.3 us W0d measured: about 0.02 ms a tick. Not worth the risk to per-pack order, "*" handlers and diag
+  attribution. Revisit only if a later measurement shows script events back above about 2 a tick.
 - UTL-36 (leaf decay's `setblock ... destroy` commands): each leaf's break particles, sound and drops are the point,
   and the stable API has no other way to drop a leaf's own loot; the cost is per leaf, not per tick, and
   `leavesPerTick` already lets operators slow it. No change.

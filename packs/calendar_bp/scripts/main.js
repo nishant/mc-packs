@@ -27,6 +27,7 @@ import { get, onChange } from "./settings.js";
 import { holdTitle, sideBoxes } from "./side.js";
 import { escapeZones, protectedBox } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 import { spawnFresh } from "./spawn.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -154,23 +155,12 @@ const afk = (p) => {
 };
 
 // ---------------------------------------------------------------------------
-// Installed packs (the realm:help_ping scan)
+// Installed packs: one census for the whole script context (scripts/census.js; packs can't change while it runs)
 // ---------------------------------------------------------------------------
 
-/** @type {Set<string>} */
-let installed = new Set();
-/** @type {Set<string> | undefined} */
-let scanning;
-function scanPacks() {
-  scanning = new Set([PACK]);
-  send("realm:help_ping", {});
-  system.runTimeout(() => {
-    if (scanning) installed = scanning;
-    scanning = undefined;
-  }, 40);
-}
-/** Before the first scan answers, assume a pack is there. @param {string} folder */
-const has = (folder) => !installed.size || installed.has(folder);
+const census = createCensus(PACK, onScriptEvent);
+/** Before the census answers, assume a pack is there. @param {string} folder */
+const has = (folder) => !census.ready() || census.installed().has(folder);
 
 // ---------------------------------------------------------------------------
 // The Realm day and the calendar
@@ -1302,7 +1292,7 @@ function startSiege(town, warnMs) {
 const claimAsks = new Map();
 /** @param {number} x @param {number} z @param {number} r */
 function claimsNear(x, z, r) {
-  if (installed.size && !installed.has("claims_bp")) return Promise.resolve(0);
+  if (!has("claims_bp")) return Promise.resolve(0);
   const id = `cal${system.currentTick}${Math.floor(Math.random() * 1e6)}`;
   return new Promise((resolve) => {
     claimAsks.set(id, resolve);
@@ -2288,12 +2278,8 @@ function onQuestDone(msg) {
 const EVENTS = new Set(["realm:calendar", "realm:calendar_ping", "realm:town_list", "realm:town_state_ping", "realm:quest_done", "realm:npc_gift", "realm:saga_progress", "realm:place_ready", "realm:claims_check_result", "realm:npc_talk", "realm:npc_choose", "realm:calendar_debug"]);
 
 onScriptEvent(
-  ["realm:help_pong", "realm:actionbar", ...EVENTS],
+  ["realm:actionbar", ...EVENTS],
   ({ id, message, sourceEntity }) => {
-    if (id === "realm:help_pong") {
-      scanning?.add(message.trim());
-      return;
-    }
     if (id === "realm:actionbar") {
       try {
         const m = JSON.parse(message);
@@ -2433,10 +2419,7 @@ system.runInterval(() => {
     console.warn(`[calendar] roll: ${e}`);
   }
 }, 200);
-system.runInterval(() => {
-  broadcast();
-  scanPacks();
-}, 6000);
+system.runInterval(broadcast, 6000);
 onChange((key) => {
   if (!loaded || (key !== "festivals" && key !== "*")) return;
   broadcast();
@@ -2474,7 +2457,6 @@ world.afterEvents.worldLoad.subscribe(() => {
     }, 40);
   } else handoff();
   system.runTimeout(() => {
-    scanPacks();
     send("realm:town_list_ping", {});
     send("realm:saga_progress_ping", {});
     send("realm:place_ping", {});

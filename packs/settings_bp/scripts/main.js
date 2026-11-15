@@ -42,10 +42,11 @@ onScriptEvent(
 );
 
 /**
- * Asks every installed pack for its options, with this player's own values for player options.
- * @param {Player} player @returns {Promise<Pack[]>} by title
+ * Asks every installed pack for its options of one scope ("world" for /realm:config, "player" for /realm:prefs), with
+ * this player's own values for player options. Packs with no option of that scope don't answer.
+ * @param {Player} player @param {"world" | "player"} scope @returns {Promise<Pack[]>} by title
  */
-async function collect(player) {
+async function collect(player, scope) {
   const id = newId();
   /** @type {Map<string, { title: string, parts: number, got: Map<number, Option[]> }>} */
   const answers = new Map();
@@ -57,7 +58,7 @@ async function collect(player) {
   });
   const complete = () => [...answers.values()].every((a) => a.got.size >= a.parts);
   try {
-    system.sendScriptEvent("realm:cfg_ping", JSON.stringify({ id, player: player.id }));
+    system.sendScriptEvent("realm:cfg_ping", JSON.stringify({ id, player: player.id, scope }));
     await system.waitTicks(CONFIG.answerTicks);
     if (!complete()) await system.waitTicks(CONFIG.answerTicks); // a long answer comes in parts: give the rest a moment
   } finally {
@@ -323,7 +324,7 @@ const worldOptions = (pack) => pack.options.filter((o) => o.scope === "world");
 /** @param {Player} player */
 async function configMenu(player) {
   while (player.isValid && isOp(player)) {
-    const packs = (await collect(player)).filter((p) => worldOptions(p).length);
+    const packs = (await collect(player, "world")).filter((p) => worldOptions(p).length);
     if (!player.isValid) return;
     if (!packs.length) {
       player.sendMessage("§7No installed pack has settings to change.");
@@ -419,7 +420,7 @@ async function allSettings(player) {
   const results = [];
   let page = 0;
   while (player.isValid && isOp(player)) {
-    const pages = paginate((await collect(player)).filter((p) => worldOptions(p).length));
+    const pages = paginate((await collect(player, "world")).filter((p) => worldOptions(p).length));
     if (!player.isValid || !pages.length) return false;
     page = Math.min(page, pages.length - 1);
     const many = pages.length > 1;
@@ -506,7 +507,7 @@ async function prefsMenu(player) {
 
 /** @param {Player} player @returns {Promise<boolean>} true = show the preferences again */
 async function prefsForm(player) {
-  const packs = (await collect(player)).filter((p) => p.options.some((o) => o.scope === "player"));
+  const packs = (await collect(player, "player")).filter((p) => p.options.some((o) => o.scope === "player"));
   if (!player.isValid) return false;
   if (!packs.length) {
     player.sendMessage("§7No installed pack has preferences of your own.");

@@ -6,7 +6,9 @@
 // pack's scripts/settings-core.js. It imports only from @minecraft/server, never a sibling file.
 //
 // Realm Settings (settings_bp) talks to this over script events, so packs never import each other:
-//   realm:cfg_ping   {id, player?}                 → realm:cfg_schema {id, pack, title, part, parts, options}
+//   realm:cfg_ping   {id, player?, pack?, packs?, scope?} → realm:cfg_schema {id, pack, title, part, parts, options}
+//                    (only the pack named by `pack`, or the packs listed in `packs`, answer; neither = every pack;
+//                    `scope` "world" or "player": only those options, and a pack with none of them stays silent)
 //   realm:cfg_set    {id, pack, key, value, player?} → realm:cfg_ack    {id, pack, key, player?, ok, value, error?}
 //   realm:cfg_reset  {id, pack}                     → realm:cfg_ack    {id, pack, key: "*", ok}
 // World values are saved in `<PREFIX>:cfg` (JSON, only what differs from config.js), player
@@ -192,10 +194,18 @@ export function createSettings({ PACK, PREFIX, TITLE, BASE, OPTIONS, onScriptEve
    */
   function getFor(player, key) {
     const opt = optionFor("player", key);
-    if (!opt) return get(key);
+    return opt ? playerValue(player, opt) : get(key);
+  }
+
+  /**
+   * A player option's value. `prefs` is the player's parsed `<PREFIX>:pref` when the caller already has it (one
+   * read for a whole menu answer instead of one per option).
+   * @param {Player} player @param {Option} opt @param {Record<string, unknown>} [prefs] @returns {any}
+   */
+  function playerValue(player, opt, prefs) {
     let v;
     try {
-      v = opt.prop ? player.getDynamicProperty(opt.prop) : prefsOf(player)[key];
+      v = opt.prop ? player.getDynamicProperty(opt.prop) : (prefs ?? prefsOf(player))[opt.key];
     } catch {
       v = undefined;
     }
@@ -273,16 +283,22 @@ export function createSettings({ PACK, PREFIX, TITLE, BASE, OPTIONS, onScriptEve
     }
   }
 
-  /** @param {Player | undefined} player @returns {object[]} the options, with their current values */
-  function describe(player) {
-    return OPTIONS.filter((o) => o.scope === "world" || player).map((o) => {
+  /**
+   * @param {Player | undefined} player @param {"world" | "player"} [scope] only that scope's options
+   * @returns {object[]} the options, with their current values
+   */
+  function describe(player, scope) {
+    /** @type {Record<string, unknown> | undefined} */
+    let prefs;
+    return OPTIONS.filter((o) => (o.scope === "world" || player) && (!scope || o.scope === scope)).map((o) => {
       const isWorld = o.scope === "world";
+      const p = /** @type {Player} */ (player);
       return {
         key: o.key,
         type: o.type,
         label: o.label,
         help: o.help,
-        value: isWorld ? get(o.key) : getFor(/** @type {Player} */ (player), o.key),
+        value: isWorld ? get(o.key) : playerValue(p, o, o.prop ? undefined : (prefs ??= prefsOf(p))),
         default: isWorld ? fileDefault(o.key) : playerBase(o),
         min: o.min,
         max: o.max,
@@ -299,6 +315,7 @@ export function createSettings({ PACK, PREFIX, TITLE, BASE, OPTIONS, onScriptEve
 
   /** UTF-8 length, so a message is under the limit however the game counts it. @param {string} s */
   function bytes(s) {
+    if (!NON_ASCII.test(s)) return s.length; // the common case, without a character loop in script
     let n = 0;
     for (let i = 0; i < s.length; i++) {
       const c = s.charCodeAt(i);
@@ -306,6 +323,8 @@ export function createSettings({ PACK, PREFIX, TITLE, BASE, OPTIONS, onScriptEve
     }
     return n;
   }
+
+  const NON_ASCII = /[^\x00-\x7f]/;
 
   /** @param {string} id @returns {Player | undefined} */
   const online = (id) => {
@@ -317,19 +336,44 @@ export function createSettings({ PACK, PREFIX, TITLE, BASE, OPTIONS, onScriptEve
     }
   };
 
+  /**
+   * Is a realm:cfg_ping for this pack? A ping may name one pack (`pack`) or several (`packs`) so that the others stay
+   * silent; one that names neither is for every pack.
+   * @param {any} req
+   */
+  const askedFor = (req) => (typeof req.pack !== "string" || req.pack === PACK) && (!Array.isArray(req.packs) || req.packs.includes(PACK));
+
+  /** A ping's `scope` ("world": /realm:config, "player": /realm:prefs): only those options; a pack with none stays silent. @param {any} req */
+  const scopeOf = (req) => (req.scope === "world" || req.scope === "player" ? req.scope : undefined);
+
   /** @param {any} req */
   function answer(req) {
+    if (!askedFor(req)) return;
+    const scope = scopeOf(req);
+    if (scope && !OPTIONS.some((o) => o.scope === scope)) return;
     const player = typeof req.player === "string" ? online(req.player) : undefined;
-    /** @param {object[]} options @param {number} part @param {number} parts */
-    const envelope = (options, part, parts) => JSON.stringify({ id: req.id, pack: PACK, title: TITLE, part, parts, options });
-    /** @type {object[][]} */
+    // The envelope {id, pack, title, part, parts, options} with each option stringified once and the parts cut by
+    // adding byte lengths: the same messages as stringifying the whole envelope again for every option added, without
+    // that quadratic work (one /realm:prefs asks every pack at once).
+    /** @param {number} part @param {number} parts */
+    const head = (part, parts) => JSON.stringify({ id: req.id, pack: PACK, title: TITLE, part, parts, options: [] }).slice(0, -2);
+    const fixed = bytes(head(99, 99)) + 2; // the head and the closing "]}"
+    /** @type {string[][]} */
     const parts = [[]];
-    for (const o of describe(player)) {
-      const last = /** @type {object[]} */ (parts.at(-1));
-      if (last.length && bytes(envelope([...last, o], 99, 99)) > MESSAGE_LIMIT) parts.push([o]);
-      else last.push(o);
+    let size = fixed;
+    for (const o of describe(player, scope)) {
+      const s = JSON.stringify(o);
+      const n = bytes(s);
+      const last = /** @type {string[]} */ (parts.at(-1));
+      if (last.length && size + 1 + n > MESSAGE_LIMIT) {
+        parts.push([s]);
+        size = fixed + n;
+      } else {
+        size += (last.length ? 1 : 0) + n;
+        last.push(s);
+      }
     }
-    parts.forEach((options, i) => system.sendScriptEvent("realm:cfg_schema", envelope(options, i + 1, parts.length)));
+    parts.forEach((options, i) => system.sendScriptEvent("realm:cfg_schema", `${head(i + 1, parts.length)}${options.join(",")}]}`));
   }
 
   /** @param {any} req */

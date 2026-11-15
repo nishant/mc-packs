@@ -12,6 +12,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecra
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 import { applyParts, createOwedStore } from "./owed.js";
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -714,14 +715,17 @@ system.runInterval(() => {
   }
 }, 40);
 
-world.afterEvents.worldLoad.subscribe(() => {
-  // Is the Champions pack installed? Every pack answers /realm:help's ping with its folder name.
-  system.runTimeout(() => system.sendScriptEvent("realm:help_ping", ""), 40);
-  system.runTimeout(() => {
-    if (eliteSeen === undefined) eliteSeen = false;
-    ready = true;
-    ensureDay();
-  }, 100);
+// Is the Champions pack installed? One installed-packs census for the whole script context (scripts/census.js),
+// a few seconds after the world loads; a later answer still counts.
+const census = createCensus("bounty_bp", onScriptEvent);
+census.onAdded((folder) => {
+  if (folder === "elite_bp") eliteSeen = true;
+});
+census.whenReady().then((packs) => {
+  if (packs.has("elite_bp")) eliteSeen = true;
+  else if (eliteSeen === undefined) eliteSeen = false;
+  ready = true;
+  ensureDay();
 });
 
 // ---------------------------------------------------------------------------
@@ -851,7 +855,6 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 
 onScriptEvent(
   [
-    "realm:help_pong",
     "realm:bounty_targets_ping",
     "realm:champion_slain",
     "realm:npc_talk",
@@ -859,10 +862,6 @@ onScriptEvent(
     "realm:bounty_rival",
   ],
   ({ id, message }) => {
-    if (id === "realm:help_pong") {
-      if (message === "elite_bp") eliteSeen = true;
-      return;
-    }
     if (id === "realm:bounty_targets_ping") {
       targetsSent = undefined; // sent again within 2 seconds
       return;

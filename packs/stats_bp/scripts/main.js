@@ -221,7 +221,7 @@ const RANK_TICKS = 100;
 /**
  * Per player: the stat it's on, seconds on it, what was last drawn (and for which stat, `head`), when, and where
  * ("bar" = the action bar, "hud" = a line under the Coordinates HUD, which owns the bar while it's on).
- * @type {Map<string, { index: number, seconds: number, text: string, head?: string, at: number, via?: "bar" | "hud" }>}
+ * @type {Map<string, { index: number, seconds: number, text: string, head?: string, at: number, via?: "bar" | "hud", sent?: number }>} (`sent`: when the line last went to the HUD)
  */
 const tickers = new Map();
 /**
@@ -403,8 +403,11 @@ function tickerPlace(id, name, score) {
 /** @param {Player} player @param {string} [id] */
 const tickerOn = (player, id = player.id) => prefsOf(player, id).on;
 
+/** How long the Coordinates HUD keeps the ticker's line, and when an unchanged line is sent again before that (as Saga's quest box does). */
+const HUD_LINE_TICKS = 300;
+const HUD_RENEW_TICKS = 240;
 /** @param {string} playerId @param {string} text */
-const toHud = (playerId, text) => system.sendScriptEvent("realm:hud_line", JSON.stringify({ player: playerId, key: "stats", text, ticks: 80 }));
+const toHud = (playerId, text) => system.sendScriptEvent("realm:hud_line", JSON.stringify({ player: playerId, key: "stats", text, ticks: HUD_LINE_TICKS }));
 
 /** Takes the ticker off the screen. @param {Player} player @param {{ text: string, via?: "bar" | "hud" }} t */
 function clearTicker(player, t) {
@@ -444,8 +447,13 @@ function tickerLoop() {
       if (head === t.head && via === t.via && now - t.at < REFRESH_TICKS) continue;
       const text = head ? tickerText(player, head, id) : "";
       if (!text && !t.text) continue; // nothing to show, and nothing of ours to take off
-      if (via === "hud") toHud(id, text);
-      else player.onScreenDisplay.setActionBar(text);
+      if (via === "hud") {
+        // An unchanged line is already under the HUD: send it again only before the HUD's hold runs out.
+        if (!(text === t.text && t.via === "hud" && now - (t.sent ?? -Infinity) < HUD_RENEW_TICKS)) {
+          toHud(id, text);
+          t.sent = now;
+        }
+      } else player.onScreenDisplay.setActionBar(text);
       t.text = text;
       t.head = head;
       t.via = via;

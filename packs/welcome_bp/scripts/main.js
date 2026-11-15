@@ -10,6 +10,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { DEFAULTS, GENERIC, LEGACY_REALM } from "./config.js";
 import { getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 
 /** @typedef {import("./config.js").WelcomeSettings} WelcomeSettings */
 
@@ -92,11 +93,11 @@ function legacyCopy() {
 world.afterEvents.worldLoad.subscribe(() => {
   migrate();
 });
-/** @type {Set<string>} the pack folders that answered the last realm:help_ping */
+/** Which packs are installed: one census for the whole script context (scripts/census.js). */
+const census = createCensus("welcome_bp", onScriptEvent);
+/** @type {Set<string>} the installed pack folders */
 let installed = new Set(["welcome_bp"]);
 let askedAt = -Infinity;
-/** @type {Set<Set<string>>} answer sets of pings still waiting */
-const pongs = new Set();
 
 /** @type {Promise<void> | undefined} the ping in flight: a join during it waits for the same answer */
 let asking;
@@ -106,35 +107,31 @@ let placed;
 /** @type {Map<number, string[]>} the parts of a realm:npc_places list still coming */
 let placesParts = new Map();
 
-/** Asks which packs are installed (each answers /realm:help's ping with its folder), at most once a minute. */
+/**
+ * The installed packs (the shared census) and, until Townsfolk has answered once, who is placed: Townsfolk sends its
+ * list on every change after that, so it is asked at most once a minute only while no answer has come.
+ */
 function askInstalled() {
   if (asking) return asking;
-  if (system.currentTick - askedAt < 1200) return Promise.resolve();
-  askedAt = system.currentTick;
+  const askPlaces = !placed && system.currentTick - askedAt >= 1200;
+  if (!askPlaces && census.ready()) {
+    installed = census.installed();
+    return Promise.resolve();
+  }
+  if (askPlaces) askedAt = system.currentTick;
   asking = (async () => {
-    /** @type {Set<string>} */
-    const got = new Set(["welcome_bp"]);
-    pongs.add(got);
     try {
-      system.sendScriptEvent("realm:help_ping", "");
-      system.sendScriptEvent("realm:npc_places_ping", "{}"); // who is placed, for the story start line
-      await system.waitTicks(10);
-      installed = got;
+      if (askPlaces) {
+        system.sendScriptEvent("realm:npc_places_ping", "{}"); // who is placed, for the story start line
+        await system.waitTicks(10);
+      }
+      installed = await census.whenReady();
     } finally {
-      pongs.delete(got);
       asking = undefined;
     }
   })();
   return asking;
 }
-
-onScriptEvent(
-  "realm:help_pong",
-  ({ id, message }) => {
-    if (id !== "realm:help_pong") return;
-    for (const set of pongs) set.add(String(message));
-  },
-);
 
 // Townsfolk sends where each townsfolk lives on every change and on realm:npc_places_ping, in parts under 2048 characters.
 onScriptEvent("realm:npc_places", ({ id, message }) => {
