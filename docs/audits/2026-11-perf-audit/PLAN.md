@@ -302,18 +302,19 @@ BSE-04 in W2). Packs: `build_bp`, `build_rp`.
   harness shim if it can (else count `spawnParticle` calls in the profile); the preview floor of about 0.38 ms
   (OPEN.md O10) measured again.
 
-### W9 Quick Stack (M)
+### W9 Quick Stack: the move itself (S-M, left after #229)
 
-Findings: BSE-27, BSE-10, BSE-11, BSE-35, BSE-17, BSE-26. Packs: `stash_bp`.
-- On a nearly full page every pickup is a three-snapshot commit: 2.1 ms a tick for one miner in October, and only
-  the trigger was narrowed since (BSE-27). Batch pickups into one commit per second per player without weakening the
-  item-safety rule (C3: snapshots verified before live slots change).
-- Drive auto-store from `playerInventoryItemChange` with its slot filter instead of looking at an active player every
-  2 ticks (BSE-10); lengthen or drop the 5-second quiet look, which is the pack's whole soak figure (BSE-11); cache
-  the parsed page index; the retired-snapshot queue (BSE-17); `keyOf` twice per stack (BSE-26).
-- Proof: `stash-miner-perf` (W0c), `stash-autostore-perf`, every `stash-*` scenario including the item-loss ones;
-  write the still-open `stash-fill-locked.js` (OPEN.md F1) here since the same code is being changed.
-- Risk: item loss is the worst bug this repo has had. Review this PR against C3, C5 and C19 before it merges.
+Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
+- #229 (stash_bp 1.9.7) batched auto-store to one move a second, drove the looks from inventory events and did
+  BSE-10, BSE-11, BSE-35, BSE-17 and BSE-26. `stash-miner-perf` (two miners, four pickups a second each) went from
+  3.66 to 1.50 ms/tick at 10 players and 3.51 to 1.62 at 40 (#239): about 0.75 ms a miner, still over the 0.3 target. What is left is the cost
+  of one move, about 13 ms: three verified snapshot saves (the page and both whole-inventory images) and a page read.
+- Options, each needing a review against C3 before it ships: keep each page snapshot's verified readback in memory
+  (a snapshot never changes and its id is never reused), so a move does not restore the page it saved one move
+  before (tried on the #229 branch; the unit tests that count page restores need rewriting for it); or the finding's
+  option 3, a journal of page refs instead of the two whole-inventory images for a move that only takes stacks off
+  the live page, after a written crash analysis. Batching past one second is an owner trade-off (pickups on a page
+  with no free slot wait longer on the ground), not planned.
 
 ### W10 Townsfolk, labels and towns (M to L: two PRs)
 
