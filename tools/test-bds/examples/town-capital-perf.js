@@ -144,6 +144,8 @@ export default async function (t) {
 
   if (AWAY) {
     // Everyone 300 blocks or more from both towns: nobody is in a town, so every check reads every player.
+    // The world's 10 ticking areas are taken (one per simulated player, as for the transients): free them first.
+    t.server("/tickingarea remove_all");
     const { top } = await t.loadArea(150, 320, { radius: 4, whole: true });
     for (const s of players) {
       s.home = { x: 150 + Math.round(Math.random() * 20) - 10, z: 320 + Math.round(Math.random() * 20) - 10 };

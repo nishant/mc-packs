@@ -7,6 +7,13 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Town spots
+
+- Town Projects: towns pick spots for their projects faster, especially on hillsides.
+- Town Projects: when no good spot can be found in the ground around you, the town now says so, and an operator can set one.
+- Town Projects: a build at a spot an operator set goes up over a few moments instead of all at once.
+- Town Projects: build outlines use fewer particles (a dot every block).
+
 ## Lighter Minimap radar
 
 - Minimap: the radar costs the server about a third of what it did while players move, and its land fills in faster on a small server.
