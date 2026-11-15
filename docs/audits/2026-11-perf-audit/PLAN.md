@@ -91,7 +91,6 @@ pairs, and read differences against the A/A spread the report prints next to eac
 | Average at 10 players | 1.06 ms | 0.8 or less | W5, W8, W1 |
 | Slowest tick of a join, a respawn, a leave | not measured | measured in W0, then halved | W13 |
 | Minimap with the radar on, one flier | 4 to 5 ms/tick (estimate) | 2 or less, measured | W5 |
-| Side-box title, compass only | 5,425 bytes | 1,609 bytes | W6 |
 | Longest tick during a 50,000-block build, copy or cut | seconds (estimate) | under 50 ms | W7 |
 | One miner with a nearly full Quick Stack page | 2.1 ms/tick (October) | 0.3 or less | W9 |
 | Callbacks for one mob death / one broken block | 33 / 22 | 15 / 10 or less | W12 |
@@ -232,18 +231,17 @@ leaks (HUD-16, HUD-17, HUD-20, HUD-21).
 - Proof: `map-radar-perf` pairs; the soak's Minimap line at 10 (0.55 to 0.35 or less) and 40; `map-*` scenarios and
   `tools/map-*` fixtures; the real-client checklist item for `budgetLevel` (O15) stays open for the owner.
 
-### W6 Side-box title size (S, needs one device check)
+### W6 Side HUD string expressions (M, waits for the owner's device check)
 
-Findings: HUD-04, HUD-05, HUD-27. Packs: the 7 with `side.js`, `hud_rp`.
-- Leave off the trailing empty radar and quest segments, never cutting before byte 1,609: a compass-only title goes
-  from 5,425 to 1,609 bytes and older cached resource packs still draw it correctly (the HUD reader's answer 4 has
-  the exact rule; do not use "cut after the last non-empty slot", which draws empty boxes).
-- `playerById` as a map instead of a search over all players on every draw (HUD-27).
-- HUD-05 (45 JSON UI string expressions cutting up the whole subtitle with no binding condition) needs frame-time
-  numbers from a phone before and after: do the protocol change above first, then try binding conditions in a
-  second PR only if the owner's device check shows the HUD costing frames.
-- Proof: `tools/hud-layout.test.mjs`, `side-*` tests, the HUD scenarios; `setTitle` bytes per tick in the profile;
-  one check on the Fold with the old and the new Realm Resources (section 6).
+Finding: HUD-05. Pack: `hud_rp`. The title protocol part (HUD-04, HUD-27) shipped: a title without the radar or a
+quest box is 1,609 bytes, 4,913 with the radar.
+- HUD-05 (45 JSON UI string expressions cut up the whole subtitle with no binding condition) needs frame-time numbers
+  from a phone before and after (section 6). Only if the device check shows the HUD costing frames:
+  `"binding_condition": "visible"` on the slots' text bindings, one hidden control holding the radar slice with the
+  four radar labels bound to it by `source_control_name`, the same for the quest segment and its nine places, and
+  whether two radar labels are enough.
+- Proof: `tools/hud-layout.test.mjs`, the HUD scenarios, and the Fold's frame time with the strip, with the radar and
+  with the radar while turning.
 
 ### W7 Easy Building: what is left of the long ticks (S)
 
@@ -438,7 +436,7 @@ Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
    (saga), W17 (weather packs).
 5. W12, W13, W14, W18: each touches many packs lightly, so run them when the per-pack workstreams above are merged,
    grouped by track.
-6. W6, W19, W4, W20 any time their inputs exist (W6 after the owner's device is available; W4 after W1).
+6. W6, W19, W4, W20 any time their inputs exist (W6 after the owner's device check in section 6; W4 after W1).
 
 Releases: each merge here opens a hosting PR and a new Realm Bundle for the owner to upload. Group the small ones
 (W18) and leave at least the release run's length between merges.
@@ -449,8 +447,10 @@ Add each to `nishant/skills` `MANUAL-STEPS.md` when its workstream reaches it, w
 rest of its workstream.
 
 - **Device checks on the Fold** (frame rate and memory cannot be measured by the harness): the shorter side-box
-  title with the old and the new Realm Resources installed (W6); whether the HUD costs frames, which decides HUD-05
-  (W6); rain storm memory before and after the sound change (W17b); the tornado and rainbow looks (W17a); whether the
+  title (shipped with W6's first part) with the Realm Resources live before it and with the newest: the compass strip
+  alone, the strip with a box (the Coordinates HUD in Right 1), the radar on, and a story quest box, each drawn with no empty
+  dark boxes and no radar square when the radar is off; then whether the HUD costs frames (the frame rate with the
+  strip, with the radar, and with the radar while turning), which decides HUD-05 (W6); rain storm memory before and after the sound change (W17b); the tornado and rainbow looks (W17a); whether the
   game preloads every texture a client entity lists (BSE-15, decides how much W19 matters).
 - **Which languages the Realm needs** in Easy Building's guides and panels (W19): each one dropped from Realm
   Resources saves about 0.27 MB of every player's download.

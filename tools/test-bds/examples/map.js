@@ -189,7 +189,9 @@ export default async function (t) {
   if (!last) t.log("titles seen:", JSON.stringify(t.messages(p, { kind: "title", since }).slice(-2)).slice(0, 600));
   t.check(!!last, "map_bp draws the Side HUD title");
   if (last) {
-    t.check(utf8(last.subtitle).length === 9 + 10 * 160 + 3304 + 512, `subtitle is 5425 bytes (${utf8(last.subtitle).length})`);
+    // No quest box: its empty segment is left off (5425 with one).
+    const bytes = utf8(last.subtitle).length;
+    t.check(bytes === 9 + 10 * 160 + 3304 || bytes === 5425, `subtitle is 4913 bytes, 5425 with a quest box (${bytes})`);
     t.check(slot(last.subtitle, 9).startsWith([...st.strip].slice(0, 5).join("")), "the strip is in the top slot");
     t.check(slot(last.subtitle, 10).split("\n").length === 33, "the radar (33 rows) is in the radar slot");
   }
