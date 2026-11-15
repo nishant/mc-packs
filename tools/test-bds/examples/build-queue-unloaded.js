@@ -11,6 +11,7 @@
 export default async function (t) {
   const { ItemStack } = t.mc;
   await t.loadArea(0, 0, { radius: 2 });
+  t.server("/difficulty peaceful"); // a survival player waits a minute here: no mob may take the stone
   const p = await t.player("Queuer", { x: 0, z: 0, gameMode: "survival", op: true });
   const inv = p.getComponent("minecraft:inventory").container;
   const stone = () => {
