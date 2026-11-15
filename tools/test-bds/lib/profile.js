@@ -13,7 +13,9 @@
 // (the start falls at a random point inside a millisecond). Time after an `await` inside an async
 // callback is not attributed (it runs as a promise continuation, outside the wrapper).
 // Reports go to the console as "PROFILE {json}" lines when run.mjs sends
-// `scriptevent harness:profile_dump`; `harness:profile_reset` starts a new window.
+// `scriptevent harness:profile_dump`; `harness:profile_reset` starts a new window. The final dump also sends, in
+// 1,500-character parts: PROFILE_TICKS (ms per tick), PROFILE_CALLBACKS (every callback that took any time, as a JSON
+// list) and PROFILE_HEAVY (every single call of 1 ms or more as "tick:ms:index" into that list, for the worst ticks).
 import { world, system, System, World, Entity, ItemStack, ScreenDisplay, Dimension, CustomCommandRegistry } from "@minecraft/server";
 
 const PACK = __PACK__;
@@ -30,6 +32,10 @@ let counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 
 let sent = new Map();
 /** script event id -> { calls, ms } of this pack's scriptEventReceive listeners */
 let handled = new Map();
+/** Single calls of 1 ms or more: [tick, key, ms] (the host joins them to its worst ticks). */
+let heavy = [];
+const HEAVY_MAX = 100000;
+let heavyDropped = 0;
 
 function reset() {
   startTick = system.currentTick;
@@ -40,6 +46,8 @@ function reset() {
   counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0 };
   sent = new Map();
   handled = new Map();
+  heavy = [];
+  heavyDropped = 0;
 }
 
 function flushTick() {
@@ -54,6 +62,7 @@ function record(key, ms) {
   if (!c) cbs.set(key, (c = { ms: 0, calls: 0, max: 0 }));
   c.ms += ms; c.calls++;
   if (ms > c.max) c.max = ms;
+  if (ms >= 1) { if (heavy.length < HEAVY_MAX) heavy.push([tick, key, ms]); else heavyDropped++; }
 }
 
 /** "file:line" of the first stack frame outside the harness files (and the pack's scripts/diag-core.js and diag.js, which wrap the same calls, and the bundle's shared folder). */
@@ -67,8 +76,6 @@ function site() {
   }
   return "?";
 }
-
-const wrapped = new WeakMap(); // original callback -> wrapper (for unsubscribe)
 
 function timed(fn, key, byEvent = false) {
   if (typeof fn !== "function") return fn;
@@ -88,7 +95,6 @@ function timed(fn, key, byEvent = false) {
         const s = now();
         try { return fn.apply(this, a); } finally { record(key, now() - s); }
       };
-  wrapped.set(fn, w);
   return w;
 }
 
@@ -134,9 +140,16 @@ function patchSignals(owner, prefix) {
     try { sig = owner[name]; } catch (e) { continue; }
     if (!sig || typeof sig.subscribe !== "function") continue;
     const sub = sig.subscribe, unsub = sig.unsubscribe;
+    // This signal's own map of original callback -> wrapper: with one map for every signal, a function subscribed to
+    // two signals kept only its newest wrapper and could not be unsubscribed from the first.
+    const wrapped = new WeakMap();
     try {
       const byEvent = name === "scriptEventReceive";
-      sig.subscribe = function (cb, ...rest) { return sub.call(this, timed(cb, label(`${prefix}.${name}`, cb), byEvent), ...rest); };
+      sig.subscribe = function (cb, ...rest) {
+        const w = timed(cb, label(`${prefix}.${name}`, cb), byEvent);
+        if (typeof cb === "function") wrapped.set(cb, w);
+        return sub.call(this, w, ...rest);
+      };
       if (typeof unsub === "function") sig.unsubscribe = function (cb, ...rest) { return unsub.call(this, (cb && wrapped.get(cb)) || cb, ...rest); };
     } catch (e) { console.warn(`[harness-profile] could not wrap ${prefix}.${name}: ${e}`); }
   }
@@ -181,6 +194,15 @@ function percentile(sorted, p) {
 
 function out(type, obj) { console.warn(type + " " + JSON.stringify(obj)); }
 
+const PART = 1500;
+/** A long string as console-sized parts { pack, startTick, i, n, d }. */
+function parts(s) {
+  const n = Math.max(1, Math.ceil(s.length / PART));
+  const L = [];
+  for (let i = 0; i < n; i++) L.push({ pack: PACK, startTick, i, n, d: s.slice(i * PART, (i + 1) * PART) });
+  return L;
+}
+
 function dump(final) {
   flushTick(); curTick = -1; curMs = 0;
   const end = system.currentTick;
@@ -193,6 +215,16 @@ function dump(final) {
   const list = [...cbs.entries()].map(([key, c]) => ({ key, ms: c.ms, calls: c.calls, max: c.max }));
   for (const c of list) calls += c.calls;
   list.sort((a, b) => b.ms - a.ms || b.calls - a.calls);
+  let chunks = null;
+  if (final) {
+    // Per-tick ms for the whole-bundle per-tick total (run.mjs sums the packs tick by tick).
+    const tickParts = parts(per.map((v) => (v ? String(v) : "")).join(","));
+    const timedList = list.filter((c) => c.ms > 0 || c.max > 0);
+    const index = new Map(timedList.map((c, i) => [c.key, i]));
+    const cbParts = parts(JSON.stringify(timedList.map((c) => ({ key: c.key.slice(0, 160), ms: c.ms, calls: c.calls, max: c.max }))));
+    const heavyParts = parts(heavy.filter((h) => h[0] >= startTick && index.has(h[1])).map((h) => `${h[0]}:${h[2]}:${index.get(h[1])}`).join(","));
+    chunks = { tickParts, cbParts, heavyParts };
+  }
   out("PROFILE", {
     pack: PACK, final, startTick, endTick: end, ticks: n, wallMs: now() - startWall,
     totalMs: total, msPerTick: total / n, p95TickMs: percentile(sorted, 0.95), p99TickMs: percentile(sorted, 0.99), maxTickMs: sorted[sorted.length - 1] || 0,
@@ -203,13 +235,13 @@ function dump(final) {
     slowest: [...list].sort((a, b) => b.max - a.max || b.ms - a.ms).slice(0, 5).map((c) => ({ key: c.key.slice(0, 160), max: c.max, ms: c.ms, calls: c.calls })),
     scriptEventsSent: Object.fromEntries(sent),
     scriptEventsHandled: Object.fromEntries([...handled].map(([id, h]) => [id, { calls: h.calls, ms: h.ms }])),
+    // How many parts of each kind follow, so the host knows when the final dump has fully arrived.
+    ...(chunks ? { parts: { ticks: chunks.tickParts.length, callbacks: chunks.cbParts.length, heavy: chunks.heavyParts.length }, heavyCalls: heavy.length, heavyDropped } : {}),
   });
-  if (final) {
-    // Per-tick ms for the whole-bundle per-tick total (run.mjs sums the packs tick by tick).
-    const s = per.map((v) => (v ? String(v) : "")).join(",");
-    const MAX = 1500;
-    const parts = Math.max(1, Math.ceil(s.length / MAX));
-    for (let i = 0; i < parts; i++) out("PROFILE_TICKS", { pack: PACK, startTick, i, n: parts, d: s.slice(i * MAX, (i + 1) * MAX) });
+  if (chunks) {
+    for (const p of chunks.tickParts) out("PROFILE_TICKS", p);
+    for (const p of chunks.cbParts) out("PROFILE_CALLBACKS", p);
+    for (const p of chunks.heavyParts) out("PROFILE_HEAVY", p);
   }
 }
 

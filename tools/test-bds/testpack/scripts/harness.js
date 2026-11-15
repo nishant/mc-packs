@@ -223,7 +223,8 @@ function tickMeterDump() {
     ticks, wallMs, tps: ticks / Math.max(0.001, wallMs / 1000),
     tickIntervalAvgMs: d.length ? d.reduce((a, b) => a + b, 0) / d.length : 0,
     tickIntervalP95Ms: pct(0.95), tickIntervalP99Ms: pct(0.99), tickIntervalMaxMs: sorted[sorted.length - 1] || 0,
-    ticksOver50ms: d.filter((x) => x > 55).length, ticksOver100ms: d.filter((x) => x > 100).length,
+    // Over 50 ms is a tick that ran late (20 TPS); over 55 ms is the older, looser count, kept for comparisons.
+    ticksOver50ms: d.filter((x) => x > 50).length, ticksOver55ms: d.filter((x) => x > 55).length, ticksOver100ms: d.filter((x) => x > 100).length,
   }));
 }
 

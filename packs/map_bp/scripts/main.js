@@ -106,7 +106,7 @@ class LabDisabledPersistence {
 }
 function experimentNative() { return EXP.palette === "native"; }
 /** @typedef {import("./terrain.js").Pick & {d:number,stale:boolean,queuedAt:number,visible?:boolean}} LabPick */
-/** @type {Map<string,{key:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,demandVersion?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
+/** @type {Map<string,{key:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,lossSeq?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
 const labPlans = new Map();
 /** @type {Map<string,{storeId:string,x:number,z:number,sample:import("./detail-persistence.js").Raw,wall:number}>} */
 const labPendingWrites = new Map();
@@ -1014,6 +1014,12 @@ let readCost = 0.06;
 let readMsSum = 0;
 let readOpsSum = 0;
 const SCAN_MAX_AGE = 2400;
+let storeIdleAt = -Infinity, storeTrims = 0, storesFreed = 0;
+/** Ticks with no radar viewer before a store's columns are freed (5 minutes), and how often that is checked. */
+const STORE_IDLE = 6000;
+const STORE_IDLE_CHECK = 200;
+/** The largest /realm:minimap scan radius for players who are not operators (operators: MANUAL_SCAN_MAX_RADIUS). */
+const PLAYER_SCAN_MAX_RADIUS = 128;
 const PLAN_EACH_TICK = 2;
 const PLAN_EVERY = EXP.checkEvery;
 /** Viewers to check first: their radar was just built (a new list of what it misses) or they move fast. @type {Set<string>} */
@@ -1176,7 +1182,7 @@ function dispatchTerrainRead(plan,pick,now){
       return "mapped";
 }
 const manualScans=new ManualScanner({
- terrain,profile:()=>experimentNative()?"native":"material",maxRadius:()=>MANUAL_SCAN_MAX_RADIUS,players:playersNow,
+ terrain,profile:()=>experimentNative()?"native":"material",maxRadius:p=>isOp(p)?MANUAL_SCAN_MAX_RADIUS:PLAYER_SCAN_MAX_RADIUS,players:playersNow,
  visible:p=>get("enabled")===true&&prefsOf(p).radar&&prefsOf(p).terrain,
  snapshot:p=>{const at=p.location,dim=p.dimension,py=dim.id==="minecraft:nether"?netherLayerFor(p.id,at.y):Math.floor(at.y);return{dim,py,store:terrain.store(dim.id,dim.id==="minecraft:nether"?py:undefined)};},
  pending:pendingTerrain,step:dispatchTerrainRead
@@ -1307,6 +1313,15 @@ function scanFrame() {
   }
   scanQueueCost.remainingPeak = Math.max(scanQueueCost.remainingPeak, remaining);
   manualScans.synchronize(all,now,true);
+  // A store over its cap (a scan ended, players left) goes back under it in batches; stores no radar used for
+  // STORE_IDLE ticks are freed (HUD-07).
+  storeTrims += terrain.trim(now);
+  if (now - storeIdleAt >= STORE_IDLE_CHECK || now < storeIdleAt) {
+    storeIdleAt = now;
+    const inUse = new Set(playerStore.values());
+    for (const c of manualScans.contexts.values()) inUse.add(c.plan.store);
+    storesFreed += terrain.releaseIdle(now, STORE_IDLE, inUse);
+  }
   let tCleanup = Date.now();
   scanQueueCost.viewerPruneMs += tCleanup - tViewer;
   scanPlanMs += Date.now() - t0;
@@ -1402,6 +1417,18 @@ const detailFootprints = new Map();
 /** @param {string} _id @param {number} _now */
 function planIdle(_id, _now) { return false; }
 
+/**
+ * Is everything a plan knew about still there: no column within its circle evicted or invalidated since the plan
+ * last checked (a loss far away, behind a traveler at the store cap, is not its business: HUD-29)? Moves the plan's
+ * mark up to now when so.
+ * @param {import("./terrain.js").Store} store @param {{x:number,z:number,readRadius?:number,lossSeq?:number}} state @param {number} radius
+ */
+function keptDemand(store, state, radius) {
+  if (terrain.lostNear(store, state.lossSeq ?? -1, state.x, state.z, (state.readRadius ?? radius) + COL)) return false;
+  state.lossSeq = store.lossSeq;
+  return true;
+}
+
 /** @param {Player} player @param {number} now @param {boolean} [trustedRoster] */
 function planFor(player, now,trustedRoster=false) {
   if(!trustedRoster&&!player.isValid)return undefined;
@@ -1417,19 +1444,20 @@ function planFor(player, now,trustedRoster=false) {
   const geometryKey = store.id + "|" + Math.round(at.x) + "|" + Math.round(at.z) + "|" + pr.radarRadius;
   let version="";
   const sameFootprint = state && state.key === geometryKey && state.x === at.x && state.z === at.z;
-  if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&state.demandVersion===store.demandVer&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*.75)**2){
-    const geometry=northUpRadarGeometry(store.id,Math.round(at.x),Math.round(at.z),pr.radarRadius,R,state.geometry);
+  if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*.75)**2&&keptDemand(store,state,pr.revealRadius)){
+    // The rounded position (and so the geometry) is often the same as last time for a walker.
+    const geometry=state.key===geometryKey?state.geometry:northUpRadarGeometry(store.id,Math.round(at.x),Math.round(at.z),pr.radarRadius,R,state.geometry);
     const rerank=now>=(state.reorderAt??Infinity);
     const rolled=rollTerrainDemand({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,geometry,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed,rerank});
     if(rolled){old.picks=rolled.picks;old.pos=0;old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;old.rangeDeleted=undefined;
-      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh);
+      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh);
       if(rerank)state.reorderAt=now+80;if(rolled.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,rolled.nextRetry);retryAt.set(idOf(player),Math.min(retryAt.get(idOf(player))??Infinity,rolled.nextRetry));}
       labStats.rolled++;labStats.rollTail+=rolled.stats.tailVisited;labStats.rollEntered+=rolled.stats.entered;labStats.rollRawChecks+=rolled.stats.rawChecks;planTurn.made++;return old;
     }
   }
   if(same&&sameFootprint&&(state.retryDeadline===undefined||now<state.retryDeadline)){
     const complete=old.pos>=old.picks.length;
-    if(!complete&&now<(state.freshUntil??0)&&state.demandVersion===store.demandVer&&(!EXP.persistence||state.storeVersion===store.ver)){
+    if(!complete&&now<(state.freshUntil??0)&&(!EXP.persistence||state.storeVersion===store.ver)&&keptDemand(store,state,pr.revealRadius)){
       if(now>=(state.reorderAt??Infinity)){old.picks=labOrder(old.picks.slice(old.pos).map(p=>({...p,d:(p.wx-at.x)**2+(p.wz-at.z)**2,stale:p.stale===true,queuedAt:p.queuedAt??old.at,visible:"visible" in p?p.visible!==false:undefined})),now);old.pos=0;state.reorderAt=now+80;}
       return old;
     }
@@ -1477,7 +1505,7 @@ function planFor(player, now,trustedRoster=false) {
   const plan = { id: idOf(player), player, store, picks: labOrder(picks, now), dim, py, x: at.x, z: at.z,
     at: now, pos: 0, missed: 0, missRun: 0, failed: same ? old.failed : undefined };
   scanPlans.set(idOf(player), plan);
-  labPlans.set(idOf(player), { key: geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,demandVersion:store.demandVer,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
+  labPlans.set(idOf(player), { key: geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,lossSeq:store.lossSeq,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
   if (nextRetry < Infinity) retryAt.set(idOf(player), nextRetry);
   planTurn.made++; labStats.planned++;
   return plan;
@@ -2581,7 +2609,7 @@ function onEvent(id, m, source) {
           pendingSaves: labPendingWrites.size, hydrated: detailCost.hydrated, nativeOps: scanReads,
           completed2: detailCost.nativeCompleted, rasterBuilds: radarRebuilds, scanMs, radarMs, turnMs,
           elapsedTargetMs: EXP.featureMs, observedPeakMs: featureEnvelope.peak,
-          manual:{...manualScans.stats,active:manualScans.contexts.size},cache:{native:terrain.totalCols,limit:terrain.maxTotalCols,retainedFootprints:terrain.retained.size} });
+          manual:{...manualScans.stats,active:manualScans.contexts.size},cache:{native:terrain.totalCols,limit:terrain.maxTotalCols,cap:terrain.maxCols,stores:terrain.stores.size,trimmed:storeTrims,freed:storesFreed,retainedFootprints:terrain.retained.size} });
         return;
       }
       if(player && m.action==="resident_trace") {
