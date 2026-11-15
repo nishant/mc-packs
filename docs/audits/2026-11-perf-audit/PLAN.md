@@ -446,9 +446,6 @@ Findings: UTL-02, UTL-03, UTL-06, UTL-15, UTL-35, UTL-36, UTL-16, UTL-37, UTL-18
   the tornado's 67 packets a second and about 2,500 live particles per viewer (UTL-03: fewer, larger particles and a
   per-player density preference); a NOS boost's 41 spawns a tick (UTL-06); claim borders and zone outlines (UTL-15);
   a new `MolangVariableMap` per player per second (UTL-35); leaf decay's 6 destroy commands a tick (UTL-36).
-- **W17b What devices load.** `rain_rp`'s ten 20-second clips loaded as samples and all marked for low-memory
-  devices (UTL-16: needs a memory reading on the phone before and after); the vanilla rain splash redefined with 300
-  particles and per-frame work (UTL-37).
 - Proof: `weather-crowd`, `tornado-sound-perf` (numbers kept after W0c), the night-and-thunder phase; before and
   after pictures and clips regenerated (`gen:rain`, `gen:sky`); the looks change, so a NEWS line and the owner's
   device check (section 6).
@@ -533,3 +530,6 @@ rest of its workstream.
 - XC-12 (a timeout scheduled before a profiling window is not counted in it): documented behavior of
   `/realm:diag`, not worth the code. BSE-18 is a measurement note, not a change.
 - Everything under "Checked and fine" and "Rejected leads" in the findings files.
+- UTL-37 (the redefined rain splash): vanilla's own `rain_splash_particle` has the same 300-particle cap, collision and
+  per-frame acceleration; Realistic Rain's is a third of the area and a little shorter-lived, so it draws no more than
+  vanilla. Nothing to change.

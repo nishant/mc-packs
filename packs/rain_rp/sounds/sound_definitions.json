@@ -127,22 +127,26 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed1",
-          "volume": 0.182
+          "volume": 0.182,
+          "stream": true
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed2",
-          "volume": 0.18
+          "volume": 0.18,
+          "stream": true
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed3",
-          "volume": 0.18
+          "volume": 0.18,
+          "stream": true
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed4",
-          "volume": 0.184
+          "volume": 0.184,
+          "stream": true
         }
       ]
     },
@@ -155,12 +159,14 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed_inside1",
-          "volume": 0.16
+          "volume": 0.16,
+          "stream": true
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed_inside2",
-          "volume": 0.16
+          "volume": 0.16,
+          "stream": true
         }
       ]
     },
@@ -173,12 +179,14 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain_inside1",
-          "volume": 0.069
+          "volume": 0.069,
+          "stream": true
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain_inside2",
-          "volume": 0.069
+          "volume": 0.069,
+          "stream": true
         }
       ],
       "subtitle": "subtitles.weather.rain"
@@ -211,17 +219,20 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind1",
-          "volume": 0.204
+          "volume": 0.204,
+          "stream": true
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind2",
-          "volume": 0.207
+          "volume": 0.207,
+          "stream": true
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind3",
-          "volume": 0.204
+          "volume": 0.204,
+          "stream": true
         }
       ]
     },
@@ -234,12 +245,14 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind_inside1",
-          "volume": 0.127
+          "volume": 0.127,
+          "stream": true
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind_inside2",
-          "volume": 0.129
+          "volume": 0.129,
+          "stream": true
         }
       ]
     },

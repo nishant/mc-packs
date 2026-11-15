@@ -13,7 +13,8 @@
     "Easy Building: big builds, digs, copies, cuts and pastes no longer freeze the server: the blocks are read and written a few at a time, and an undo while a build is still going stops it."
   ],
   "resourceNotes": [
-    "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
+    "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens.",
+    "Realistic Rain: the long thunderstorm, wind and muffled-rain clips are streamed as they play instead of loaded whole into memory, which should leave phones more memory during storms."
   ],
   "packNotes": {
     "hud_rp": {
@@ -87,6 +88,10 @@
     "map_bp": {
       "version": "1.5.8",
       "notes": "The radar keeps filling in when its terrain cache is full or over its cap (after a big scan or when players leave), plans travel at the cap far more cheaply, and frees terrain nobody has looked at for 5 minutes. /realm:minimap scan is limited to radius 128 for players (operators keep 384)."
+    },
+    "rain_rp": {
+      "version": "1.4.5",
+      "notes": "The 13 long clips Rain Extras plays (realm.storm.bed, bed_inside, realm.rain.inside, realm.storm.wind, wind_inside) are marked stream: true in sound_definitions.json; realm.rain.enter and the short clips stay loaded."
     }
   }
 }
