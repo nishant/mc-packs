@@ -4760,7 +4760,7 @@ Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanR
 | `dolphin:owner` | Entity | The owner's player id on a tamed dolphin |
 | `dolphin:ownerName` | Entity | The owner's name when it was tamed |
 | `dolphin:ridden` | Entity | `true` while the dolphin has the `realm:dolphin_ridden` group (its own swimming off) |
-| `dolphin:idx:<player id>` | World | JSON `{ entity id: { o, on, n, d, x, y, z } }`: that player's tamed dolphins (owner, name and last known spot), for the lists while they're far away. A swimming dolphin's spot is written once it moved 16 blocks or once a minute (the pack keeps the exact spot in memory, every second); a new, renamed or moved-to-another-dimension one at once. A world from an older version has one `dolphin:index` for everyone; the pack splits it into these on its first load and removes it once every part is written |
+| `dolphin:idx:<player id>` | World | JSON `{ entity id: { o, on, n, d, x, y, z } }`: that player's tamed dolphins (owner, name and last known spot), for the lists while they're far away. A world from an older version has one `dolphin:index` for everyone; the pack splits it into these on its first load and removes it once every part is written |
 | `dolphin:tamedCount` | Player | How many dolphins the player has tamed |
 | `dolphin:cfg` | World | Settings changed in `/realm:config` |
 

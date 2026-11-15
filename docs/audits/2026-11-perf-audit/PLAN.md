@@ -342,23 +342,17 @@ ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). P
   today: also the suite's slowest scenario, so this shortens every full run), `wander-*`; the label timing check on
   a real client stays with the owner (O11).
 
-### W11 Champions, bounties, dolphins and other mobs (S to M)
+### W11 Champions, bounties, dolphins and other mobs: what is left
 
-Findings: ENT-07, ENT-08, ENT-09, ENT-31, ENT-20, ENT-10, ENT-33, ENT-19, ENT-12, ENT-24. Packs: `elite_bp`,
-`bounty_bp`, `dolphin_bp`.
-- Champions: every `entityHurt` in the world costs 3 to 5 native calls before the known-champion test (ENT-07);
-  every spawned mob 3 to 5 and every item entity 5 (ENT-08: test the type first; do not gate on a death window, the
-  item's spawn event can arrive before the death event). The pack's 0.04 to 0.09 ms spread between runs is the
-  workload, not the code: its cost follows mob spawns, burns and deaths and whether a champion rolled, and the soak
-  pins neither time nor spawning (ENT-09: W0c fixes the measurement; the 5-second upkeep is a spike only at the
-  32-champion cap, slice it). An approach step is about 50 native calls, 18 of them `dim.id` for cache keys
-  (ENT-31). `convert` reads 150 block calls before a spacing test that needs none (ENT-20).
-- Bounties: a clean spot reads 81 columns in one tick (ENT-10, shared with elite: slice and back off); the 2-second
-  target check reads each player's place twice (ENT-33).
-- Dolphins: the whole index copied and every loaded dolphin queried each second (ENT-12); a ridden dolphin costs
-  about 16 native calls per rider per tick (ENT-24).
-- Proof: `night-soak` for champions (its numbers are kept after W0c), the churn phase's kill loop, `bounty-*`,
-  `dolphin-*`.
+Shipped in PR #265 (ENT-07, ENT-08, ENT-09, ENT-31, ENT-20, ENT-10, ENT-33, ENT-19; `tools/test-bds/examples/mobs-perf.js`).
+Left:
+- Dolphins (ENT-12, ENT-24): measured no gain, not shipped. In `mobs-perf` (validation #270) two riders cost
+  dolphin_bp 0.002 to 0.085 ms/tick on the base and the head alike (a mount check every 5 ticks, the index worked on in
+  place and a swimming dolphin written after 16 blocks): the per-rider calls are far cheaper than the 10 us estimate.
+  Retry only with a scenario that holds the dolphins' figure steady (more riders, a moving dolphin).
+- The upkeep slice (ENT-09) and the bounty parts (ENT-33, ENT-19, and the bounty copy of the sliced build scan) shipped
+  without a figure of their own: no scenario reaches 32 champions, a board-placed target or a cull note burst. The
+  sliced scan is the same code as the Stormcaller one, measured in `mobs-perf`'s storm phase.
 
 ### W12 Game event filters and cheap first lines (M: one PR per group of packs)
 
