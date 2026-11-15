@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Daily Quests, Skills, Milestones, Titles & Trails, Atlas and Realm News write their saved data less often (Daily Quests no longer on every counted block), and Skills no longer forgets blocks placed just before the Realm closes.",
     "Champions and the Bounty Board cost the server less: mob farms and dropped items no longer wake Champions up, and a Stormcaller strike or a new bounty target no longer makes one long tick.",
     "Quick Stack & Sort costs the server much less while you mine on a nearly full inventory page: auto-store moves pickups at most once a second, all together.",
     "Fishing costs the server much less: one pack follows each bobber and shares every catch with Skills, the Journal, Daily Quests and Story Questlines.",
@@ -90,8 +91,8 @@
       "notes": "The fish page counts the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
     },
     "quests_bp": {
-      "version": "1.3.13",
-      "notes": "Fish quests count the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
+      "version": "1.3.14",
+      "notes": "Quest progress is saved at most once a second and as you leave, instead of on every block, kill or step that counts; a finished quest is saved at once, before its reward."
     },
     "caravan_bp": {
       "version": "1.2.14",
