@@ -134,6 +134,18 @@ function glow() {
   return img;
 }
 
+/** A small solid round dot, 16x16, white, with a one-texel soft rim (the little rainbow's dots, like vanilla's flame dots). */
+function dot() {
+  const n = 16, img = blank(n, n);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const r = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2);
+      put(img, x, y, [255, 255, 255, clamp(n / 2 - 0.5 - r + 0.5) * 255]);
+    }
+  }
+  return img;
+}
+
 /** Meteor fireball, 32x32, in color: white core, yellow, then an orange flame halo with a ragged rim. */
 function meteor() {
   const n = 32, img = blank(n, n);
@@ -392,6 +404,7 @@ function icon() {
 const TEXTURES = {
   aurora: aurora(),
   glow: glow(),
+  dot: dot(),
   meteor: meteor(),
   smoke: puff(32, 40, 0.45),
   fog: mistSheet(),
@@ -532,24 +545,25 @@ const PARTICLES = {
   // band's color (cr, cg, cb), for variable.life seconds. Each dot is placed once (parametric, from its own randoms)
   // and stays put while it fades in and out, so the band twinkles like the vanilla flames it replaced. Seven of these,
   // one per band, sent every 2 s, draw what 259 vanilla flames sent twice a second did.
-  sky_arc: effect("realm:sky_arc", "glow", "particles_blend", {
-    "minecraft:emitter_rate_steady": { spawn_rate: 45, max_particles: 60 },
+  sky_arc: effect("realm:sky_arc", "dot", "particles_blend", {
+    "minecraft:emitter_rate_steady": { spawn_rate: 80, max_particles: 100 },
     ...once(or("life", 2)),
     "minecraft:emitter_shape_point": {},
     "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(0.7, 1.1)" },
     "minecraft:particle_motion_parametric": {
       relative_position: [
-        `Math.cos(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.3) * variable.ux`,
-        `Math.sin(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.3)`,
-        `Math.cos(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.3) * variable.uz`,
+        `Math.cos(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.16) * variable.ux`,
+        `Math.sin(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.16)`,
+        `Math.cos(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.16) * variable.uz`,
       ],
     },
     "minecraft:particle_appearance_billboard": {
-      size: ["0.12 + variable.particle_random_3 * 0.05", "0.12 + variable.particle_random_3 * 0.05"],
+      // 0.2 to 0.3 blocks across, like the vanilla flame dots (0.2 to 0.4, shrinking as they age).
+      size: ["0.1 + variable.particle_random_3 * 0.05", "0.1 + variable.particle_random_3 * 0.05"],
       facing_camera_mode: "lookat_xyz",
-      uv: uv("glow"),
+      uv: uv("dot"),
     },
-    "minecraft:particle_appearance_tinting": { color: ["variable.cr", "variable.cg", "variable.cb", `${fade(0.15, 0.3)} * 0.95`] },
+    "minecraft:particle_appearance_tinting": { color: ["variable.cr", "variable.cg", "variable.cb", `${fade(0.1, 0.25)} * 0.95`] },
   }),
 
   // A meteor: like the shooting star, but a big fireball head and a long fiery trail whose embers drift and cool

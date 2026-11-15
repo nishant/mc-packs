@@ -5,13 +5,13 @@
       "identifier": "realm:sky_arc",
       "basic_render_parameters": {
         "material": "particles_blend",
-        "texture": "textures/particle/realm_sky_glow"
+        "texture": "textures/particle/realm_sky_dot"
       }
     },
     "components": {
       "minecraft:emitter_rate_steady": {
-        "spawn_rate": 45,
-        "max_particles": 60
+        "spawn_rate": 80,
+        "max_particles": 100
       },
       "minecraft:emitter_lifetime_once": {
         "active_time": "(variable.life > 0 ? variable.life : 2)"
@@ -22,27 +22,27 @@
       },
       "minecraft:particle_motion_parametric": {
         "relative_position": [
-          "Math.cos(variable.particle_random_1 * 180) * ((variable.r > 0 ? variable.r : 10) + (variable.particle_random_2 - 0.5) * 0.3) * variable.ux",
-          "Math.sin(variable.particle_random_1 * 180) * ((variable.r > 0 ? variable.r : 10) + (variable.particle_random_2 - 0.5) * 0.3)",
-          "Math.cos(variable.particle_random_1 * 180) * ((variable.r > 0 ? variable.r : 10) + (variable.particle_random_2 - 0.5) * 0.3) * variable.uz"
+          "Math.cos(variable.particle_random_1 * 180) * ((variable.r > 0 ? variable.r : 10) + (variable.particle_random_2 - 0.5) * 0.16) * variable.ux",
+          "Math.sin(variable.particle_random_1 * 180) * ((variable.r > 0 ? variable.r : 10) + (variable.particle_random_2 - 0.5) * 0.16)",
+          "Math.cos(variable.particle_random_1 * 180) * ((variable.r > 0 ? variable.r : 10) + (variable.particle_random_2 - 0.5) * 0.16) * variable.uz"
         ]
       },
       "minecraft:particle_appearance_billboard": {
         "size": [
-          "0.12 + variable.particle_random_3 * 0.05",
-          "0.12 + variable.particle_random_3 * 0.05"
+          "0.1 + variable.particle_random_3 * 0.05",
+          "0.1 + variable.particle_random_3 * 0.05"
         ],
         "facing_camera_mode": "lookat_xyz",
         "uv": {
-          "texture_width": 32,
-          "texture_height": 32,
+          "texture_width": 16,
+          "texture_height": 16,
           "uv": [
             0,
             0
           ],
           "uv_size": [
-            32,
-            32
+            16,
+            16
           ]
         }
       },
@@ -51,7 +51,7 @@
           "variable.cr",
           "variable.cg",
           "variable.cb",
-          "Math.clamp(Math.min(variable.particle_age / 0.15, (variable.particle_lifetime - variable.particle_age) / 0.3), 0, 1) * 0.95"
+          "Math.clamp(Math.min(variable.particle_age / 0.1, (variable.particle_lifetime - variable.particle_age) / 0.25), 0, 1) * 0.95"
         ]
       }
     }
