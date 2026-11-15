@@ -894,10 +894,10 @@ export const PACKS = [
         "text": "The §lMinimap§r menu: your destination, §lGet Mara's Field Map§r (an empty locator map), §lPick a destination§r, §lMark this spot§r, §lClear destination§r, and quick toggles for the Minimap and Compass strip"
       },
       {
-        "usage": "/realm:minimap",
+        "usage": "/realm:minimap [scan [radius]]",
         "ops": false,
         "who": "Everyone",
-        "text": "Shows or hides your minimap radar at the top right below the compass strip"
+        "text": "With no argument, shows or hides your minimap radar at the top right below the compass strip. §escan [radius]§r reads the loaded land within §eradius§r blocks of where you stand for the radar (default 64; at most 128 for players, 384 for operators); §e/realm:minimap status§r tells you how far it got and §e/realm:minimap cancel§r stops it. The scan is kept in memory only, shared with every radar, and dropped later like any other land"
       },
       {
         "usage": "/realm:compass",
