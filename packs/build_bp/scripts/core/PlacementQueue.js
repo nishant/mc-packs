@@ -33,14 +33,13 @@ function dimOf(id) {
 export function setPlayerBuildSpeed(playerId, blocksPerTick) {
     playerSpeeds.set(playerId, Math.max(1, Math.floor(blocksPerTick)));
 }
+/**
+ * A player left: their speed goes, but their queued writes still finish (a cut whose air was still queued must not
+ * leave its blocks in the world while its clipboard is saved), and the loader goes when the queue is empty.
+ */
 export function removePlayerBuildSpeed(playerId) {
     playerSpeeds.delete(playerId);
-    const q = queues.get(playerId);
-    if (q) {
-        totalPending -= q.items.length - q.head;
-        queues.delete(playerId);
-    }
-    releaseChunkLoaders(playerId);
+    if (!queues.has(playerId)) releaseChunkLoaders(playerId);
 }
 /**
  * Queues one block write for a cell that could not be written yet (an unloaded chunk) or for a paste. `refund` is the
