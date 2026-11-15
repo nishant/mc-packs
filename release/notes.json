@@ -153,8 +153,8 @@
       "notes": "Saving the regions found and the sites built writes only the parts that changed, and in a big world the region or site at the edge of two saved parts is no longer lost on a restart."
     },
     "news_bp": {
-      "version": "1.7.112",
-      "notes": "Realm News shows the Skills and Atlas fixes; last seen is saved every 10 minutes and on leave instead of every minute."
+      "version": "1.7.113",
+      "notes": "Realm News shows the town spot changes."
     },
     "cooking_bp": {
       "version": "1.1.20",
