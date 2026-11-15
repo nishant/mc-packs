@@ -58,7 +58,19 @@ function idSlot(id) {
   for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
   return (h >>> 16) % TRACKER_RUNS;
 }
-const SAVE_RUNS = 5; // unsaved progress is written every 5 seconds
+const SAVE_RUNS = 5; // unsaved progress is written every 5 seconds, each player on their own second
+/** @type {Map<string, number>} */
+const saveSlots = new Map();
+/** A player's second (0 to SAVE_RUNS - 1) to save on, from a hash (FNV-1a) of their id, so dirty players don't all save in one tick. @param {string} id */
+function saveSlot(id) {
+  let s = saveSlots.get(id);
+  if (s !== undefined) return s;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  if (saveSlots.size > 1000) saveSlots.clear();
+  saveSlots.set(id, (s = (h >>> 8) % SAVE_RUNS));
+  return s;
+}
 const PACK_SCAN_TICKS = 40; // installed packs: answers to realm:help_ping are collected for 2 seconds
 const PACK_SCAN_EVERY = 12000; // ...every 10 minutes
 
@@ -74,7 +86,7 @@ system.runInterval(() => {
   let roster;
   const all = () => (roster ??= world.getAllPlayers());
   try {
-    if (runs % SAVE_RUNS === 0) flushAll();
+    flushAll((id) => (runs + saveSlot(id)) % SAVE_RUNS === 0);
     tendActors();
     if (runs % 2 === 0) autoTick();
     if (runs % 60 === 0) expireAdds();
