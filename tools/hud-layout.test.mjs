@@ -301,7 +301,7 @@ test("map_bp takes its compass and radar parts down when the Minimap is off, for
     const calls = [];
     const state = Object.fromEntries(["views","preparedDetailFrames","publishedDetailFrames","lastText","planNow","scanPlans","retryAt","playerStore","lastSent","labPlans","detailFootprints"].map(k => [k,new Map([["p",{}],["foreign",{}]])]));
     const portalState = Object.fromEntries(["terrainBaseMemo", "passAt", "netherLayers"].map(k => [k, new Map([["p",{}],["foreign",{}]])]));
-    const ctx = { ...state, ...portalState,manualScans:{cancel(){}}, prefsOf:()=>prefs, get:()=>enabled, arrival(){}, destination(){},
+    const ctx = { ...state, ...portalState,manualScans:{cancel(){}}, prefsOf:()=>prefs, get:()=>enabled, arrival(){}, destination(){}, idOf:(p)=>p.id, hereOf:()=>({}), passQuiet:new Map(), passExtra:new Map(),
       side: { clear(p,part,draw){calls.push(["clear",p.id,part,draw]);}, redraw(p){calls.push(["redraw",p.id]);} } };
     const run = vm.runInNewContext(hide + "\n" + pass + "\n;pass",ctx);
     run({id:"p"},[],[],0);

@@ -124,7 +124,7 @@ test("the real pass callback never recreates a left player's entry, nor passes o
   const passAt = new Map(fillers.map((p) => [p.id, 99]));
   const sandbox = {
     world: { getAllPlayers: () => [left, alive, ...fillers] }, system: { currentTick: 100 }, Date, console,
-    passBudget: okBudget(), oldestDue, passAt, INTERVAL: 10, PASS_EACH: 2, partyTag: () => undefined,
+    passBudget: okBudget(), oldestDue, passAt, passDue: passAt, INTERVAL: 10, PASS_EACH: 2, partyTag: () => undefined, partyOf: () => undefined,
     pass: (p) => passed.push(p.id),
   };
   const run = runInVm(`${playersNowSrc}\nlet seenAt = -Infinity, seen = [], costPasses = 0;\n(${callbackSource("pass")})`, sandbox);
@@ -150,7 +150,7 @@ test("the real redraw callback reads the facing only when its checks need it, an
   });
   const facingOf = { dirty: 90, still: 0, turned: 30 };
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, QUIET_MOVE: 1, passExtra: new Map(), passQuiet: new Map(), REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent: new Map(), planNow: new Set(), terrainVerOf: () => "v",
     wrap: (a) => a, headingOf: (p) => (facing.push(p.id), facingOf[p.id]),
     render: (p, v, now, refresh, heading, at) => (renders.push({ id: p.id, heading, at }), false),
@@ -175,7 +175,7 @@ test("the real redraw callback refreshes a still player's title without building
   // Every part was sent 40 ticks ago: all three are due a refresh.
   const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: 10, rtext: "r", rat: 10, compass: true, radar: true }]));
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, QUIET_MOVE: 1, passExtra: new Map(), passQuiet: new Map(), REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
     wrap: (a) => a, headingOf: (p) => facingOf[p.id],
     render: (p) => (renders.push(p.id), true),
@@ -201,7 +201,7 @@ test("out of draw budget, a moving player's title about to fade is drawn again a
   ]);
   const spent = { ...okBudget(), ok: false, left: -1, room: 0 };
   const sandbox = {
-    drawBudget: spent, rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: spent, rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, QUIET_MOVE: 1, passExtra: new Map(), passQuiet: new Map(), REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
     wrap: (a) => a, headingOf: () => 0,
     render: (p) => (renders.push(p.id), true),
@@ -224,7 +224,7 @@ test("titles about to fade are drawn before players who waited longer for a redr
     ["fading", { ctext: "c", cat: 19, rtext: "", rat: 19, compass: true, radar: false }],
   ]);
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, QUIET_MOVE: 1, passExtra: new Map(), passQuiet: new Map(), REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
     wrap: (a) => a, headingOf: () => 0,
     render: (p) => (order.push(p.id), true),
@@ -242,7 +242,7 @@ test("a still player's refresh builds the radar when their 200-tick stale rebuil
   const views = new Map([["due", mkView("due")], ["fresh", mkView("fresh")]]);
   const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: 10, rtext: "r", rat: 10, compass: true, radar: true }]));
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, QUIET_MOVE: 1, passExtra: new Map(), passQuiet: new Map(), REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => "v",
     wrap: (a) => a, headingOf: () => 0, staleDue: (id) => id === "due",
     render: (p) => (renders.push(p.id), true),
@@ -303,6 +303,7 @@ test("the real pass draws again only when it found something new: a still player
     prefsOf: () => ({ compass: true, radar: true, radius: 24, north: true, terrain: true }), get: () => true, lastSent, views, Date,
     gather: () => ({ markers: found, liveFolk: new Map() }), destination: () => undefined, arrival: () => undefined, arrived: new Map(),
     regions: new Map(), line2: (r, d) => `${r}|${d}`, OVERWORLD: "minecraft:overworld", DIM_NAMES: {}, G: {}, cutWords: (t) => t, costMs: 0, costPlayers: 0, costPassBy: new Map(),
+    hereOf: (p) => ({ at: p.location, dim: p.dimension, dimId: p.dimension.id }), idOf: (p) => p.id, passQuiet: new Map(), passExtra: new Map(), INTERVAL: 10, QUIET_MOVE: 1, QUIET_LEVELS: 2, QUIET_MAX: 40,
     side: { clear() {}, redraw() {} }, Math,
   };
   const pass = runInVm(`${helpers}\n${functionSource("pass")}\npass`, sandbox);
@@ -324,6 +325,63 @@ test("the real pass draws again only when it found something new: a still player
   found[0].x += 3;
   pass(player, [player], [], 40);
   assert.equal(views.get("p").dirty, true, "a marker that moved draws again");
+});
+
+test("a still player's passes come less often while nothing around them changes, and on time again when they move or a monster is near (HUD-03)", () => {
+  const helpers = `${mainSource.match(/^const MARKER_SLACK = .+;$/m)[0]}
+${functionSource("sameMarkers")}`;
+  const calm = () => [{ kind: "folk", x: 3, z: 3, clamp: false }, { kind: "camp", x: 40.5, z: 2.5, clamp: false }];
+  let found = calm();
+  const views = new Map();
+  const passQuiet = new Map();
+  const passExtra = new Map();
+  const lastSent = new Map([["p", { ctext: "c", cat: 0, rtext: "", rat: 0, compass: true, radar: false }]]);
+  const player = { id: "p", location: { x: 0, y: 64, z: 0 }, dimension: { id: "minecraft:overworld" } };
+  const sandbox = {
+    prefsOf: () => ({ compass: true, radar: false, radius: 24, north: true, terrain: false }), get: () => true, lastSent, views, Date,
+    gather: () => ({ markers: found, liveFolk: new Map() }), destination: () => undefined, arrival: () => undefined, arrived: new Map(),
+    regions: new Map(), line2: (r, d) => `${r}|${d}`, OVERWORLD: "minecraft:overworld", DIM_NAMES: {}, G: {}, cutWords: (t) => t, costMs: 0, costPlayers: 0, costPassBy: new Map(),
+    hereOf: (p) => ({ at: { ...p.location }, dim: p.dimension, dimId: p.dimension.id }), idOf: (p) => p.id, passQuiet, passExtra, INTERVAL: 10, QUIET_MOVE: 1, QUIET_LEVELS: 2, QUIET_MAX: 40,
+    side: { clear() {}, redraw() {} }, Math,
+  };
+  const pass = runInVm(`${helpers}
+${functionSource("pass")}
+pass`, sandbox);
+  pass(player, [player], [], 10);
+  assert.equal(passExtra.has("p"), false, "the first pass keeps the usual interval");
+  found = calm();
+  pass(player, [player], [], 20);
+  assert.equal(passExtra.get("p"), 10, "the same find at the same place: the next pass after 20 ticks");
+  found = calm();
+  player.location.x += 0.4;
+  pass(player, [player], [], 40);
+  assert.equal(passExtra.get("p"), 30, "then after 40 ticks (a drift under a block is still)");
+  found = calm();
+  pass(player, [player], [], 80);
+  assert.equal(passExtra.get("p"), 30, "and never longer than QUIET_MAX");
+  found = [...calm(), { kind: "mob", x: 6, z: 1, clamp: true }];
+  pass(player, [player], [], 120);
+  assert.equal(passExtra.has("p"), false, "a monster near: back to every INTERVAL");
+  found = [...calm(), { kind: "mob", x: 6, z: 1, clamp: true }];
+  pass(player, [player], [], 130);
+  assert.equal(passExtra.has("p"), false, "and it stays there while one is near");
+  found = calm();
+  pass(player, [player], [], 140);
+  found = calm();
+  pass(player, [player], [], 150);
+  assert.equal(passExtra.get("p"), 10);
+  found = calm();
+  player.location.z += 3;
+  pass(player, [player], [], 170);
+  assert.equal(passExtra.has("p"), false, "moving a block or more: back to every INTERVAL");
+  assert.equal(passQuiet.has("p"), false);
+});
+
+test("the redraw puts a still player's next pass back on the usual interval as soon as they walk off (HUD-03)", () => {
+  const redraw = callbackSource("redraw");
+  assert.match(redraw, /fromPass >= QUIET_MOVE && passExtra\.size && passExtra\.delete\(id\)/, "the redraw's check wakes the pass");
+  const passLoop = callbackSource("pass");
+  assert.match(passLoop, /oldestDue\(all, passDue, now, INTERVAL/, "the pass queue reads the quiet wait");
 });
 
 test("the 200-tick radar rebuild is spread over the ticks by player, not one wave for everyone (O10)", () => {
@@ -363,7 +421,7 @@ test("a title about to fade is refreshed on time even when it isn't the player's
   // Everyone was sent a moment ago but p90, whose parts are 30 ticks old.
   const lastSent = new Map([...views.keys()].map((id) => [id, { ctext: "c", cat: id === "p90" ? 20 : 49, rtext: "r", rat: id === "p90" ? 20 : 49, compass: true, radar: true }]));
   const sandbox = {
-    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, REFRESH: 30,
+    drawBudget: okBudget(), rebuildBudget: okBudget(), views, TURN_CHECKS: 12, DRAW_MIN: 2, DRAW_MIN_FROM: 16, LAG_CHECKS: 2, TURN_BUDGET: 8, RENDER_BUDGET: 10, TURN_MIN: 2, MOVE_MIN: 0.5, FAR_MOVE: 256, QUIET_MOVE: 1, passExtra: new Map(), passQuiet: new Map(), REFRESH: 30,
     system: { currentTick: 50 }, Date, console, lastSent, planNow: new Set(), terrainVerOf: () => undefined,
     wrap: (a) => a, headingOf: () => 0, render: () => true, keepAlive: (p) => (kept.push(p.id), true),
   };

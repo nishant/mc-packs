@@ -26,7 +26,11 @@ const regionKey = (wx, wz) => (Math.floor(wx / REGION) + 2 ** 20) * 2 ** 21 + (M
 /** @param {Store} s @param {number} wx @param {number} wz @param {number} resolution */
 function bumpStoreRegions(s, wx, wz, resolution) {
   s.ver++;
-  for (const k of new Set([regionKey(wx, wz), regionKey(wx + resolution, wz), regionKey(wx, wz + resolution)])) s.regions.set(k, (s.regions.get(k) ?? 0) + 1);
+  // The column's region and the ones east and south of it (its edge can shade theirs), each once: no Set (HUD-21).
+  const a = regionKey(wx, wz), b = regionKey(wx + resolution, wz), c = regionKey(wx, wz + resolution);
+  s.regions.set(a, (s.regions.get(a) ?? 0) + 1);
+  if (b !== a) s.regions.set(b, (s.regions.get(b) ?? 0) + 1);
+  if (c !== a && c !== b) s.regions.set(c, (s.regions.get(c) ?? 0) + 1);
 }
 /** Losses a store remembers by place (lostNear): a planner checked every few ticks looks at far fewer. */
 export const LOSS_LOG = 4096;
