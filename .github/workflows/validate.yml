@@ -7,6 +7,8 @@
 #     runs were canceled are still compared (tools/test-bds/lib/validate-base.mjs); the report says how many commits
 #     the pair spans;
 #   bundle-10, bundle-40 (5 min each): the genuine one-context Realm Bundle under the same soak, both trees built, one harness;
+#   every soak and bundle job pins noon and clear weather and adds perf-soak's phases (empty, one, ramp, steady, churn;
+#     bundle-40 also a 60 s night in a thunderstorm): only the steady window is compared and judged;
 #   suite-1..8: the whole BDS scenario suite, split by the last run's seconds.
 # The memory soak (memory-40-head, 60 min unprofiled, bedrock_server RSS every 10 s, F74) runs nightly instead, when
 # master moved: its base is the previous nightly's head RSS (memory doesn't depend on runner speed the way ms/tick
@@ -128,10 +130,11 @@ jobs:
             : specs.length
               ? specs.map((spec, i) => ({ name: `scenario-${i + 1}-${spec.split(" ")[0]}`, kind: "scenario", spec }))
               : [
-                  { name: "soak-10", kind: "soak", players: 10, seconds: s(900) },
-                  { name: "soak-40", kind: "soak", players: 40, seconds: s(900) },
-                  { name: "bundle-10", kind: "bundle", players: 10, seconds: s(300) },
-                  { name: "bundle-40", kind: "bundle", players: 40, seconds: s(300) },
+                  // perfargs: perf-soak's phases (empty, one, ramp, steady, churn) and, at 40 in the bundle, a stormy night.
+                  { name: "soak-10", kind: "soak", players: 10, seconds: s(900), perfargs: "phases=1" },
+                  { name: "soak-40", kind: "soak", players: 40, seconds: s(900), perfargs: "phases=1" },
+                  { name: "bundle-10", kind: "bundle", players: 10, seconds: s(300), perfargs: "phases=1" },
+                  { name: "bundle-40", kind: "bundle", players: 40, seconds: s(300), perfargs: "phases=1 night=60" },
                   ...(process.env.MEMORY ? [mem("base"), mem("head")] : []),
                   ...require("./plan.json").shards.map((x) => ({ name: `suite-${x.index}`, kind: "suite", filter: x.filter })),
                 ];
@@ -164,6 +167,8 @@ jobs:
       FILTER: ${{ matrix.filter }}
       SPEC: ${{ matrix.spec }}
       SIDE: ${{ matrix.side }}
+      # suite.mjs --perf hands these to perf-soak (an older suite.mjs on a base tree ignores the variable).
+      PERF_SOAK_ARGS: ${{ matrix.perfargs }}
       REPEAT: ${{ inputs.repeat || '1' }}
       BASE_SHA: ${{ needs.plan.outputs.base }}
     steps:

@@ -108,32 +108,20 @@ Size is the amount of work: S (one sitting), M (a day of agent work with tests),
 
 ### W0 Make the measurement trustworthy and fast (harness and CI only; no pack changes)
 
-Two PRs, in this order. None changes a pack, so none needs a pack release; each still merges through the normal
-flow and is proven by one `validate.yml` dispatch. The validation report already keeps the full profiles, the tick
-histograms by `tick % 20` to `% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts, flaky
-scenarios and the bundle's per-pack table by `scripts/<pack>/` path; a merge is validated in about 31 minutes against
-the last master commit with a finished validation, and the memory soak runs nightly.
+None changes a pack, so none needs a pack release; each still merges through the normal flow and is proven by one
+`validate.yml` dispatch. The validation report already keeps the full profiles, the tick histograms by `tick % 20` to
+`% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts, flaky scenarios, the bundle's
+per-pack table by `scripts/<pack>/` path, a phase table per soak (empty, one, ramp, steady, churn, and a stormy night
+on bundle-40, in a world pinned at noon and clear weather) and a table per profiled suite scenario; a merge is
+validated in about 37 minutes against the last master commit with a finished validation, and the memory soak runs
+nightly.
 
-**W0c Phases and a pinned world** (M). Findings: PIPE-04, UTL-01, PIPE-10, UTL-07 (confirm), and the measurement
-halves of XC-02, XC-06, XC-07, HUD-01, BSE-27, PRG-16.
-- `perf-soak.js` sets the time and weather itself and reports them, so day and night are measured on purpose. Run
-  the bundle soak and the A/B soak over the same span of the day (PIPE-04 dusk mismatch, UTL-01).
-- Phases, using the profiler's existing phase support (`night-soak.js` shows how): `empty` (20 s before the first
-  player), `one` (30 s with one player), the steady window as today, then `churn`: a leave and a join every 5 s,
-  two deaths and respawns, two dimension changes, block break and place loops on 4 players, 20 summoned mobs killed
-  each second for 20 s, `/realm:help`, `/realm:prefs` and `/realm:config` once each. Each phase reports its own
-  average, percentiles and worst ticks; acceptance still judges the steady window only.
-- A `night` phase with a thunderstorm at the end of the 40-player bundle soak, replacing luck (UTL-01).
-- Keep the numbers of the ten per-pack perf workloads that already run under the profiler on every merge and are
-  discarded today (PIPE-10): a table per scenario in the report.
-- New A/B scenarios for what phases cannot hold (run by hand through `validate.yml` `scenarios`, and by the
-  workstream that needs them): `map-radar-perf` (radar on: standing, walking, flying), `stash-miner-perf` (a nearly
-  full page and a stream of pickups), `build-big-perf` (place, copy and cut a 40x40x30 box; preview held), `saga-quest-perf`
-  exists as `saga-perf-quests` (check it has a quest active for every player), `fishing-perf` (10 bobbers out).
-  Write each with the workstream that uses it if that is simpler; list them in WORKING.md.
-- Confirm or reject UTL-07 (admin_bp's steady cost being the soak emptying the slot its item sits in) with
-  `refill=0`.
-- Proof: the report shows every phase; rerun twice to see the phase figures are stable enough to compare.
+**W0c (left): A/B scenarios that phases cannot hold** (S each). The phases, the pinned world, the per-scenario
+tables and the UTL-07 check shipped; what is left is the scenarios, each best written with the workstream that uses it
+(run by hand through `validate.yml` `scenarios`; list them in WORKING.md): `map-radar-perf` (radar on: standing,
+walking, flying; W5), `stash-miner-perf` (a nearly full page and a stream of pickups; W9), `build-big-perf` (place,
+copy and cut a 40x40x30 box, preview held; W7), `fishing-perf` (10 bobbers out), and a check that `saga-perf-quests`
+has a quest active for every player (W16).
 
 **W0d Trust the comparison, and see the engine** (M). Findings: PIPE-07, PIPE-03, PIPE-08.
 - Bundle pair as base, head, head, base; compare means as well as lows (PIPE-07 (1)). A weekly A/A dispatch (base
@@ -268,23 +256,17 @@ Findings: HUD-04, HUD-05, HUD-27. Packs: the 7 with `side.js`, `hud_rp`.
 - Proof: `tools/hud-layout.test.mjs`, `side-*` tests, the HUD scenarios; `setTitle` bytes per tick in the profile;
   one check on the Fold with the old and the new Realm Resources (section 6).
 
-### W7 Easy Building: no long ticks (M to L: two PRs)
+### W7 Easy Building: what is left of the long ticks (S)
 
-Findings: BSE-01, BSE-02, BSE-28, BSE-34, BSE-19, BSE-12, BSE-32, BSE-36. Packs: `build_bp`.
-- **W7a** Place, destroy, copy, cut and paste read every cell in one tick before the sliced writes start, and cut
-  sets every block to air unsliced (BSE-01): move the reading into `system.runJob` generators with a time budget per
-  tick, read each cell once for both the filter and the undo snapshot, and send cut's writes through the sliced path.
-  The destroy loop's ten `typeId` reads per block and the 500 drops pulled every tick (BSE-34). A time budget for
-  "Instant" placing (BSE-19).
-- **W7b** The preview: its cache key contains the draw cadence the solve itself changes, so many previews re-solve
-  every 15 ticks forever (BSE-28: a bug, fix first and alone); a solve reads every cell, up to 8,000 with defer on
-  (BSE-02: slice it, or solve the shell only). The placement queue rescanning itself every second and dropping blocks
-  the player was charged for (BSE-12, a bug with a behavior change in the player's favor). A ticking area added and
-  removed on every paste even in loaded chunks (BSE-32).
-- Proof: `build-big-perf` (longest tick under 50 ms for 50,000 blocks); `build*.js` scenarios; undo and redo of a
-  sliced job interrupted by leave, death and a dimension change (C17).
-- Risk: a job that now spans ticks can be interleaved with another player's edit or the owner leaving: keep the
-  existing lifecycle generation checks around every yield.
+Findings: BSE-01 (the rest), BSE-36. Packs: `build_bp`.
+- Hollow spheres, cylinders and circles still scan their whole bounding box in script before a build or preview
+  (`utils/GeometryUtils.js`, up to 2 million cells at the limit): walk the shell analytically (per y-slice, the two x
+  roots) instead. Not done with the jobs because it is plain script work in the shape handlers, not reads.
+- Every item use by anyone runs `hasRequiredTag` and `getInfiniteReach` before the mode test (BSE-36).
+- A 48,000-block paste still has one tick of 111 to 119 ms in `build-big-perf` (place, copy and cut are at the
+  runner's idle floor, 71 to 75 ms against 66 with no job at all): find it (the profiler shows an 80 ms build_bp
+  callback during the paste, the same as before W7a; likely the placement queue's writes or `trimPasteEntries`).
+- Proof: `build-big-perf` with a hollow sphere of radius 40 added as a phase.
 
 ### W8 Easy Building: previews, particles and the idle floor (M)
 
@@ -501,7 +483,7 @@ Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
 
 ## 5. Order and what can run together
 
-1. Hosting H1 (CI minutes), then W0c and W0d here. From here every workstream has cheap, fast, trustworthy
+1. Hosting H1 (CI minutes), then W0d here. From here every workstream has cheap, fast, trustworthy
    measurement with phases.
 2. W1, then W2 (both bump every pack: never in flight together, and nothing else merges between a start and its
    release).

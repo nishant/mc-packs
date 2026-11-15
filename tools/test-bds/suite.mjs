@@ -3,14 +3,16 @@
 // and prints a table: scenario | result | seconds | first failure line.
 //   node tools/test-bds/suite.mjs [--jobs 2] [--filter <regex>] [--retry] [--json <out>] [--times <suite json>] [--list] [--prepare-only]
 //   (--times: the last run's seconds; a scenario is killed at 3x its usual time, 300 s at least, lib/suite-limits.mjs)
-//   node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp | --perf-bundle <mcpack>] [--json <out>]
+//   node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp | --perf-bundle <mcpack>] [--perf-arg k=v ...] [--json <out>]
 //   (--perf default = 10,40: 10 is the real Realm, 40 shows how the packs scale; 120 s for development, 300 s for release)
 // Results: pass, fail, flaky (failed, then passed when rerun alone with --retry), timeout, skipped.
 // --prepare-only (offline, starts no BDS): stages every header recipe and checks the folder its run command points at.
 // --perf runs only the perf-soak scenario once per player count (with run.mjs --profile, one after another) and
 // prints ms/tick per pack side by side with the budget (whole bundle < 5 ms/tick at 40 players, a typical pack <= 0.15,
 // the Minimap and HUD <= 1; steady soak window only, verdicts at 40 players only); --perf-only installs just those
-// packs, --perf-bundle runs a built Realm Bundle as one script context. The run exits 1 over budget (OVER BUDGET), and
+// packs, --perf-bundle runs a built Realm Bundle as one script context; --perf-arg (repeatable, and the space-separated
+// PERF_SOAK_ARGS, which an older suite.mjs ignores) hands perf-soak more --arg pairs, such as phases=1 and night=60.
+// The run exits 1 over budget (OVER BUDGET), and
 // also when a count is INVALID: its soak did not spawn and keep every declared player for the whole window (profile
 // "acceptance"), its scenario did not pass, or a steady-window figure is missing or not a number (lib/perf-acceptance.mjs).
 // Logs: tools/test-bds/logs/suite-<time>/<scenario>.out (run.mjs output) and .log (full BDS log).
@@ -32,8 +34,8 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { findBash, runRecipe, stageRecipe, stageWord } from "./lib/recipe.mjs";
 import { findPacks } from "./lib/packs.mjs";
-import { BUDGET_PLAYERS, BUNDLE_BUDGET_MS, evaluatePerfBudgets, packBudget } from "./lib/perf-acceptance.mjs";
-import { reducedReport } from "./lib/profile-report.mjs";
+import { BUDGET_PLAYERS, BUNDLE_BUDGET_MS, evaluatePerfBudgets, packBudget, perfSoakArgs, phaseSeconds } from "./lib/perf-acceptance.mjs";
+import { reducedReport, scenarioPerf } from "./lib/profile-report.mjs";
 import { hardLimitSeconds, readTimes } from "./lib/suite-limits.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -47,7 +49,7 @@ try {
       jobs: { type: "string", default: "2" }, filter: { type: "string" }, retry: { type: "boolean", default: false },
       json: { type: "string" }, list: { type: "boolean", default: false }, help: { type: "boolean", short: "h", default: false },
       perf: { type: "string" }, "perf-seconds": { type: "string", default: "120" }, "perf-only": { type: "string" },
-      "perf-bundle": { type: "string" }, times: { type: "string" },
+      "perf-bundle": { type: "string" }, "perf-arg": { type: "string", multiple: true }, times: { type: "string" },
       "prepare-only": { type: "boolean", default: false },
     },
   }).values;
@@ -220,6 +222,11 @@ function hardLimit(p) {
   return hardLimitSeconds(i >= 0 ? Number(p.args[i + 1]) : p.runner ? 240 : 180, knownSeconds.get(p.name)) * 1000;
 }
 
+/** A JSON file, or null. @param {string} f */
+function readJson(f) {
+  try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; }
+}
+
 function runOne(p, logDir, tag = "") {
   return new Promise((resolve) => {
     const base = path.join(logDir, p.name + tag);
@@ -256,7 +263,13 @@ function runOne(p, logDir, tag = "") {
       clearTimeout(kill);
       outStream.end();
       const result = verdict(code, timedOut);
-      resolve({ result, code, seconds: (Date.now() - t0) / 1000, failure: result === "pass" ? "" : timedOut ? "killed by suite (hung)" : firstFailure(out, code) });
+      // A profiled scenario's figures go into the suite JSON, so the validation report keeps them (PIPE-10).
+      let perf;
+      if (!p.runner && p.args?.includes("--profile")) {
+        const at = p.args.indexOf("--profile-json");
+        perf = scenarioPerf(readJson(at >= 0 ? path.resolve(ROOT, p.args[at + 1]) : base + ".profile.json")) ?? undefined;
+      }
+      resolve({ result, code, seconds: (Date.now() - t0) / 1000, failure: result === "pass" ? "" : timedOut ? "killed by suite (hung)" : firstFailure(out, code), ...(perf ? { perf } : {}) });
     });
   });
 }
@@ -269,15 +282,16 @@ async function perf() {
   const seconds = Math.max(10, Number(args["perf-seconds"]) || 120);
   fs.mkdirSync(logDir, { recursive: true });
   const soak = path.join(EXAMPLES, "perf-soak.js");
+  const extra = perfSoakArgs(args["perf-arg"], process.env.PERF_SOAK_ARGS);
   /** @type {Map<number, any>} */
   const reports = new Map();
   for (const n of counts) {
     const json = path.join(logDir, `perf-${n}.json`);
     // Spawning takes about a second per player on top of the soak itself; ticks run slow under load.
-    const timeout = Math.round(120 + n * 2 + seconds * 6);
+    const timeout = Math.round(120 + n * 2 + (seconds + phaseSeconds(extra)) * 6);
     // The watchdog's spike and slow-script warnings are off unless set: on for the soaks, so their lines are counted.
-    const p = { name: `perf-${n}`, args: ["--quiet", "--no-relay", "--profile", "--profile-every", "0", "--profile-json", json, "--prop", "script-watchdog-spike-threshold=50", "--prop", "script-watchdog-slow-threshold=10", ...(args["perf-bundle"] ? ["--bundle", path.resolve(args["perf-bundle"])] : args["perf-only"] ? ["--only", args["perf-only"]] : []), "--arg", `players=${n}`, "--arg", `seconds=${seconds}`, "--timeout", String(timeout), "--scenario", soak], notes: [] };
-    console.log(`[suite] perf: ${n} players, ${seconds} s of game time${args["perf-bundle"] ? `, bundle ${args["perf-bundle"]}` : args["perf-only"] ? `, packs ${args["perf-only"]}` : ""}`);
+    const p = { name: `perf-${n}`, args: ["--quiet", "--no-relay", "--profile", "--profile-every", "0", "--profile-json", json, "--prop", "script-watchdog-spike-threshold=50", "--prop", "script-watchdog-slow-threshold=10", ...(args["perf-bundle"] ? ["--bundle", path.resolve(args["perf-bundle"])] : args["perf-only"] ? ["--only", args["perf-only"]] : []), "--arg", `players=${n}`, "--arg", `seconds=${seconds}`, ...extra.flatMap((kv) => ["--arg", kv]), "--timeout", String(timeout), "--scenario", soak], notes: [] };
+    console.log(`[suite] perf: ${n} players, ${seconds} s of game time${args["perf-bundle"] ? `, bundle ${args["perf-bundle"]}` : args["perf-only"] ? `, packs ${args["perf-only"]}` : ""}${extra.length ? `, ${extra.join(" ")}` : ""}`);
     const r = await runOne(p, logDir);
     console.log(`[suite] perf ${n}: ${r.result} (${r.seconds.toFixed(0)} s)${r.failure ? ` - ${r.failure.slice(0, 160)}` : ""}`);
     try {
@@ -304,7 +318,7 @@ async function perf() {
   console.log(L.join("\n"));
   if (args.json) {
     fs.mkdirSync(path.dirname(path.resolve(args.json)), { recursive: true });
-    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, invalid: verdict.invalid, over: verdict.over, perf: Object.fromEntries([...reports].map(([n, { report: r }]) => [n, r ? reducedReport(r) : null])) }, null, 2));
+    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, perfArgs: extra, invalid: verdict.invalid, over: verdict.over, perf: Object.fromEntries([...reports].map(([n, { report: r }]) => [n, r ? reducedReport(r) : null])) }, null, 2));
   }
   for (const line of verdict.invalid) console.log(`INVALID (not a budget result, not a pass): ${line}`);
   for (const line of verdict.over) console.log(`OVER BUDGET: ${line}`);

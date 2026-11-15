@@ -195,6 +195,16 @@ the code, not measurements.
   `isValid` and two `getLore()` calls (about 30 us), and a chest sort fires dozens.
 - Prove it with: the 40-player soak with `--arg refill=0`: if `admin_bp` drops to the floor the artifact is
   confirmed; `admin-item-legacy.js` and `admin-stash-singleton.js` for the pre-filter.
+- **Answer (W0c, 2026-11-14): confirmed, about half of it.** Run
+  [43654869418](https://github.com/nishant/mc-packs/actions/runs/43654869418) (issue #245): perf-soak at 40 players,
+  120 s, separate contexts, pinned noon, two same-commit pairs per setting. `admin_bp` steady ms/tick with the refill
+  step (`refill=20`): 0.043, 0.035, 0.039, 0.043 (mean 0.040); with `refill=0`: 0.020, 0.018, 0.019, 0.018 (mean
+  0.019), on a runner whose whole bundle read slower (2.55 against 2.20), so the drop is not the machine. With the
+  refill step its dearest callback is the 30 s round (`runJob @ main.js:1278`, 34 ms over 101 calls: re-giving the item
+  the soak deleted from slot 0); without it, the spawn-time give (`runTimeout @ main.js:1216`) is the dearest and the
+  round is not on top. So 0.02 ms/tick at 40 is the soak's artifact, and 0.02 is the pack's own steady floor (the
+  inventory handler's `getLore()` calls on ordinary stacks, which the pre-filter above still removes). Soaks keep
+  `refill=20` (Hotbar Refill and Quick Stack need it); read `admin_bp`'s soak figure with this half in mind.
 
 ### UTL-08 cleanup_bp inspects every dropped item synchronously once a minute  [medium / confirmed / S / low]
 - Where: `packs/cleanup_bp/scripts/main.js:206-220` (the check), `:64-79` (`itemsByDimension`), `:89-102`

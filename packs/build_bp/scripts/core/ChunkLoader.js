@@ -4,6 +4,10 @@ import { world } from "@minecraft/server";
 const activeTAs  = new Map();
 const CHUNK_BLOCKS = 16;
 const TA_PROP = "eb:tickingAreas";
+// The world allows 10 ticking areas and Expeditions needs one per dungeon: builds hold at most two at a time.
+const MAX_BUILD_AREAS = 2;
+/** player ids whose failed add was already logged (once until one succeeds) */
+const warned = new Set();
 
 function readSaved() {
     try {
@@ -27,33 +31,35 @@ function taName(playerId) {
     return `eb${String(playerId).replace(/[^a-zA-Z0-9]/g, "").slice(-6)}`;
 }
 
-export function ensureChunkLoaders(playerId, dimensionId, pendingItems) {
-    if (pendingItems.length === 0) {
-        releaseChunkLoaders(playerId);
-        return;
-    }
-
-    let minX = Infinity,  minY = Infinity,  minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-    for (const { pos } of pendingItems) {
-        if (pos.x < minX) minX = pos.x; if (pos.x > maxX) maxX = pos.x;
-        if (pos.y < minY) minY = pos.y; if (pos.y > maxY) maxY = pos.y;
-        if (pos.z < minZ) minZ = pos.z; if (pos.z > maxZ) maxZ = pos.z;
-    }
-
-    minX = Math.floor(minX / CHUNK_BLOCKS) * CHUNK_BLOCKS;
-    minZ = Math.floor(minZ / CHUNK_BLOCKS) * CHUNK_BLOCKS;
-    maxX = Math.min(minX + 95, Math.ceil((maxX + 1) / CHUNK_BLOCKS) * CHUNK_BLOCKS - 1);
-    maxZ = Math.min(minZ + 95, Math.ceil((maxZ + 1) / CHUNK_BLOCKS) * CHUNK_BLOCKS - 1);
+/** The chunk-aligned area (at most 96 blocks a side, from the box's low corner) a loader for this box covers. */
+export function loaderArea(dimensionId, box) {
+    const minX = Math.floor(box.minX / CHUNK_BLOCKS) * CHUNK_BLOCKS;
+    const minZ = Math.floor(box.minZ / CHUNK_BLOCKS) * CHUNK_BLOCKS;
+    const maxX = Math.min(minX + 95, Math.ceil((box.maxX + 1) / CHUNK_BLOCKS) * CHUNK_BLOCKS - 1);
+    const maxZ = Math.min(minZ + 95, Math.ceil((box.maxZ + 1) / CHUNK_BLOCKS) * CHUNK_BLOCKS - 1);
     const yMin = dimensionId === "minecraft:nether" || dimensionId === "minecraft:the_end" ? 0 : -64;
     const yMax = dimensionId === "minecraft:nether" ? 127 : dimensionId === "minecraft:the_end" ? 255 : 319;
-    minY = Math.max(yMin, Math.min(yMax, minY));
-    maxY = Math.max(yMin, Math.min(yMax, maxY));
+    const minY = Math.max(yMin, Math.min(yMax, box.minY));
+    const maxY = Math.max(yMin, Math.min(yMax, box.maxY));
+    return { dimensionId, minX, minY, minZ, maxX, maxY, maxZ };
+}
 
+/**
+ * Keeps one ticking area per player over the box of the blocks that came back unloaded (BSE-32: only then, never for
+ * a paste into loaded chunks). Returns the area now loaded for this player, or null when none could be added.
+ */
+export function ensureChunkLoaders(playerId, dimensionId, box) {
+    if (!box) {
+        releaseChunkLoaders(playerId);
+        return null;
+    }
+    const area = loaderArea(dimensionId, box);
+    const { minX, minY, minZ, maxX, maxY, maxZ } = area;
     const name = taName(playerId);
     const key = `${dimensionId}:${minX},${minZ},${maxX},${maxZ}`;
     const prev = activeTAs.get(playerId);
-    if (prev && prev.key === key) return;
+    if (prev && prev.key === key) return prev.area;
+    if (!prev && activeTAs.size >= MAX_BUILD_AREAS) return null;
 
     if (prev) {
         try {
@@ -65,16 +71,24 @@ export function ensureChunkLoaders(playerId, dimensionId, pendingItems) {
     }
 
     try {
-        world.getDimension(dimensionId)
+        const result = world.getDimension(dimensionId)
             .runCommand(`tickingarea add ${minX} ${minY} ${minZ} ${maxX} ${maxY} ${maxZ} ${name}`);
-        activeTAs.set(playerId, { dimensionId, name, key });
+        if (result && result.successCount === 0) throw new Error("the world has no free ticking area");
+        activeTAs.set(playerId, { dimensionId, name, key, area });
         saveAdd(name, dimensionId);
+        warned.delete(playerId);
+        return area;
     } catch (e) {
-        console.warn(`[EB] tickingarea add failed: ${e}`);
+        if (!warned.has(playerId)) {
+            warned.add(playerId);
+            console.warn(`[EB] tickingarea add failed: ${e}`);
+        }
+        return null;
     }
 }
 
 export function releaseChunkLoaders(playerId) {
+    warned.delete(playerId);
     const ta = activeTAs.get(playerId);
     if (!ta) return;
     try {

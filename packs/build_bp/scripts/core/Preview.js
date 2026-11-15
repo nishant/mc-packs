@@ -28,6 +28,7 @@ import { applyModifiers, applyModifiersToEntries, getModifierCacheKey } from "./
 import { aimingAtPanel } from "./EntityPanel.js";
 import { aimingAtCoach } from "./Coach.js";
 import { aimingAtPicker } from "./LanguagePicker.js";
+import { overBudget } from "./TickBudget.js";
 
 const previewTicks         = new Map();
 const previewTierQ         = new Map();
@@ -118,6 +119,7 @@ export function clearPreviewCache(playerId) {
     flickChangeAt.delete(playerId);
     pasteSkeletonCache.delete(playerId);
     shapeStableAt.delete(playerId);
+    solving.delete(playerId);
 }
 
 export function clearDeferHintState(playerId) {
@@ -302,35 +304,259 @@ function bboxCorners(minX, maxX, minY, maxY, minZ, maxZ) {
 
 const tpsPart = { text: "" };
 
-/**
- * The blocks a destroy preview outlines: every breakable block in the shape (no air, no bedrock outside creative),
- * plus the other half of each bed. Each block is read once, and its states only when it is a bed.
- */
-export function destroyPreviewPositions(positions, dim, creative) {
-    const out = [];
-    const partners = [];
-    for (const pos of positions) {
-        try {
-            const block = dim.getBlock(pos);
-            if (!block || block.isAir) continue;
-            const typeId = block.typeId;
-            if (!creative && typeId === "minecraft:bedrock") continue;
-            out.push(pos);
-            if (!isBedType(typeId)) continue;
-            const partner = bedPartnerPos(pos, block.permutation.getAllStates());
-            if (partner) partners.push(partner);
-        } catch {}
+const AIR_ID     = "minecraft:air";
+const BEDROCK_ID = "minecraft:bedrock";
+
+/** player id -> the solve being read in a job, { key, gen }. A newer aim or a cleared preview replaces or drops it. */
+const solving = new Map();
+
+/** Over the block limit: keep the last outline of the same context with a warning instead. */
+function warnOverLimit(player, contextKey, cacheKey, cap) {
+    const last = previewCache.get(player.id);
+    const warnBar = t("eb.preview.exceeds_limit", cap.toLocaleString());
+    if (last?.contextKey === contextKey) {
+        previewCache.set(player.id, { ...last, key: cacheKey, settled: true, actionBar: warnBar });
+        spawnParticles(player.dimension, last.preview, last.particleId);
     }
-    if (partners.length) {
-        const seen = new Set(out.map((p) => `${p.x},${p.y},${p.z}`));
-        for (const partner of partners) {
-            const k = `${partner.x},${partner.y},${partner.z}`;
-            if (seen.has(k)) continue;
-            seen.add(k);
-            out.push(partner);
+    if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
+}
+
+/** Caches a finished solve and draws it. */
+function applySolve(player, dim, entry) {
+    if (entry.tier !== undefined) previewTierQ.set(player.id, entry.tier);
+    lastSolvedFamily.set(player.id, entry.family);
+    previewCache.set(player.id, entry);
+    if (!isActionBarLocked(player.id)) steadyBar(player, entry.actionBar);
+    spawnParticles(dim, entry.preview, entry.particleId);
+}
+
+/** Runs the rest of a solve a slice a tick; stops when a newer aim replaced it or the preview was cleared. */
+function* finishSolve(player, playerId, dim, job) {
+    try {
+        while (solving.get(playerId) === job) {
+            const step = job.gen.next();
+            if (step.done) {
+                solving.delete(playerId);
+                if (step.value && player.isValid) applySolve(player, dim, step.value);
+                return;
+            }
+            yield;
+        }
+    } catch {
+        if (solving.get(playerId) === job) solving.delete(playerId);
+    }
+}
+
+/**
+ * Reads the shape at one aim and builds its outline, bar and cache entry (BSE-02). Each cell is read once for both the
+ * shape and its shell (kept in a Map by position), the states only for a bed, and the reading yields whenever this
+ * tick's shared budget is spent, so a big shape is finished over a few ticks while the box stays drawn. After every
+ * yield the player must still be here, in the same dimension, with the same anchor. Returns the entry to cache and draw,
+ * or null when there is nothing to draw (a warning was already shown, or the player, anchor or dimension changed).
+ */
+function* solveShape(c) {
+    const { player, state, handler, target, dim, creative, replaceBlocks, isDestroy, previewMode, quality, contextKey, cacheKey } = c;
+    const anchor       = state.anchor;
+    const secondAnchor = state.secondAnchor ?? null;
+    const blockTypeId  = state.blockTypeId;
+    const dimId        = dim.id;
+    const live = () => {
+        try { return player.isValid && getState(player).anchor === anchor && player.dimension.id === dimId; }
+        catch { return false; }
+    };
+    const maxBlocks = getMaxBlocks(player);
+    const rawPositions = handler.getPositions(anchor, target, player, secondAnchor, { cap: maxBlocks + 1 });
+    if (rawPositions?.oversize || rawPositions?.length > maxBlocks) {
+        warnOverLimit(player, contextKey, cacheKey, maxBlocks);
+        return null;
+    }
+    if (!rawPositions?.length) return null;
+    const allPositions = applyModifiers(player, rawPositions);
+    if (!allPositions?.length) return null;
+
+    // position -> its block's type, or null when there is no readable block there (unloaded, out of the world)
+    const typeAt = new Map();
+    let reads = 0;
+    const read = (p) => {
+        const k = `${p.x},${p.y},${p.z}`;
+        let v = typeAt.get(k);
+        if (v !== undefined) return v;
+        try { v = dim.getBlock(p)?.typeId ?? null; } catch { v = null; }
+        typeAt.set(k, v);
+        return v;
+    };
+
+    let positions = [];
+    const partners = [];
+    for (const p of allPositions) {
+        if ((++reads & 31) === 0 && overBudget()) {
+            yield;
+            if (!live()) return null;
+        }
+        const existing = read(p);
+        if (isDestroy) {
+            // Every breakable block (no air, no bedrock outside creative), plus the other half of each bed.
+            if (existing === null || existing === AIR_ID) continue;
+            if (!creative && existing === BEDROCK_ID) continue;
+            positions.push(p);
+            if (isBedType(existing)) {
+                try {
+                    const partner = bedPartnerPos(p, dim.getBlock(p).permutation.getAllStates());
+                    if (partner) partners.push(partner);
+                } catch {}
+            }
+        } else {
+            if (existing !== null) {
+                if (!creative && existing === BEDROCK_ID) continue;
+                if (!replaceBlocks && !ALWAYS_REPLACEABLE.has(existing)) continue;
+                if (existing === blockTypeId) continue;
+            }
+            positions.push(p);
         }
     }
-    return out;
+    if (partners.length) {
+        const keys = new Set(positions.map((p) => `${p.x},${p.y},${p.z}`));
+        for (const partner of partners) {
+            const k = `${partner.x},${partner.y},${partner.z}`;
+            if (keys.has(k)) continue;
+            keys.add(k);
+            positions.push(partner);
+        }
+    }
+    if (!positions.length) return null;
+    if (!isDestroy) positions = previewBedPositions(positions, blockTypeId, player, state.blockStates);
+    if (!positions.length) return null;
+    const cap = getMaxBlocks(player);
+    if (positions.length > cap) {
+        warnOverLimit(player, contextKey, cacheKey, cap);
+        return null;
+    }
+
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    for (const p of positions) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+        if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+    }
+    const dx = maxX - minX, dy = maxY - minY, dz = maxZ - minZ;
+    const dims = [dx + 1, dy + 1, dz + 1].filter(d => d > 1);
+    const dimStr = dims.length ? dims.join('x') : '1';
+    const dirKey = dx === 0 && dy === 0 && dz === 0 ? "eb.dir.single"
+        : dx >= dy && dx >= dz ? "eb.dir.ew"
+        : dz >= dx && dz >= dy ? "eb.dir.ns" : "eb.dir.ud";
+    let stepHintKey;
+    if (handler.steps === 3) {
+        stepHintKey = secondAnchor
+            ? (isDestroy ? "eb.preview.step3_destroy" : "eb.preview.step3_place")
+            : "eb.preview.step2";
+    } else {
+        stepHintKey = isDestroy ? "eb.preview.hint_destroy" : "eb.preview.hint_place";
+    }
+    const { durabRemaining, durabMax, totalDurabRemaining, spareToolCount, paletteOn, paletteSrc, paletteDist } = c;
+    let durabSuffix = "";
+    if (durabRemaining >= 0) {
+        const willBreak = positions.length >= totalDurabRemaining;
+        const pct       = durabMax > 0 ? durabRemaining / durabMax : 1;
+        const color     = willBreak ? "§c" : pct < 0.15 ? "§e" : "§f";
+        const stackInfo = spareToolCount > 0 ? ` §8(+${spareToolCount} stacked)` : "";
+        const breakMsg  = willBreak
+            ? (spareToolCount > 0 ? " §c- all tools exhausted!" : " §c- tool will break!")
+            : "";
+        durabSuffix     = `\n${color}${totalDurabRemaining} uses left${stackInfo}${breakMsg}`;
+    }
+    const totalSteps = handler.steps === 3 ? 3 : 2;
+    const curStep    = handler.steps === 3 ? (secondAnchor ? 3 : 2) : 2;
+    const actionBar = rawtext(
+        { text: `§f${positions.length} blocks §7(${dimStr})` },
+        tpsPart,
+        { text: `\n§7` },
+        t(`eb.mode.${state.mode}`),
+        { text: `  §8-  §7` },
+        t("eb.preview.step_of", curStep, totalSteps),
+        { text: `  §8-  §7` },
+        t(dirKey),
+        { text: `  §8-  ` },
+        t(stepHintKey),
+        ...(durabSuffix ? [{ text: durabSuffix }] : []),
+
+        ...(paletteOn ? [
+            { text: `\n` },
+            t("eb.preview.palette_active",
+                t(`eb.palette.source.${paletteSrc}`),
+                t(`eb.palette.dist.${paletteDist}`)),
+        ] : []),
+    );
+
+    // The shell is read through the same Map: only its cells that are not in the shape cost a read.
+    function* shellBase() {
+        if (!handler.getShellPositions) return positions;
+        const shellAll = handler.getShellPositions(anchor, target, player, secondAnchor);
+        if (!shellAll?.length) return positions;
+        const filtered = [];
+        for (const p of shellAll) {
+            if ((++reads & 31) === 0 && overBudget()) {
+                yield;
+                if (!live()) return null;
+            }
+            const existing = read(p);
+            if (isDestroy) {
+                if (existing === null || existing === AIR_ID) continue;
+                if (!creative && existing === BEDROCK_ID) continue;
+            } else if (existing !== null) {
+                if (!creative && existing === BEDROCK_ID) continue;
+                if (existing === blockTypeId) continue;
+            }
+            filtered.push(p);
+        }
+        return filtered.length ? filtered : positions;
+    }
+
+    const { PARTICLE, CONTROLLER, CONTROLLER_DESTROY } = c;
+    const isCornerOutline = previewMode === "corner_outline";
+    const isOutline       = isDestroy || previewMode === "outline" || isCornerOutline;
+    let preview;
+    let particleId = PARTICLE;
+    let tier;
+    if (isCornerOutline) {
+        preview = bboxCorners(minX, maxX, minY, maxY, minZ, maxZ);
+        particleId = isDestroy ? CONTROLLER_DESTROY : CONTROLLER;
+    } else if (isOutline) {
+        let base = yield* shellBase();
+        if (!base) return null;
+        if (!isDestroy) base = previewBedPositions(base, blockTypeId, player, state.blockStates);
+        const wf = wireframePositions(base);
+
+        const count = wf.length;
+        if      (isDestroy)     tier = 1;
+        else if (count <=  50)  tier = 1;
+        else if (count <= 100)  tier = 2;
+        else if (count <= 150)  tier = 3;
+        else if (count <= 200)  tier = 4;
+        else                    tier = BIG_PREVIEW_TIER;
+
+        const spawnQ = Math.max(quality, tier);
+        if (isDestroy) {
+            preview    = wf;
+            particleId = destroyParticle(spawnQ);
+        } else if (count <= 200) {
+            preview    = wf;
+            particleId = outlineParticle(spawnQ);
+        } else {
+            preview    = adaptiveParticles(wireframePositions(base));
+            particleId = previewParticle(spawnQ);
+        }
+    } else {
+        let base = yield* shellBase();
+        if (!base) return null;
+        if (!isDestroy) base = previewBedPositions(base, blockTypeId, player, state.blockStates);
+        preview = adaptiveParticles(wireframePositions(base));
+    }
+    return {
+        key: cacheKey, contextKey, settled: true, preview, particleId, actionBar, tier,
+        family: { mode: state.mode, destroy: isDestroy, family: particleFamily(particleId) },
+    };
 }
 
 function previewBedPositions(positions, typeId, player, blockStates) {
@@ -355,6 +581,7 @@ function releasePreview(player) {
     try {
         lastPreviewTarget.delete(player.id);
         previewCache.delete(player.id);
+        solving.delete(player.id);
         previewBusy.delete(player);
         const state = getState(player);
         if (state.anchor && state.mode === "disable") clearAnchor(player);
@@ -765,7 +992,10 @@ export function startPreviewLoop() {
                 const paletteOn   = paletteSrc && paletteSrc !== "disable";
                 const paletteDist = paletteOn ? getDistributionMode(player) : "";
 
-                const contextKey = `${state.mode}|${state.anchor.x},${state.anchor.y},${state.anchor.z}|${state.secondAnchor ? `${state.secondAnchor.x},${state.secondAnchor.y},${state.secondAnchor.z}` : "~"}|${state.blockTypeId}|${previewMode}|${creative ? 1 : 0}|${replaceBlocks ? 1 : 0}|${totalDurabRemaining}|${yawQ}|${paletteSrc}|${paletteDist}|${drawQ}|${getModifierCacheKey(player)}`;
+                // No draw cadence (drawQ) in the key: the solve itself changes the cadence (previewTierQ), so a key
+                // with it never found its own solve again and re-solved about every 13 ticks while the aim rested
+                // (BSE-28). Each cached entry keeps its own particle id.
+                const contextKey = `${state.mode}|${state.anchor.x},${state.anchor.y},${state.anchor.z}|${state.secondAnchor ? `${state.secondAnchor.x},${state.secondAnchor.y},${state.secondAnchor.z}` : "~"}|${state.blockTypeId}|${previewMode}|${creative ? 1 : 0}|${replaceBlocks ? 1 : 0}|${totalDurabRemaining}|${yawQ}|${paletteSrc}|${paletteDist}|${getModifierCacheKey(player)}`;
 
                 const cacheKey = `${contextKey}|${targetKey}`;
                 const cached   = previewCache.get(player.id);
@@ -949,196 +1179,35 @@ export function startPreviewLoop() {
                     continue;
                 }
 
-                const maxBlocks = getMaxBlocks(player);
-                const rawPositions = handler.getPositions(
-                    state.anchor, target, player, state.secondAnchor ?? null, { cap: maxBlocks + 1 }
-                );
-                if (rawPositions?.oversize || rawPositions?.length > maxBlocks) {
-                    const last = previewCache.get(player.id);
-                    const stillRelevant = last?.contextKey === contextKey;
-                    const warnBar = t("eb.preview.exceeds_limit", maxBlocks.toLocaleString());
-                    if (stillRelevant) {
-                        previewCache.set(player.id, { ...last, key: cacheKey, settled: true, actionBar: warnBar });
-                        spawnParticles(dim, last.preview, last.particleId);
+                // The shape at this aim is still being read in a job: keep what is drawn (the box) meanwhile.
+                const pending = solving.get(player.id);
+                if (pending?.key === cacheKey) {
+                    if (cached) {
+                        if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
+                        if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                     }
-                    if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
                     continue;
                 }
-                if (!rawPositions?.length) continue;
-                const allPositions = applyModifiers(player, rawPositions);
-                if (!allPositions?.length) continue;
-                const positions = isDestroy
-                    ? destroyPreviewPositions(allPositions, dim, creative)
-                    : allPositions.filter(p => {
-                        try {
-                            const block = dim.getBlock(p);
-                            if (block === null || block === undefined) return true;
-                            const existing = block.typeId;
-                            if (!creative && existing === "minecraft:bedrock") return false;
-                            if (!replaceBlocks && !ALWAYS_REPLACEABLE.has(existing)) return false;
-                            return existing !== state.blockTypeId;
-                        }
-                        catch { return true; }
-                    });
-                const shown = !positions.length ? positions
-                    : isDestroy ? positions
-                    : previewBedPositions(positions, state.blockTypeId, player, state.blockStates);
-                if (!shown.length) continue;
-                if (shown !== positions) {
-                    positions.length = 0;
-                    for (const p of shown) positions.push(p);
-                }
-                const cap = getMaxBlocks(player);
-                if (positions.length > cap) {
-                    const last = previewCache.get(player.id);
-                    const stillRelevant = last?.contextKey === contextKey;
-                    const warnBar = t("eb.preview.exceeds_limit", cap.toLocaleString());
-                    if (stillRelevant) {
-                        previewCache.set(player.id, { ...last, key: cacheKey, settled: true, actionBar: warnBar });
-                        spawnParticles(dim, last.preview, last.particleId);
-                    }
-                    if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
+                const solve = solveShape({
+                    player, state, handler, target, dim, creative, replaceBlocks, isDestroy, previewMode, quality,
+                    contextKey, cacheKey, PARTICLE, CONTROLLER, CONTROLLER_DESTROY,
+                    durabRemaining, durabMax, totalDurabRemaining, spareToolCount, paletteOn, paletteSrc, paletteDist,
+                });
+                // A small shape is read here, in this tick, as before; one that runs out of this tick's budget goes
+                // on in a job, a slice a tick.
+                const first = solve.next();
+                if (first.done) {
+                    solving.delete(player.id);
+                    if (first.value) applySolve(player, dim, first.value);
                     continue;
                 }
-                let minX = Infinity, maxX = -Infinity;
-                let minY = Infinity, maxY = -Infinity;
-                let minZ = Infinity, maxZ = -Infinity;
-                for (const p of positions) {
-                    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-                    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-                    if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+                const job = { key: cacheKey, gen: solve };
+                solving.set(player.id, job);
+                system.runJob(finishSolve(player, player.id, dim, job));
+                if (cached) {
+                    if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
+                    if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                 }
-                const dx = maxX - minX, dy = maxY - minY, dz = maxZ - minZ;
-                const dims = [dx + 1, dy + 1, dz + 1].filter(d => d > 1);
-                const dimStr = dims.length ? dims.join('x') : '1';
-                const dirKey = dx === 0 && dy === 0 && dz === 0 ? "eb.dir.single"
-                    : dx >= dy && dx >= dz ? "eb.dir.ew"
-                    : dz >= dx && dz >= dy ? "eb.dir.ns" : "eb.dir.ud";
-                let stepHintKey;
-                if (handler.steps === 3) {
-                    stepHintKey = state.secondAnchor
-                        ? (isDestroy ? "eb.preview.step3_destroy" : "eb.preview.step3_place")
-                        : "eb.preview.step2";
-                } else {
-                    stepHintKey = isDestroy ? "eb.preview.hint_destroy" : "eb.preview.hint_place";
-                }
-                let durabSuffix = "";
-                if (durabRemaining >= 0) {
-                    const willBreak = positions.length >= totalDurabRemaining;
-                    const pct       = durabMax > 0 ? durabRemaining / durabMax : 1;
-                    const color     = willBreak ? "§c" : pct < 0.15 ? "§e" : "§f";
-                    const stackInfo = spareToolCount > 0 ? ` §8(+${spareToolCount} stacked)` : "";
-                    const breakMsg  = willBreak
-                        ? (spareToolCount > 0 ? " §c- all tools exhausted!" : " §c- tool will break!")
-                        : "";
-                    durabSuffix     = `\n${color}${totalDurabRemaining} uses left${stackInfo}${breakMsg}`;
-                }
-                const totalSteps = handler.steps === 3 ? 3 : 2;
-                const curStep    = handler.steps === 3 ? (state.secondAnchor ? 3 : 2) : 2;
-                const actionBar = rawtext(
-                    { text: `§f${positions.length} blocks §7(${dimStr})` },
-                    tpsPart,
-                    { text: `\n§7` },
-                    t(`eb.mode.${state.mode}`),
-                    { text: `  §8-  §7` },
-                    t("eb.preview.step_of", curStep, totalSteps),
-                    { text: `  §8-  §7` },
-                    t(dirKey),
-                    { text: `  §8-  ` },
-                    t(stepHintKey),
-                    ...(durabSuffix ? [{ text: durabSuffix }] : []),
-
-                    ...(paletteOn ? [
-                        { text: `\n` },
-                        t("eb.preview.palette_active",
-                            t(`eb.palette.source.${paletteSrc}`),
-                            t(`eb.palette.dist.${paletteDist}`)),
-                    ] : []),
-                );
-                if (!isActionBarLocked(player.id)) steadyBar(player, actionBar);
-                const isCornerOutline = previewMode === "corner_outline";
-                const isOutline       = isDestroy || previewMode === "outline" || isCornerOutline;
-                let preview;
-                let particleId = PARTICLE;
-                if (isCornerOutline) {
-                    preview = bboxCorners(minX, maxX, minY, maxY, minZ, maxZ);
-                    particleId = isDestroy ? CONTROLLER_DESTROY : CONTROLLER;
-                } else if (isOutline) {
-                    let base = positions;
-                    if (handler.getShellPositions) {
-                        const shellAll = handler.getShellPositions(
-                            state.anchor, target, player, state.secondAnchor ?? null
-                        );
-                        if (shellAll?.length) {
-                            const filtered = shellAll.filter(p => {
-                                try {
-                                    if (isDestroy) {
-                                        const block = dim.getBlock(p);
-                                        if (!block || block.isAir) return false;
-                                        if (!creative && block.typeId === "minecraft:bedrock") return false;
-                                        return true;
-                                    }
-                                    const block = dim.getBlock(p);
-                                    if (block === null || block === undefined) return true;
-                                    const existing = block.typeId;
-                                    if (!creative && existing === "minecraft:bedrock") return false;
-                                    return existing !== state.blockTypeId;
-                                } catch { return true; }
-                            });
-                            if (filtered.length) base = filtered;
-                        }
-                    }
-                    if (!isDestroy) base = previewBedPositions(base, state.blockTypeId, player, state.blockStates);
-                    const wf = wireframePositions(base);
-
-                    const count = wf.length;
-                    let tier;
-                    if      (isDestroy)     tier = 1;
-                    else if (count <=  50)  tier = 1;
-                    else if (count <= 100)  tier = 2;
-                    else if (count <= 150)  tier = 3;
-                    else if (count <= 200)  tier = 4;
-                    else                    tier = BIG_PREVIEW_TIER;
-
-                    const spawnQ = Math.max(quality, tier);
-                    if (isDestroy) {
-                        preview    = wf;
-                        particleId = destroyParticle(spawnQ);
-                    } else if (count <= 200) {
-                        preview    = wf;
-                        particleId = outlineParticle(spawnQ);
-                    } else {
-                        preview    = adaptiveParticles(wireframePositions(base));
-                        particleId = previewParticle(spawnQ);
-                    }
-                    previewTierQ.set(player.id, tier);
-                } else {
-                    let base = positions;
-                    if (handler.getShellPositions) {
-                        const shellAll = handler.getShellPositions(
-                            state.anchor, target, player, state.secondAnchor ?? null
-                        );
-                        if (shellAll?.length) {
-                            const filtered = shellAll.filter(p => {
-                                try {
-                                    const block = dim.getBlock(p);
-                                    if (block === null || block === undefined) return true;
-                                    const existing = block.typeId;
-                                    if (!creative && existing === "minecraft:bedrock") return false;
-                                    return existing !== state.blockTypeId;
-                                } catch { return true; }
-                            });
-                            if (filtered.length) base = filtered;
-                        }
-                    }
-                    if (!isDestroy) base = previewBedPositions(base, state.blockTypeId, player, state.blockStates);
-                    preview = adaptiveParticles(wireframePositions(base));
-                }
-
-                lastSolvedFamily.set(player.id, { mode: state.mode, destroy: isDestroy, family: particleFamily(particleId) });
-
-                previewCache.set(player.id, { key: cacheKey, contextKey, settled: true, preview, particleId, actionBar });
-                spawnParticles(dim, preview, particleId);
             } catch {  }
         }
     }, 1);

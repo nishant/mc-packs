@@ -5,7 +5,8 @@
 // the same-runner comparisons (tools/test-bds/perf-compare.mjs), the head's budget lines, the memory curve and the
 // scenario totals. It also writes the scenario seconds (--times, a suite --json shape) for pr-tests.yml's shards.
 // Each soak also gets a details block from the head's profile: bedrock_server CPU, watchdog lines, the steady window's
-// tick histogram and worst ticks, each phase's worst ticks and, for the one-context bundle, per-pack rows by path.
+// tick histogram and worst ticks, each phase's worst ticks and, for the one-context bundle, per-pack rows by path; a
+// soak with phases (perf-soak phases=1) gets a phase table, and the suite's profiled scenarios a table each (PIPE-10).
 // --matrix (the plan's matrix JSON) names the jobs that uploaded nothing; a missing suite shard counts as a failure.
 //   node tools/test-bds/validate-report.mjs --dir <artifacts> --base <sha> --head <sha> [--run <url>] [--matrix <json>] --out report.md [--times t.json]
 // Sets `status` in $GITHUB_OUTPUT: ok, or red when a scenario failed or timed out, a pair regressed, a soak gave
@@ -55,7 +56,9 @@ export function suiteSummary(reports) {
     for (const x of r.results ?? []) {
       if (!x) continue;
       counts[x.result] = (counts[x.result] ?? 0) + 1;
-      results.push({ name: x.name, seconds: x.seconds });
+      // A profiled scenario's figures (PIPE-10): the clean rerun's when it was retried.
+      const perf = x.retry?.perf ?? x.perf;
+      results.push({ name: x.name, seconds: x.seconds, ...(perf ? { perf } : {}) });
       const why = (/** @type {any} */ f) => (f ? ` - ${String(f).replace(/\s+/g, " ").slice(0, 160)}` : "");
       if (x.result === "fail" || x.result === "timeout") failures.push(`${x.name}: ${x.result}${why(x.failure)}`);
       // A flaky scenario failed, then passed when rerun alone: both durations and the first failure.
@@ -123,6 +126,54 @@ export function profileDetails(head, base = null) {
     L.push("", `One script context by \`scripts/<pack>/\` path (whole run; ${byPath.length} groups):`, "", "| pack | ms/tick | calls/tick | max ms | callbacks |", "|---|---:|---:|---:|---:|");
     for (const p of byPath.slice(0, 25)) L.push(`| ${p.pack} | ${n3(p.msPerTick)} | ${Number(p.callsPerTick).toFixed(2)} | ${p.max} | ${p.callbacks} |`);
     if (byPath.length > 25) L.push("", `${byPath.length - 25} cheaper group(s) not shown.`);
+  }
+  return L;
+}
+
+const ms = (/** @type {any} */ v) => (typeof v === "number" && Number.isFinite(v) ? String(Math.round(v * 100) / 100) : "-");
+
+/**
+ * Every phase of one soak (perf-soak phases=1: empty, one, ramp, steady, churn, night) as a table: players, ticks, the
+ * base's and the head's average, and the head's percentiles and slowest tick, plus the pinned world and the churn
+ * counts. The steady window is the one the comparison above and acceptance judge.
+ * @param {any} head one player count of a suite --perf --json report (head side) @param {any} [base]
+ */
+export function phaseTable(head, base = null) {
+  const phases = head?.bundle?.phases ?? [];
+  if (!phases.length) return [];
+  const baseOf = (/** @type {string} */ n) => (base?.bundle?.phases ?? []).find((/** @type {any} */ p) => p.name === n)?.bundle?.avg ?? (n === "steady" ? base?.bundle?.steadyWindow?.avg : undefined);
+  const L = ["| phase | players | ticks | base avg | head avg | p50 | p95 | p99 | max | ticks over 50 ms |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"];
+  for (const ph of phases) {
+    const b = ph.bundle ?? {};
+    L.push(`| ${ph.name}${ph.name === "steady" ? " (judged)" : ""} | ${ph.players ?? "-"} | ${b.ticks ?? "-"} | ${n3(baseOf(ph.name))} | ${n3(b.avg)} | ${ms(b.p50)} | ${ms(b.p95)} | ${ms(b.p99)} | ${ms(b.max)} | ${b.over50 ?? "-"} |`);
+  }
+  const w = head.workload ?? {};
+  const world = w.world;
+  if (world) L.push("", `World: time ${world.time >= 0 ? world.time : "running"}, weather ${world.weather}; over the steady window the time went ${world.start?.timeOfDay ?? "?"} -> ${world.end?.timeOfDay ?? "?"} and the weather ${world.start?.weather ?? "?"} -> ${world.end?.weather ?? "?"}.`);
+  const c = w.churn;
+  if (c) L.push("", `Churn (not judged; its players are not counted against retention): ${c.left} left and ${c.rejoined} rejoined${c.rejoinFailed ? ` (${c.rejoinFailed} could not)` : ""}, ${c.deaths} deaths and ${c.respawns} respawns, ${c.dimensionChanges} dimension changes, ${c.broken} blocks broken and ${c.placed} placed, ${c.mobsKilled} of ${c.mobsSummoned} summoned mobs killed, menus ${(c.menus ?? []).join(", ") || "none"}; fewest players in the world ${c.minValid}, at the end ${c.endValid}.`);
+  if (w.night) L.push("", `Night: ${w.night.start?.timeOfDay ?? "?"} -> ${w.night.end?.timeOfDay ?? "?"}, weather ${w.night.start?.weather ?? "?"} -> ${w.night.end?.weather ?? "?"}, fewest players ${w.night.minValid}.`);
+  return L;
+}
+
+/**
+ * The profiled scenarios of the suite shards (PIPE-10), one table each: the bundle's whole-run and steady figures, the
+ * previous validation's figure for the same scenario (another runner: a trend line, not a gate), each phase, and the
+ * dearest packs.
+ * @param {{ name: string, perf?: any }[]} results @param {any} [previous] the times file as it was
+ */
+export function scenarioPerfTables(results, previous = null) {
+  const before = new Map((previous?.results ?? []).filter((/** @type {any} */ r) => r?.perf).map((/** @type {any} */ r) => [r.name, r.perf]));
+  const L = [];
+  for (const r of [...results].filter((x) => x.perf).sort((a, b) => a.name.localeCompare(b.name))) {
+    const p = r.perf, prev = before.get(r.name);
+    const main = p.steady ?? p.whole;
+    const prevMain = prev ? (prev.steady ?? prev.whole)?.avg : undefined;
+    L.push(`**${r.name}**: ${n3(main?.avg)} ms/tick ${p.steady ? "over the steady window" : "over the whole run"} (p95 ${ms(main?.p95)} / p99 ${ms(main?.p99)} / max ${ms(main?.max)} ms, ${main?.ticks ?? "-"} ticks); whole run ${n3(p.msPerTick)}; previous validation ${n3(prevMain)}; bedrock_server ${n3(p.cpuMsPerTick)} CPU ms/tick${p.acceptance === false ? "; its acceptance FAILED" : ""}`, "");
+    if (p.phases?.length) L.push(`Phases: ${p.phases.map((/** @type {any} */ ph) => `${ph.name} ${n3(ph.avg)} (p95 ${ms(ph.p95)}, max ${ms(ph.max)})`).join("; ")}`, "");
+    L.push("| pack | ms/tick | steady | p95 | max |", "|---|---:|---:|---:|---:|");
+    for (const x of p.packs ?? []) L.push(`| ${x.pack} | ${n3(x.msPerTick)} | ${n3(x.steady)} | ${x.p95 ?? "-"} | ${x.max ?? "-"} |`);
+    L.push("");
   }
   return L;
 }
@@ -200,6 +251,8 @@ function main() {
       const result = compare(b, h);
       if (result.status !== "ok") red = true;
       L.push(markdown(count, b, h, result).replace(/^### /, `### ${name}, `), "");
+      const phases = phaseTable(heads[0]?.perf?.[count], bases[0]?.perf?.[count]);
+      if (phases.length) L.push(`Phases of ${name}, ${count} players (the head's figures; ms/tick summed over packs):`, "", ...phases, "");
       const details = profileDetails(heads[0]?.perf?.[count], bases[0]?.perf?.[count]);
       if (details.length) L.push(`<details><summary>${name}, ${count}: CPU, watchdog, tick histogram, worst ticks${heads[0]?.perf?.[count]?.bundle?.byPath ? ", per pack" : ""}</summary>`, "", ...details, "", "</details>", "");
     }
@@ -223,7 +276,10 @@ function main() {
     for (const x of s.failures) L.push(`- ${x}`);
     if (s.failures.length) L.push("");
     if (s.flaky.length) L.push("Flaky (failed, then passed rerun alone):", "", ...s.flaky.map((x) => `- ${x}`), "");
-    const history = flakyHistory(a.times ? json(a.times) : null, s.flaky.map((x) => x.split(":")[0]), s.results.length);
+    const previous = a.times ? json(a.times) : null;
+    const perfTables = scenarioPerfTables(s.results, previous);
+    if (perfTables.length) L.push(`<details><summary>Scenario perf: ${s.results.filter((x) => x.perf).length} profiled scenarios of the suite (one run each on its shard's runner: a trend against the previous validation, not a gate)</summary>`, "", ...perfTables, "</details>", "");
+    const history = flakyHistory(previous, s.flaky.map((x) => x.split(":")[0]), s.results.length);
     if (history.top.length) L.push(`Flaky most often over the last ${history.runs.length} validation(s): ${history.top.map((t) => `${t.name} (${t.times})`).join(", ")}`, "");
     if (a.times) fs.writeFileSync(a.times, JSON.stringify({ date: new Date().toISOString(), results: s.results, flakyRuns: history.runs }));
   }

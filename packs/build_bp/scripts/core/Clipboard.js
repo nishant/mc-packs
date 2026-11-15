@@ -4,14 +4,15 @@ import { getState } from "./PlayerState.js";
 import { isCreative, countBlocks, removeBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 import { getMaxBlocks, getUndoThreshold, getReplaceBlocks, getAllowDestroy, getDestroyCreativeOnly } from "./Settings.js";
-import { captureSnapshot, recordSnapshot } from "./UndoRedo.js";
-import { enqueue } from "./PlacementQueue.js";
-import { reportPlaced } from "../utils/PlacedReport.js";
+import { snapshotJob, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
+import { sliceDue, runJobAsync, ownerHere, inTurn } from "./TickBudget.js";
+import { enqueue, cancelQueued } from "./PlacementQueue.js";
+import { reportPlacedJob } from "../utils/PlacedReport.js";
 import { ALWAYS_REPLACEABLE, UNPLACEABLE } from "./BlockPlacer.js";
 import { rotateStates } from "../utils/BlockStates.js";
 import { applyModifiersToEntries } from "./ModifierPipeline.js";
 import { deleteSlot, fitsInSlot } from "../utils/ClipboardStore.js";
-import { filterAllowedPositionsAsync, inSafeZoneAt, isBuildBlockedForPlayer } from "./Protection.js";
+import { filterAllowedPositionsAsync, inSafeZoneAt, isBuildBlockedForPlayer, safeZonesIn } from "./Protection.js";
 import { UNBREAKABLE } from "./BlockDestroyer.js";
 import { bedPartnerPos, chargeUnits, dropIncompleteBeds, isBedType } from "./beds.js";
 import { isOp } from "../utils/Permissions.js";
@@ -71,6 +72,22 @@ function trimPasteEntries(entries, cap) {
     }
     return out;
 }
+/** getRotatedEntries a slice a tick, for a paste (a 50,000-block clipboard is a lot of objects for one tick). */
+function* rotatedJob(clipboard, origin, pasteFacingIdx) {
+    const n = (pasteFacingIdx - clipboard.captureFacing + 4) & 3;
+    const out = new Array(clipboard.blocks.length);
+    for (let i = 0; i < clipboard.blocks.length; i++) {
+        if (sliceDue()) yield;
+        const b = clipboard.blocks[i];
+        const { dx, dz } = rotateOffset(b.dx, b.dz, n);
+        out[i] = {
+            pos:        { x: origin.x + dx, y: origin.y + b.dy, z: origin.z + dz },
+            typeId:     b.typeId,
+            permStates: n ? rotateStates(b.permStates, n) : b.permStates,
+        };
+    }
+    return out;
+}
 export function getRotatedEntries(clipboard, origin, pasteFacingIdx) {
     const n = (pasteFacingIdx - clipboard.captureFacing + 4) & 3;
     return clipboard.blocks.map(b => {
@@ -126,38 +143,73 @@ export function copyTooBig(player, corner1, corner2, notify = true) {
     return true;
 }
 
-export function captureClipboard(player, corner1, corner2) {
-    const dim = player.dimension;
-    if (boxVolume(dim.id, corner1, corner2) > copyLimit(player)) return 0;
-    const { x1, x2, y1, y2, z1, z2 } = boxBounds(dim.id, corner1, corner2);
-    const blocks = [];
-    for (let x = x1; x <= x2; x++)
-        for (let y = y1; y <= y2; y++)
-            for (let z = z1; z <= z2; z++) {
-                try {
-                    const block = dim.getBlock({ x, y, z });
-                    if (!block || block.isAir) continue;
-                    blocks.push({
-                        dx: x - x1,
-                        dy: y - y1,
-                        dz: z - z1,
-                        typeId:     block.typeId,
-                        permStates: block.permutation.getAllStates(),
-                    });
-                } catch { }
-            }
-    if (!blocks.length) { getState(player).clipboard = null; return 0; }
-    getState(player).clipboard = {
-        blocks,
-        version:       Date.now(),
-        captureFacing: yawToFacingIndex(player.getRotation().y),
-        dims:          { x: x2 - x1 + 1, y: y2 - y1 + 1, z: z2 - z1 + 1 },
-    };
-    return blocks.length;
+const AIR_ID = "minecraft:air";
+let airPerm = null;
+function air() {
+    if (!airPerm) airPerm = BlockPermutation.resolve(AIR_ID);
+    return airPerm;
 }
 
 function hasInventory(block) {
     try { return !!block.getComponent("minecraft:inventory"); } catch { return false; }
+}
+
+/**
+ * Reads the box for a copy or cut in a job, a slice a tick (BSE-01): per cell one getBlock and one typeId, and the
+ * states only for a block (2 to 4 native calls; it was 5). With `withInventory`, the indexes of blocks with an
+ * inventory are noted too (a survival cut leaves them). Returns null when the owner left, died or changed dimension.
+ */
+function* captureJob(player, dimId, corner1, corner2, withInventory) {
+    if (!ownerHere(player, dimId)) return null;
+    const dim = player.dimension;
+    if (boxVolume(dimId, corner1, corner2) > copyLimit(player)) return null;
+    let yaw = 0;
+    try { yaw = player.getRotation().y; } catch { }
+    const { x1, x2, y1, y2, z1, z2 } = boxBounds(dimId, corner1, corner2);
+    const blocks = [];
+    const inv = withInventory ? new Set() : null;
+    for (let x = x1; x <= x2; x++)
+        for (let y = y1; y <= y2; y++)
+            for (let z = z1; z <= z2; z++) {
+                if (sliceDue()) {
+                    yield;
+                    if (!ownerHere(player, dimId)) return null;
+                }
+                try {
+                    const block = dim.getBlock({ x, y, z });
+                    if (!block) continue;
+                    const typeId = block.typeId;
+                    if (typeId === AIR_ID) continue;
+                    if (inv && hasInventory(block)) inv.add(blocks.length);
+                    blocks.push({
+                        dx: x - x1,
+                        dy: y - y1,
+                        dz: z - z1,
+                        typeId,
+                        permStates: block.permutation.getAllStates(),
+                    });
+                } catch { }
+            }
+    return { blocks, inv, yaw, dimId, x1, x2, y1, y2, z1, z2 };
+}
+
+function setClipboard(player, cap) {
+    if (!cap.blocks.length) { getState(player).clipboard = null; return 0; }
+    getState(player).clipboard = {
+        blocks:        cap.blocks,
+        version:       Date.now(),
+        captureFacing: yawToFacingIndex(cap.yaw),
+        dims:          { x: cap.x2 - cap.x1 + 1, y: cap.y2 - cap.y1 + 1, z: cap.z2 - cap.z1 + 1 },
+    };
+    return cap.blocks.length;
+}
+
+/** Copies the box into the player's clipboard; resolves with the number of blocks copied. */
+export async function captureClipboard(player, corner1, corner2) {
+    const dimId = player.dimension.id;
+    const cap = await inTurn(player.id, () => runJobAsync(captureJob(player, dimId, corner1, corner2, false)));
+    if (!cap || !ownerHere(player, cap.dimId)) return 0;
+    return setClipboard(player, cap);
 }
 
 export async function cutAndCapture(player, corner1, corner2) {
@@ -165,50 +217,56 @@ export async function cutAndCapture(player, corner1, corner2) {
     if (!getAllowDestroy()) { try { player.sendMessage(t("eb.destroy.disabled")); } catch { } return 0; }
     if (getDestroyCreativeOnly() && !isCreative(player)) { try { player.sendMessage(t("eb.destroy.creative_only")); } catch { } return 0; }
     const dim = player.dimension;
+    const dimId = dim.id;
     const { x1, y1, z1, x2, z2 } = boxBounds(dim.id, corner1, corner2);
     if (!isOp(player) && get("safeZonesOperatorsOnly") === true) {
-        for (let x = x1; x <= x2; x++) {
-            for (let z = z1; z <= z2; z++) {
-                const zHit = inSafeZoneAt(dim.id, x, z);
-                if (zHit) {
-                    try { player.sendMessage(`§c[EB] You cannot cut inside safe zone "${zHit.name}".`); } catch {}
-                    return 0;
+        const zones = safeZonesIn(dim.id);
+        if (zones.length) {
+            for (let x = x1; x <= x2; x++) {
+                for (let z = z1; z <= z2; z++) {
+                    const zHit = inSafeZoneAt(dim.id, x, z, zones);
+                    if (zHit) {
+                        try { player.sendMessage(`§c[EB] You cannot cut inside safe zone "${zHit.name}".`); } catch {}
+                        return 0;
+                    }
                 }
             }
         }
     }
-    const count = captureClipboard(player, corner1, corner2);
+    const creative = isCreative(player);
+    const cap = await inTurn(player.id, () => runJobAsync(captureJob(player, dimId, corner1, corner2, !creative)));
+    if (!cap || !ownerHere(player, dimId)) return 0;
+    const count = setClipboard(player, cap);
     if (count === 0) return 0;
     const state     = getState(player);
     const clipboard = state.clipboard;
-    const creative  = isCreative(player);
 
     // Bedrock, spawners and the like stay put, and so do containers in survival (the clipboard keeps no contents).
     const asked = [];
-    for (const b of clipboard.blocks) {
-        if (UNBREAKABLE.has(b.typeId)) continue;
-        const pos = { x: x1 + b.dx, y: y1 + b.dy, z: z1 + b.dz };
-        if (!creative) {
-            try {
-                const block = dim.getBlock(pos);
-                if (block && hasInventory(block)) continue;
-            } catch { }
+    await runJobAsync((function* () {
+        for (let i = 0; i < clipboard.blocks.length; i++) {
+            if (sliceDue()) yield;
+            const b = clipboard.blocks[i];
+            if (UNBREAKABLE.has(b.typeId)) continue;
+            if (cap.inv?.has(i)) continue;
+            asked.push({ x: x1 + b.dx, y: y1 + b.dy, z: z1 + b.dz, _b: b });
         }
-        asked.push({ ...pos, _b: b });
-    }
+    })());
+    if (!ownerHere(player, dimId) || state.clipboard !== clipboard) return 0;
     // Land Claims: cells in someone else's claim are neither cut nor copied.
     const allowed = await filterAllowedPositionsAsync(player, dim.id, asked, true);
-    if (!player.isValid || state.clipboard !== clipboard) return 0;
+    if (!ownerHere(player, dimId) || state.clipboard !== clipboard) return 0;
     const cutPositions = [];
     const cutBlocks = [];
-    for (const a of allowed ?? []) {
-        try {
-            const block = dim.getBlock(a);
-            if (!block || block.typeId !== a._b.typeId) continue;
-        } catch { continue; }
-        cutPositions.push({ x: a.x, y: a.y, z: a.z });
-        cutBlocks.push(a._b);
-    }
+    await runJobAsync((function* () {
+        for (const a of allowed ?? []) {
+            if (sliceDue()) yield;
+            // What the cell held comes from the clipboard: the undo snapshot reads nothing again.
+            cutPositions.push({ x: a.x, y: a.y, z: a.z, _bt: pack(a._b.typeId), _bs: a._b.permStates, _t: a._b.typeId });
+            cutBlocks.push(a._b);
+        }
+    })());
+    if (!ownerHere(player, dimId) || state.clipboard !== clipboard) return 0;
     if (!cutBlocks.length) { state.clipboard = null; return 0; }
     // A survival cut destroys the source blocks: it must be savable, or leaving would lose them for good.
     if (!creative && !fitsInSlot(cutBlocks)) {
@@ -220,20 +278,70 @@ export async function cutAndCapture(player, corner1, corner2) {
     clipboard.isCut = !creative;
     clipboard.cutId = clipboard.version;
     const undoThreshold = getUndoThreshold(player);
-    const snapshot = captureSnapshot(dim, cutPositions, "minecraft:air", {}, null, undoThreshold);
+    const snapshot = await runJobAsync(snapshotJob(dim, cutPositions, "minecraft:air", {}, null, undoThreshold));
+    if (!ownerHere(player, dimId) || state.clipboard !== clipboard) return 0;
+    // The cells go to air through the placement queue, within the shared tick budget (it was every cell in one
+    // tick). A cell that holds something else by its turn is left as it is, and an undo drops the air still waiting.
+    const playerId = player.id;
+    let jid;
     if (snapshot) {
         snapshot.isCutSource = true;
         snapshot.survival = !creative;
         snapshot.cutId = clipboard.cutId;
+        trackWrites(snapshot, () => cancelQueued(playerId, jid));
+        jid = snapshot.jid;
         recordSnapshot(player, snapshot);
     }
-    for (const pos of cutPositions) {
-        try {
-            const block = dim.getBlock(pos);
-            if (block && !block.isAir) block.setType("minecraft:air");
-        } catch { }
-    }
+    await runJobAsync((function* () {
+        for (const pos of cutPositions) {
+            if (sliceDue()) yield;
+            enqueue(playerId, dimId, { x: pos.x, y: pos.y, z: pos.z }, air(), undefined, pos._t, jid);
+        }
+    })());
     return cutBlocks.length;
+}
+
+/**
+ * Reads the paste's cells in a job (one getBlock, one typeId and, for a non-air cell, its states: the filter and the
+ * undo snapshot in one pass, BSE-01). Returns the entries that may be written, or null when the owner left, died or
+ * changed dimension.
+ */
+function* pasteReadJob(player, dimId, allowedEntries, creative, replaceBlocks) {
+    if (!ownerHere(player, dimId)) return null;
+    const dim = player.dimension;
+    const { yMin, yMax } = dimYRange(dimId);
+    // Kept bottom layer first, as the paste writes them, in buckets by y (stable, and no sort of 50,000 entries).
+    const byY = new Map();
+    const keep = (e) => {
+        let list = byY.get(e.pos.y);
+        if (!list) { list = []; byY.set(e.pos.y, list); }
+        list.push(e);
+    };
+    for (const e of allowedEntries) {
+        if (sliceDue()) {
+            yield;
+            if (!ownerHere(player, dimId)) return null;
+        }
+        if (e.pos.y < yMin || e.pos.y > yMax) continue;
+        if (UNPLACEABLE.has(e.typeId)) continue;
+        if (!creative && UNBREAKABLE.has(e.typeId)) continue;
+        let block, existing;
+        try {
+            block = dim.getBlock(e.pos);
+            existing = block?.typeId;
+        } catch { keep(e); continue; }
+        if (existing === undefined) { keep(e); continue; }
+        if (!creative && existing === "minecraft:bedrock") continue;
+        if (!replaceBlocks && !ALWAYS_REPLACEABLE.has(existing)) continue;
+        let states = {};
+        if (existing !== AIR_ID) { try { states = block.permutation.getAllStates(); } catch { } }
+        e._bt = pack(existing);
+        e._bs = states;
+        keep(e);
+    }
+    const out = [];
+    for (const y of [...byY.keys()].sort((a, b) => a - b)) for (const e of byY.get(y)) out.push(e);
+    return out;
 }
 
 export async function executePaste(player, origin) {
@@ -243,38 +351,27 @@ export async function executePaste(player, origin) {
     const { clipboard } = state;
     const isCut         = clipboard.isCut === true;
     const dim           = player.dimension;
+    const dimId         = dim.id;
     const creative      = isCreative(player);
     const cap           = getMaxBlocks(player);
     const pasteFacing   = yawToFacingIndex(player.getRotation().y);
 
     const replaceBlocks = creative && getReplaceBlocks(player);
 
-    const { yMin, yMax } = dimYRange(dim.id);
     // Safe zones and Land Claims, like every other way of building.
+    const rotated = await runJobAsync(rotatedJob(clipboard, origin, pasteFacing));
+    if (!rotated || !ownerHere(player, dimId) || getState(player).clipboard !== clipboard) return 0;
     const allowedEntries = await filterAllowedPositionsAsync(
         player,
         dim.id,
-        applyModifiersToEntries(player, getRotatedEntries(clipboard, origin, pasteFacing)),
+        applyModifiersToEntries(player, rotated),
         true
     );
     // The claims answer can take a few ticks: the player or the clipboard may be gone by now.
     if (!player.isValid || getState(player).clipboard !== clipboard) return 0;
-    let entries = allowedEntries
-        .filter(e => {
-            if (e.pos.y < yMin || e.pos.y > yMax) return false;
-            if (UNPLACEABLE.has(e.typeId)) return false;
-            if (!creative && UNBREAKABLE.has(e.typeId)) return false;
-            try {
-                const block = dim.getBlock(e.pos);
-                if (!block) return true;
-                const existing = block.typeId;
-                if (!creative && existing === "minecraft:bedrock") return false;
-                if (!replaceBlocks && !ALWAYS_REPLACEABLE.has(existing)) return false;
-                return true;
-            } catch { return true; }
-        })
-        .sort((a, b) => a.pos.y - b.pos.y);
-    entries = trimPasteEntries(entries, cap);
+    const read = await inTurn(player.id, () => runJobAsync(pasteReadJob(player, dimId, allowedEntries, creative, replaceBlocks)));
+    if (!read || !ownerHere(player, dimId) || getState(player).clipboard !== clipboard) return 0;
+    let entries = trimPasteEntries(read, cap);
 
     if (!creative && !isCut) {
         const needed = new Map();
@@ -301,19 +398,31 @@ export async function executePaste(player, origin) {
         }
     }
 
-    const positions     = entries.map(e => ({
-        ...e.pos,
-        _resolvedStates: e.permStates,
-        _bedHead: isBedType(e.typeId) && e.permStates?.head_piece_bit === true,
-        _bedGroup: e._bedGroup,
-    }));
-    const perPosTypeIds = entries.map(e => e.typeId);
+    const positions     = new Array(entries.length);
+    const perPosTypeIds = new Array(entries.length);
+    await runJobAsync((function* () {
+        for (let i = 0; i < entries.length; i++) {
+            if (sliceDue()) yield;
+            const e = entries[i];
+            positions[i] = {
+                x: e.pos.x, y: e.pos.y, z: e.pos.z,
+                _resolvedStates: e.permStates,
+                _bedHead: isBedType(e.typeId) && e.permStates?.head_piece_bit === true,
+                _bedGroup: e._bedGroup,
+                _bt: e._bt,
+                _bs: e._bs,
+            };
+            perPosTypeIds[i] = e.typeId;
+        }
+    })());
+    if (!ownerHere(player, dimId) || getState(player).clipboard !== clipboard) return 0;
 
     const undoThreshold = getUndoThreshold(player);
-    const snapshot = captureSnapshot(
+    const snapshot = await runJobAsync(snapshotJob(
         dim, positions, entries[0]?.typeId ?? "minecraft:air", {},
         perPosTypeIds, undoThreshold,
-    );
+    ));
+    if (!ownerHere(player, dimId) || getState(player).clipboard !== clipboard) return 0;
     if (snapshot) snapshot.survival = !creative && !isCut;
     if (!snapshot) {
         lockActionBar(player.id, 1500);
@@ -324,16 +433,7 @@ export async function executePaste(player, origin) {
         );
     }
 
-    for (const e of entries) {
-        try {
-            let perm = BlockPermutation.resolve(e.typeId);
-            for (const [k, v] of Object.entries(e.permStates)) {
-                try { perm = perm.withState(k, v); } catch {}
-            }
-            enqueue(player.id, dim.id, e.pos, perm);
-        } catch { }
-    }
-
+    // Charged before the writes are queued (they are queued over a few ticks below).
     if (!creative && !isCut) {
         const consumed = new Map();
         for (const e of entries) {
@@ -343,12 +443,40 @@ export async function executePaste(player, origin) {
         for (const [tid, count] of consumed) removeBlocks(player, tid, count);
     }
 
-    reportPlaced(dim.id, entries.map((e) => ({ ...e.pos, typeId: e.typeId })), (p) => p.typeId);
     recordSnapshot(player, snapshot);
 
     if (isCut && !creative) {
         if (typeof clipboard.originSlot === "number") deleteSlot(player, clipboard.originSlot);
         state.clipboard = null;
     }
+
+    // One permutation per kind of block and states (resolved once, not once per entry with a withState per state).
+    const playerId = player.id;
+    await runJobAsync((function* () {
+        const perms = new Map();
+        for (const e of entries) {
+            if (sliceDue()) yield;
+            try {
+                const key = `${e.typeId}|${JSON.stringify(e.permStates)}`;
+                let perm = perms.get(key);
+                if (!perm) {
+                    try {
+                        perm = BlockPermutation.resolve(e.typeId, e.permStates);
+                    } catch {
+                        perm = BlockPermutation.resolve(e.typeId);
+                        for (const [k, v] of Object.entries(e.permStates)) {
+                            try { perm = perm.withState(k, v); } catch {}
+                        }
+                    }
+                    perms.set(key, perm);
+                }
+                // A survival player paid for this block (or cut it): given back if the queue finally gives it up.
+                const refund = !creative && chargeUnits(e.typeId, e.permStates) > 0 ? e.typeId : undefined;
+                enqueue(playerId, dimId, e.pos, perm, refund);
+            } catch { }
+        }
+        yield;
+        yield* reportPlacedJob(dimId, entries.map((e) => ({ ...e.pos, typeId: e.typeId })), (p) => p.typeId);
+    })());
     return entries.length;
 }
