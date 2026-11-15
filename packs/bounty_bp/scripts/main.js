@@ -355,29 +355,70 @@ function ensureDay() {
 // Spawning the targets (when a player comes near: the chunk must be loaded)
 // ---------------------------------------------------------------------------
 
-/** Per target, not saved: spots tried, when to try again, when we asked, ticks unseen. @type {Map<string, { tries: number, retryAt: number, askedAt: number, unseen: number }>} */
+/**
+ * Per target, not saved: spots tried, when to try again, when we asked, ticks unseen, and whether a spot's build scan
+ * is under way (`scanning`, about half a second).
+ * @typedef {{ tries: number, retryAt: number, askedAt: number, unseen: number, scanning?: boolean }} SpawnState
+ */
+/** @type {Map<string, SpawnState>} */
 const spawnState = new Map();
+/**
+ * How near (blocks) a player must be to the place a spawned target was last seen for it to be looked up: past the
+ * distance at which a mob still moves (simulation distance, up to 12 chunks) plus the 16 blocks it may have gone
+ * unrecorded, nobody can be moving it, so its place stands.
+ */
+const TRACK_DISTANCE = 216;
 
 /**
- * Is there anything player-made in the 9 x 9 columns around (x, z), from the surface down 4?
- * Unloaded columns count as built (we can't tell).
- * @param {Dimension} dim @param {number} x @param {number} z
+ * Is there anything player-made in the 9 x 9 columns around (x, z), from the surface down 4? Unloaded columns count
+ * as built (we can't tell). In steps: the 81 top blocks first (most builds show on top, and one of them ends the
+ * scan), then one row of 9 columns, 4 blocks under each top, per step. It yields between steps (`scanSliced` runs one
+ * a tick) and returns true (built, or not loaded) or false: about 240 native calls in the first step and 72 in each
+ * of the 9 after it, instead of about 1,460 in one tick.
+ * @param {Dimension} dim @param {number} x @param {number} z @returns {Generator<undefined, boolean, unknown>}
  */
-function nearBuilt(dim, x, z) {
+function* nearBuilt(dim, x, z) {
+  /** @type {number[]} */
+  const tops = [];
   try {
     for (let dx = -4; dx <= 4; dx++)
       for (let dz = -4; dz <= 4; dz++) {
         const top = dim.getTopmostBlock({ x: x + dx, z: z + dz });
-        if (!top) return true;
-        for (let y = top.y; y >= top.y - 4; y--) {
-          const b = dim.getBlock({ x: x + dx, y, z: z + dz });
-          if (!b || BUILT.test(b.typeId)) return true;
-        }
+        if (!top || BUILT.test(top.typeId)) return true;
+        tops.push(top.y);
       }
   } catch {
     return true; // part of it isn't loaded
   }
+  for (let i = 0; i < 9; i++) {
+    yield;
+    try {
+      for (let j = 0; j < 9; j++) {
+        const ty = tops[i * 9 + j];
+        for (let y = ty - 1; y >= ty - 4; y--) {
+          const b = dim.getBlock({ x: x + i - 4, y, z: z + j - 4 });
+          if (!b || BUILT.test(b.typeId)) return true;
+        }
+      }
+    } catch {
+      return true; // part of it isn't loaded
+    }
+  }
   return false;
+}
+
+/**
+ * Runs `nearBuilt` one step a tick (10 ticks for a clean spot), then calls `done(built)`.
+ * @param {Dimension} dim @param {number} x @param {number} z @param {(built: boolean) => void} done
+ */
+function scanSliced(dim, x, z, done) {
+  const steps = nearBuilt(dim, x, z);
+  const step = () => {
+    const r = steps.next();
+    if (!r.done) system.runTimeout(step, 1);
+    else done(r.value === true);
+  };
+  step();
 }
 
 /** Is (x, z) too close to the world spawn for a target? @param {number} x @param {number} z */
@@ -424,16 +465,24 @@ function targetOf(h) {
   return world.getDimension(h.dim).getEntities({ tags: [TAG + h.id] })[0];
 }
 
-/** One step for one target, while players are around. @param {Hunt} h @param {Player[]} players */
-function tend(h, players) {
+/**
+ * One step for one target, while players are around. `places`: where the overworld's players are, read once per run.
+ * @param {Hunt} h @param {{ x: number, z: number }[]} places
+ */
+function tend(h, places) {
   const now = system.currentTick;
   let st = spawnState.get(h.id);
   if (!st) spawnState.set(h.id, (st = { tries: 0, retryAt: 0, askedAt: -1, unseen: 0 }));
+  if (st.scanning) return; // a spot's build scan is under way
   const dist = get("spawnDistance");
-  const near = players.some((p) => Math.hypot(p.location.x - h.lx, p.location.z - h.lz) <= dist);
+  let nearest = Infinity;
+  for (const p of places) nearest = Math.min(nearest, Math.hypot(p.x - h.lx, p.z - h.lz));
+  const near = nearest <= dist;
 
   if (h.s) {
-    // Spawned: follow where it is, and spawn it again if it's gone (despawned, or died without a player).
+    // Spawned: follow where it is, and spawn it again if it's gone (despawned, or died without a player). Nobody
+    // within TRACK_DISTANCE: nothing can be moving it, and the dimension-wide tag query waits.
+    if (!near && nearest > TRACK_DISTANCE) return;
     const e = targetOf(h);
     if (e) {
       st.unseen = 0;
@@ -481,33 +530,60 @@ function tend(h, players) {
     if (st.tries > 0) st.tries++;
     return;
   }
-  let mob = h.mob;
   // Treetops count as a bad spot too: a target stuck up in the leaves is no hunt.
-  if (nearSpawn(x, z) || /leaves|_log$|_wood$/.test(top.typeId) || nearBuilt(dim, x, z)) {
-    // Somebody's build (or land we can't see yet): look around it, and after a few tries move the
-    // target 100 to 200 blocks away (the board shows the new place).
-    if (++st.tries >= 6) {
-      for (let i = 0; i < 10; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const r = rand(100, 200);
-        const nx = Math.floor(h.lx + Math.cos(angle) * r);
-        const nz = Math.floor(h.lz + Math.sin(angle) * r);
-        if (nearSpawn(nx, nz)) continue;
-        h.lx = nx;
-        h.lz = nz;
-        break;
-      }
-      st.tries = 0;
-      dirty = true;
-    }
+  if (nearSpawn(x, z) || /leaves|_log$|_wood$/.test(top.typeId)) {
+    badSpot(h, st);
     return;
   }
+  // The build scan reads about 1,460 blocks on a clean spot: spread over 10 ticks, then the rest of this step.
+  const state = st;
+  state.scanning = true;
+  scanSliced(dim, x, z, (built) => {
+    state.scanning = false;
+    try {
+      // The day rolled, the target was claimed or spawned meanwhile: nothing more to do for this spot.
+      if (spawnState.get(h.id) !== state || h.done || h.s || state.askedAt >= 0) return;
+      if (built) badSpot(h, state);
+      else askSpawn(h, state, top, x, z);
+    } catch (e) {
+      if (!String(e).includes("LocationInUnloadedChunk")) console.warn(`[bounty] target ${h.id}: ${e}`);
+    }
+  });
+}
+
+/**
+ * Somebody's build (or land we can't see yet) at the spot tried: look around it, and after a few tries move the
+ * target 100 to 200 blocks away (the board shows the new place).
+ * @param {Hunt} h @param {SpawnState} st
+ */
+function badSpot(h, st) {
+  if (++st.tries < 6) return;
+  for (let i = 0; i < 10; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = rand(100, 200);
+    const nx = Math.floor(h.lx + Math.cos(angle) * r);
+    const nz = Math.floor(h.lz + Math.sin(angle) * r);
+    if (nearSpawn(nx, nz)) continue;
+    h.lx = nx;
+    h.lz = nz;
+    break;
+  }
+  st.tries = 0;
+  dirty = true;
+}
+
+/**
+ * A clean spot: ask the Champions pack for the target there.
+ * @param {Hunt} h @param {SpawnState} st @param {import("@minecraft/server").Block} top @param {number} x @param {number} z
+ */
+function askSpawn(h, st, top, x, z) {
+  let mob = h.mob;
   // Over a lake or the sea: a drowned, in the water (not a land mob on the bed).
   const water = top.isLiquid ? top.location.y : waterOver(top);
   if (water !== undefined) mob = "minecraft:drowned";
   const y = water ?? top.location.y + 1;
   st.tries = 0;
-  st.askedAt = now;
+  st.askedAt = system.currentTick;
   h.lx = x;
   h.lz = z;
   dirty = true;
@@ -605,11 +681,23 @@ system.runInterval(() => {
     ensureDay();
     const d = day();
     if (d.d === today() && get("enabled") === true) {
-      const players = world.getDimension(OVERWORLD).getPlayers();
+      // Each player's place once per run, however many targets there are.
+      /** @type {{ x: number, z: number }[]} */
+      const places = [];
+      if (d.list.some((b) => b.t === "c" && !b.done)) {
+        for (const p of world.getDimension(OVERWORLD).getPlayers()) {
+          try {
+            const l = p.location;
+            places.push({ x: l.x, z: l.z });
+          } catch {
+            // left this tick
+          }
+        }
+      }
       for (const b of d.list) {
         if (b.t !== "c" || b.done) continue;
         try {
-          tend(b, players);
+          tend(b, places);
         } catch (e) {
           console.warn(`[bounty] target ${b.id}: ${e}`);
         }
@@ -702,6 +790,45 @@ function finishCull(c, finisher) {
   for (const p of world.getAllPlayers()) p.sendMessage(`§6[Bounty] The realm finished "${c.label}"! §7${n} player${n === 1 ? "" : "s"} share the reward.`);
 }
 
+/** How often (ticks) at most a player's cull progress line is shown: a sweeping hit on a grinder kills many at once. */
+const NOTE_TICKS = 10;
+/** Tick each player's cull progress line was last shown. @type {Map<string, number>} */
+const noteShown = new Map();
+/** The newest line waiting for its turn, per player. @type {Map<string, { p: Player, text: string }>} */
+const notePending = new Map();
+
+/** Shows the player a line (with notes on), at most once every NOTE_TICKS: the latest one wins. @param {Player} p @param {string} text */
+function showNote(p, text) {
+  noteShown.set(p.id, system.currentTick);
+  if (getFor(p, "notes") !== true) return;
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 40, from: "bounty_bp" }));
+  p.onScreenDisplay.setActionBar(text);
+}
+
+/** A cull kill's progress line for its player. @param {Player} p @param {string} text */
+function cullNote(p, text) {
+  const id = p.id;
+  const now = system.currentTick;
+  const last = noteShown.get(id);
+  if (last === undefined || now - last >= NOTE_TICKS || now < last) {
+    showNote(p, text);
+    if (noteShown.size > 64) for (const [k, t] of noteShown) if (now - t >= NOTE_TICKS) noteShown.delete(k);
+    return;
+  }
+  const waiting = notePending.has(id);
+  notePending.set(id, { p, text });
+  if (waiting) return;
+  system.runTimeout(() => {
+    const next = notePending.get(id);
+    notePending.delete(id);
+    try {
+      if (next && next.p.isValid) showNote(next.p, next.text);
+    } catch {
+      // left meanwhile
+    }
+  }, last + NOTE_TICKS - now);
+}
+
 world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   const killer = damageSource.damagingEntity;
   if (!(killer instanceof Player)) return;
@@ -715,10 +842,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       b.who[killer.id] = (b.who[killer.id] ?? 0) + 1;
       dirty = true;
       if (b.p >= b.count) finishCull(b, killer);
-      else if (getFor(killer, "notes") === true) {
-        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: killer.id, ticks: 40, from: "bounty_bp" }));
-        killer.onScreenDisplay.setActionBar(`§eBounty: ${countdown(b.label, b.p, b.count)} §f${b.p}/${b.count}`);
-      }
+      else cullNote(killer, `§eBounty: ${countdown(b.label, b.p, b.count)} §f${b.p}/${b.count}`);
     }
   } catch (e) {
     console.warn(`[bounty] ${e}`);

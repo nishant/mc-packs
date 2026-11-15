@@ -27,7 +27,8 @@ function run(n) {
   const dim = { getPlayers: () => players, runCommand(c) { log.push(`dim ${c}`); return { successCount: 1 }; } };
   const ctx = {
     console, Math,
-    rand: () => 0, groundAt: () => undefined, PATH_POINTS: 10, get: () => 200, compass: () => "N", sendJournal() {},
+    rand: () => 0, groundAt: () => undefined, PATH_POINTS: 10, get: () => 200, getFor: () => 1, compass: () => "N", sendJournal() {},
+    world: { getDefaultSpawnLocation: () => ({ x: 0, y: 64, z: 0 }) },
     CONFIG: { warnDistance: 150, hornEvery: 20, sounds: { horn: "raid.horn", wind: "wind.loop", rumble: "ambient.weather.thunder" } },
     WIND_RANGE: 48, RUMBLE_RANGE: 100, WIND_EVERY: 5, RUMBLE_EVERY: 6, SOUND_BAND: 8,
   };

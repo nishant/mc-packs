@@ -83,7 +83,7 @@ export default async function (t) {
   let ms = await mapState();
   t.check(!ms.radar, "server-size controls leave the fully optional radar OFF");
   // These are declared admitted-work allocations, not measured CPU use while radar is OFF.
-  t.check(ms.budgetLevel === "normal" && Math.abs(ms.perTick - 9.2) < 0.01, `the Minimap's budgets are normal (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
+  t.check(ms.budgetLevel === "normal" && Math.abs(ms.perTick - 3.85) < 0.01, `the Minimap's budgets are normal (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
 
   // 4. Operator Tools > Server size > Large server: the list first, Cancel changes nothing.
   shown = t.waitForm(op, { timeout: 100 });
@@ -119,7 +119,7 @@ Minimap: Largest mob range players may pick (blocks): 32 -> 24
   v = await values();
   t.check(!matches(v, LARGE).length, `every option has its Large server value (${matches(v, LARGE).join("; ")})`);
   ms = await mapState();
-  t.check(ms.budgetLevel === "low" && Math.abs(ms.perTick - 4.6) < 0.01, `the Minimap's budgets are low (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
+  t.check(ms.budgetLevel === "low" && Math.abs(ms.perTick - 1.925) < 0.01, `the Minimap's budgets are low (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
   t.check(title(page) === "Operator Tools" && lines(page).some((/** @type {string} */ b) => b.startsWith("[x] Server Size")), `Operator Tools comes back with the size checked off (${lines(page).filter((/** @type {string} */ b) => b.includes("Server Size")).join("")})`);
 
   // 6. The size page now says Large; Small Realm puts every option back.
@@ -134,7 +134,7 @@ Minimap: Minimap script time a tick: Low (less work per tick) -> Normal (Oak pro
   v = await values();
   t.check(!matches(v, SMALL).length, `every option is back at its default (${matches(v, SMALL).join("; ")})`);
   ms = await mapState();
-  t.check(ms.budgetLevel === "normal" && Math.abs(ms.perTick - 9.2) < 0.01, `the Minimap's budgets are normal again (${ms.perTick} ms a tick)`);
+  t.check(ms.budgetLevel === "normal" && Math.abs(ms.perTick - 3.85) < 0.01, `the Minimap's budgets are normal again (${ms.perTick} ms a tick)`);
 
   // 7. Applied again: nothing left to change.
   page = await tap(page, "Server size");

@@ -482,6 +482,9 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 // Borders
 // ---------------------------------------------------------------------------
 
+const MAX_BORDERS = 6; // claims whose borders are drawn at once, the nearest first
+/** Squared distance from a claim's middle to the player. @param {Claim} c @param {Player} p */
+const sq = (c, p) => (c.x - p.location.x) ** 2 + (c.z - p.location.z) ** 2;
 /** @type {Map<string, number>} player id → the run drawing their borders, so a new one replaces it */
 const drawing = new Map();
 world.afterEvents.playerLeave.subscribe(({ playerId }) => drawing.delete(playerId));
@@ -499,15 +502,25 @@ function showBorders(player, list) {
   const pid = player.id;
   const previous = drawing.get(pid);
   if (previous !== undefined) system.clearRun(previous);
+  // The nearest MAX_BORDERS claims only, at one height (before 1.5.13: every claim in range, at two heights, so a few
+  // claims together were about 850 spawns twice a second).
+  const shown = list.length > MAX_BORDERS ? [...list].sort((a, b) => sq(a, player) - sq(b, player)).slice(0, MAX_BORDERS) : list;
+  const stop = () => {
+    system.clearRun(id);
+    if (drawing.get(pid) === id) drawing.delete(pid);
+  };
   const id = system.runInterval(() => {
-    if (!player.isValid || system.currentTick > until) {
-      system.clearRun(id);
-      if (drawing.get(pid) === id) drawing.delete(pid);
-      return;
+    if (system.currentTick > until) return stop();
+    let px, py, pz, dim;
+    try {
+      // No isValid on this kept handle (it makes the reads after it dearer): a player who left throws here.
+      ({ x: px, y: py, z: pz } = player.location);
+      dim = player.dimension.id;
+    } catch {
+      return stop();
     }
-    const { x: px, y: py, z: pz } = player.location;
-    for (const c of list) {
-      if (c.dim !== player.dimension.id) continue;
+    for (const c of shown) {
+      if (c.dim !== dim) continue;
       const x0 = c.x - c.r, x1 = c.x + c.r + 1, z0 = c.z - c.r, z1 = c.z + c.r + 1;
       /** @type {[number, number][]} */
       const points = [];
@@ -515,12 +528,10 @@ function showBorders(player, list) {
       for (let t = 0; t <= z1 - z0; t += 2) points.push([x0, z0 + t], [x1, z0 + t]);
       for (const [x, z] of points) {
         if (Math.abs(x - px) > 48 || Math.abs(z - pz) > 48) continue;
-        for (const dy of [0, 1.5]) {
-          try {
-            player.spawnParticle("minecraft:villager_happy", { x, y: py + dy, z });
-          } catch {
-            // outside the loaded world
-          }
+        try {
+          player.spawnParticle("minecraft:villager_happy", { x, y: py + 0.75, z });
+        } catch {
+          // outside the loaded world
         }
       }
     }

@@ -1,6 +1,7 @@
 {
   "notes": [
     "Town Projects picks spots for its projects much faster on hillsides, stops rescanning the same ground every 5 seconds, and tells operators and the players in a town when no good spot can be found.",
+    "Champions and the Bounty Board cost the server less: mob farms and dropped items no longer wake Champions up, and a Stormcaller strike or a new bounty target no longer makes one long tick.",
     "Quick Stack & Sort costs the server much less while you mine on a nearly full inventory page: auto-store moves pickups at most once a second, all together.",
     "Fishing costs the server much less: one pack follows each bobber and shares every catch with Skills, the Journal, Daily Quests and Story Questlines.",
     "Side HUD: the right-side boxes now show on short phone screens when the Minimap radar is hidden.",
@@ -9,14 +10,26 @@
     "Mining the same stone spot again within 5 minutes gives no Mining XP, so cobblestone and basalt generators do not farm it.",
     "The sky-wonder bonus in Frogs in Three Voices also works with Rainbows, Tornadoes or Storm Cells.",
     "Town Projects residents can no longer breed.",
+    "Townsfolk cost the server much less, most of all with many players online away from town; a townsfolk standing next to an armor stand, painting or pet no longer has its name label flicker every 10 seconds.",
     "Easy Building: a resting preview no longer flips between the box and the shape, big previews no longer stall the server, and survival blocks that could not reach an unloaded chunk are handed back instead of lost.",
     "Minimap radar: a full terrain cache no longer leaves radars blank for minutes after a big scan, and costs the server less while players travel; players can scan up to 128 blocks with /realm:minimap scan (operators 384).",
-    "Easy Building: big builds, digs, copies, cuts and pastes no longer freeze the server: the blocks are read and written a few at a time, and an undo while a build is still going stops it."
+    "Easy Building: big builds, digs, copies, cuts and pastes no longer freeze the server: the blocks are read and written a few at a time, and an undo while a build is still going stops it.",
+    "Weather and sky effects cost phones and the server much less: the little rainbow over a pot of gold, the tornado funnel, a NOS boost and claim and zone outlines send far fewer particles, and players can lower a tornado's funnel density for their own screen in /realm:prefs.",
+    "Minimap radar: with players moving it costs the server about a third of what it did (about 4 ms a tick instead of 11 to 14), and with 10 players the land under the radar fills in far faster."
   ],
   "resourceNotes": [
-    "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
+    "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens.",
+    "Realm Skies: new particles for the little rainbow over a pot of gold and a NOS boost's plume, and a tornado funnel of fewer, slightly bigger clouds that looks the same at about half the particles."
   ],
   "packNotes": {
+    "elite_bp": {
+      "version": "1.3.22",
+      "notes": "Hurts and spawns anywhere in the world (mob farms, mined blocks, crop drops) are checked against the loaded champions before anything is read from the game; a Stormcaller's build check is spread over half a second; the 5-second upkeep fully checks 4 champions in turn; an approach step reads its dimension once."
+    },
+    "bounty_bp": {
+      "version": "1.3.16",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
+    },
     "hud_rp": {
       "version": "1.6.3",
       "notes": "The right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
@@ -38,7 +51,7 @@
       "notes": "Picking project spots: a town keeps the ground it read between scans, waits for players to move instead of rescanning every 5 seconds, and says when no good spot exists; spot scans on hillsides finish much sooner; operator-set builds go up a few blocks a tick; outlines use half the particles."
     },
     "saga_bp": {
-      "version": "1.16.25",
+      "version": "1.16.26",
       "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "maps_bp": {
@@ -58,11 +71,11 @@
       "notes": "Auto-store moves pickups to your other pages at most once a second (several pickups in one save) and looks only after an inventory change; a lost page button is put back within 30 s instead of 5 s. The pack reads and saves its page index and retired-snapshot list far less often."
     },
     "npc_bp": {
-      "version": "1.9.6",
+      "version": "1.9.7",
       "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "wander_bp": {
-      "version": "1.2.26",
+      "version": "1.2.27",
       "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "titles_bp": {
@@ -81,29 +94,57 @@
       "version": "1.3.13",
       "notes": "Fish quests count the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
     },
+    "caravan_bp": {
+      "version": "1.2.15",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
+    },
     "build_bp": {
       "version": "3.0.18",
       "notes": "Build, destroy, copy, cut and paste read their cells in runJob jobs within a shared 4 ms a tick (one read per cell for filter and undo), stop if the owner leaves, dies or changes dimension before anything is charged, cut writes air through the placement queue, Instant and destroy writes share the budget, an undo stops a build still being written and refunds the rest, queued writes finish after their player leaves, and collected destroy drops are handed over as stacks for any size. Before that (3.0.17): the deferred preview solves a shape once while the aim rests and reads big shapes over a few ticks; queued blocks open a chunk loader only once one comes back unloaded (at most two), wait up to a minute, and are refunded to survival players when given up."
     },
     "map_bp": {
-      "version": "1.5.8",
-      "notes": "The radar keeps filling in when its terrain cache is full or over its cap (after a big scan or when players leave), plans travel at the cap far more cheaply, and frees terrain nobody has looked at for 5 minutes. /realm:minimap scan is limited to radius 128 for players (operators keep 384)."
+      "version": "1.5.9",
+      "notes": "The radar's planner no longer walks each moving player's whole list of land to read every tick, planning gets only the first part of the scanner's time, and the time budgets are smaller (scanner 2.5 ms, pictures 0.75, drawing 0.4) with overruns paid back by the next ticks: about 3.8 ms a tick at 10 players and 4.6 at 40 with every radar on and players moving, from 11 to 14."
+    },
+    "sky_rp": {
+      "version": "1.4.0",
+      "notes": "New realm:sky_arc (one band of the little rainbow over a pot of gold), realm:nos_ring and realm:nos_ribbon (a NOS boost's slipstream ring and afterburner ribbon); realm:sky_tornado rings are 14-34 slightly bigger clouds living 1.2-1.8 s (were 18-44 living 1.05-1.55 s)."
+    },
+    "rainbow_bp": {
+      "version": "1.5.0",
+      "notes": "The little rainbow over a pot of gold is 7 Realm Skies emitters sent every 2 s instead of 259 vanilla flames twice a second; it needs Realm Skies (in Realm Resources) to show."
+    },
+    "tornado_bp": {
+      "version": "1.3.0",
+      "notes": "Each ring is redrawn every 0.8 s instead of 0.5 s and the ground skirt and storm collar half as often (about 37% fewer particle packets); players can set their own funnel density in /realm:prefs; no isValid reads on kept handles."
+    },
+    "elytra_bp": {
+      "version": "1.4.0",
+      "notes": "A NOS boost's plume is two Realm Skies emitters, one vanilla flame and a lava pop a tick (was 41 spawns a tick at full boost)."
+    },
+    "claims_bp": {
+      "version": "1.5.13",
+      "notes": "Claim borders are drawn at one height for the 6 nearest claims (were two heights for every claim in range)."
+    },
+    "zones_bp": {
+      "version": "1.0.15",
+      "notes": "Zone outlines are drawn at one height for the 6 nearest shapes (were two heights for every shape)."
+    },
+    "climate_bp": {
+      "version": "1.0.15",
+      "notes": "One reused MolangVariableMap for the sand and snow gusts; a join removes the fog only when the new climate:fog flag says one may be left."
+    },
+    "rain_bp": {
+      "version": "1.5.21",
+      "notes": "Walking in or out stops only the sounds still playing (usually 2 or 3 stopsound commands instead of 7); a join removes the fogs only when the new rain:fogs flag says one may be left."
     },
     "cooking_bp": {
       "version": "1.1.20",
       "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
     },
-    "bounty_bp": {
-      "version": "1.3.15",
-      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
-    },
     "guilds_bp": {
       "version": "1.1.19",
       "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
-    },
-    "caravan_bp": {
-      "version": "1.2.14",
-      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     }
   }
 }

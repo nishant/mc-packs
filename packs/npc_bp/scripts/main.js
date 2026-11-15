@@ -64,13 +64,18 @@ const nameLabels = createNameLabels({
   labelIdTag: LABEL_ID_TAG,
   spectatorsExcluded: true,
   syncTicks: 10, // LABEL_TICKS
+  trustHandles: true, // entityRemove below calls forget
 });
 
 const LOOP_TICKS = 10; // facing, idle lines and keeping them on their spot
 const MISSING_EVERY = 4; // loops between checks for a missing NPC (2 s)
 const MISSING_CHECKS = 3; // checks in a row before a missing NPC is spawned again (6 s): its chunk may still be loading
 const LABEL_TICKS = 10; // how often the name labels are synced
-const AUDIT_TICKS = 200; // every 10 s, look for duplicates, leftovers and changed names
+// Every minute, look for duplicates, leftovers and changed names (each townsfolk is also audited when it loads, and the
+// loop checks a sunk post every 10 s while a player is near).
+const AUDIT_TICKS = 1200;
+const LIFT_EVERY = 20; // loops between checks for a post sunk into a block laid later (10 s)
+const SKIN_RETRY_TICKS = 1200; // a skin snapshot refused (an entity next to it) is tried again a minute later
 const OFFER_TICKS = 4; // how long other packs have to answer realm:npc_talk
 const MAX_OFFERS = 16;
 const TAP_COOLDOWN = 10;
@@ -78,7 +83,7 @@ const MOVE_DISTANCE = 1.5; // farther than this from where it belongs, an NPC is
 const SPOT_SHARED = 1.5; // two townsfolk's spots closer than this: operators are warned
 const SPOT_CLEAR = 0.9; // someone within this of an NPC's spot: it isn't put back there until they move off
 const TURN_STEP = 45; // degrees an NPC turns per loop at most, so it turns rather than snaps
-const TURN_MIN = 4; // smaller differences aren't worth a teleport
+const TURN_MIN = 10; // smaller differences aren't worth a teleport (a move packet to every viewer)
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -89,7 +94,10 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
  * (ids stay the same across loads), so any other entity with its tags is a duplicate or a leftover.
  * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string, orig?: Vector3 }} Placed
  */
-/** @typedef {{ missing: number, nextIdle: number, speech: number, speechLine?: string, yaw?: number }} State */
+/**
+ * `at`: where the loop last saw its entity (its feet), `headDy`: its head's height above them (read once), for the label.
+ * @typedef {{ missing: number, nextIdle: number, speech: number, speechLine?: string, yaw?: number, at?: Vector3, headDy?: number }} State
+ */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
 
 /** The cast (config.js): affinity, gifts, letters and the stories are theirs only. */
@@ -290,15 +298,141 @@ function idOf(entity) {
   }
 }
 
-/** The townsfolk's entity, if it is loaded. @param {Placed} rec */
+/**
+ * Our townsfolk's entity handles by entity id, kept from their load (the audit), spawn or lookup and dropped on
+ * `entityRemove` (removed, killed or unloaded), so the half-second loop and the label sync never ask the game for them.
+ * @type {Map<string, Entity>}
+ */
+const handles = new Map();
+
+/** The townsfolk's entity, if it is loaded (checked). @param {Placed} rec */
 function entityOf(rec) {
   if (!rec.eid) return undefined;
   try {
+    const h = handles.get(rec.eid);
+    if (h && h.isValid) return h;
     const e = world.getEntity(rec.eid);
-    return e && e.isValid ? e : undefined;
+    if (e && e.isValid) {
+      handles.set(rec.eid, e);
+      return e;
+    }
+    handles.delete(rec.eid);
+    return undefined;
   } catch {
     return undefined;
   }
+}
+
+/** The townsfolk's entity handle as last seen loaded, unchecked (the loop and the labels; a stale one throws there). @param {Placed} rec */
+const handleOf = (rec) => (rec.eid ? handles.get(rec.eid) : undefined);
+
+world.afterEvents.entityRemove.subscribe(
+  ({ removedEntityId }) => {
+    handles.delete(removedEntityId);
+    nameLabels.forget(removedEntityId);
+  },
+  { entityTypes: [NPC_TYPE, LABEL_TYPE] },
+);
+
+/**
+ * The dimension and place of every player near a post (playersNearPosts), read once per tick and shared by the loop,
+ * the labels and the turning (3 native reads a player instead of 3 per player per townsfolk; none for players far away). `spectator`: in spectator mode (the labels and turning skip them).
+ * @typedef {{ p: Player, id: string, dimId: string, x: number, y: number, z: number, spectator: boolean }} Seen
+ */
+/** @type {{ tick: number, all: Seen[], watching: Seen[] }} */
+let seen = { tick: -1, all: [], watching: [] };
+/** How near a post a player makes its townsfolk active: the largest of the label, respawn, facing and idle ranges plus 16. */
+const activeRangeNow = () => Math.max(NAME_RANGE, CONFIG.respawnRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
+
+/** Posts closer than this (per axis cell) are asked about with one query. */
+const CLUSTER_CELL = 256;
+
+/**
+ * The players who could be within the loop's active range of any post: one `getPlayers` query per group of posts
+ * (one cell of CLUSTER_CELL blocks in one dimension: a town), over a circle holding every post of the group plus that
+ * range. Players farther from every post (exploring, in another town) are never read, and each one found comes with the
+ * dimension it was found in (no dimension read). @returns {{ p: Player, dimId: string }[]}
+ */
+function playersNearPosts() {
+  /** @type {Map<string, { dim: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number }>} */
+  const groups = new Map();
+  for (const r of list) {
+    const key = `${r.dim}|${Math.floor(r.x / CLUSTER_CELL)}|${Math.floor(r.z / CLUSTER_CELL)}`;
+    const g = groups.get(key);
+    if (!g) groups.set(key, { dim: r.dim, x0: r.x, x1: r.x, y0: r.y, y1: r.y, z0: r.z, z1: r.z });
+    else {
+      g.x0 = Math.min(g.x0, r.x);
+      g.x1 = Math.max(g.x1, r.x);
+      g.y0 = Math.min(g.y0, r.y);
+      g.y1 = Math.max(g.y1, r.y);
+      g.z0 = Math.min(g.z0, r.z);
+      g.z1 = Math.max(g.z1, r.z);
+    }
+  }
+  const reach = activeRangeNow();
+  /** @type {Map<string, { p: Player, dimId: string }>} */
+  const found = new Map();
+  for (const g of groups.values()) {
+    const location = { x: (g.x0 + g.x1) / 2, y: (g.y0 + g.y1) / 2, z: (g.z0 + g.z1) / 2 };
+    const maxDistance = Math.hypot(g.x1 - g.x0, g.y1 - g.y0, g.z1 - g.z0) / 2 + reach + 1;
+    try {
+      for (const p of dimOf(g.dim).getPlayers({ location, maxDistance })) found.set(p.id, { p, dimId: g.dim });
+    } catch {
+      // dimension not available
+    }
+  }
+  return [...found.values()];
+}
+
+function playersNow() {
+  const tick = system.currentTick;
+  if (seen.tick === tick) return seen;
+  /** @type {Seen[]} */
+  const all = [];
+  const players = list.length ? playersNearPosts() : [];
+  if (players.length) {
+    const spect = new Set(world.getPlayers({ gameMode: GameMode.Spectator }).map((p) => p.id));
+    for (const { p, dimId } of players) {
+      try {
+        const l = p.location;
+        all.push({ p, id: p.id, dimId, x: l.x, y: l.y, z: l.z, spectator: spect.has(p.id) });
+      } catch {
+        // left this tick
+      }
+    }
+  }
+  seen = { tick, all, watching: all.filter((s) => !s.spectator) };
+  return seen;
+}
+
+/**
+ * The nearest watching (not spectator) player within `range` of `at` in `dimId`, from the snapshot.
+ * @param {string} dimId @param {Vector3} at @param {number} range @returns {Seen | undefined}
+ */
+function nearestSeen(dimId, at, range) {
+  let best;
+  let bestSq = range * range;
+  for (const s of playersNow().watching) {
+    if (s.dimId !== dimId) continue;
+    const d2 = (s.x - at.x) ** 2 + (s.y - at.y) ** 2 + (s.z - at.z) ** 2;
+    if (d2 <= bestSq) {
+      bestSq = d2;
+      best = s;
+    }
+  }
+  return best;
+}
+
+/** @type {Map<string, Dimension>} */
+const dimCache = new Map();
+/** @param {string} id */
+function dimOf(id) {
+  let d = dimCache.get(id);
+  if (!d) {
+    d = world.getDimension(id);
+    dimCache.set(id, d);
+  }
+  return d;
 }
 
 // ---------------------------------------------------------------------------
@@ -469,8 +603,13 @@ const NAME_RANGE = 20; // players this close count as watching
 
 /** Current text for the townsfolk's world-fixed nameplate helper. @param {Townsfolk} t */
 function labelTextFor(t) {
+  return labelTextAt(t, system.currentTick);
+}
+
+/** @param {Townsfolk} t @param {number} tick */
+function labelTextAt(t, tick) {
   const st = stateOf(t.id);
-  if (system.currentTick < st.speech && st.speechLine) return st.speechLine;
+  if (tick < st.speech && st.speechLine) return st.speechLine;
   return displayName(t);
 }
 
@@ -480,19 +619,24 @@ function updateLabels() {
   const dims = () =>
     DIMENSIONS.flatMap((id) => {
       try {
-        return [world.getDimension(id)];
+        return [dimOf(id)];
       } catch {
         return [];
       }
     });
+  // A townsfolk stands on its post: its dimension is the post's, and its head is where the loop last saw it plus its
+  // head height (both read by the loop, which runs in the same tick), so the sync reads nothing from it.
+  const tick = system.currentTick;
   const targets = [];
   for (const rec of list) {
     const t = folkOf(rec.id);
-    const entity = entityOf(rec);
+    const entity = handleOf(rec);
     if (!t || !entity) continue;
-    targets.push({ id: rec.id, entity, name: labelTextFor(t) });
+    const st = stateOf(t.id);
+    const head = st.at && st.headDy !== undefined ? { x: st.at.x, y: st.at.y + st.headDy, z: st.at.z } : undefined;
+    targets.push({ id: rec.id, entity, name: labelTextAt(t, tick), dimId: rec.dim, head });
   }
-  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
+  nameLabels.sync(targets, () => playersNow().watching, dims);
 }
 
 
@@ -505,6 +649,7 @@ function spawn(rec, t, at) {
   dress(entity, t);
   entity.teleport(at, { rotation: { x: 0, y: rec.yaw } });
   rec.eid = entity.id;
+  handles.set(entity.id, entity);
   const st = stateOf(t.id);
   st.yaw = rec.yaw;
   save();
@@ -534,14 +679,22 @@ function audit(entity) {
     rec.eid = entity.id; // the saved one isn't loaded: this one takes over, and the other goes when it loads
     save();
   }
+  handles.set(entity.id, entity);
   dress(entity, t);
-  if (!hasSkin(rec.id)) saveSkin(entity, rec.id); // the first snapshot of its skin (not while another townsfolk stands on it)
-  // A spot inside a block (sunk into a path laid later, or saved a block low): lifted and the NPC put on top.
-  if (liftSaved(rec)) {
-    const at = anchorOf(rec);
-    const st = stateOf(rec.id);
-    if (entity.dimension.id === rec.dim && loaded(entity.dimension, at)) entity.teleport(at, { rotation: { x: 0, y: st.yaw ?? rec.yaw } });
-  }
+  // The first snapshot of its skin (not while another entity stands next to it; after a refusal, a minute later).
+  if (system.currentTick >= (skinRetry.get(rec.id) ?? 0) && !hasSkin(rec.id) && !saveSkin(entity, rec.id)) skinRetry.set(rec.id, system.currentTick + SKIN_RETRY_TICKS);
+  liftOnto(rec, entity);
+}
+
+/**
+ * A spot inside a block (sunk into a path laid later, or saved a block low): lifted and the NPC put on top.
+ * @param {Placed} rec @param {Entity} entity
+ */
+function liftOnto(rec, entity) {
+  if (!liftSaved(rec)) return;
+  const at = anchorOf(rec);
+  const st = stateOf(rec.id);
+  if (entity.dimension.id === rec.dim && loaded(entity.dimension, at)) entity.teleport(at, { rotation: { x: 0, y: st.yaw ?? rec.yaw } });
 }
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
@@ -567,7 +720,6 @@ function auditAll() {
       console.warn(`[npc] audit: ${e}`);
     }
   }
-  updateLabels();
 }
 
 // An NPC that dies anyway (/kill) is spawned again at the next missing check, if anyone is around. (BDS 1.26 never
@@ -589,9 +741,11 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
  */
 function checkMissing(rec, t) {
   const st = stateOf(rec.id);
-  const dim = world.getDimension(rec.dim);
+  const dim = dimOf(rec.dim);
   const at = anchorOf(rec);
-  if (!loaded(dim, at) || !dim.getPlayers({ location: at, maxDistance: CONFIG.respawnRange }).length) {
+  const rSq = CONFIG.respawnRange * CONFIG.respawnRange;
+  const someone = playersNow().all.some((s) => s.dimId === rec.dim && (s.x - at.x) ** 2 + (s.y - at.y) ** 2 + (s.z - at.z) ** 2 <= rSq);
+  if (!someone || !loaded(dim, at)) {
     st.missing = 0;
     return;
   }
@@ -601,6 +755,7 @@ function checkMissing(rec, t) {
   if (found.length) {
     found.sort((a, b) => dist(a.location, at) - dist(b.location, at));
     rec.eid = found[0].id;
+    handles.set(found[0].id, found[0]);
     save();
     for (const e of found.slice(1)) e.remove();
     dress(found[0], t);
@@ -628,13 +783,16 @@ function occupied(entity, at) {
   }
 }
 
-/** Turns (a step) toward `yaw`, staying where it belongs. @param {Entity} entity @param {State} st @param {Vector3} at @param {number} yaw @param {boolean} snap */
-function turn(entity, st, at, yaw, snap) {
+/**
+ * Turns (a step) toward `yaw`, staying where it belongs. @param {Entity} entity @param {State} st @param {Vector3} at
+ * @param {number} yaw @param {boolean} snap @param {Vector3} [where] its place, when the caller just read it
+ */
+function turn(entity, st, at, yaw, snap, where) {
   const current = st.yaw ?? entity.getRotation().y;
   const diff = wrap(yaw - current);
   if (Math.abs(diff) < TURN_MIN) return;
   const next = snap ? yaw : wrap(current + Math.max(-TURN_STEP, Math.min(TURN_STEP, diff)));
-  const loc = entity.location;
+  const loc = where ?? entity.location;
   // Nudged a little: back onto its spot while turning. Farther (the loop puts it back): turn in place.
   const d = dist(loc, at);
   entity.teleport(d > 0.3 && d <= MOVE_DISTANCE && !occupied(entity, at) ? at : loc, { rotation: { x: 0, y: next } });
@@ -673,9 +831,9 @@ const fill = (line, name) => line.split("{player}").join(name);
  * idle lines. It never walks anywhere: pushed or moved more than MOVE_DISTANCE away, it's put back.
  * @param {Placed} rec @param {Townsfolk} t @param {Entity} entity @param {boolean} lively
  */
-function behave(rec, t, entity, lively) {
+function behave(rec, t, entity, lively, checkDim = true) {
   const st = stateOf(rec.id);
-  const dim = world.getDimension(rec.dim);
+  const dim = dimOf(rec.dim);
   // Its post moved down when the floor under it went: once that floor is back (refilled), it goes back up to its own
   // post, instead of being left inside the new blocks.
   if (rec.orig && entity.dimension.id === rec.dim && loaded(dim, rec.orig) && standable(dim, rec.orig)) {
@@ -688,7 +846,12 @@ function behave(rec, t, entity, lively) {
     return;
   }
   const at = anchorOf(rec);
-  if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
+  // Its place, read once a loop (the label sync uses it too); its dimension only every 2 s (`checkDim`): a townsfolk
+  // that went through a portal is rare, and the loop puts it back then.
+  const loc = entity.location;
+  st.at = loc;
+  if (st.headDy === undefined) st.headDy = entity.getHeadLocation().y - loc.y;
+  if ((checkDim && entity.dimension.id !== rec.dim) || dist(loc, at) > MOVE_DISTANCE) {
     // The floor under its post is gone (broken, or the post was a block or more above the ground): it dropped straight
     // down and stands there. Putting it back up would only let it fall again, every check: its post moves down instead.
     if (entity.dimension.id === rec.dim && postFall.falling(entity, rec.id, at, system.currentTick)) return; // still falling: wait until it lands
@@ -727,13 +890,14 @@ function behave(rec, t, entity, lively) {
   }
   if (!lively) return;
   const range = Number(get("faceRange")) || 0;
-  const loc = entity.location;
-  const [near] = range > 0 ? dim.getPlayers({ location: loc, maxDistance: range, closest: 1, excludeGameModes: [GameMode.Spectator] }) : [];
-  turn(entity, st, at, near ? yawTo(loc, near.location) : rec.yaw, false);
+  // The nearest players come from the loop's snapshot of everyone's place (no query per townsfolk).
+  const near = range > 0 ? nearestSeen(rec.dim, loc, range) : undefined;
+  turn(entity, st, at, near ? yawTo(loc, near) : rec.yaw, false, loc);
 
-  if (system.currentTick >= st.nextIdle) {
-    st.nextIdle = system.currentTick + idleDelay();
-    const [listener] = dim.getPlayers({ location: loc, maxDistance: CONFIG.idleRange, closest: 1, excludeGameModes: [GameMode.Spectator] });
+  const tick = system.currentTick;
+  if (tick >= st.nextIdle) {
+    st.nextIdle = tick + idleDelay();
+    const listener = nearestSeen(rec.dim, loc, CONFIG.idleRange)?.p;
     if (!listener) return;
     // Mostly idle chatter, sometimes a remark that fits the time and weather.
     // Acquaintances (and up) of the nearest listener hear more of its chatter.
@@ -754,26 +918,39 @@ function loop() {
     }
   }
   const lively = get("enabled") === true;
-  const activeRange = Math.max(NAME_RANGE, CONFIG.respawnRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
-  const players = world.getAllPlayers();
+  const activeRange = activeRangeNow();
+  const activeSq = activeRange * activeRange;
+  // Every player's place is read once per run (ENT-01: it was read once per townsfolk, 3 x players x townsfolk calls).
+  const { all } = list.length ? playersNow() : { all: [] };
+  const checkDim = loops % MISSING_EVERY === 0;
   for (const rec of list) {
     const t = folkOf(rec.id);
     if (!t) continue;
+    let entity;
     try {
-      if (!players.some((p) => p.dimension.id === rec.dim && dist(p.location, rec) <= activeRange)) {
+      if (!all.some((s) => s.dimId === rec.dim && (s.x - rec.x) ** 2 + (s.y - rec.y) ** 2 + (s.z - rec.z) ** 2 <= activeSq)) {
         const st = states.get(rec.id);
         if (st) st.missing = 0;
         continue;
       }
-      const entity = entityOf(rec);
+      entity = handleOf(rec) ?? entityOf(rec);
       if (!entity) {
         if (loops % MISSING_EVERY === 0) checkMissing(rec, t);
         continue;
       }
       stateOf(rec.id).missing = 0;
-      behave(rec, t, entity, lively);
+      if (loops % LIFT_EVERY === 0) liftOnto(rec, entity);
+      behave(rec, t, entity, lively, checkDim);
     } catch (e) {
-      console.warn(`[npc] ${rec.id}: ${e}`); // usually an unloaded chunk
+      // A handle that went without an entityRemove (rare): dropped quietly, the next run looks it up again.
+      let gone = false;
+      try {
+        gone = !!entity && !entity.isValid;
+      } catch {
+        gone = true;
+      }
+      if (gone && rec.eid) handles.delete(rec.eid);
+      else console.warn(`[npc] ${rec.id}: ${e}`); // usually an unloaded chunk
     }
   }
 }
@@ -794,6 +971,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   for (const d of DIMENSIONS) tryCommand(world.getDimension(d), `tickingarea remove ${HOUSES_AREA}`);
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
+  updateLabels();
   system.runInterval(loop, LOOP_TICKS);
   // Every half second: they stand still (a speech line or a resend redraws at once), and each sync reads every
   // player near them (about 1 ms with 12 of them and 40 players around).
@@ -1731,6 +1909,8 @@ const SKIN_PREFIX = "realm_npc:";
 const SKIN_SAVE_AFTER = [100, 600, 2400]; // ticks after an operator opens the NPC editor (5 s, 30 s, 2 min)
 /** Townsfolk ids known to have a saved skin. @type {Set<string>} */
 const skins = new Set();
+/** Townsfolk id -> the tick before which the audit doesn't try its first skin snapshot again (one was refused). @type {Map<string, number>} */
+const skinRetry = new Map();
 
 /** @param {string} id */
 function hasSkin(id) {
@@ -1751,13 +1931,15 @@ function hasSkin(id) {
 function saveSkin(entity, id) {
   try {
     if (!entity.isValid) return false;
-    nameLabels.removeFor(id);
     const dim = entity.dimension;
     const loc = entity.location;
+    // Checked before its label comes down: a refusal (a painting, an armor stand, a pet next to it) leaves the label
+    // alone, where it used to be removed and spawned again at every try (ENT-25).
+    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player" && e.typeId !== LABEL_TYPE)) return false; // players aren't saved
+    nameLabels.removeFor(id);
     for (const e of dim.getEntities({ type: LABEL_TYPE, location: loc, maxDistance: 3 })) {
       if (e.isValid) e.remove();
     }
-    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player" && e.typeId !== LABEL_TYPE)) return false; // players aren't saved
     const from = { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) };
     const sm = world.structureManager;
     const key = SKIN_PREFIX + skinKey(id);
