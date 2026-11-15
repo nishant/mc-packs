@@ -199,19 +199,27 @@ const built = new Map();
 /** @type {[number, number][]} */
 let meteors = [];
 
-/** Reads a value saved in numbered parts. @param {string} prop */
+/** The text of each saved part as last read or written, per value: a save writes only the parts that changed. @type {Map<string, string[]>} */
+const writtenParts = new Map();
+
+/**
+ * Reads records saved in numbered parts. Every part holds whole records, so the parts are joined with ";" (they were
+ * once run together, which glued the last record of one part to the first of the next). @param {string} prop
+ */
 function readParts(prop) {
-  let out = "";
+  /** @type {string[]} */
+  const parts = [];
   try {
     const n = Number(world.getDynamicProperty(prop) ?? 0);
-    for (let i = 0; i < n; i++) out += String(world.getDynamicProperty(`${prop}:${i}`) ?? "");
+    for (let i = 0; i < n; i++) parts.push(String(world.getDynamicProperty(`${prop}:${i}`) ?? ""));
+    writtenParts.set(prop, parts);
   } catch (e) {
     console.warn(`[atlas] read ${prop}: ${e}`);
   }
-  return out;
+  return parts.join(";");
 }
 
-/** Saves records ("a;b;c") in parts of at most PART characters. @param {string} prop @param {string[]} items */
+/** Saves records ("a;b;c") in parts of at most PART characters, writing only the parts that changed. @param {string} prop @param {string[]} items */
 function writeParts(prop, items) {
   /** @type {string[]} */
   const parts = [];
@@ -225,11 +233,19 @@ function writeParts(prop, items) {
   }
   if (cur) parts.push(cur);
   try {
-    const old = Number(world.getDynamicProperty(prop) ?? 0);
-    parts.forEach((p, i) => world.setDynamicProperty(`${prop}:${i}`, p));
+    const before = writtenParts.get(prop);
+    const old = before ? before.length : Number(world.getDynamicProperty(prop) ?? 0);
+    /** @type {string[]} */
+    const now = [];
+    writtenParts.set(prop, now);
+    parts.forEach((p, i) => {
+      if (before?.[i] !== p) world.setDynamicProperty(`${prop}:${i}`, p);
+      now.push(p);
+    });
     for (let i = parts.length; i < old; i++) world.setDynamicProperty(`${prop}:${i}`, undefined);
-    world.setDynamicProperty(prop, parts.length);
+    if (old !== parts.length || !before) world.setDynamicProperty(prop, parts.length);
   } catch (e) {
+    writtenParts.delete(prop); // unsure what was written: the next save writes every part
     console.warn(`[atlas] save ${prop}: ${e}`);
   }
 }

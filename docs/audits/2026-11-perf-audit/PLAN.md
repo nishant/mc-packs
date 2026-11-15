@@ -379,17 +379,16 @@ Findings: PRG-37 (the map of what each pack saves, how big and how often), PRG-0
 PRG-27, PRG-31, PRG-44, PRG-24, PRG-42, HUD-10, HUD-24, BSE-07, BSE-08, BSE-14, UTL-31, UTL-32. Packs: `quests_bp`,
 `stats_bp`, `skills_bp`, `guilds_bp`, `milestones_bp`, `titles_bp`, `journal_bp`, `saga_bp` (save path only),
 `maps_bp`, `atlas_bp`, `build_bp`, `news_bp`, `nick_bp`.
-- **W14a Write less.** Quests writing the player's property, with a stringify and a preference parse, on every
-  counted block, kill or catch (PRG-03: dirty flag, flush once a second and on leave). Skills remembering every
-  placed block, not only XP blocks, and rewriting the whole 10,000-key set (150 KB in 9 world properties) every 30 s
-  while anyone builds (PRG-09: remember only blocks that give XP first, then hashed buckets with a dirty flag each,
-  old format read forever; also a bug: no save on leave, so logs placed in the last 30 s give XP again after a
-  restart). Skills rewriting all of a player's explored chunks for one new chunk (PRG-10). Milestones writing a world
-  record per moving player every 10 s (PRG-11). Titles marking every online player dirty every second (PRG-44).
-  Story progress stringified and walked twice per flush, all dirty players in one tick (PRG-31). Atlas rewriting
-  every 24,000-character part when one record changes (HUD-24). Easy Building rewriting all 10 undo entries per
-  build (BSE-07: a ring index) and stringifying the whole clipboard on every copy (BSE-08). News writing a property
-  for every online player every minute (UTL-31).
+- **W14a Write less (what is left).** Quests, Skills (XP blocks only, save on leave, explored chunks), Milestones,
+  Titles, Atlas and News shipped in perf/progress-writes. Left: Story progress counted twice in JS per flush (PRG-31): a
+  native byte count and hashed flush seconds measured no gain in saga-perf-quests (saga_bp 0.152 -> 0.150 ms/tick,
+  saves there are small), so it was not shipped; measure it again with a 10 KB+ save (a seeded player) first. And Skills still rewrites its whole placed-block
+  set (up to 10,000 keys of XP blocks, 9 world properties) every 30 s while anyone places stone, logs or ores
+  (PRG-09 M: a ring of the 9 properties, new keys into the newest, the oldest dropped whole, a dirty flag each, old
+  format read as the ring's first lap). It needs a fixture with a full set to measure (a test hook in skills_bp or a
+  bundle-store seed), so it was left for its own PR; Guilds' 5,000-key set (rarely dirty: ores and stateless crops
+  only) can share it. Easy Building rewriting all 10 undo entries per build (BSE-07: a ring index) and stringifying
+  the whole clipboard on every copy (BSE-08).
 - **W14b Bound what grows.** Stats boards never lose a name and the ticker reads a whole board every 5 s per shown
   stat (PRG-04: prune by last seen, cap the ticker; first verify PRG-48, whether the sidebar sends a board of every
   name ever seen to every client). 20 scoreboard objectives and the Milestones records grow with

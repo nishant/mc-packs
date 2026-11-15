@@ -365,6 +365,8 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   cache.delete(playerId);
   lastSpot.delete(playerId);
   trailSpot.delete(playerId);
+  settled.delete(playerId);
+  saveSlots.delete(playerId);
 });
 
 // Each player once a second. One share (scripts/spread.js): a share visited on a later run works on player handles read ticks before, and their
@@ -386,36 +388,63 @@ spreadPlayers(system, world, {
     night = time >= 13000 && time < 23000;
     storm = weather === WeatherType.Thunder;
   },
-  visit: (share, { round, part }) => {
+  visit: (share, { round }) => {
     if (!on) return;
-    // Saved every SAVE_EVERY seconds.
-    const saving = (round + part) % SAVE_EVERY === 0;
-    for (const player of share) countSecond(player, saving);
+    for (const player of share) countSecond(player, round);
   },
 });
 
-/** One player's second: distance, night and storm time, built-in titles. @param {Player} player @param {boolean} saving */
-function countSecond(player, saving) {
+/** A player's second (0 to SAVE_EVERY - 1) to save their changed stats, from a hash (FNV-1a) of their id. @type {Map<string, number>} */
+const saveSlots = new Map();
+/** @param {string} id */
+function saveSlot(id) {
+  let s = saveSlots.get(id);
+  if (s !== undefined) return s;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  saveSlots.set(id, (s = (h >>> 8) % SAVE_EVERY));
+  return s;
+}
+
+/** The built-in titles, with their saved (lowercase) form worked out once. */
+const BUILTINS = CONFIG.builtins.map((b) => ({ ...b, lower: cleanTitle(b.title).toLowerCase() }));
+/** Built-ins each online player has settled for good (title and trail owned, or taken by an operator): not checked again. @type {Map<string, Set<number>>} */
+const settled = new Map();
+
+/** One player's second: distance, night and storm time, built-in titles. @param {Player} player @param {number} round */
+function countSecond(player, round) {
   try {
-    const d = dataOf(player.id);
+    const id = player.id;
+    const d = dataOf(id);
     const loc = player.location;
     const dimension = player.dimension;
     const dim = dimension.id;
-    const last = lastSpot.get(player.id);
+    const last = lastSpot.get(id);
+    // Only whole blocks and seconds are saved: a stat that moved by less leaves the record unchanged.
+    const before = Math.floor(d.s.d) + Math.floor(d.s.n) + Math.floor(d.s.w);
     if (last && last.dim === dim) {
       const dist = Math.hypot(loc.x - last.x, loc.y - last.y, loc.z - last.z);
       if (dist <= CONFIG.maxSpeed) d.s.d += dist;
     }
-    lastSpot.set(player.id, { x: loc.x, y: loc.y, z: loc.z, dim });
+    lastSpot.set(id, { x: loc.x, y: loc.y, z: loc.z, dim });
     if (night) d.s.n += 1;
     if (storm && underStorm(player, loc, dimension)) d.s.w += 1;
-    dirty.add(player.id);
-    for (const b of CONFIG.builtins) {
-      if (statOf(d, b.stat) < b.amount) continue;
-      if (!d.x.includes(cleanTitle(b.title).toLowerCase())) unlockTitle(player.id, b.title, player.name); // an operator took it: not again
-      if (b.trail && !d.x.includes(`trail:${b.trail}`)) unlockTrail(player.id, b.trail, player.name); // also when the title came first from an operator
+    if (Math.floor(d.s.d) + Math.floor(d.s.n) + Math.floor(d.s.w) !== before) dirty.add(id);
+    let done = settled.get(id);
+    for (let i = 0; i < BUILTINS.length; i++) {
+      const b = BUILTINS[i];
+      if (done?.has(i) || statOf(d, b.stat) < b.amount) continue;
+      if (!d.x.includes(b.lower)) unlockTitle(id, b.title, player.name); // an operator took it: not again
+      if (b.trail && !d.x.includes(`trail:${b.trail}`)) unlockTrail(id, b.trail, player.name); // also when the title came first from an operator
+      const titleDone = d.x.includes(b.lower) || d.t.some((t) => t.toLowerCase() === b.lower);
+      const trailDone = !b.trail || d.x.includes(`trail:${b.trail}`) || d.r.includes(b.trail);
+      if (titleDone && trailDone) {
+        if (!done) settled.set(id, (done = new Set()));
+        done.add(i);
+      }
     }
-    if (saving) save(player.id);
+    // Changed stats are saved once every SAVE_EVERY seconds, each player on their own second.
+    if ((round + saveSlot(id)) % SAVE_EVERY === 0 && dirty.has(id)) save(id);
   } catch (e) {
     console.warn(`[titles] ${e}`);
   }
