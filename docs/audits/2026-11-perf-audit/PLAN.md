@@ -224,18 +224,12 @@ Findings: XC-08, XC-09, PIPE-17, PIPE-22, HUD-41, XC-10, XC-11.
 - Diagnostics: do not keep an entry per world property key when its prefix has one owner (XC-10).
 - Proof: bundle size, startup time and memory before and after; `bundle-smoke.js`; `check-pipeline`.
 
-### W5 Minimap (L: three PRs)
+### W5 Minimap (L: two PRs left)
 
-Findings: HUD-01, HUD-29, HUD-07, HUD-30, HUD-06, HUD-02, HUD-03, HUD-08, HUD-14, HUD-31, HUD-36, HUD-37, HUD-38,
+Findings: HUD-01, HUD-06, HUD-02, HUD-03, HUD-08, HUD-14, HUD-31, HUD-36, HUD-37, HUD-38,
 HUD-16, HUD-17, HUD-20, HUD-21. Packs: `map_bp` (and `hud_rp` only through W6).
 
-**W5a Measure the radar and fix the cap** (M). Write `map-radar-perf` (W0c) first: standing, walking, flying, with
-the store empty and at its cap. Then: the store-wide eviction counter that switches off the incremental planner once
-a store holds 6,000 columns, so the full 2,166-candidate plan runs on every check (HUD-29); a store over its cap
-refusing new columns and draining one a tick, which any player can cause with `/realm:minimap scan` (HUD-07: evict
-in batches, cap the radius for non-operators, free stores nobody views); the 2-minute full re-read of a standing
-radar in one 25-tick burst (HUD-30: spread it or re-read only columns a block event marked).
-**W5b Budgets** (M). With W5a's numbers, set the scan, rebuild and draw ceilings (6 + 2 + 1 ms today) so one flier
+**W5b Budgets** (M). With the numbers from `map-radar-perf` (`tools/test-bds/examples/`), set the scan, rebuild and draw ceilings (6 + 2 + 1 ms today) so one flier
 costs 2 ms or less and several share a per-tick envelope that carries overruns into the next tick (HUD-01). Make
 `config.js`, PACKS.md and CLAUDE.md's "about 1 ms" say what is true. Finish or delete the planner's idle skip and
 its dead limits (HUD-08). The radar fills more slowly at the same budget: a NEWS line.
@@ -262,19 +256,14 @@ Findings: HUD-04, HUD-05, HUD-27. Packs: the 7 with `side.js`, `hud_rp`.
 - Proof: `tools/hud-layout.test.mjs`, `side-*` tests, the HUD scenarios; `setTitle` bytes per tick in the profile;
   one check on the Fold with the old and the new Realm Resources (section 6).
 
-### W7 Easy Building: no long ticks (M to L: two PRs)
+### W7 Easy Building: no long ticks (M: one PR left, W7a)
 
-Findings: BSE-01, BSE-02, BSE-28, BSE-34, BSE-19, BSE-12, BSE-32, BSE-36. Packs: `build_bp`.
+Findings: BSE-01, BSE-34, BSE-19, BSE-36. Packs: `build_bp`.
 - **W7a** Place, destroy, copy, cut and paste read every cell in one tick before the sliced writes start, and cut
   sets every block to air unsliced (BSE-01): move the reading into `system.runJob` generators with a time budget per
   tick, read each cell once for both the filter and the undo snapshot, and send cut's writes through the sliced path.
   The destroy loop's ten `typeId` reads per block and the 500 drops pulled every tick (BSE-34). A time budget for
   "Instant" placing (BSE-19).
-- **W7b** The preview: its cache key contains the draw cadence the solve itself changes, so many previews re-solve
-  every 15 ticks forever (BSE-28: a bug, fix first and alone); a solve reads every cell, up to 8,000 with defer on
-  (BSE-02: slice it, or solve the shell only). The placement queue rescanning itself every second and dropping blocks
-  the player was charged for (BSE-12, a bug with a behavior change in the player's favor). A ticking area added and
-  removed on every paste even in loaded chunks (BSE-32).
 - Proof: `build-big-perf` (longest tick under 50 ms for 50,000 blocks); `build*.js` scenarios; undo and redo of a
   sliced job interrupted by leave, death and a dimension change (C17).
 - Risk: a job that now spans ticks can be interleaved with another player's edit or the owner leaving: keep the
@@ -296,18 +285,19 @@ BSE-04 in W2). Packs: `build_bp`, `build_rp`.
   harness shim if it can (else count `spawnParticle` calls in the profile); the preview floor of about 0.38 ms
   (OPEN.md O10) measured again.
 
-### W9 Quick Stack (M)
+### W9 Quick Stack: the move itself (S-M, left after #229)
 
-Findings: BSE-27, BSE-10, BSE-11, BSE-35, BSE-17, BSE-26. Packs: `stash_bp`.
-- On a nearly full page every pickup is a three-snapshot commit: 2.1 ms a tick for one miner in October, and only
-  the trigger was narrowed since (BSE-27). Batch pickups into one commit per second per player without weakening the
-  item-safety rule (C3: snapshots verified before live slots change).
-- Drive auto-store from `playerInventoryItemChange` with its slot filter instead of looking at an active player every
-  2 ticks (BSE-10); lengthen or drop the 5-second quiet look, which is the pack's whole soak figure (BSE-11); cache
-  the parsed page index; the retired-snapshot queue (BSE-17); `keyOf` twice per stack (BSE-26).
-- Proof: `stash-miner-perf` (W0c), `stash-autostore-perf`, every `stash-*` scenario including the item-loss ones;
-  write the still-open `stash-fill-locked.js` (OPEN.md F1) here since the same code is being changed.
-- Risk: item loss is the worst bug this repo has had. Review this PR against C3, C5 and C19 before it merges.
+Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
+- #229 (stash_bp 1.9.7) batched auto-store to one move a second, drove the looks from inventory events and did
+  BSE-10, BSE-11, BSE-35, BSE-17 and BSE-26. `stash-miner-perf` (two miners, four pickups a second each) went from
+  3.66 to 1.50 ms/tick at 10 players and 3.51 to 1.62 at 40 (#239): about 0.75 ms a miner, still over the 0.3 target. What is left is the cost
+  of one move, about 13 ms: three verified snapshot saves (the page and both whole-inventory images) and a page read.
+- Options, each needing a review against C3 before it ships: keep each page snapshot's verified readback in memory
+  (a snapshot never changes and its id is never reused), so a move does not restore the page it saved one move
+  before (tried on the #229 branch; the unit tests that count page restores need rewriting for it); or the finding's
+  option 3, a journal of page refs instead of the two whole-inventory images for a move that only takes stacks off
+  the live page, after a written crash analysis. Batching past one second is an owner trade-off (pickups on a page
+  with no free slot wait longer on the ground), not planned.
 
 ### W10 Townsfolk, labels and towns (M to L: two PRs)
 
