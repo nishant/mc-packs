@@ -27,11 +27,11 @@ import { executePaste, copyTooBig } from "./core/Clipboard.js";
 import { getModeHandler, MODE_LIST } from "./modes/ModeRegistry.js";
 import { placeBlocks, ALWAYS_REPLACEABLE, UNPLACEABLE } from "./core/BlockPlacer.js";
 import { destroyBlocks, isDiggingTool, canMineWithTool } from "./core/BlockDestroyer.js";
-import { startPreviewLoop, getTargetPos, getTargetBlock, getStep3HeightTarget, clearPreviewCache, clearDeferHintState, getLastPreviewTargetPos } from "./core/Preview.js";
+import { startPreviewLoop, getTargetPos, getTargetBlock, getStep3HeightTarget, clearPreviewCache, getLastPreviewTargetPos, forgetPreviewPlayer } from "./core/Preview.js";
 import { onChange } from "./settings.js";
 import { getMenuStyle } from "./utils/CustomUI.js";
 import { startPlacementQueue, setPlayerBuildSpeed, removePlayerBuildSpeed } from "./core/PlacementQueue.js";
-import { startModifierVisualizerLoop } from "./core/ModifierVisualizer.js";
+import { startModifierVisualizerLoop, forgetMirrorGuide } from "./core/ModifierVisualizer.js";
 import { startVanillaModifierHook } from "./core/VanillaModifierHook.js";
 import { performUndo, performRedo, clearPlayerTempStacks } from "./core/UndoRedo.js";
 import { getAirBuildTarget, getPlacementStatesFromAir, getPlacementStatesFromFace } from "./modes/AirBuildMode.js";
@@ -41,9 +41,10 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, allPlayers, buildingBookHands, tutorialBookHands, checkSlot, handKnown, handTypeId, markHandDirty, refreshHand } from "./utils/Items.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, allPlayers, buildingBookHands, tutorialBookHands, checkSlot, handKnown, handTypeId, markHandDirty, refreshHand, onBookHand } from "./utils/Items.js";
 import { createIdleClock, idleDue } from "./utils/idle-cadence.js";
-import { visualizationHolders } from "./utils/tool-gate.js";
+import { visualizationHolders, onHolderMark } from "./utils/tool-gate.js";
+import { wakeLoop, wakeDue } from "./utils/wake-loop.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 import { bedPartnerPos, dropIncompleteBeds, expandDestroyForClaims, expandForClaims, isBedType } from "./core/beds.js";
 import { onScriptEvent } from "./script-events.js";
@@ -840,8 +841,9 @@ world.afterEvents.playerLeave.subscribe(ev => {
     removeState(ev.playerId);
     removePlayerBuildSpeed(ev.playerId);
     clearPlayerTempStacks(ev.playerId);
-    clearPreviewCache(ev.playerId);
-    clearDeferHintState(ev.playerId);
+    forgetPreviewPlayer(ev.playerId);
+    forgetMirrorGuide(ev.playerId);
+    wrongToolMsgMs.delete(ev.playerId);
     anchoredAtMs.delete(ev.playerId);
     lastAirBuildMs.delete(ev.playerId);
     lastInteractMs.delete(ev.playerId);
@@ -882,10 +884,11 @@ system.run(() => {
 
 /** player id -> player whose camera is zoomed for a selection (so it can be cleared when the anchor goes) */
 const zoomedPlayers = new Map();
-system.runInterval(() => {
+// Runs while someone has an anchor or is still zoomed from one (an anchor is set with a holder mark, which wakes it).
+const zoomLoop = wakeLoop(2, () => {
     // Only players with an anchor can be selecting, plus those still zoomed from one.
     const anchored = anchoredPlayers();
-    if (anchored.size === 0 && zoomedPlayers.size === 0) return;
+    if (anchored.size === 0 && zoomedPlayers.size === 0) return false;
     const looked = anchored.size && zoomedPlayers.size ? new Map([...zoomedPlayers, ...anchored]) : anchored.size ? anchored : zoomedPlayers;
     for (const player of [...looked.values()]) {
         try {
@@ -927,10 +930,13 @@ system.runInterval(() => {
             player.runCommand(`camera @s fov_set ${fov} 0.15 linear`);
         } catch { }
     }
-}, 2);
-system.runInterval(() => {
+}, () => anchoredPlayers().size > 0 || zoomedPlayers.size > 0);
+onHolderMark(zoomLoop.wake);
+const bookNameLoop = wakeLoop(20, () => {
     // Only Building Book holders (kept from the hand events): nobody else's inventory is read.
-    for (const player of [...buildingBookHands().values()]) {
+    const holders = buildingBookHands();
+    if (holders.size === 0) return false;
+    for (const player of [...holders.values()]) {
         try {
             const inv = player.getComponent("minecraft:inventory")?.container;
             if (!inv) continue;
@@ -943,12 +949,12 @@ system.runInterval(() => {
             inv.setItem(slot, item);
         } catch { }
     }
-}, 20);
+}, () => buildingBookHands().size > 0);
 /** Players holding the Building Book (kept from the hand events): their sneaks are watched every tick, nobody else's. */
-system.runInterval(() => {
+const sneakLoop = wakeLoop(1, () => {
     const holders = buildingBookHands();
     if (prevSneakState.size) for (const id of [...prevSneakState.keys()]) if (!holders.has(id)) prevSneakState.delete(id);
-    if (holders.size === 0) return;
+    if (holders.size === 0) return false;
     for (const player of [...holders.values()]) {
         try {
             const isSneaking  = player.isSneaking;
@@ -981,7 +987,9 @@ system.runInterval(() => {
             }
         } catch { }
     }
-}, 1);
+}, () => buildingBookHands().size > 0);
+onBookHand(bookNameLoop.wake);
+onBookHand(sneakLoop.wake);
 
 // Backstops for a missed hand event. Every tick, players who are building (a mode on, a tool or a book in hand) have
 // their hotbar slot compared with the one their hand was read in; everyone else every SLOT_WATCH_TICKS. Every
@@ -1001,16 +1009,22 @@ function slotOf(id) {
     }
     return n;
 }
+// The every-tick watch runs only while someone is building or holds a book or a tool (BSE-31); the sweep below is the
+// pack's one permanent loop with nobody building.
+const busySlotWatch = wakeLoop(1, () => {
+    let any = false;
+    for (const group of [buildingPlayers(), buildingBookHands(), tutorialBookHands()]) {
+        if (group.size) { any = true; for (const player of [...group.values()]) { try { checkSlot(player); } catch {} } }
+    }
+    const holders = visualizationHolders();
+    if (holders.length) any = true;
+    for (const player of holders) { try { checkSlot(player); } catch {} }
+    return any;
+}, () => buildingPlayers().size > 0 || buildingBookHands().size > 0 || tutorialBookHands().size > 0 || visualizationHolders().length > 0);
+onHolderMark(busySlotWatch.wake);
 let handTicks = 0;
 system.runInterval(() => {
-    handTicks++;
-    if (handTicks % SLOT_WATCH_TICKS !== 0) {
-        for (const group of [buildingPlayers(), buildingBookHands(), tutorialBookHands()]) {
-            if (group.size) for (const player of [...group.values()]) { try { checkSlot(player); } catch {} }
-        }
-        for (const player of visualizationHolders()) { try { checkSlot(player); } catch {} }
-        return;
-    }
+    handTicks += SLOT_WATCH_TICKS;
     const all = allPlayers();
     const sweep = handTicks % HAND_SWEEP_TICKS === 0;
     const phase = sweep ? handClock.tick() : 0;
@@ -1022,7 +1036,8 @@ system.runInterval(() => {
             else checkSlot(player);
         } catch {}
     }
-}, 1);
+    wakeDue();
+}, SLOT_WATCH_TICKS);
 
 // /realm:prefs changes apply right away: the build speed's queue limit (otherwise set at spawn and in the book's
 // settings), and the menu style's old switch (eb:customUI), which would otherwise outrank the new one.

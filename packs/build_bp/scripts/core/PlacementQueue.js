@@ -7,6 +7,7 @@ import { ensureChunkLoaders, releaseChunkLoaders } from "./ChunkLoader.js";
 import { lockActionBar } from "../utils/ActionBar.js";
 import { giveBlocks } from "../utils/InventoryUtils.js";
 import { overBudget } from "./TickBudget.js";
+import { wakeLoop } from "../utils/wake-loop.js";
 const DEFAULT_SPEED    = 2500;
 const GLOBAL_MAX_TICK  = 50000;
 const LOADER_UPDATE_EVERY = 20;
@@ -55,7 +56,12 @@ export function enqueue(playerId, dimensionId, pos, permutation, refund, expect,
     q.items.push({ dimensionId, pos, permutation, refund, expect, jid, attempts: 0, tried: -1 });
     q.sx += pos.x; q.sy += pos.y; q.sz += pos.z;
     totalPending++;
+    writer?.wake();
+    loaders?.wake();
 }
+/** The two loops below run only while something is queued (BSE-31). */
+let writer;
+let loaders;
 export function queueSize() { return totalPending; }
 /** Drops the player's waiting writes of one job (an undo of a cut whose air is still queued). */
 export function cancelQueued(playerId, jid) {
@@ -106,11 +112,11 @@ export function startPlacementQueue() {
 
     const hadPending = new Set();
 
-    system.runInterval(() => {
+    writer = wakeLoop(1, () => {
         if (totalPending === 0) {
             for (const playerId of hadPending) releaseChunkLoaders(playerId);
             hadPending.clear();
-            return;
+            return false;
         }
         tickNo++;
         const placedThisTick = new Map();
@@ -195,10 +201,10 @@ export function startPlacementQueue() {
             }
         }
         for (const playerId of queues.keys()) hadPending.add(playerId);
-    }, 1);
+    }, () => totalPending > 0 || hadPending.size > 0);
 
-    system.runInterval(() => {
-        if (totalPending === 0) return;
+    loaders = wakeLoop(LOADER_UPDATE_EVERY, () => {
+        if (totalPending === 0) return false;
         // A loader only over the blocks that came back unloaded in the last second: none for a paste into loaded chunks.
         for (const [playerId, q] of queues) {
             if (!q.miss) continue;
@@ -224,5 +230,6 @@ export function startPlacementQueue() {
                 );
             } catch {  }
         }
-    }, LOADER_UPDATE_EVERY);
+    }, () => totalPending > 0);
+    if (totalPending > 0) { writer.wake(); loaders.wake(); }
 }

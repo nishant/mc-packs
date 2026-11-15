@@ -168,3 +168,6 @@ export function resetWorld() {
   dimensions.clear();
   system.currentTick = 1;
 }
+export class MolangVariableMap { setFloat() {} setColorRGBA() {} setVector3() {} }
+/** Intervals registered now (a cleared one is gone). */
+export function intervalCount() { return intervals.size; }

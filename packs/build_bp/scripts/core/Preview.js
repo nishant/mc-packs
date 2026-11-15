@@ -9,7 +9,10 @@ import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReac
 import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "../utils/Items.js";
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
-import { beginVisualizationTick, markHolderDirty, visualizationHolders, visualizationIdle, visualizationReleased } from "../utils/tool-gate.js";
+import { beginVisualizationTick, markHolderDirty, onHolderMark, visualizationHolders, visualizationIdle, visualizationReleased } from "../utils/tool-gate.js";
+import { wakeLoop } from "../utils/wake-loop.js";
+import { creaseSegmentsGen, creaseSegments, boxSegments, capSegments } from "../utils/edges.js";
+import { drawSegments, EDGE_CAP } from "./EdgeParticles.js";
 import { modifiedStates } from "../modifiers/MirrorModifier.js";
 import { expandBeds, isBedType, directionFromYaw, directionFromStates, bedPartnerPos } from "./beds.js";
 
@@ -21,7 +24,7 @@ import { isCreative } from "../utils/InventoryUtils.js";
 import { t, rawtext } from "../utils/Text.js";
 import { isActionBarLocked, steadyBar } from "../utils/ActionBar.js";
 import { showHintOnce } from "../utils/Hints.js";
-import { recordTick, tpsText } from "../utils/Tps.js";
+import { sampleTps, tpsText } from "../utils/Tps.js";
 import { getAirBuildTarget } from "../modes/AirBuildMode.js";
 import { yawToFacingIndex, getRotatedEntries, boxVolume } from "./Clipboard.js";
 import { applyModifiers, applyModifiersToEntries, getModifierCacheKey } from "./ModifierPipeline.js";
@@ -43,6 +46,10 @@ function destroyParticle(q)  { return "eb:controller_destroy"+ qSuffix(q); }
 const FILL_THRESHOLD = 500;
 
 const BIG_PREVIEW_TIER = 5;
+/** The redraw period for an outline of `count` lines: about 50 particles a tick at most, whatever the shape. */
+function segmentTier(count) {
+    return count <= 50 ? 1 : count <= 100 ? 2 : count <= 150 ? 3 : count <= 200 ? 4 : BIG_PREVIEW_TIER;
+}
 const WOOD_BLOCK_IDS = new Set([
     "minecraft:oak_log","minecraft:oak_planks","minecraft:oak_wood",
     "minecraft:stripped_oak_log","minecraft:stripped_oak_wood",
@@ -112,7 +119,66 @@ function particleFamily(id) {
     return "preview";
 }
 
+/** player id -> the digging tools' uses left, as last read: { tick, slot, typeId, durabRemaining, durabMax, total, spares } */
+const toolTotals = new Map();
+/** Re-read at least this often even without an inventory event (a missed event can only be this stale). */
+const TOOL_TOTALS_TICKS = 100;
+/**
+ * The held digging tool's uses left and those of the spare tools of its kind in the inventory. The 36-slot scan runs
+ * once and again only after an inventory change, a slot change or another tool in hand (BSE-03).
+ */
+function destroyToolTotals(player, held) {
+    const now = system.currentTick;
+    const slot = player.selectedSlotIndex;
+    const c = toolTotals.get(player.id);
+    if (c && c.slot === slot && c.typeId === held?.typeId && now - c.tick < TOOL_TOTALS_TICKS) return c;
+    const out = { tick: now, slot, typeId: held?.typeId, durabRemaining: -1, durabMax: -1, total: -1, spares: 0 };
+    try {
+        const dc = held?.getComponent("minecraft:durability");
+        if (dc) {
+            out.durabRemaining = dc.maxDurability - dc.damage;
+            out.durabMax       = dc.maxDurability;
+            out.total          = out.durabRemaining;
+            try {
+                const invComp = player.getComponent("minecraft:inventory")?.container;
+                const size = invComp?.size ?? 0;
+                const ht = held.typeId;
+                const kind = ht.includes("_pickaxe") ? "_pickaxe" : ht.includes("_axe") ? "_axe" : ht.includes("_shovel") ? "_shovel" : null;
+                if (kind) for (let s = 0; s < size; s++) {
+                    if (s === slot) continue;
+                    const spare = invComp.getItem(s);
+                    if (!spare || !spare.typeId.includes(kind) || !isDiggingTool(spare.typeId)) continue;
+                    // "_axe" is also in "_pickaxe": an axe's spares are axes only
+                    if (kind === "_axe" && spare.typeId.includes("_pickaxe")) continue;
+                    const sdc = spare.getComponent("minecraft:durability");
+                    if (!sdc) continue;
+                    const spareDur = sdc.maxDurability - sdc.damage;
+                    if (spareDur <= 0) continue;
+                    out.total += spareDur;
+                    out.spares++;
+                }
+            } catch { }
+        }
+    } catch { }
+    toolTotals.set(player.id, out);
+    return out;
+}
+try {
+    world.afterEvents.playerInventoryItemChange.subscribe(({ player }) => { toolTotals.delete(player.id); });
+} catch {}
+
+/** A player left: everything the preview kept for them (BSE-22). */
+export function forgetPreviewPlayer(playerId) {
+    clearPreviewCache(playerId);
+    clearDeferHintState(playerId);
+    previewTicks.delete(playerId);
+    previewTierQ.delete(playerId);
+    previewLastTargetKey.delete(playerId);
+    lastPreviewTarget.delete(playerId);
+}
+
 export function clearPreviewCache(playerId) {
+    toolTotals.delete(playerId);
     previewCache.delete(playerId);
     pasteStableMs.delete(playerId);
     lastPreviewTargetPos.delete(playerId);
@@ -231,12 +297,27 @@ export function getStep3HeightTarget(player, secondAnchor) {
         };
     } catch { return null; }
 }
-function spawnParticles(dim, positions, particleId = PARTICLE) {
-    for (const p of positions) {
+/** Most block particles one draw spawns (an even sample past it): the paste ghost, a long curve, dots mode. */
+const CELL_CAP = 300;
+/** One particle a block, for the builder only (a preview is nobody else's: BSE-05). */
+function spawnParticles(player, positions, particleId) {
+    if (!positions?.length) return;
+    const step = positions.length > CELL_CAP ? Math.ceil(positions.length / CELL_CAP) : 1;
+    for (let i = 0; i < positions.length; i += step) {
+        const p = positions[i];
         try {
-            dim.spawnParticle(particleId, { x: p.x + 0.5, y: p.y + 0.5, z: p.z + 0.5 });
-        } catch {  }
+            player.spawnParticle(particleId, { x: p.x + 0.5, y: p.y + 0.5, z: p.z + 0.5 });
+        } catch { if (!player.isValid) return; }
     }
+}
+/**
+ * Draws a cached preview: its outline segments (lines that last until the next draw, q ticks away) or its block
+ * particles.
+ */
+function drawEntry(player, entry, q = entry?.drawQ ?? 1) {
+    if (!entry) return;
+    if (entry.segments) drawSegments(player, entry.segments, entry.edgeKind, q + 1);
+    else spawnParticles(player, entry.preview, entry.particleId);
 }
 
 const pasteSkeletonCache = new Map();
@@ -316,7 +397,7 @@ function warnOverLimit(player, contextKey, cacheKey, cap) {
     const warnBar = t("eb.preview.exceeds_limit", cap.toLocaleString());
     if (last?.contextKey === contextKey) {
         previewCache.set(player.id, { ...last, key: cacheKey, settled: true, actionBar: warnBar });
-        spawnParticles(player.dimension, last.preview, last.particleId);
+        drawEntry(player, last);
     }
     if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
 }
@@ -327,7 +408,7 @@ function applySolve(player, dim, entry) {
     lastSolvedFamily.set(player.id, entry.family);
     previewCache.set(player.id, entry);
     if (!isActionBarLocked(player.id)) steadyBar(player, entry.actionBar);
-    spawnParticles(dim, entry.preview, entry.particleId);
+    drawEntry(player, entry);
 }
 
 /** Runs the rest of a solve a slice a tick; stops when a newer aim replaced it or the preview was cleared. */
@@ -519,34 +600,25 @@ function* solveShape(c) {
     let preview;
     let particleId = PARTICLE;
     let tier;
+    let segments;
     if (isCornerOutline) {
         preview = bboxCorners(minX, maxX, minY, maxY, minZ, maxZ);
         particleId = isDestroy ? CONTROLLER_DESTROY : CONTROLLER;
     } else if (isOutline) {
-        let base = yield* shellBase();
-        if (!base) return null;
-        if (!isDestroy) base = previewBedPositions(base, blockTypeId, player, state.blockStates);
-        const wf = wireframePositions(base);
-
-        const count = wf.length;
-        if      (isDestroy)     tier = 1;
-        else if (count <=  50)  tier = 1;
-        else if (count <= 100)  tier = 2;
-        else if (count <= 150)  tier = 3;
-        else if (count <= 200)  tier = 4;
-        else                    tier = BIG_PREVIEW_TIER;
-
-        const spawnQ = Math.max(quality, tier);
-        if (isDestroy) {
-            preview    = wf;
-            particleId = destroyParticle(spawnQ);
-        } else if (count <= 200) {
-            preview    = wf;
-            particleId = outlineParticle(spawnQ);
-        } else {
-            preview    = adaptiveParticles(wireframePositions(base));
-            particleId = previewParticle(spawnQ);
+        // The shape's outer edges as lines (BSE-05, BSE-29): a box is 12 particles whatever its size. Built from the
+        // cells that change, a slice at a time like the reads; at most EDGE_CAP lines (the longest), and the redraw
+        // slows with the count the same way for building and digging.
+        const edges = creaseSegmentsGen(positions, overBudget);
+        let segs;
+        for (;;) {
+            const step = edges.next();
+            if (step.done) { segs = step.value; break; }
+            yield;
+            if (!live()) return null;
         }
+        segments = capSegments(segs, EDGE_CAP);
+        tier = segmentTier(segments.length);
+        particleId = isDestroy ? CONTROLLER_DESTROY : CONTROLLER;
     } else {
         let base = yield* shellBase();
         if (!base) return null;
@@ -555,6 +627,7 @@ function* solveShape(c) {
     }
     return {
         key: cacheKey, contextKey, settled: true, preview, particleId, actionBar, tier,
+        segments, edgeKind: isDestroy ? "destroy" : "place", drawQ: Math.max(quality, tier ?? 1),
         family: { mode: state.mode, destroy: isDestroy, family: particleFamily(particleId) },
     };
 }
@@ -590,10 +663,10 @@ function releasePreview(player) {
 
 const previewClock = createIdleClock();
 export function startPreviewLoop() {
-    system.runInterval(() => {
-        recordTick();
-
-        if (visualizationIdle()) return;
+    // Runs while the tool gate has holders or players to look at; a holder mark wakes it (BSE-31).
+    const loop = wakeLoop(1, () => {
+        if (visualizationIdle()) return false;
+        sampleTps();
         const open = beginVisualizationTick(allPlayers(), holdsBuildTool, system.currentTick);
         // Put away what this preview drew for players who just stopped holding a tool. Their anchor stays (F8): it
         // is drawn again when they hold the block or tool it was set with. Only an anchor left over in "Disable"
@@ -680,7 +753,7 @@ export function startPreviewLoop() {
                         if (player.dimension.getBlock(target)?.typeId === held.typeId) continue;
                     } catch {  }
                     const particleId = (previewMode === "outline" || previewMode === "corner_outline") ? CONTROLLER : PARTICLE;
-                    spawnParticles(player.dimension, previewBedPositions([target], held.typeId, player), particleId);
+                    spawnParticles(player, previewBedPositions([target], held.typeId, player), particleId);
                     if (!isActionBarLocked(player.id)) steadyBar(player,
                         t("eb.preview.air_build", target.x, target.y, target.z)
                     );
@@ -712,7 +785,7 @@ export function startPreviewLoop() {
                         const cached       = previewCache.get(player.id);
                         const suppressBar  = Date.now() - (state.lastPasteAt ?? 0) < 1000;
                         if (cached?.key === cacheKey) {
-                            if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
+                            if (flickHold) drawEntry(player, cached, drawQ);
                             if (!suppressBar && !isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                             continue;
                         }
@@ -720,18 +793,25 @@ export function startPreviewLoop() {
                         let preview;
                         let fakePlace = false;
                         let ghostCount = 0;
+                        let segments;
 
                         if (isStable && state.clipboard.blocks.length <= 500 && previewMode !== "particle") {
                             const pastePositions = applyModifiersToEntries(
                                 player,
                                 getRotatedEntries(state.clipboard, target, pasteFacing),
                             ).map(e => e.pos);
-                            preview    = pastePositions;
+                            segments   = capSegments(creaseSegments(pastePositions), EDGE_CAP);
                             ghostCount = pastePositions.length;
                             fakePlace  = true;
                         } else {
                             const box = getPasteSkeleton(player.id, state.clipboard, pasteFacing);
-                            preview = box.offsets.map(o => ({
+                            if (useOutline && !useCornerOutline) {
+                                segments = boxSegments(
+                                    target.x + box.minX, target.x + box.maxX,
+                                    target.y + box.minY, target.y + box.maxY,
+                                    target.z + box.minZ, target.z + box.maxZ,
+                                );
+                            } else preview = box.offsets.map(o => ({
                                 x: target.x + o.x, y: target.y + o.y, z: target.z + o.z,
                             }));
                             if (useCornerOutline) {
@@ -761,8 +841,9 @@ export function startPreviewLoop() {
                                 { text: `§f${clipCount} §7blocks copied §8(${dimStr})\n` },
                                 { text: `§7Right-click to paste  §8-  §7Sneak+click to recopy` },
                               );
-                        previewCache.set(player.id, { key: cacheKey, preview, particleId: previewParticle, actionBar });
-                        spawnParticles(dim, preview, previewParticle);
+                        const entry = { key: cacheKey, preview, particleId: previewParticle, actionBar, segments, edgeKind: "place", drawQ };
+                        previewCache.set(player.id, entry);
+                        drawEntry(player, entry);
                         if (!suppressBar && !isActionBarLocked(player.id)) steadyBar(player, actionBar);
                         continue;
                     }
@@ -785,7 +866,7 @@ export function startPreviewLoop() {
                         const cacheKey     = `cp_copy|${anchor.x},${anchor.y},${anchor.z}|${saKey}|${targetKey}|${previewMode}`;
                         const cached       = previewCache.get(player.id);
                         if (cached?.key === cacheKey) {
-                            if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
+                            if (flickHold) drawEntry(player, cached, drawQ);
                             if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                             continue;
                         }
@@ -806,28 +887,25 @@ export function startPreviewLoop() {
                         const dims    = [dx + 1, dy + 1, dz + 1].filter(d => d > 1);
                         const dimStr  = dims.length ? dims.join("x") : "1";
                         let preview;
-                        // A far-off corner must never build a particle for every cell of the box: past the copy limit
-                        // (which Copy refuses anyway) only the box edges are sampled.
+                        let segments;
+                        // The box's 12 edges as lines, however big; dots mode samples the edges (no cell of the box
+                        // is ever listed: a far-off corner made a list of every cell before).
                         const copyLimitBlocks = getMaxBlocks(player);
                         const copyTooLarge = blockCount > copyLimitBlocks;
                         if (useCornerOutline) {
                             preview = bboxCorners(x1, x2, y1, y2, z1, z2);
-                        } else if (copyTooLarge) {
-                            preview = sampledBoxEdges(x1, x2, y1, y2, z1, z2);
+                        } else if (useOutline) {
+                            segments = boxSegments(x1, x2, y1, y2, z1, z2);
                         } else {
-                            const positions = [];
-                            for (let x = x1; x <= x2; x++)
-                                for (let y = y1; y <= y2; y++)
-                                    for (let z = z1; z <= z2; z++)
-                                        positions.push({ x, y, z });
-                            preview = useOutline ? wireframePositions(positions) : adaptiveParticles(wireframePositions(positions));
+                            preview = sampledBoxEdges(x1, x2, y1, y2, z1, z2);
                         }
                         const actionBar = rawtext(
                             { text: `${copyTooLarge ? "§c" : "§f"}${blockCount} blocks §7(${dimStr})${copyTooLarge ? ` §c- over your limit of ${copyLimitBlocks}` : ""}\n` },
                             t(hasSecondAnchor ? "eb.preview.copy_step3" : "eb.preview.copy_step2"),
                         );
-                        previewCache.set(player.id, { key: cacheKey, preview, particleId, actionBar });
-                        spawnParticles(dim, preview, particleId);
+                        const entry = { key: cacheKey, preview, particleId, actionBar, segments, edgeKind: "place", drawQ };
+                        previewCache.set(player.id, entry);
+                        drawEntry(player, entry);
                         if (!isActionBarLocked(player.id)) steadyBar(player, actionBar);
                         continue;
                     }
@@ -836,7 +914,7 @@ export function startPreviewLoop() {
                         ? getTargetBlock(player)
                         : (getTargetPos(player) ?? getTargetBlock(player));
                     if (idleTarget) {
-                        spawnParticles(dim, [idleTarget], CONTROLLER);
+                        spawnParticles(player, [idleTarget], CONTROLLER);
                         if (!isActionBarLocked(player.id)) steadyBar(player,
                             t(player.isSneaking
                                 ? "eb.preview.copy_corner1_sneak"
@@ -893,7 +971,7 @@ export function startPreviewLoop() {
                         : getAirBuildTarget(player, reach);
                     if (!target) continue;
                     const particleId = (previewMode === "outline" || previewMode === "corner_outline") ? CONTROLLER : PARTICLE;
-                    spawnParticles(player.dimension, [target], particleId);
+                    spawnParticles(player, [target], particleId);
                     if (!isActionBarLocked(player.id)) steadyBar(player,
                         t(isDestroyPending ? "eb.preview.no_anchor_destroy" : "eb.preview.no_anchor_build",
                             t(`eb.mode.${state.mode}`), target.x, target.y, target.z)
@@ -952,37 +1030,12 @@ export function startPreviewLoop() {
                 let totalDurabRemaining = -1;
                 let spareToolCount      = 0;
                 if (isDestroy) {
-                    try {
-                        const dc = held?.getComponent("minecraft:durability");
-                        if (dc) {
-                            durabRemaining      = dc.maxDurability - dc.damage;
-                            durabMax            = dc.maxDurability;
-                            totalDurabRemaining = durabRemaining;
-
-                            try {
-                                const invComp = player.getComponent("minecraft:inventory")?.container;
-                                if (invComp && held) {
-                                    for (let s = 0; s < invComp.size; s++) {
-                                        if (s === player.selectedSlotIndex) continue;
-                                        const spare = invComp.getItem(s);
-                                        if (!spare || !isDiggingTool(spare.typeId)) continue;
-                                        const ht = held.typeId, st = spare.typeId;
-                                        if (!(
-                                            (ht.includes("_pickaxe") && st.includes("_pickaxe")) ||
-                                            (ht.includes("_axe")     && st.includes("_axe"))     ||
-                                            (ht.includes("_shovel")  && st.includes("_shovel"))
-                                        )) continue;
-                                        const sdc = spare.getComponent("minecraft:durability");
-                                        if (!sdc) continue;
-                                        const spareDur = sdc.maxDurability - sdc.damage;
-                                        if (spareDur <= 0) continue;
-                                        totalDurabRemaining += spareDur;
-                                        spareToolCount++;
-                                    }
-                                }
-                            } catch { }
-                        }
-                    } catch { }
+                    // Read once and kept until the inventory, the slot or the tool changes (BSE-03).
+                    const tools = destroyToolTotals(player, held);
+                    durabRemaining      = tools.durabRemaining;
+                    durabMax            = tools.durabMax;
+                    totalDurabRemaining = tools.total;
+                    spareToolCount      = tools.spares;
                 }
                 const yawQ = state.mode === "slope_floor"
                     ? Math.floor((((player.getRotation().y % 360) + 360) % 360) / 90)
@@ -1002,7 +1055,7 @@ export function startPreviewLoop() {
                 const sameAim  = cached?.key === cacheKey;
 
                 if (sameAim && cached.settled) {
-                    if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
+                    if (flickHold) drawEntry(player, cached, drawQ);
                     if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                     continue;
                 }
@@ -1032,7 +1085,7 @@ export function startPreviewLoop() {
                 }
 
                 if (sameAim && !settled) {
-                    if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
+                    if (flickHold) drawEntry(player, cached, drawQ);
                     if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                     continue;
                 }
@@ -1118,11 +1171,17 @@ export function startPreviewLoop() {
                         ] : []),
                     );
 
-                    previewCache.set(player.id, {
+                    // An outline without modifiers: the box's 12 edges as lines (a modifier's copies stay sampled cells).
+                    const boxSegs = previewMode !== "corner_outline" && previewMode !== "particle" && modded === boxPreview
+                        ? boxSegments(b.minX, b.maxX, b.minY, b.maxY, b.minZ, b.maxZ) : undefined;
+                    if (boxSegs) previewTierQ.set(player.id, 1);
+                    const boxEntry = {
                         key: cacheKey, contextKey, settled: false,
                         preview: boxPreview, particleId: boxParticle, actionBar: boxActionBar,
-                    });
-                    if (flickHold) spawnParticles(dim, boxPreview, boxParticle);
+                        segments: boxSegs, edgeKind: isDestroy ? "destroy" : "place", drawQ: Math.max(quality, boxSegs ? 1 : boxTier),
+                    };
+                    previewCache.set(player.id, boxEntry);
+                    if (flickHold) drawEntry(player, boxEntry);
                     if (!isActionBarLocked(player.id)) steadyBar(player, boxActionBar);
 
                     if (!deferHintDone.has(player.id)) {
@@ -1154,7 +1213,7 @@ export function startPreviewLoop() {
                         const warnBar = t("eb.preview.exceeds_limit", cap.toLocaleString());
                         if (stillRelevant) {
                             previewCache.set(player.id, { ...cachedSpline, key: splineCacheKey, actionBar: warnBar });
-                            spawnParticles(dim, cachedSpline.preview, cachedSpline.particleId);
+                            drawEntry(player, cachedSpline, drawQ);
                         }
                         if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
                         continue;
@@ -1168,12 +1227,12 @@ export function startPreviewLoop() {
                         { text: hint },
                     );
                     if (cachedSpline?.key === splineCacheKey) {
-                        if (flickHold) spawnParticles(dim, cachedSpline.preview, cachedSpline.particleId);
+                        if (flickHold) drawEntry(player, cachedSpline, drawQ);
                         if (!isActionBarLocked(player.id)) steadyBar(player, cachedSpline.actionBar);
                     } else {
                         const bezierParticleId = preview.length <= 200 ? CONTROLLER : PARTICLE;
                         previewCache.set(player.id, { key: splineCacheKey, contextKey: bezierContextKey, preview, particleId: bezierParticleId, actionBar });
-                        spawnParticles(dim, preview, bezierParticleId);
+                        spawnParticles(player, preview, bezierParticleId);
                         if (!isActionBarLocked(player.id)) steadyBar(player, actionBar);
                     }
                     continue;
@@ -1183,7 +1242,7 @@ export function startPreviewLoop() {
                 const pending = solving.get(player.id);
                 if (pending?.key === cacheKey) {
                     if (cached) {
-                        if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
+                        if (flickHold) drawEntry(player, cached, drawQ);
                         if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                     }
                     continue;
@@ -1205,10 +1264,12 @@ export function startPreviewLoop() {
                 solving.set(player.id, job);
                 system.runJob(finishSolve(player, player.id, dim, job));
                 if (cached) {
-                    if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
+                    if (flickHold) drawEntry(player, cached, drawQ);
                     if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                 }
             } catch {  }
         }
-    }, 1);
+    }, () => !visualizationIdle());
+    onHolderMark(loop.wake);
+    loop.wake();
 }

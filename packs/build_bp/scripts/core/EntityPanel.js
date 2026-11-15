@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { world, system, Player } from "@minecraft/server";
+import { world, system } from "@minecraft/server";
 import { allPlayers } from "../utils/Items.js";
 import { PANELS, PANEL_CURSOR_LIFT, PANEL_TIP_ABOVE } from "./EntityPanelData.js";
 import { getCursor, setCursor as saveCursor, getCursorTipSeen, setCursorTipSeen, getPanelScale } from "./Settings.js";
@@ -7,6 +7,8 @@ import { panelSound as sound, scaleEntity, panelLanguage } from "../utils/PanelS
 import { t } from "../utils/Text.js";
 import { clearSpotInFront, liftClear, yawToward } from "../utils/InFront.js";
 import { lockActionBar } from "../utils/ActionBar.js";
+import { wakeLoop, slowSweep } from "../utils/wake-loop.js";
+import { onPlayerHit } from "../utils/panel-hits.js";
 
 const DISTANCE       = 2.7;
 const MIN_DISTANCE   = 1.3;
@@ -19,7 +21,6 @@ const MISS_MARGIN    = 16;
 const SYNC_TICKS     = 5;
 const TIP_TICKS      = 20;
 const TIP_LOCK_MS    = 1500;
-const SWEEP_TICKS    = 200;
 const PRESS_STEPS    = 8;
 const REPEAT_DELAY   = 8;
 const REPEAT_GRACE   = 2;
@@ -52,9 +53,28 @@ function heldSlot(player) {
     try { return player.selectedSlotIndex; } catch { return -1; }
 }
 
+/** player id -> this tick's head and view: read once a tick however many aim tests ask (BSE-37) */
+const views = new Map();
+function headView(player) {
+    const now = system.currentTick;
+    let v = views.get(player.id);
+    if (!v || v.tick !== now) {
+        v = { tick: now, head: player.getHeadLocation(), view: player.getViewDirection() };
+        views.set(player.id, v);
+    }
+    return v;
+}
+
 function aimPoint(player, panel, lift = 0) {
-    const head = player.getHeadLocation();
-    const view = player.getViewDirection();
+    // The plain aim (hover, click, the preview's test) is worked out once a tick per panel.
+    if (lift === 0 && panel.aimAt?.tick === system.currentTick && panel.aimAt.player === player) return panel.aimAt.point;
+    const point = aimPointAt(player, panel, lift);
+    if (lift === 0) panel.aimAt = { tick: system.currentTick, player, point };
+    return point;
+}
+
+function aimPointAt(player, panel, lift) {
+    const { head, view } = headView(player);
     const rad  = panel.yaw * Math.PI / 180;
     const face = { x: -Math.sin(rad), z: Math.cos(rad) };
     const at   = isLive(panel.entity) ? panel.entity.location : panel.origin;
@@ -295,6 +315,7 @@ export function openPanel(player, name, { local = {}, pinned = false, centre = n
         try {
             old.entity.setProperty("eb:leave", slide);
             leaving.push({ entity: old.entity, removeAt: system.currentTick + LEAVE_TICKS });
+            panelLoop?.wake();
         } catch { remove(old.entity); }
         try { entity.setProperty("eb:enter", slide); } catch {}
     } else {
@@ -307,6 +328,7 @@ export function openPanel(player, name, { local = {}, pinned = false, centre = n
     const panel = { name, def, screen, entity, origin, yaw, player, pinned, local, hover: 0, shutAt: null, slot: heldSlot(player), values: {},
         wanted: size, scale: scaleEntity(entity, size) };
     panels.set(player.id, panel);
+    panelLoop?.wake();
     sync(player, panel);
     setCursor(player, panel);
     sound(player, quiet ? "click" : swap ? "swap" : "open");
@@ -329,6 +351,7 @@ export function removePanel(playerId) {
     panels.delete(playerId);
     lastClick.delete(playerId);
     holding.delete(playerId);
+    views.delete(playerId);
 }
 
 export function panelClick(player) {
@@ -414,19 +437,21 @@ export function startEntityPanels() {
         system.run(() => outside ? outside.click(player) : panelClick(player));
     });
 
-    world.afterEvents.entityHitEntity.subscribe(ev => {
-        if (!PANEL_TYPES.has(ev.hitEntity?.typeId)) return;
-        if (!(ev.damagingEntity instanceof Player)) return;
-        const outside = externals.get(ev.hitEntity.typeId);
-        if (outside) outside.click(ev.damagingEntity);
-        else panelClick(ev.damagingEntity);
-    });
+    for (const typeId of PANEL_TYPES) {
+        onPlayerHit([typeId], (player) => {
+            const outside = externals.get(typeId);
+            if (outside) outside.click(player);
+            else panelClick(player);
+        });
+    }
 
     world.afterEvents.itemStartUse.subscribe(ev => holding.set(ev.source.id, system.currentTick));
     world.afterEvents.itemStopUse.subscribe(ev => holding.delete(ev.source.id));
 
     let ticks = 0;
-    system.runInterval(() => {
+    // Runs while a panel is open or one is still sliding away (BSE-31); strays go in the shared slow sweep (BSE-20).
+    panelLoop = wakeLoop(1, () => {
+        if (panels.size === 0 && leaving.length === 0) return false;
         while (leaving.length > 0 && system.currentTick >= leaving[0].removeAt) remove(leaving.shift().entity);
         if (panels.size > 0) {
             const online = new Map(allPlayers().map(player => [player.id, player]));
@@ -454,6 +479,10 @@ export function startEntityPanels() {
                 } catch {}
             }
         }
-        if (ticks++ % SWEEP_TICKS === 0) sweepStrays();
-    }, 1);
+        ticks++;
+    }, () => panels.size > 0 || leaving.length > 0);
+    slowSweep(sweepStrays);
 }
+
+/** @type {ReturnType<typeof wakeLoop> | undefined} */
+let panelLoop;
