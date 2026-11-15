@@ -1849,7 +1849,7 @@ Operators can change `resetHourUtc`, `questsPerDay`, `progressNotes`, `skipCreat
 
 | Key | Scope | Contents |
 |---|---|---|
-| `quests:day` | Player | JSON `{ d, q }`: the day number and today's quests, `[{ id, p, done }]` (pool id, progress, finished). Progress is written at most once a second and as the player leaves, not on every counted block; a finished quest is written at once, before its reward |
+| `quests:day` | Player | JSON `{ d, q }`: the day number and today's quests, `[{ id, p, done }]` (pool id, progress, finished). Progress is written at most every 5 seconds and as the player leaves, not on every counted block; a finished quest is written at once, before its reward |
 | `quests:pref` | Player | JSON of the player's own `progressNotes` choice from `/realm:prefs` |
 | `quests:cfg` | World | Settings changed in `/realm:config` |
 | `quests:pbox` | World | The boxes of blocks that Easy Building and other packs reported with `realm:blocks_placed` (up to 500, the oldest dropped first): `<dimension>|x1,y1,z1,x2,y2,z2` entries joined by `;`. A block broken inside a box counts as placed, so it gives no quest progress |

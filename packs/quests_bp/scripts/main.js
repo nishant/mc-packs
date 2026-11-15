@@ -54,7 +54,7 @@ function countdown(label, n, need) {
 
 /** @type {Map<string, Day>} */
 const cache = new Map();
-/** Players whose progress changed since it was saved: written once a second and as they leave. @type {Map<string, Player>} */
+/** Players whose progress changed since it was saved: written every 5 seconds and as they leave. @type {Map<string, Player>} */
 const dirty = new Map();
 
 /** Writes the cached day of a player whose progress changed. @param {string} id */
@@ -71,7 +71,7 @@ function flush(id) {
 }
 system.runInterval(() => {
   for (const id of [...dirty.keys()]) flush(id);
-}, 20);
+}, 100);
 // Player properties can still be written while the player leaves.
 world.beforeEvents.playerLeave.subscribe(({ player }) => {
   if (dirty.has(player.id)) flush(player.id);
@@ -150,7 +150,7 @@ function wants(player, kind) {
 
 /**
  * Adds progress to every unfinished quest of this kind that `id` counts for. A finished quest is saved before its
- * reward is given; other progress is saved within a second (and as the player leaves), not on every block.
+ * reward is given; other progress is saved within 5 seconds (and as the player leaves), not on every block.
  * @param {Player} player @param {Kind} kind @param {string} id @param {number} [n]
  */
 function progress(player, kind, id, n = 1) {
