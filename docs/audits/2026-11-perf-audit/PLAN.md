@@ -80,12 +80,11 @@ The average meets its budget with room to spare, so this plan is not about the a
 ## 3. Targets
 
 Set from the findings; each is checked on the validation report after its workstream ships. Compare same-runner
-pairs, and read differences against the A/A spread once W0 publishes it.
+pairs, and read differences against the A/A spread the report prints next to each comparison.
 
 | Measure (Realm Bundle unless said) | Today | Target | Workstream |
 |---|---:|---:|---|
 | Validation wall time after a merge | 100 min | about 31 min | W0 |
-| A/A spread of the bundle figure | +5% to +9% seen, unknown in general | published with every report | W0 |
 | Callbacks per tick at 40 | 109 | 45 or less | W1 |
 | Slowest tick caused by one `/realm:help` or `/realm:prefs` | not measured (about 4,500 callbacks) | under 5 ms | W1, W2 |
 | p95 / p99 / max per tick at 40, steady window | 9 / 14 / 32 ms | 5 / 8 / 20 or less | W3, W1 |
@@ -112,9 +111,12 @@ None changes a pack, so none needs a pack release; each still merges through the
 `validate.yml` dispatch. The validation report already keeps the full profiles, the tick histograms by `tick % 20` to
 `% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts, flaky scenarios, the bundle's
 per-pack table by `scripts/<pack>/` path, a phase table per soak (empty, one, ramp, steady, churn, and a stormy night
-on bundle-40, in a world pinned at noon and clear weather) and a table per profiled suite scenario; a merge is
-validated in about 37 minutes against the last master commit with a finished validation, and the memory soak runs
-nightly.
+on bundle-40, in a world pinned at noon and clear weather) and a table per profiled suite scenario. The bundle pairs
+run base, head, head, base and are judged by lows and means, the per-pack bar follows the clock noise, every
+comparison prints the weekly A/A spread and a drift table against a pinned baseline, the PR perf check soaks the
+built bundle, `run.mjs --meter` measures unprofiled runs, and the `listener` job measures one script event listener
+wake-up on every merge. A merge is validated against the last master commit with a finished validation, and the
+memory soak runs nightly.
 
 **W0c (left): A/B scenarios that phases cannot hold** (S each). The phases, the pinned world, the per-scenario
 tables and the UTL-07 check shipped; what is left is the scenarios, each best written with the workstream that uses it
@@ -122,22 +124,6 @@ tables and the UTL-07 check shipped; what is left is the scenarios, each best wr
 walking, flying; W5), `stash-miner-perf` (a nearly full page and a stream of pickups; W9), `build-big-perf` (place,
 copy and cut a 40x40x30 box, preview held; W7), `fishing-perf` (10 bobbers out), and a check that `saga-perf-quests`
 has a quest active for every player (W16).
-
-**W0d Trust the comparison, and see the engine** (M). Findings: PIPE-07, PIPE-03, PIPE-08.
-- Bundle pair as base, head, head, base; compare means as well as lows (PIPE-07 (1)). A weekly A/A dispatch (base
-  equals head) whose spread is printed next to every later comparison (2). A drift table against a pinned baseline
-  (3). The per-pack bar scaled to the clock noise instead of a flat 0.1 ms (4). The PR perf check measures the
-  bundle, with the per-pack table by path that the validation report has (5).
-- An always-on meter (`--meter`): tick interval percentiles and bedrock_server CPU ms/tick without the profiler, so
-  profiled and unprofiled runs of one workload can be compared (PIPE-03 (1)).
-- The differential listener scenario: an idle bundle for 60 s twice in one job, once sending 5 no-op `realm:` events
-  a tick; the CPU difference divided by 5 x 67 is the real cost of one listener wake-up, engine side included
-  (PIPE-03 (2)). Record the number in `cross-cutting.md` XC-01: it sizes W1 and W12.
-- Try the native tools on the harness's BDS version: `script profiler start` / `stop` and `script watchdog
-  exportstats`. If they exist, add `--native-profile` as a separate short pass and report script memory, which
-  nothing reports today (PIPE-03 (3)). If they do not, write that in the harness README and stop.
-- Remove the stack capture the profiler does on every `system.run` and `runTimeout` (PIPE-08).
-- Proof: the first A/A dispatch; the wake-up cost number; `perf-compare` tests.
 
 ### W1 One script event listener per context (M)
 
@@ -166,7 +152,7 @@ Findings: XC-01, XC-02, UTL-11, UTL-10, HUD-32, HUD-40, UTL-34, PRG-33, PRG-36. 
 - Proof: unit tests for the hub (order across packs, "*", a throwing handler, register and unregister during
   delivery, the last handler dropping the native listener); `bundle-smoke.js`; the whole suite (every protocol goes
   through this); the bundle soaks: callbacks per tick 109 to 45 or less at 40, the `/realm:help` worst tick from
-  W0c, tick interval p95 and p99; the wake-up cost from W0d before and after.
+  W0c, tick interval p95 and p99; the wake-up cost from `validate.yml`'s `listener` job before and after.
 - Risk: ordering between packs on the same event, and standalone packs talking to the bundle. Run the two-pack mini
   bundle scenarios (`storm-rod-claims.js`, `diag-bundle`) and one scenario with a pack installed beside the bundle.
 - Release: every behavior pack's copy changes, so every pack is bumped: one release, one line of notes each
@@ -214,7 +200,9 @@ Findings: XC-03, BSE-31, UTL-19, HUD-35, HUD-18. Packs: decided by the histogram
 ### W4 Bundle payload and startup (M, low priority)
 
 Findings: XC-08, XC-09, PIPE-17, PIPE-22, HUD-41, XC-10, XC-11.
-- Measure first with W0d's meter: world start to first tick and script memory, with the bundle and without.
+- Measure first: world start to first tick (the server log's timings, or `run.mjs --meter` around startup) and
+  bedrock_server RSS, with the bundle and without. BDS 1.26.52 has no script memory figure (`script watchdog
+  exportstats` does not exist; see the harness README), so RSS is the memory measure.
 - After W1, `script-events.js` can join the bundle's shared list; give `zones.js` and `side.js` the same factory
   shape so they can too (67, 15 and 7 copies today).
 - Comment stripping at bundle time with every line number kept, only if the measurement shows startup or memory
@@ -440,8 +428,8 @@ Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
 
 ## 5. Order and what can run together
 
-1. Hosting H1 (CI minutes), then W0d here. From here every workstream has cheap, fast, trustworthy
-   measurement with phases.
+1. Hosting H1 (CI minutes). Every workstream has cheap, fast, trustworthy measurement with phases, A/A spreads and
+   the listener cost.
 2. W1, then W2 (both bump every pack: never in flight together, and nothing else merges between a start and its
    release).
 3. W3 as soon as two validation runs with histograms exist.

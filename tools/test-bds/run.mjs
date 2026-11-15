@@ -10,6 +10,7 @@ import { parseArgs } from "node:util";
 import { HERE, IS_WIN, BDS_BIN, makeServerDir, writeProps, baseProps, reservePort, recordOwner, startBds, stopBds, ensureTemplate, copyTemplate, bdsDir, tmpRoot } from "./lib/server.mjs";
 import { findPacks, loadBundle, installBehaviorPack, installResourcePack, installHarnessPack, HARNESS_PACK } from "./lib/packs.mjs";
 import { Profile } from "./lib/profile-report.mjs";
+import { cpuProfileLines, summarizeCpuProfile } from "./lib/native-profile.mjs";
 
 const USAGE = `usage: node run.mjs --packs <dir> [options]
   --packs <dir>        folder containing pack folders (default: ../../packs from this script, if present)
@@ -33,7 +34,12 @@ const USAGE = `usage: node run.mjs --packs <dir> [options]
   --no-relay           do not relay pack messages to the scenario (t.messages stays empty; forms still work)
   --profile            time every pack's callbacks during the scenario and report per pack (see README)
   --profile-every <s>  with --profile: also print an interim report every s seconds (default 60, 0 = off)
-  --profile-json <f>   with --profile: where to write the JSON report (default: the log file + .profile.json)`;
+  --profile-json <f>   with --profile or --meter: where to write the JSON report (default: the log file + .profile.json)
+  --meter              the tick meter and bedrock_server CPU ms/tick alone, no profiler (an unprofiled run to set
+                       against a profiled one of the same workload; --profile includes it)
+  --native-profile     also send 'script profiler start' at the scenario start and 'script profiler stop' and
+                       'script watchdog exportstats' at its end, print what BDS answers and copy the files it writes
+                       into the log folder (see README: a separate short pass, never inside a measured soak)`;
 
 let args;
 try {
@@ -46,7 +52,7 @@ try {
       strict: { type: "boolean", default: false }, "no-shim": { type: "boolean", default: false },
       keep: { type: "boolean", default: false }, log: { type: "string" }, quiet: { type: "boolean", default: false },
       arg: { type: "string", multiple: true, default: [] }, "no-relay": { type: "boolean", default: false },
-      profile: { type: "boolean", default: false }, "profile-every": { type: "string", default: "60" }, "profile-json": { type: "string" },
+      profile: { type: "boolean", default: false }, meter: { type: "boolean", default: false }, "native-profile": { type: "boolean", default: false }, "profile-every": { type: "string", default: "60" }, "profile-json": { type: "string" },
       bundle: { type: "string" }, "bundle-resources": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -75,7 +81,7 @@ const logStream = fs.createWriteStream(logFile);
 const say = (s) => { console.log(s); logStream.write(s + "\n"); };
 const scenarioArgs = {};
 for (const kv of args.arg) { const i = kv.indexOf("="); if (i > 0) scenarioArgs[kv.slice(0, i)] = kv.slice(i + 1); else scenarioArgs[kv] = "true"; }
-const profile = args.profile ? new Profile({ say, everyS: Number(args["profile-every"]) || 0, json: path.resolve(args["profile-json"] || logFile.replace(/\.log$/, "") + ".profile.json"), scenario: scenarioFile, args: scenarioArgs }) : null;
+const profile = args.profile || args.meter ? new Profile({ say, everyS: args.profile ? Number(args["profile-every"]) || 0 : 0, json: path.resolve(args["profile-json"] || logFile.replace(/\.log$/, "") + ".profile.json"), scenario: scenarioFile, args: scenarioArgs, meterOnly: !args.profile }) : null;
 
 // ---------------------------------------------------------------------------
 // Prepare
@@ -138,7 +144,7 @@ try {
   writeProps(serverDir, baseProps(port, extra, { players: Number(scenarioArgs.players) || 0 }));
   const world = path.join(serverDir, "worlds", "world");
   copyTemplate(template, world, { flat: args.flat });
-  const bpList = bps.map((p) => installBehaviorPack(p, serverDir, { shim: !args["no-shim"], profile: !!profile, relay: !args["no-relay"] }));
+  const bpList = bps.map((p) => installBehaviorPack(p, serverDir, { shim: !args["no-shim"], profile: !!args.profile, relay: !args["no-relay"] }));
   bpList.push(installHarnessPack(serverDir, scenarioFile));
   const rpList = rps.map((p) => installResourcePack(p, serverDir));
   fs.writeFileSync(path.join(world, "world_behavior_packs.json"), JSON.stringify(bpList, null, 2));
@@ -182,11 +188,13 @@ function attribute(text) {
 function onHarness(obj) {
   switch (obj.type) {
     case "ready": ready = true; maybeStart(); return "";
-    case "start": timings.scenarioStart = secs(); if (profile) profile.start(bds); return `[scenario] started at ${secs()} s`;
+    case "start": timings.scenarioStart = secs(); if (profile) profile.start(bds); if (args["native-profile"]) nativeStart(); return `[scenario] started at ${secs()} s`;
+    case "measure": if (profile) profile.start(bds); return `[scenario] measured window starts at ${secs()} s`;
     case "log": scenarioLines.push(obj.msg); return `[scenario] ${obj.msg}`;
     case "report":
       reports[obj.name] = obj.data;
       if (profile && obj.name === "perf-workload") profile.setWorkload(obj.data);
+      if (profile) profile.reports[obj.name] = obj.data;
       return `[scenario] report ${obj.name}: ${JSON.stringify(obj.data).slice(0, 300)}`;
     case "check": scenarioLines.push(`${obj.ok ? "ok" : "FAILED"}: ${obj.msg}`); return `[scenario] ${obj.ok ? "ok" : "FAILED"}: ${obj.msg}`;
     case "player": return `[scenario] spawned simulated player ${obj.name} at ${obj.location.x} ${obj.location.y} ${obj.location.z}${obj.standingOn ? ` on ${obj.standingOn}` : ""}`;
@@ -204,16 +212,66 @@ function onHarness(obj) {
       }
       done = obj;
       timings.scenarioDone = secs();
-      if (profile) {
-        // Finish as soon as every profiled pack's final row and all its parts (and the tick meter) have arrived; 5 s at most.
-        profile.finalDump();
-        const until = Date.now() + 5000;
-        const profiled = bps.filter((p) => (p.manifest?.modules || []).some((m) => m.type === "script" && m.entry)).length;
-        const poll = setInterval(() => { if (profile.complete(profiled) || Date.now() > until) { clearInterval(poll); finish(); } }, 100);
-      } else setTimeout(finish, 1000);
+      {
+        // --native-profile: the native profiler stops after the measured window closed, and BDS gets 6 s to answer.
+        const minEnd = args["native-profile"] ? Date.now() + 6000 : 0;
+        if (profile) {
+          // Finish as soon as every profiled pack's final row and all its parts (and the tick meter) have arrived; 5 s at most.
+          profile.finalDump();
+          if (args["native-profile"]) nativeStop();
+          const until = Math.max(Date.now() + 5000, minEnd);
+          const profiled = args.profile ? bps.filter((p) => (p.manifest?.modules || []).some((m) => m.type === "script" && m.entry)).length : 0;
+          const poll = setInterval(() => { if ((profile.complete(profiled) && Date.now() >= minEnd) || Date.now() > until) { clearInterval(poll); finish(); } }, 100);
+        } else {
+          if (args["native-profile"]) nativeStop();
+          setTimeout(finish, minEnd ? 6000 : 1000);
+        }
+      }
       return `[scenario] done: ${obj.ok ? "PASS" : "FAIL"} - ${obj.msg}`;
     default: return `[scenario] ${JSON.stringify(obj)}`;
   }
+}
+
+// --native-profile (PIPE-03 (3)): BDS's own script profiler and watchdog statistics. What BDS answers (any line that
+// is not a pack's or the harness's) is kept from the start command on, and the files it writes are copied out below.
+let nativeAt = 0;
+const nativeLines = [];
+function nativeStart() {
+  nativeAt = Date.now();
+  bds.send("script profiler start");
+  bds.send("script diagnostics startcapture");
+}
+function nativeStop() {
+  if (!nativeAt) return;
+  bds.send("script profiler stop");
+  bds.send("script diagnostics stopcapture");
+  // Not on BDS 1.26.52 ('Syntax error: Unexpected "watchdog"'); still sent, so a BDS that has it is noticed.
+  bds.send("script watchdog exportstats");
+}
+
+/** Files under the server folder (worlds/ aside) written since the native profiler started, copied next to the log. */
+function copyNativeFiles() {
+  if (!nativeAt || !serverDir) return [];
+  const out = logFile.replace(/\.log$/, "") + ".native";
+  const found = [];
+  const walk = (dir) => {
+    let list = [];
+    try { list = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of list) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (!(dir === serverDir && e.name === "worlds")) walk(p); continue; }
+      try {
+        const st = fs.statSync(p);
+        if (st.mtimeMs < nativeAt - 1000 || /\.(so|exe|dll|log)$|bedrock_server/.test(e.name)) continue;
+        fs.mkdirSync(out, { recursive: true });
+        const dest = path.join(out, path.relative(serverDir, p).replace(/[\\/]/g, "__"));
+        fs.copyFileSync(p, dest);
+        found.push({ file: path.relative(serverDir, p), bytes: st.size, dest });
+      } catch { /* gone */ }
+    }
+  };
+  walk(serverDir);
+  return found;
 }
 
 function maybeStart() {
@@ -249,6 +307,7 @@ function onLine(raw) {
     if (s) console.log(s);
     return;
   }
+  if (nativeAt && nativeLines.length < 80 && (!text.startsWith("[Scripting]") || /profil|watchdog|exportstats|memory/i.test(text))) nativeLines.push(`${level} ${text}`);
   if (text.includes("Server started.")) {
     serverStarted = true; timings.serverStarted = secs(); maybeStart();
     const p = runPhase;
@@ -373,6 +432,21 @@ function summary(reason) {
     for (const s of scenarioLines.slice(-40)) L.push(`  ${s}`);
   }
   if (profile) L.push(...profileLines);
+  if (args["native-profile"]) {
+    const files = copyNativeFiles();
+    L.push(`native profile: ${nativeAt ? `${nativeLines.length} server line(s) after 'script profiler start', ${files.length} file(s) written` : "never started (the scenario did not start)"}`);
+    for (const l of nativeLines.slice(0, 40)) L.push(`  | ${l.slice(0, 300)}`);
+    for (const f of files) {
+      L.push(`  file ${f.file} (${f.bytes} bytes) -> ${f.dest}`);
+      if (f.bytes < 2e7 && /\.(json|txt|csv|cpuprofile)$/i.test(f.file) && !/Dedicated_Server\.txt$/.test(f.file)) {
+        try {
+          const text = fs.readFileSync(f.dest, "utf8");
+          if (/\.cpuprofile$/i.test(f.file)) L.push(...cpuProfileLines(summarizeCpuProfile(JSON.parse(text)), f.file));
+          else L.push(`    ${text.replace(/\s+/g, " ").slice(0, 600)}`);
+        } catch { /* unreadable */ }
+      }
+    }
+  }
   L.push(`log: ${logFile}`);
   if (args.keep) L.push(`server folder kept: ${serverDir}`);
   L.push("=".repeat(72));

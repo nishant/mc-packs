@@ -144,7 +144,8 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
   if (!res) return;
   pending.delete(msg.id);
   res(msg.response);
-});
+  // Only harness events: a realm: event would wake this listener too, harness cost in the CPU figures (W0d).
+}, { namespaces: ["harness"] });
 
 function isSimulated(p) {
   try { return p instanceof SimulatedPlayer; } catch (e) { return false; }

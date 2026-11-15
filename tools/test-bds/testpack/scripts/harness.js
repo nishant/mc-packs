@@ -199,10 +199,12 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
     try { if (!world.scoreboard.getObjective("realm_test_hooks")) world.scoreboard.addObjective("realm_test_hooks", "realm_test_hooks"); } catch {}
     system.run(() => run(cfg));
   }
-});
+  // Only harness events: the packs' realm: traffic would wake this listener too (and the listener-cost scenario's
+  // events would be counted against it).
+}, { namespaces: ["harness"] });
 
 // ---------------------------------------------------------------------------
-// Server tick meter (run.mjs --profile): wall time between consecutive ticks, as one script sees it
+// Server tick meter (run.mjs --profile or --meter): wall time between consecutive ticks, as one script sees it
 // ---------------------------------------------------------------------------
 
 let meter = null;
@@ -222,7 +224,7 @@ function tickMeterDump() {
   console.warn("PROFILE_SERVER " + JSON.stringify({
     ticks, wallMs, tps: ticks / Math.max(0.001, wallMs / 1000),
     tickIntervalAvgMs: d.length ? d.reduce((a, b) => a + b, 0) / d.length : 0,
-    tickIntervalP95Ms: pct(0.95), tickIntervalP99Ms: pct(0.99), tickIntervalMaxMs: sorted[sorted.length - 1] || 0,
+    tickIntervalP50Ms: pct(0.5), tickIntervalP95Ms: pct(0.95), tickIntervalP99Ms: pct(0.99), tickIntervalMaxMs: sorted[sorted.length - 1] || 0,
     // Over 50 ms is a tick that ran late (20 TPS); over 55 ms is the older, looser count, kept for comparisons.
     ticksOver50ms: d.filter((x) => x > 50).length, ticksOver55ms: d.filter((x) => x > 55).length, ticksOver100ms: d.filter((x) => x > 100).length,
   }));
@@ -382,6 +384,8 @@ function makeT(cfg) {
     log: (...a) => out({ type: "log", msg: a.map(fmt).join(" ") }),
     /** Hands run.mjs a named structured result (the perf soak's workload report); it lands in the profile JSON. */
     report: (name, data) => out({ type: "report", name: String(name), data }),
+    /** Starts the measured window here: run.mjs --meter (and --profile) take CPU and the tick meter from now on. */
+    measure: () => out({ type: "measure" }),
     wait: (ticks = 1) => system.waitTicks(Math.max(1, Math.floor(ticks))),
     seconds: (s) => system.waitTicks(Math.max(1, Math.round(s * 20))),
 

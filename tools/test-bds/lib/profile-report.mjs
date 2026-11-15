@@ -1,4 +1,4 @@
-// run.mjs --profile: drives the in-pack profiler (lib/profile.js) and the test pack's tick meter
+// run.mjs --profile (or --meter, the tick meter and CPU alone): drives the in-pack profiler (lib/profile.js) and the test pack's tick meter
 // through script events, collects their "PROFILE ..." console lines, and prints/writes the report.
 import fs from "node:fs";
 import { execSync } from "node:child_process";
@@ -59,7 +59,7 @@ export function byPackPath(callbacks, ticks) {
   return [...by.values()].map((e) => ({ ...e, msPerTick: e.ms / n, callsPerTick: e.calls / n })).sort((a, b) => b.ms - a.ms || b.calls - a.calls);
 }
 
-const COUNTERS = ["ticks", "calls", "callsPerTick", "callbacks", "dynWrites", "dynBytes", "dynWorld", "dynEntity", "dynItem", "actionBar", "titles", "commands", "p95TickMs", "maxTickMs"];
+const COUNTERS = ["ticks", "calls", "callsPerTick", "callbacks", "dynWrites", "dynBytes", "dynWorld", "dynEntity", "dynItem", "actionBar", "titles", "commands", "stacks", "p95TickMs", "maxTickMs"];
 /**
  * suite.mjs --perf --json's form of one profile JSON: the bundle, server, process, workload and watchdog figures, and
  * each pack's whole and steady ms/tick with its top and slowest callbacks and counters (the full JSON is uploaded too).
@@ -163,8 +163,9 @@ export function scriptEventTotals(rows, ticks) {
 }
 
 export class Profile {
-  constructor({ say, everyS, json, scenario, args }) {
-    Object.assign(this, { say, everyS, json, scenario, args });
+  /** meterOnly (run.mjs --meter without --profile): no pack is wrapped; only the tick meter and bedrock_server CPU. */
+  constructor({ say, everyS, json, scenario, args, meterOnly = false }) {
+    Object.assign(this, { say, everyS, json, scenario, args, meterOnly });
     this.latest = new Map();
     this.final = new Map();
     this.tickParts = new Map();
@@ -178,6 +179,8 @@ export class Profile {
     this.startedAt = null;
     this.workload = null;
     this.acceptance = null;
+    /** Every t.report(name, data) of the scenario (the meter JSON keeps them). @type {Record<string, any>} */
+    this.reports = {};
   }
 
   /** The scenario's own account of its workload (perf-soak's `perf-workload` report). */
@@ -346,7 +349,41 @@ export class Profile {
     return { avg: per.reduce((a, b) => a + b, 0) / per.length, p95: pct(sorted, 0.95), max: sorted[sorted.length - 1] || 0 };
   }
 
+  /** bedrock_server CPU between start() and finalDump(), per tick of `ticks`; null without both samples. @param {number} ticks */
+  cpuOver(ticks) {
+    if (!this.cpu0 || !this.cpu1) return null;
+    const wall = this.cpu1.at - this.cpu0.at, used = this.cpu1.cpuMs - this.cpu0.cpuMs;
+    return { cpuMs: used, wallMs: wall, cpuPct: (100 * used) / Math.max(1, wall), cpuMsPerTick: used / Math.max(1, ticks), rssMB: this.cpu1.rssMB, threads: this.cpu1.threads };
+  }
+
+  /**
+   * The meter alone (--meter without --profile): tick interval percentiles and bedrock_server CPU ms/tick of an
+   * unprofiled run, so a profiled and an unprofiled run of one workload can be compared (PIPE-03). The ticks are the tick
+   * meter's, from the scenario's start to its end.
+   */
+  meterReport() {
+    const s = this.serverFinal || this.server;
+    const ticks = s?.ticks ?? 0;
+    const cpu = this.cpuOver(ticks);
+    const L = [];
+    if (!s) L.push("meter: no reading from the tick meter (the scenario did not finish?)");
+    else {
+      L.push(`meter (no profiler): ${ticks} ticks (${(ticks / 20).toFixed(0)} game s)`);
+      L.push(`  server: ${f2(s.tps)} TPS; tick interval avg ${f2(s.tickIntervalAvgMs)} / p50 ${s.tickIntervalP50Ms ?? "-"} / p95 ${s.tickIntervalP95Ms} / p99 ${s.tickIntervalP99Ms} / max ${s.tickIntervalMaxMs} ms; ${s.ticksOver50ms} ticks over 50 ms, ${s.ticksOver100ms} over 100 ms`);
+    }
+    if (cpu) L.push(`  bedrock_server process: ${f3(cpu.cpuMsPerTick)} CPU ms/tick (${cpu.cpuPct.toFixed(0)}% of one core), RSS ${cpu.rssMB?.toFixed(0)} MB, ${cpu.threads} threads`);
+    if (this.watchdog) L.push(`  watchdog and slow-tick lines: ${this.watchdog.count}`);
+    L.push(`  meter JSON: ${this.json}`);
+    try {
+      fs.writeFileSync(this.json, JSON.stringify({ date: new Date().toISOString(), scenario: this.scenario, args: this.args, meter: true, ticks, server: s ?? null, process: cpu, watchdog: this.watchdog, workload: this.workload, reports: this.reports }, null, 2));
+    } catch (e) {
+      this.say(`[meter] could not write ${this.json}: ${e}`);
+    }
+    return L;
+  }
+
   report() {
+    if (this.meterOnly) return this.meterReport();
     const rows = this.packRows(this.final);
     const L = [];
     if (!rows.length) {
@@ -360,11 +397,7 @@ export class Profile {
     for (const r of rows) r.callbacksAll = this.callbacksOf(r.pack);
     // One script context (the Realm Bundle): per-pack figures from the callbacks' scripts/<pack>/ paths.
     const byPath = rows.length === 1 && rows[0].callbacksAll ? byPackPath(rows[0].callbacksAll, rows[0].ticks) : null;
-    let cpu = null;
-    if (this.cpu0 && this.cpu1) {
-      const wall = this.cpu1.at - this.cpu0.at;
-      cpu = { cpuMs: this.cpu1.cpuMs - this.cpu0.cpuMs, wallMs: wall, cpuPct: (100 * (this.cpu1.cpuMs - this.cpu0.cpuMs)) / Math.max(1, wall), cpuMsPerTick: (this.cpu1.cpuMs - this.cpu0.cpuMs) / Math.max(1, ticks), rssMB: this.cpu1.rssMB, threads: this.cpu1.threads };
-    }
+    const cpu = this.cpuOver(ticks);
     const s = this.serverFinal || this.server;
     const totals = rows.reduce((a, r) => ({ ms: a.ms + r.totalMs, dyn: a.dyn + r.dynWrites, bytes: a.bytes + r.dynBytes, bar: a.bar + r.actionBar, ttl: a.ttl + r.titles, cmd: a.cmd + r.commands, calls: a.calls + r.calls }), { ms: 0, dyn: 0, bytes: 0, bar: 0, ttl: 0, cmd: 0, calls: 0 });
     L.push(`profile: ${rows.length} packs over ${ticks} ticks (${(ticks / 20).toFixed(0)} game s)`);
