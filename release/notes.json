@@ -43,8 +43,8 @@
       "notes": "A story request never overrides a moon an operator chose tonight (even an ordinary one) and never follows a moon night; moon:night now saves op and p."
     },
     "skills_bp": {
-      "version": "1.1.17",
-      "notes": "Fishing XP counts the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
+      "version": "1.1.18",
+      "notes": "Logs and stone you placed just before the Realm closed no longer give XP again after a restart (placed blocks are saved as players leave). Only blocks that could give XP are remembered as placed, so building with dirt, planks or glass no longer rewrites that list, and explored chunks write only what changed."
     },
     "town_bp": {
       "version": "1.7.7",
