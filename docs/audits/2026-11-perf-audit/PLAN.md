@@ -302,7 +302,7 @@ Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
 ### W10 Townsfolk and labels: what is left
 
 W10a is #249 (npc_bp, wander_bp, caravan_bp and the shared labels) and W10b (the town scan and saved indexes) is
-#PR_W10B. Left from W10a, each only if a measurement asks for it: with a crowd standing around the townsfolk the
+#278. Left from W10a, each only if a measurement asks for it: with a crowd standing around the townsfolk the
 half-second loop is still about 1.2 to 1.6 ms (npc-labels-perf near phase at 40, mostly the turning teleports and the
 players' places, which that phase needs); the label entities' `minecraft:transient` and `minecraft:physics` (ENT-32,
 needs a BDS check); caravan_bp's traders still use the labels' default reads (`trustHandles` off). The label timing
