@@ -223,11 +223,19 @@ async function onJoin(player, lastSeen) {
   else player.sendMessage(`${away ? `§7${away}§r ` : ""}§bThere's new Realm news!§r Run §b/realm:news§r to read it.`);
 }
 
-// Keep lastSeen fresh while online (leave events can't write player data).
+// Keep lastSeen fresh while online: every 10 minutes (the away notice counts hours), and as the player leaves (player
+// properties can still be written in beforeEvents.playerLeave).
 system.runInterval(() => {
   const now = Date.now();
   for (const p of world.getAllPlayers()) p.setDynamicProperty(PROP_LAST_SEEN, now);
-}, 1200);
+}, 12000);
+world.beforeEvents.playerLeave.subscribe(({ player }) => {
+  try {
+    player.setDynamicProperty(PROP_LAST_SEEN, Date.now());
+  } catch (e) {
+    console.warn(`[news] last seen on leave: ${e}`);
+  }
+});
 
 /** @param {number} ms */
 function formatDuration(ms) {

@@ -14,6 +14,11 @@ entries below as a changelog.
 - Town Projects: a build at a spot an operator set goes up over a few moments instead of all at once.
 - Town Projects: build outlines use fewer particles (a dot every block).
 
+## Fixes for Skills and the Atlas
+
+- Skills: logs and stone you placed just before the server restarted no longer give Mining or Woodcutting XP again.
+- Atlas of the Realm: very large atlases no longer lose places at the edges of their saved pages.
+
 ## Lighter Minimap radar
 
 - Minimap: the radar costs the server about a third of what it did while players move, and its land fills in faster on a small server.
