@@ -244,3 +244,13 @@ test("a player's answer reads their saved preferences", () => {
   assert.equal(opts.find((o) => o.key === "p0").value, false);
   assert.equal(opts.find((o) => o.key === "p3").value, true);
 });
+
+test("a cfg_ping with a scope gets only that scope's options, and silence from a pack without any", () => {
+  const { ping } = schemaFixture(9);
+  const opts = (req) => ping(req).flatMap((m) => JSON.parse(m).options);
+  assert.ok(opts({ id: "w", player: "P1", scope: "world" }).every((o) => o.scope === "world"));
+  assert.ok(opts({ id: "p", player: "P1", scope: "player" }).every((o) => o.scope === "player"));
+  assert.equal(opts({ id: "p", player: "P1", scope: "player" }).length, 3);
+  const { ping: one } = schemaFixture(1); // a single player option, no world ones
+  assert.equal(one({ id: "w", scope: "world" }).length, 0);
+});

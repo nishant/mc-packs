@@ -221,6 +221,7 @@ export function pingZones() {
 
 /** UTF-8 length, so a message is under the limit however the game counts it. @param {string} s */
 function utf8Length(s) {
+  if (!/[^\x00-\x7f]/.test(s)) return s.length; // the common case, without a character loop in script
   let n = 0;
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
