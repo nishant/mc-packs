@@ -53,6 +53,18 @@ function fmt(n) {
 let cache;
 /** @type {Set<string>} player ids whose record changed */
 const dirty = new Set();
+/** @type {Set<string>} player ids whose record changed more than its counters (a tier, a title flag, the name, a new record): saved at the next check */
+const urgent = new Set();
+/** Counters alone (distance, playtime, blocks) are saved at most this often per player, and as they leave. */
+const COUNTER_SAVE_TICKS = 1200;
+/** Tick each online player's record was last saved by the check. @type {Map<string, number>} */
+const savedAt = new Map();
+
+/** @param {string} id */
+function markUrgent(id) {
+  dirty.add(id);
+  urgent.add(id);
+}
 
 /** @returns {Map<string, Rec>} */
 function records() {
@@ -82,10 +94,10 @@ function recordOf(player) {
   if (!r) {
     r = { n: player.name, c: {} };
     records().set(player.id, r);
-    dirty.add(player.id);
+    markUrgent(player.id);
   } else if (r.n !== player.name) {
     r.n = player.name;
-    dirty.add(player.id);
+    markUrgent(player.id);
   }
   return r;
 }
@@ -93,6 +105,7 @@ function recordOf(player) {
 /** Saves changed records: every one, or only these players'. @param {Iterable<string>} [ids] */
 function flush(ids = [...dirty]) {
   for (const id of ids) {
+    urgent.delete(id);
     if (!dirty.delete(id)) continue;
     const r = records().get(id);
     if (r) world.setDynamicProperty(RECORD_PREFIX + id, JSON.stringify(r));
@@ -158,6 +171,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   pending.delete(playerId);
   backfilled.delete(playerId);
   unconfirmed.delete(playerId);
+  savedAt.delete(playerId);
   try {
     flush([playerId]);
   } catch (e) {
@@ -250,7 +264,7 @@ function confirmTitle(m) {
 function markConfirmed(r, id) {
   r.tf = 1;
   r.tc = 1;
-  dirty.add(id);
+  markUrgent(id);
 }
 
 /** @param {Player} player @param {Milestone} m @param {boolean} quiet already had it when the pack was added: no gossip */
@@ -261,7 +275,7 @@ function topTier(player, m, quiet) {
   if (r.tf || r.tc) {
     delete r.tf;
     delete r.tc;
-    dirty.add(player.id);
+    markUrgent(player.id);
   }
   sendTop(player.id, name);
   if (!quiet) gossip(`${player.id}:${m.id}`, { kind: "milestone", player: player.id, name: player.name, place: name });
@@ -300,10 +314,10 @@ function check(player, objectives) {
     if (now <= before) continue;
     for (let t = before + 1; t <= now; t++) unlocked.push(`${title(m, t)} (${STATS[m.stat].goal(fmt(m.tiers[t - 1]))})`);
     got[m.id] = now;
-    dirty.add(player.id);
+    markUrgent(player.id);
     if (now >= m.tiers.length) topTier(player, m, first);
   }
-  if (first) dirty.add(player.id);
+  if (first) markUrgent(player.id);
   if (!unlocked.length) return;
   if (first) {
     // The first check after the pack is added: what the player already had, told quietly.
@@ -318,7 +332,8 @@ function check(player, objectives) {
   player.playSound("random.levelup", { pitch: 1, volume: 0.9 });
 }
 
-// Each player is checked (and their record saved) every checkSeconds (scripts/spread.js, one share, as above).
+// Each player is checked every checkSeconds (scripts/spread.js, one share, as above). Their record is saved then when
+// a tier or flag changed, and otherwise (counters only) once every COUNTER_SAVE_TICKS, and as they leave.
 const CHECK_EVERY = Math.max(1, Math.floor(CONFIG.checkSeconds) || 1);
 spreadPlayers(system, world, {
   every: 20 * CHECK_EVERY,
@@ -328,10 +343,18 @@ spreadPlayers(system, world, {
     const ids = [];
     /** @type {Map<string, import("@minecraft/server").ScoreboardObjective | null>} */
     const objectives = new Map();
+    const now = system.currentTick;
     for (const player of share) {
       try {
         check(player, objectives);
-        ids.push(player.id);
+        const id = player.id;
+        if (!dirty.has(id)) continue;
+        const at = savedAt.get(id);
+        if (at === undefined) savedAt.set(id, now); // counters first changed: saved in a minute
+        if (urgent.has(id) || (at !== undefined && now - at >= COUNTER_SAVE_TICKS)) {
+          ids.push(id);
+          savedAt.set(id, now);
+        }
       } catch (e) {
         console.warn(`[milestones] ${e}`);
       }

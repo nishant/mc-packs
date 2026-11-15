@@ -1932,7 +1932,7 @@ The Stats pack's scoreboards (`stats_mined` and the rest) are only read, never w
 
 - Counting uses the same events as the Stats pack: `afterEvents.playerBreakBlock`, `playerPlaceBlock`, `entityDie`, `playerSpawn` (joins), and a once-a-second loop for playtime and distance (gliding counts as elytra distance).
 - The Stats pack's numbers are read from its scoreboard objectives `stats_<stat>`, where scores are kept under each player's name. The packs don't import each other: without those objectives, the pack uses its own counts only.
-- Counts are kept in memory and each player's are saved when they're checked and when they leave.
+- Counts are kept in memory. A player's record is saved at the check after a tier, a title flag or their name changed, otherwise (counts only: walking, playtime, blocks) at most once a minute, and when they leave.
 - **Test hook:** `realm:milestones_test` `{ fill: n }` adds n offline players' records. It only works from the server console, and it changes the world's saved data: for tests only.
 
 ---

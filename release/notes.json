@@ -137,6 +137,10 @@
     "rain_bp": {
       "version": "1.5.21",
       "notes": "Walking in or out stops only the sounds still playing (usually 2 or 3 stopsound commands instead of 7); a join removes the fogs only when the new rain:fogs flag says one may be left."
+    },
+    "milestones_bp": {
+      "version": "1.0.12",
+      "notes": "Your record is saved when a tier changes, as you leave, and otherwise at most once a minute, instead of every 10 seconds while you walk."
     }
   }
 }
