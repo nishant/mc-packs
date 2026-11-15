@@ -132,3 +132,25 @@ export function evaluatePerfBudgets(counts, { only } = {}) {
   }
   return { ok: !invalid.length && !over.length && counts.size > 0, invalid, over, steady };
 }
+
+/**
+ * The extra perf-soak arguments of `suite.mjs --perf`: `--perf-arg` values and the space-separated PERF_SOAK_ARGS
+ * (validate.yml sets the variable, which an older suite.mjs on a base tree ignores), as key=value words.
+ * @param {string[] | undefined} list @param {string | undefined} env @returns {string[]}
+ */
+export function perfSoakArgs(list, env) {
+  const words = [...(list ?? []), ...String(env ?? "").split(/\s+/)].map((w) => w.trim()).filter(Boolean);
+  for (const w of words) if (!/^[A-Za-z_]+=[^\s=]+$/.test(w)) throw new Error(`perf-soak argument "${w}" is not key=value`);
+  return words;
+}
+
+/**
+ * Game seconds perf-soak spends outside its steady window with these arguments (its phases), for the run's time limit.
+ * @param {string[]} extra key=value words
+ */
+export function phaseSeconds(extra) {
+  const a = Object.fromEntries(extra.map((w) => w.split("=")));
+  const n = (/** @type {string | undefined} */ v, /** @type {number} */ d) => (v === undefined ? d : Math.max(0, Number(v) || 0));
+  const phases = Number(a.phases ?? 0) > 0 ? n(a.empty, 20) + n(a.one, 30) + n(a.churn, 60) + 10 : 0;
+  return phases + n(a.night, 0);
+}
