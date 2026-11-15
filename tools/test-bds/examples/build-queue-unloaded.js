@@ -54,12 +54,12 @@ export default async function (t) {
 
   // Wait for the queue to place the row (or give it up), then look at the row.
   await t.wait(800);
+  const left = stone(); // before loading the row: the inventory is read while nothing else moves
   await t.loadArea(from.x + LENGTH / 2, 0, { radius: 4 });
   let placed = 0;
   for (let i = 0; i < LENGTH; i++) {
     try { if (ow.getBlock({ x: from.x + i, y, z: 0 })?.typeId === "minecraft:stone") placed++; } catch {}
   }
-  const left = stone();
   t.log(`row: ${placed} of ${LENGTH} placed; stone left ${left} of ${had}`);
   t.check(placed + left === had, `every charged block was placed or handed back (${placed} placed + ${left} left, had ${had})`);
   t.check(placed === LENGTH, `the row was placed once a chunk loader could be added (${placed} of ${LENGTH})`);
