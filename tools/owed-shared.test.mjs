@@ -361,3 +361,49 @@ test("cooking's owed hand-over has no test parameters: the test hook sets a modu
   assert.ok(hook > 0 && gate > hook && sets.every((i) => i > gate && i < gate + 800));
   assert.match(src, /\} finally \{\s*owedTest = null;/);
 });
+test("ENT-11: 100 offline contributors parse the index once and write it once with updateMany; 100 updates parse it once", () => {
+  const w = fakeWorld();
+  const s = createOwedStore(w, { base: "town:owed" });
+  for (const id of ids(900)) s.set(id, { cr: 1 }); // a server with many past visitors
+  const parse = JSON.parse;
+  let parses = 0;
+  JSON.parse = (/** @type {any[]} */ ...a) => {
+    if (typeof a[0] === "string" && a[0].startsWith("[")) parses++;
+    return parse(...a);
+  };
+  const indexWrites = () => {
+    let n = 0;
+    const set = w.setDynamicProperty;
+    w.setDynamicProperty = (k, v) => {
+      if (k === "town:owed_idx") n++;
+      set.call(w, k, v);
+    };
+    return () => {
+      w.setDynamicProperty = set;
+      return n;
+    };
+  };
+  try {
+    const again = createOwedStore(w, { base: "town:owed" }); // after a restart: nothing read yet
+    let done = indexWrites();
+    const saved = again.updateMany(ids(100, 850).map((id) => [id, (cur) => ({ cr: (cur?.cr ?? 0) + 5 })]));
+    assert.ok(saved.every(Boolean));
+    assert.equal(done(), 1, "the index is written once for the 50 new ids");
+    assert.equal(parses, 1, "the index is parsed once");
+    assert.equal(again.get(ids(1, 850)[0]).cr, 6, "an existing entry is added to");
+    assert.equal(again.get(ids(1, 949)[0]).cr, 5, "a new entry is saved");
+    assert.equal(again.size(), 950);
+    parses = 0;
+    done = indexWrites();
+    for (const id of ids(100, 1000)) again.update(id, () => ({ cr: 1 }));
+    assert.equal(parses, 0, "update after the first read parses nothing");
+    assert.equal(done(), 100, "a new id still writes the index (update is one player)");
+    // The index changed behind the store's back (the diagnostics' forget): it is read again.
+    w.props.delete("town:owed_idx");
+    assert.equal(again.size(), 0);
+    again.set("7", { cr: 1 });
+    assert.deepEqual(again.ids(), ["7"]);
+  } finally {
+    JSON.parse = parse;
+  }
+});

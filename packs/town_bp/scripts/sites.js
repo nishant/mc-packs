@@ -415,9 +415,13 @@ export function compareKeys(a, b) {
  * @typedef {{
  *   cx: number, cz: number, radius: number, depth: number, projects: ScanProject[],
  *   taken?: Rect[], pads?: number[], posts?: { x: number, z: number, r: number }[], claims?: Rect[], claimsMore?: boolean,
- *   placed?: (r: Rect, y1: number, y2: number) => boolean, final?: boolean,
+ *   placed?: (r: Rect, y1: number, y2: number) => boolean, final?: boolean, cache?: Map<number, Column>,
  * }} ScanInput
  * `final`: a candidate that waits for unknown columns no longer holds back a valid one (the scan waited enough).
+ * `cache`: the town's known columns kept from earlier scans, by colKey (ENT-05); the scan adds what it reads (never an
+ * unknown column, which is asked again next time). A kept column may be out of date (a player built or dug there):
+ * before a finalist is checked, every column of its region and the ring around it not read in this scan is read
+ * again, and when one changed the project waits (`changed`) instead of taking a spot picked from old ground.
  * Requests the scan yields: ["c", x, z] a column (answer a Column), ["b", x, y, z] a block (BlockInfo or undefined),
  * ["claims", x1, z1, x2, z2] how many claims overlap (a number), ["tick"] the scan's own work for this tick is done
  * (answer nothing; the caller ends its tick).
@@ -429,15 +433,24 @@ export function compareKeys(a, b) {
 
 export const SCAN = { ringStep: 3, arcStep: 3, minWell: 6, minOther: 10, minNear: 9, maxNear: 30, edge: 8, keep: 4, enough: 6, past: 16, finalists: 3, workTick: 100, gridWork: 1 };
 
+/** The key of column (x, z) in a scan's cache (and ScanInput.cache). @param {number} x @param {number} z */
+export const colKey = (x, z) => (x + 32768) * 65536 + (z + 32768);
+
 /**
  * Picks a spot for each project, one after another (the well first), reading columns as it goes (yield). Returns
- * the picks, the projects with no valid spot (`nos`) and those waiting for unknown columns (`wait`).
+ * the picks, the projects with no valid spot (`nos`), those waiting for unknown columns (`wait`) and whether a kept
+ * column turned out to have changed (`changed`: look again soon).
  * @param {ScanInput} input
- * @returns {Generator<ScanRequest, { picks: { id: string, spot: AutoSpot }[], nos: string[], wait: string[] }, any>}
+ * @returns {Generator<ScanRequest, { picks: { id: string, spot: AutoSpot }[], nos: string[], wait: string[], changed: boolean }, any>}
  */
 export function* scanTown(input) {
-  /** @type {Map<number, Column>} */
-  const cache = new Map();
+  /** Known columns, kept by the caller across scans when it passes them. @type {Map<number, Column>} */
+  const cache = input.cache ?? new Map();
+  /** Columns read in this scan (a kept one not in here may be out of date). @type {Set<number> | undefined} */
+  const readNow = input.cache ? new Set() : undefined;
+  /** Columns that read as unknown in this scan (asked again by the next one). @type {Set<number>} */
+  const unk = new Set();
+  let changed = false;
   // Work counted in column lookups (cached or not), so a scan over columns it already read still stops for the
   // tick: without it, later projects re-walk cached rings and evaluate every candidate in one tick (F37 review).
   let work = 0;
@@ -450,22 +463,28 @@ export function* scanTown(input) {
       yield ["tick"];
     }
   }
-  /** @param {number} x @param {number} z @returns {Generator<ScanRequest, Column, any>} */
-  function* col(x, z) {
+  /**
+   * A column already read (this scan or a kept one), or undefined: read it with `fetch` (`peek(x, z) ?? (yield*
+   * fetch(x, z))`), so a cached lookup costs no generator (ENT-05). @param {number} x @param {number} z
+   */
+  const peek = (x, z) => {
     work++;
-    const key = (x + 32768) * 65536 + (z + 32768);
-    let c = cache.get(key);
-    if (!c) {
-      c = /** @type {Column} */ ((yield ["c", x, z]) ?? UNKNOWN);
+    const key = colKey(x, z);
+    return cache.get(key) ?? (unk.has(key) ? UNKNOWN : undefined);
+  };
+  /** Reads a column from the world. @param {number} x @param {number} z @returns {Generator<ScanRequest, Column, any>} */
+  function* fetch(x, z) {
+    const c = /** @type {Column} */ ((yield ["c", x, z]) ?? UNKNOWN);
+    const key = colKey(x, z);
+    if (c.k === "U") unk.add(key);
+    else {
       cache.set(key, c);
+      readNow?.add(key);
     }
     return c;
   }
   /** Synchronous lookup of a column already read. @param {number} x @param {number} z */
-  const known = (x, z) => {
-    work++;
-    return cache.get((x + 32768) * 65536 + (z + 32768)) ?? UNKNOWN;
-  };
+  const known = (x, z) => peek(x, z) ?? UNKNOWN;
   /** What each footprint looked at so far was (look), by "x1,z1,x2,z2". @type {Map<string, Look>} */
   const looked = new Map();
   const taken = [...(input.taken ?? [])];
@@ -479,6 +498,8 @@ export function* scanTown(input) {
   const order = [...input.projects].sort((a, b) => Number(!!b.well) - Number(!!a.well));
   /** Footprint shapes (all four facings, and `near`) that found no valid spot this scan. @type {Set<string>} */
   const none = new Set();
+  /** Shapes that ended "wait" since the last pick (ENT-05): with the same spots taken the next one waits too. @type {Set<string>} */
+  const waited = new Set();
   for (const p of order) {
     // A project shaped like one that found no spot finds none either (O79): spots taken since only add to what is in
     // the way. A Village's houses on a steep hillside would otherwise each walk every ring again.
@@ -487,19 +508,25 @@ export function* scanTown(input) {
       nos.push(p.id);
       continue;
     }
+    if (shape !== undefined && waited.has(shape)) {
+      wait.push(p.id);
+      continue;
+    }
     const res = p.dock ? yield* pickDock(p) : yield* pickBuild(p);
-    if (res === "wait") wait.push(p.id);
-    else if (!res) {
+    if (res === "wait") {
+      wait.push(p.id);
+      if (shape !== undefined) waited.add(shape);
+    } else if (!res) {
       nos.push(p.id);
       if (shape !== undefined) none.add(shape);
-    }
-    else {
+    } else {
       picks.push({ id: p.id, spot: res.spot });
       taken.push(res.region);
       pads.push(res.spot.y - 1);
+      waited.clear(); // a spot taken can end a wait (the nearer candidate it waited for is gone)
     }
   }
-  return { picks, nos, wait };
+  return { picks, nos, wait, changed };
 
   /** Cheap checks first, no reads: the town's edge, other spots, posts and places, claims. @param {Rect} region */
   function blockedWithoutReads(region) {
@@ -564,6 +591,12 @@ export function* scanTown(input) {
     valid.sort((a, b) => compareKeys(a.key, b.key));
     if (valid.length && !input.final && waitDist < valid[0].dist + SCAN.past) return "wait";
     for (const c of valid.slice(0, SCAN.finalists)) {
+      if (!(yield* stillSo(c.region))) {
+        // Kept columns there changed: the candidates were judged on old ground. Wait (the caller looks again soon,
+        // with what was just read) rather than pick from it or call it no spot.
+        changed = true;
+        return "wait";
+      }
       if (!(yield* deepCheck(c))) continue;
       /** @type {AutoSpot} */
       const spot = { x: c.x, y: c.pad + 1, z: c.z, f: c.f, a: 1 };
@@ -663,10 +696,25 @@ export function* scanTown(input) {
     // hillside). Same answer as reading everything: a column that isn't natural still rejects it first.
     let lo = Infinity;
     let hi = -Infinity;
+    // Its four corners and its center before the rest (ENT-05): on a slope their spread alone rules most positions out
+    // after 5 lookups instead of 49 to 81. An unknown one is skipped here (the loop below sees it again).
+    const mx = Math.floor((fp.x1 + fp.x2) / 2);
+    const mz = Math.floor((fp.z1 + fp.z2) / 2);
+    for (const [i, j] of [[fp.x1, fp.z1], [fp.x2, fp.z2], [fp.x2, fp.z1], [fp.x1, fp.z2], [mx, mz]]) {
+      const c = peek(i, j) ?? (yield* fetch(i, j));
+      if (c.k === "U") continue;
+      if (c.k !== "N") return null;
+      if (typeof c.g === "number") {
+        lo = Math.min(lo, c.g);
+        hi = Math.max(hi, c.g);
+      }
+      if (hi - lo > 2 * input.depth) return null;
+    }
+    yield* pace();
     for (let i = fp.x1; i <= fp.x2; i++) {
       yield* pace();
       for (let j = fp.z1; j <= fp.z2; j++) {
-        const c = yield* col(i, j);
+        const c = peek(i, j) ?? (yield* fetch(i, j));
         gridPut(grid, i, j, c);
         if (c.k === "U") unknown = true;
         else if (c.k !== "N") return null;
@@ -682,7 +730,7 @@ export function* scanTown(input) {
       yield* pace();
       for (let j = region.z1; j <= region.z2; j++) {
         if (i >= fp.x1 && i <= fp.x2 && j >= fp.z1 && j <= fp.z2) continue;
-        const c = yield* col(i, j);
+        const c = peek(i, j) ?? (yield* fetch(i, j));
         gridPut(grid, i, j, c);
         if (c.k === "U") unknown = true;
         else if (c.k !== "N") return null;
@@ -694,7 +742,7 @@ export function* scanTown(input) {
       yield* pace();
       for (let j = region.z1 - 1; j <= region.z2 + 1; j++) {
         if (i >= region.x1 && i <= region.x2 && j >= region.z1 && j <= region.z2) continue;
-        const c = yield* col(i, j);
+        const c = peek(i, j) ?? (yield* fetch(i, j));
         gridPut(grid, i, j, c);
         if (c.k === "U") return "wait";
         if (c.k === "T") {
@@ -731,6 +779,30 @@ export function* scanTown(input) {
   }
 
   /**
+   * Reads again every column of a region and the ring around it that came from an earlier scan (ScanInput.cache);
+   * false when one is not what was kept (the new one is kept instead). @param {Rect} region
+   * @returns {Generator<ScanRequest, boolean, any>}
+   */
+  function* stillSo(region) {
+    if (!readNow) return true;
+    let same = true;
+    for (let i = region.x1 - 1; i <= region.x2 + 1; i++) {
+      yield* pace();
+      for (let j = region.z1 - 1; j <= region.z2 + 1; j++) {
+        const key = colKey(i, j);
+        if (readNow.has(key)) continue;
+        work++;
+        const old = cache.get(key);
+        const c = yield* fetch(i, j);
+        if (!old || old.k !== c.k || old.g !== c.g || old.w !== c.w || old.top !== c.top || old.lf !== c.lf) same = false;
+        if (c.k === "U") cache.delete(key);
+      }
+    }
+    if (!same) looked.clear(); // what was looked at there is out of date
+    return same;
+  }
+
+  /**
    * A finalist, block by block: under every cut column's new top, 2 natural solid blocks; claims if there may be more.
    * @param {Candidate} c @returns {Generator<ScanRequest, boolean, any>}
    */
@@ -760,7 +832,7 @@ export function* scanTown(input) {
     for (let r = 4; r <= rMax; r += SCAN.ringStep) {
       for (const [x, z] of ring(r)) {
         yield* pace();
-        const c = yield* col(x, z);
+        const c = peek(x, z) ?? (yield* fetch(x, z));
         if (c.k === "U") {
           waitDist = Math.min(waitDist, r);
           continue;
@@ -773,7 +845,7 @@ export function* scanTown(input) {
         for (let k = 1; k <= SCAN.ringStep + 1; k++) {
           const sx = x + step[0] * k;
           const sz = z + step[1] * k;
-          const s = yield* col(sx, sz);
+          const s = peek(sx, sz) ?? (yield* fetch(sx, sz));
           if (s.k === "W") continue;
           if (s.k === "N" && typeof s.g === "number" && typeof c.w === "number" && (s.g === c.w || s.g === c.w + 1)) {
             const toWater = facingOut(-step[0], -step[1]);
@@ -800,7 +872,7 @@ export function* scanTown(input) {
     let unknown = false;
     for (let i = region.x1; i <= region.x2; i++)
       for (let j = region.z1; j <= region.z2; j++) {
-        const c = yield* col(i, j);
+        const c = peek(i, j) ?? (yield* fetch(i, j));
         if (c.k === "U") {
           unknown = true;
           continue;

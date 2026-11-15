@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Town Projects picks spots for its projects much faster on hillsides, stops rescanning the same ground every 5 seconds, and tells operators and the players in a town when no good spot can be found.",
     "Quick Stack & Sort costs the server much less while you mine on a nearly full inventory page: auto-store moves pickups at most once a second, all together.",
     "Fishing costs the server much less: one pack follows each bobber and shares every catch with Skills, the Journal, Daily Quests and Story Questlines.",
     "Side HUD: the right-side boxes now show on short phone screens when the Minimap radar is hidden.",
@@ -21,8 +22,8 @@
       "notes": "The right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
     },
     "relics_bp": {
-      "version": "1.2.21",
-      "notes": "Rain Charm and Tide Boots count natural sand, red sand, terracotta, snow and ice as dry ground only; sandstone, glazed terracotta, stairs and slabs do not, and sand next to water (a beach) counts as rained on."
+      "version": "1.2.22",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
     },
     "moon_bp": {
       "version": "1.2.19",
@@ -33,12 +34,12 @@
       "notes": "Fishing XP counts the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
     },
     "town_bp": {
-      "version": "1.7.7",
-      "notes": "Residents can no longer breed; leftovers from Remove spot are capped apart from the town limit; the realm:town_test hook needs the realm_test_hooks objective."
+      "version": "1.7.8",
+      "notes": "Picking project spots: a town keeps the ground it read between scans, waits for players to move instead of rescanning every 5 seconds, and says when no good spot exists; spot scans on hillsides finish much sooner; operator-set builds go up a few blocks a tick; outlines use half the particles."
     },
     "saga_bp": {
-      "version": "1.16.24",
-      "notes": "Fish objectives count the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
+      "version": "1.16.25",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "maps_bp": {
       "version": "1.8.19",
@@ -57,20 +58,20 @@
       "notes": "Auto-store moves pickups to your other pages at most once a second (several pickups in one save) and looks only after an inventory change; a lost page button is put back within 30 s instead of 5 s. The pack reads and saves its page index and retired-snapshot list far less often."
     },
     "npc_bp": {
-      "version": "1.9.5",
-      "notes": "Setting crownedGain to 0 now means no gain below Friend for the Hollow-Crowned."
+      "version": "1.9.6",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "wander_bp": {
-      "version": "1.2.25",
-      "notes": "A wrongly accused friendly wanderer no longer adds to an unused counter; small comment fixes."
+      "version": "1.2.26",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "titles_bp": {
       "version": "1.2.18",
       "notes": "The config comment lists every trail a built-in title can unlock."
     },
     "fishing_bp": {
-      "version": "1.1.19",
-      "notes": "Casting a rod costs the server much less: the light-block check for Dynamic Lightning now runs only on a new bobber and only when that add-on is installed, and where a catch happened is worked out once a minute per spot. Every catch is now shared with the packs that count catches."
+      "version": "1.1.20",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
     },
     "journal_bp": {
       "version": "1.1.16",
@@ -87,6 +88,22 @@
     "map_bp": {
       "version": "1.5.8",
       "notes": "The radar keeps filling in when its terrain cache is full or over its cap (after a big scan or when players leave), plans travel at the cap far more cheaply, and frees terrain nobody has looked at for 5 minutes. /realm:minimap scan is limited to radius 128 for players (operators keep 384)."
+    },
+    "cooking_bp": {
+      "version": "1.1.20",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
+    },
+    "bounty_bp": {
+      "version": "1.3.15",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
+    },
+    "guilds_bp": {
+      "version": "1.1.19",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
+    },
+    "caravan_bp": {
+      "version": "1.2.14",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     }
   }
 }

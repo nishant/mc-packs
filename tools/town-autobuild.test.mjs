@@ -389,7 +389,7 @@ test("a saved structure is placed only over air, natural ground and wild plants 
 test("stepBuild: a resumed build still waits players off the spot (also while applying), checks claims, and holds instead of losing a half-done spot", () => {
   const body = main.slice(main.indexOf("function stepBuild()"), main.indexOf("/** Runs the scan and the build"));
   assert.match(body, /phase: s\.bs \? "standing"/, "resume starts at standing, not apply");
-  assert.match(body, /case "apply": \{\s*\/\/[^\n]*\n\s*const on = playersOn\(t, geo\);/, "apply waits while someone is on the spot");
+  assert.match(body, /case "apply": \{[\s\S]*?const on = playersOn\(t, geo\);\s*job\.on = on\.length > 0;[\s\S]*?if \(job\.on\) return;/, "apply waits while someone is on the spot (looked for every ONSPOT_TICKS)");
   assert.match(body, /s\.bs \? holdBuild\(t, p, "a land claim covers it now"\) : respot/, "a claim over a half-done build holds it");
   assert.match(body, /applyBuild\(dim, p, s, geo, job\.out, placedBy\(t\)\)/, "the placed cells guard the build");
   assert.match(body, /typeof r\.value === "string"\) return holdBuild/);
