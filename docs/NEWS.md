@@ -7,6 +7,11 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Fixes for Skills and the Atlas
+
+- Skills: logs and stone you placed just before the server restarted no longer give Mining or Woodcutting XP again.
+- Atlas of the Realm: very large atlases no longer lose places at the edges of their saved pages.
+
 ## Lighter Minimap radar
 
 - Minimap: the radar costs the server about a third of what it did while players move, and its land fills in faster on a small server.

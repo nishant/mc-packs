@@ -737,7 +737,7 @@ A news popup with what changed in the latest update (written automatically for e
 
 ### "Welcome back"
 
-Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You were away 3d 5h.` It appears at the top of the news popup if there's unseen news, otherwise in chat. Last-seen time is refreshed every minute while online.
+Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You were away 3d 5h.` It appears at the top of the news popup if there's unseen news, otherwise in chat. Last-seen time is refreshed every 10 minutes while online and as the player leaves.
 
 ### Tips
 
@@ -1849,7 +1849,7 @@ Operators can change `resetHourUtc`, `questsPerDay`, `progressNotes`, `skipCreat
 
 | Key | Scope | Contents |
 |---|---|---|
-| `quests:day` | Player | JSON `{ d, q }`: the day number and today's quests, `[{ id, p, done }]` (pool id, progress, finished) |
+| `quests:day` | Player | JSON `{ d, q }`: the day number and today's quests, `[{ id, p, done }]` (pool id, progress, finished). Progress is written at most every 5 seconds and as the player leaves, not on every counted block; a finished quest is written at once, before its reward |
 | `quests:pref` | Player | JSON of the player's own `progressNotes` choice from `/realm:prefs` |
 | `quests:cfg` | World | Settings changed in `/realm:config` |
 | `quests:pbox` | World | The boxes of blocks that Easy Building and other packs reported with `realm:blocks_placed` (up to 500, the oldest dropped first): `<dimension>|x1,y1,z1,x2,y2,z2` entries joined by `;`. A block broken inside a box counts as placed, so it gives no quest progress |
@@ -1932,7 +1932,7 @@ The Stats pack's scoreboards (`stats_mined` and the rest) are only read, never w
 
 - Counting uses the same events as the Stats pack: `afterEvents.playerBreakBlock`, `playerPlaceBlock`, `entityDie`, `playerSpawn` (joins), and a once-a-second loop for playtime and distance (gliding counts as elytra distance).
 - The Stats pack's numbers are read from its scoreboard objectives `stats_<stat>`, where scores are kept under each player's name. The packs don't import each other: without those objectives, the pack uses its own counts only.
-- Counts are kept in memory and each player's are saved when they're checked and when they leave.
+- Counts are kept in memory. A player's record is saved at the check after a tier, a title flag or their name changed, otherwise (counts only: walking, playtime, blocks) at most once a minute, and when they leave.
 - **Test hook:** `realm:milestones_test` `{ fill: n }` adds n offline players' records. It only works from the server console, and it changes the world's saved data: for tests only.
 
 ---
@@ -2872,7 +2872,7 @@ Operators can change `enabled`, `banners`, `buildRange`, `avoidRadius`, `spawnDi
 |---|---|---|
 | `atlas:origin` | World | JSON `{ x, z, s }`: the grid's center (world spawn when the pack first ran, so moving the spawn later moves nothing) and the salt that makes this world's names and spots |
 | `atlas:cells` | World | How many parts; the parts `atlas:cells:<n>` hold `cx,cz,group;...` for each region found, in the order the realm found them (about 9 characters a region) |
-| `atlas:built` | World | How many parts; the parts `atlas:built:<n>` hold `cx,cz,slot,kind,x,y,z,facing,state;...` for every spot looked at: built, being built, or skipped for good (about 30 characters a spot, 24,000 characters a part) |
+| `atlas:built` | World | How many parts; the parts `atlas:built:<n>` hold `cx,cz,slot,kind,x,y,z,facing,state;...` for every spot looked at: built, being built, or skipped for good (about 30 characters a spot, 24,000 characters a part). Both are saved within 5 seconds of a change, writing only the parts whose text changed; each part holds whole records, read back joined with `;` |
 | `atlas:meteors` | World | JSON `[[x, z], ...]`: the last 24 meteor impacts (for starglass pools) |
 | `atlas:p` | Player | JSON `{ r, p, x, s, t, b, m, f, a, j }`: regions found (their numbers), sites found and sites whose reward was earned (keys like `4,-2,1`), which tablet each tablet site showed you, the 60 tablets as a 15-digit hex mask, the Realm day of your last blessing, milestones, bones mined at digs you haven't cleared, the last act heard, kinds sent to the Journal. About 12 characters per site and 4 per region: a player with 300 regions and 600 sites keeps about 16 KB; past 30,000 characters the pack first drops the tablet picks of finished sites (tapping a finished tablet site again then shows a fixed tablet and gives nothing new). If that isn't enough it stops saving and tells the player once that the atlas is full (`[Atlas] Your atlas is full; new sites won't be remembered.`) |
 | `atlas:cfg` | World | Settings changed in `/realm:config` |
@@ -3514,8 +3514,8 @@ Operators can change `enabled`, `skipCreative`, `xpMultiplier`, `partyBonus`, `p
 | Key | Scope | Contents |
 |---|---|---|
 | `skill_mining`, `skill_woodcutting`, `skill_farming`, `skill_fishing`, `skill_combat`, `skill_exploration` | Scoreboard | Each player's total XP in that skill; the level is worked out from it |
-| `skills:map0`, `skills:map1`, ... | Player | Explored chunks: 21-character records (dimension, area x and z, a 64-bit map of the area's 8 x 8 chunks), up to 1,000 per property, least recently visited first |
-| `skills:placed0`, `skills:placed1`, ... | World | Blocks placed (or moved by a piston) lately, the last 10,000: `<dimension letter>x,y,z` separated by `;`, 1,200 per property, saved every 30 seconds (planted crops are not kept) |
+| `skills:map0`, `skills:map1`, ... | Player | Explored chunks: 21-character records (dimension, area x and z, a 64-bit map of the area's 8 x 8 chunks), up to 1,000 per property, least recently visited first; saved every 30 seconds after a new chunk and as the player leaves, writing only the properties whose text changed |
+| `skills:placed0`, `skills:placed1`, ... | World | Blocks that could give XP (stone, ores, logs, melons and pumpkins) placed or moved by a piston lately, the last 10,000: `<dimension letter>x,y,z` separated by `;`, 1,200 per property, saved every 30 seconds and whenever a player leaves (other blocks and planted crops are not kept; entries an older version kept for dirt or planks age out) |
 | `skills:pbox` | World | The boxes of blocks that Easy Building and other packs reported with `realm:blocks_placed` (up to 500, the oldest dropped first): `<dimension>|x1,y1,z1,x2,y2,z2` entries joined by `;`. A block broken inside a box counts as placed, so it gives no XP, talent progress or extra drop |
 | `skills:pref` | Player | JSON of the player's own `xpNotes` choice from `/realm:prefs` |
 | `skills:calling` | Player | JSON `{ c, t, n, d, w, cd }`: the Calling id (`""` none), talent ranks by id, switches made, the Realm day and game day of the last choice, and when the Sigil is ready again (`Date.now()` ms) |
@@ -3525,7 +3525,7 @@ Operators can change `enabled`, `skipCreative`, `xpMultiplier`, `partyBonus`, `p
 
 ### How it works
 
-- **Mining, woodcutting and farming** use `afterEvents.playerBreakBlock` (its `brokenBlockPermutation` tells a grown crop, and `itemStackBeforeBreak` a Silk Touch tool through its enchantable component). `afterEvents.playerPlaceBlock` remembers placed blocks so mining them again gives nothing, and `afterEvents.pistonActivate` marks every XP-giving block a piston moves and the spots around it; a crop with a growth state counts even where seeds were planted, since it had to grow. **Tap harvests:** `beforeEvents.playerInteractWithBlock` notes a tap on a grown crop and checks it 3 ticks later, like Daily Quests.
+- **Mining, woodcutting and farming** use `afterEvents.playerBreakBlock` (its `brokenBlockPermutation` tells a grown crop, and `itemStackBeforeBreak` a Silk Touch tool through its enchantable component). `afterEvents.playerPlaceBlock` remembers placed blocks that could give XP so mining them again gives nothing, and `afterEvents.pistonActivate` marks every XP-giving block a piston moves and the spots around it; a crop with a growth state counts even where seeds were planted, since it had to grow. **Tap harvests:** `beforeEvents.playerInteractWithBlock` notes a tap on a grown crop and checks it 3 ticks later, like Daily Quests.
 - **Reported builds:** Skills listens to `realm:blocks_placed` (from [Easy Building](#easy-building--build_bp) and other packs), remembers up to 500 boxes in `skills:pbox` and treats a block broken inside one as placed.
 - **Combat** uses `afterEvents.entityDie` with the killer from its damage source.
 - **Fishing:** there is no "caught a fish" event in the stable API. A fishing hook belongs to the nearest player when it appears and is followed every tick. A catch is an item that appears within 2 blocks of the hook while the hook is reeled in (the hook goes within 4 ticks of the item appearing), from a hook that was in water and out for at least 1.5 seconds. An item that appears at a player's head (dropped, not caught) never counts, so dropping things next to your hook earns nothing. Items this pack drops itself are never taken for a catch. With [Fishing 2.0](#fishing-20--fishing_bp) installed, the pack follows no hooks itself: it counts the catches that pack sends (`realm:fish_caught`, see [How the packs work together](#how-the-packs-work-together)), found the same way.
@@ -3690,7 +3690,7 @@ Operators can change `enabled`, `trails`, `trailTicks`, `trailBudget`, `announce
 
 - Other packs unlock with the script events `realm:title_unlock` `{ player, title, from }` and `realm:trail_unlock` `{ player, trail, from }` (`player` is the player id; `trail` is `cloud`, `leaves`, `ember`, `sparkle`, `hearts`, `glyphs`, `confetti` or `notes`). The data is a world property per player, so an unlock for someone offline is kept for them. Repeats are ignored quietly. A `realm:title_unlock` with `ack` (the sender's folder, at most 40 characters) is answered with `realm:title_ack` `{ player, title, ack }` once handled, whether the title was new or already owned (Milestones uses it to stop re-sending its backfill).
 - The chosen title is the player tag `realm_title:<text>`; only this pack sets or removes it. The [Nicknames](#nicknames--nick_bp) pack reads it; after each change this pack sends `realm:nametag` `{ player, from: "titles_bp" }` so Nicknames shows it at once.
-- **Stats** are counted once a second and saved every minute and when the player leaves. The weather can't be read by scripts, so the pack follows `weatherChange` in the Overworld and keeps the last value in `titles:weather`, as Rain Extras does. Outdoors means the highest block above you is at most one block above your feet.
+- **Stats** are counted once a second and saved once a minute (each player on their own second) when a whole block or second was added, and when the player leaves. The weather can't be read by scripts, so the pack follows `weatherChange` in the Overworld and keeps the last value in `titles:weather`, as Rain Extras does. Outdoors means the highest block above you is at most one block above your feet.
 - **Trails** use `dimension.spawnParticle` with `realm:trail_cloud`, `realm:trail_leaves`, `realm:trail_ember` and `realm:trail_sparkle` from the Realm Skies resource pack, so every player nearby sees them. The pack checks every 2 ticks whether `trailTicks` have passed, then starts at a different player each time so the budget is shared fairly. When nobody online has chosen a trail the pass is skipped.
 - Inactive-record pruning runs shortly after load and every six hours. Each deletion rechecks the live retention setting and whether the player is online or the record is in use, then logs the removal. Unlike Nicknames' gamertag-only pruning, this deletes the earned title/trail record and its stats.
 
