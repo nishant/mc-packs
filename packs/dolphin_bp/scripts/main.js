@@ -104,18 +104,31 @@ function loadKnown() {
   return known;
 }
 
-/** Writes the owners whose entries changed. @returns {boolean} false when a write failed */
-function writeKnown() {
+/**
+ * The place each tamed dolphin had when its owner's part was last written (and the tick), so a swimming dolphin's
+ * owner is written once it went SAVE_MOVE blocks or SAVE_TICKS passed, not every second it moves. @type {Map<string, { x: number, y: number, z: number, t: number }>}
+ */
+const savedAt = new Map();
+const SAVE_MOVE = 16;
+const SAVE_TICKS = 1200;
+
+/**
+ * Writes the owners whose entries changed (`only`: just these owners; others wait for a later write).
+ * @param {Set<string>} [only] @returns {boolean} false when a write failed
+ */
+function writeKnown(only) {
   if (!known) return true;
   let ok = true;
   /** @type {Map<string, Record<string, Known>>} */
   const byOwner = new Map();
   for (const [id, k] of known) {
+    if (only && !only.has(k.o)) continue;
     let rec = byOwner.get(k.o);
     if (!rec) byOwner.set(k.o, (rec = {}));
     rec[id] = k;
   }
-  for (const owner of new Set([...written.keys(), ...byOwner.keys()])) {
+  const t = system.currentTick;
+  for (const owner of only ?? new Set([...written.keys(), ...byOwner.keys()])) {
     const rec = byOwner.get(owner);
     const json = rec ? JSON.stringify(rec) : undefined;
     if (json === written.get(owner)) continue;
@@ -123,6 +136,7 @@ function writeKnown() {
       world.setDynamicProperty(PROP_OWNED + owner, json);
       if (json === undefined) written.delete(owner);
       else written.set(owner, json);
+      for (const [id, k] of Object.entries(rec ?? {})) savedAt.set(id, { x: k.x, y: k.y, z: k.z, t });
     } catch (e) {
       console.warn(`[dolphin] save ${owner}: ${e}`);
       ok = false;
@@ -161,6 +175,7 @@ function forget(id) {
   const idx = index();
   if (!idx[id]) return;
   delete idx[id];
+  savedAt.delete(id);
   saveIndex(idx);
 }
 
@@ -317,7 +332,7 @@ world.afterEvents.playerInteractWithEntity.subscribe(({ player, target }) => {
       if (!player.isValid || !target.isValid) return;
       const on = mountOf(player);
       if (on && !riders.has(player.id)) {
-        riders.set(player.id, { p: player, d: on });
+        riders.set(player.id, { p: player, d: on, did: on.id, checked: system.currentTick });
         setRidden(on, true);
       }
       const owner = ownerOf(target);
@@ -325,6 +340,7 @@ world.afterEvents.playerInteractWithEntity.subscribe(({ player, target }) => {
       const ride = target.getComponent("minecraft:rideable");
       if (ride?.getRiders().some((r) => r.id === player.id)) {
         ride.ejectRider(player);
+        dropRider(player.id);
         player.sendMessage(`§7Only ${String(target.getDynamicProperty(PROP_OWNER_NAME) ?? "its owner")} can ride that dolphin.`);
       }
     } catch {
@@ -350,11 +366,15 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
 const leapReady = new Map();
 world.afterEvents.playerLeave.subscribe(({ playerId }) => leapReady.delete(playerId));
 
-/** The tamed dolphin `p` is riding, if any. @param {Player} p */
-function mountOf(p) {
+/**
+ * The tamed dolphin `p` is riding, if any. `sameAs`: the id of the tamed dolphin they rode last time (its owner is
+ * not read again).
+ * @param {Player} p @param {string} [sameAs]
+ */
+function mountOf(p, sameAs) {
   try {
     const on = p.getComponent("minecraft:riding")?.entityRidingOn;
-    return on && on.isValid && on.typeId === DOLPHIN && ownerOf(on) ? on : undefined;
+    return on && on.isValid && on.typeId === DOLPHIN && ((sameAs !== undefined && on.id === sameAs) || ownerOf(on)) ? on : undefined;
   } catch {
     return undefined;
   }
@@ -462,9 +482,20 @@ function setRidden(d, on) {
  * on), and otherwise looked at every 5 ticks (scripts/spread.js, one share), for a ride that
  * started any other way (a /ride command; the stable API has no ride event). While no tamed dolphin is loaded nobody
  * can be riding one, so nobody is looked at (the following check below counts them every second).
- * @type {Map<string, { p: Player, d: Entity }>}
+ * @type {Map<string, { p: Player, d: Entity, did: string, checked: number }>}
  */
 const riders = new Map();
+/** How often (ticks) a rider's ride is looked at again (steering itself runs every tick). */
+const MOUNT_TICKS = 5;
+
+/** Is the entity still there? (A read on one that is gone throws.) @param {Entity} e */
+function stillValid(e) {
+  try {
+    return e.isValid;
+  } catch {
+    return false;
+  }
+}
 
 /** @param {string} id */
 function dropRider(id) {
@@ -482,7 +513,7 @@ spreadPlayers(system, world, {
       if (riders.has(p.id)) continue;
       const d = mountOf(p);
       if (!d) continue;
-      riders.set(p.id, { p, d });
+      riders.set(p.id, { p, d, did: d.id, checked: system.currentTick });
       setRidden(d, true);
     }
   },
@@ -494,24 +525,36 @@ system.runInterval(() => {
     for (const id of [...riders.keys()]) dropRider(id);
     return;
   }
+  const tick = system.currentTick;
   for (const [id, r] of riders) {
     const p = r.p;
-    const d = p.isValid ? mountOf(p) : undefined;
-    if (!d) {
-      dropRider(id);
-      continue;
+    // The ride is looked at again every MOUNT_TICKS (and at once when they press Sneak); in between the dolphin is
+    // steered as it is, and one that is gone throws in steer and drops the rider.
+    if (tick - r.checked >= MOUNT_TICKS || tick < r.checked) {
+      r.checked = tick;
+      const d = p.isValid ? mountOf(p, r.did) : undefined;
+      if (!d) {
+        dropRider(id);
+        continue;
+      }
+      if (d.id !== r.did) {
+        // straight onto another dolphin
+        setRidden(r.d, false);
+        r.d = d;
+        r.did = d.id;
+        setRidden(d, true);
+      }
     }
-    if (d.id !== r.d.id) {
-      // straight onto another dolphin
-      setRidden(r.d, false);
-      r.d = d;
-      setRidden(d, true);
-    }
+    const d = r.d;
     try {
       // A leap tick has no steering push, so leaps stay as high as before.
       if (!(p.isJumping && leap(p, d))) steer(p, d);
-      if (system.currentTick % 10 === 0) breathe(p);
+      if (tick % 10 === 0) breathe(p);
     } catch (e) {
+      if (!stillValid(p) || !stillValid(d)) {
+        dropRider(id);
+        continue;
+      }
       console.warn(`[dolphin] ${e}`);
     }
   }
@@ -527,6 +570,7 @@ world.afterEvents.playerButtonInput.subscribe(
     } catch {
       // already off
     }
+    dropRider(player.id); // no more steering from this tick (the ride check runs only every MOUNT_TICKS)
   },
   { buttons: [InputButton.Sneak], state: ButtonState.Pressed },
 );
@@ -542,31 +586,42 @@ system.runInterval(() => {
     return;
   }
   const follow = Math.max(2, Number(CONFIG.followDistance) || 8);
-  const idx = index();
-  let changed = false;
   const tamed = loadedTamed();
   tamedLoaded = tamed.length;
+  if (!tamed.length) return;
+  // The index itself (no copy): places change in memory every second, and an owner's part is written when a dolphin
+  // is new, renamed or in another dimension, has gone SAVE_MOVE blocks since it was last written, or a minute passed.
+  const map = loadKnown();
+  const now = system.currentTick;
+  /** @type {Set<string>} */
+  const dirty = new Set();
   for (const d of tamed) {
     try {
       const owner = ownerOf(d);
-      const k = idx[d.id];
       if (!owner) continue;
-      if (!k) {
-        idx[d.id] = { o: owner, on: String(d.getDynamicProperty(PROP_OWNER_NAME) ?? ""), n: d.nameTag || "", d: d.dimension.id, x: 0, y: 0, z: 0 };
-        changed = true;
-      }
-      const known = idx[d.id];
+      const id = d.id;
+      const dimId = d.dimension.id;
+      const name = d.nameTag || "";
       const l = d.location;
       const at = { x: Math.round(l.x), y: Math.round(l.y), z: Math.round(l.z) };
-      if (known.x !== at.x || known.y !== at.y || known.z !== at.z || known.d !== d.dimension.id || known.n !== (d.nameTag || "")) {
-        Object.assign(known, at, { d: d.dimension.id, n: d.nameTag || "" });
-        changed = true;
+      let k = map.get(id);
+      if (!k) {
+        k = { o: owner, on: String(d.getDynamicProperty(PROP_OWNER_NAME) ?? ""), n: name, d: dimId, ...at };
+        map.set(id, k);
+        dirty.add(owner);
+      } else if (k.d !== dimId || k.n !== name) {
+        Object.assign(k, at, { d: dimId, n: name });
+        dirty.add(k.o);
+      } else if (k.x !== at.x || k.y !== at.y || k.z !== at.z) {
+        Object.assign(k, at);
+        const last = savedAt.get(id);
+        if (!last || now - last.t >= SAVE_TICKS || now < last.t || dist(last, at) >= SAVE_MOVE) dirty.add(k.o);
       }
       if (d.getComponent("minecraft:rideable")?.getRiders().length) continue;
       // nobody on it (the rider left, or the realm restarted mid-ride): it swims on its own again
       setRidden(d, false);
       const p = online(owner);
-      if (!p || p.dimension.id !== d.dimension.id || !p.isInWater || !d.isInWater) continue;
+      if (!p || p.dimension.id !== dimId || !p.isInWater || !d.isInWater) continue;
       const gap = dist(p.location, l);
       if (gap <= follow || gap > 64) continue;
       const s = 0.35 / gap;
@@ -575,7 +630,7 @@ system.runInterval(() => {
       // gone
     }
   }
-  if (changed) saveIndex(idx);
+  if (dirty.size) writeKnown(dirty);
 }, 20);
 
 // ---------------------------------------------------------------------------

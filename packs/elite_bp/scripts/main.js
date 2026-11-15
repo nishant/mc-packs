@@ -273,10 +273,17 @@ const HELMETS = new Set(Object.values(LOOKS).map((l) => l.helmet));
 const newHelmets = new Map();
 /** How long (ticks) a helmet item counts as just dropped. */
 const FRESH_TICKS = 10;
+/** Tick of the last death of a champion that wore our helmet (`helmetPossible`). */
+let gearDiedAt = -Infinity;
 
 /** Remembers a helmet item that just appeared (a champion's drop shows up the tick it dies). @param {Entity} item */
 function noteItem(item) {
-  const stack = item.getComponent("minecraft:item")?.itemStack;
+  let stack;
+  try {
+    stack = item.getComponent("minecraft:item")?.itemStack;
+  } catch {
+    return; // merged into another stack or picked up already
+  }
   if (!stack || !HELMETS.has(stack.typeId)) return;
   const now = system.currentTick;
   for (const [id, tick] of newHelmets) if (now - tick > FRESH_TICKS) newHelmets.delete(id);
@@ -459,17 +466,36 @@ function night() {
   return t >= 13000 && t <= 23000;
 }
 
+/**
+ * Could an item that appears now be a champion's helmet? Only while a loaded champion wears one (its drop can come
+ * before its death event) or one died wearing it in the last FRESH_TICKS (the drop can also come after it). JS only:
+ * at most `maxAlive` entries.
+ */
+function helmetPossible() {
+  if (system.currentTick - gearDiedAt <= FRESH_TICKS) return true;
+  for (const info of known.values()) if (info.gear) return true;
+  return false;
+}
+
+// Every spawn in the world comes here (each mined block, crop and mob drop is an item): one type read, then items
+// only while a champion's helmet could be among them, and listed mobs only past the champion roll.
 world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
+  if (cause !== EntityInitializationCause.Spawned) return;
+  let type;
   try {
-    if (cause !== EntityInitializationCause.Spawned || !entity.isValid) return;
-    if (entity.typeId === "minecraft:item") {
-      noteItem(entity);
+    type = entity.typeId;
+  } catch {
+    return; // gone already
+  }
+  try {
+    if (type === "minecraft:item") {
+      if (helmetPossible()) noteItem(entity);
       return;
     }
-    if (!mobSet.has(entity.typeId)) return;
-    if (entity.dimension.id !== "minecraft:overworld" || get("enabled") !== true) return;
+    if (!mobSet.has(type) || get("enabled") !== true) return;
     const chance = get("chance") * (bloodMoon ? get("bloodMoonMultiplier") : 1);
     if (Math.random() >= chance) return;
+    if (!entity.isValid || entity.dimension.id !== "minecraft:overworld") return;
     // A tick later: our own spawns (champion requests, Splitting copies) have their tags by then.
     system.runTimeout(() => {
       try {
@@ -521,18 +547,20 @@ function convert(e) {
   if (get("nightOnly") === true && !night()) return;
   const at = e.location;
   const dim = e.dimension;
-  if (crowdedAround(known.values(), dim.id, at, get("maxAliveNearby"))) return;
+  const dimId = dim.id;
+  if (crowdedAround(known.values(), dimId, at, get("maxAliveNearby"))) return;
+  // The spacing from recent champions first: JS only, before the block reads below.
+  const now = Date.now();
+  const spacing = CONFIG.areaSpacing;
+  recent = recent.filter((r) => now - r.at < CONFIG.areaCooldownMinutes * 60000);
+  if (recent.some((r) => r.dim === dimId && Math.hypot(r.x - at.x, r.z - at.z) < spacing)) return;
   if (get("surfaceOnly") === true) {
     const top = dim.getTopmostBlock({ x: Math.floor(at.x), z: Math.floor(at.z) });
     if (top && top.y > Math.floor(at.y) + 1) return; // a roof or a cave ceiling above it
   }
   // Next to a build (a base, a village, a mob farm's platform): no champion there.
   if (CONFIG.avoidBuilds && builtAround(dim, at)) return;
-  const now = Date.now();
-  const spacing = CONFIG.areaSpacing;
-  recent = recent.filter((r) => now - r.at < CONFIG.areaCooldownMinutes * 60000);
-  if (recent.some((r) => r.dim === dim.id && Math.hypot(r.x - at.x, r.z - at.z) < spacing)) return;
-  recent.push({ dim: dim.id, x: at.x, z: at.z, at: now });
+  recent.push({ dim: dimId, x: at.x, z: at.z, at: now });
   makeChampion(e);
 }
 
@@ -540,11 +568,15 @@ function convert(e) {
 // Fighting
 // ---------------------------------------------------------------------------
 
+// Every hurt in the world comes here (falls, fire, a mob farm): with no champion loaded it returns before any read,
+// and otherwise only the two ids are read before the known-champion test (`known` holds every loaded champion: kept
+// by makeChampion, upkeep, entityLoad, refresh and the death handler).
 world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource, damage }) => {
+  if (!known.size) return;
   try {
     const attacker = damageSource.damagingEntity;
-    if (hurtEntity.isValid && hurtEntity.hasTag(CHAMP)) championHurt(hurtEntity, attacker);
-    if (attacker && attacker !== hurtEntity && attacker.isValid && attacker.hasTag(CHAMP)) championHit(attacker, hurtEntity, damage);
+    if (known.has(hurtEntity.id) && hurtEntity.isValid && hurtEntity.hasTag(CHAMP)) championHurt(hurtEntity, attacker);
+    if (attacker && attacker !== hurtEntity && known.has(attacker.id) && attacker.isValid && attacker.hasTag(CHAMP)) championHit(attacker, hurtEntity, damage);
   } catch (e) {
     console.warn(`[elite] hurt: ${e}`);
   }
@@ -596,33 +628,69 @@ const BUILT =
   /planks|glass|chest|barrel|sign|bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|bookshelf|lectern|anvil|hopper|_rail|^minecraft:rail|banner|campfire|loom|smithing|cartography|fletching|grindstone|stonecutter|enchanting|beacon|bell|composter|cauldron|brewing|jukebox|noteblock|scaffolding|ladder|stairs|slab|brick|polished|frame|flower_pot|candle|shulker|dispenser|dropper|piston|observer|repeater|comparator|redstone_lamp|lever|button|pressure_plate/;
 
 /**
- * Is there anything player-made in the 9 x 9 columns around (x, z), from the surface down 4?
- * Unloaded columns count as built (we can't tell). About 400 block reads: only for a lightning strike.
+ * Is there anything player-made in the 9 x 9 columns around (x, z), from the surface down 4? Unloaded columns count
+ * as built (we can't tell). Run to the end in one go (`scanBuilt` in steps is what a strike uses).
  * @param {Dimension} dim @param {number} x @param {number} z
  */
 function nearBuilt(dim, x, z) {
+  const steps = scanBuilt(dim, x, z);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value === true;
+}
+
+/**
+ * `nearBuilt` in steps: the 81 top blocks first (most builds show on top, and one of them ends the scan), then one row
+ * of 9 columns, 4 blocks under each top, per step. It yields between steps and returns true (built, or not loaded)
+ * or false. About 240 native calls in the first step and 72 in each of the 9 after it, instead of about 1,460 at once.
+ * @param {Dimension} dim @param {number} x @param {number} z @returns {Generator<undefined, boolean, unknown>}
+ */
+function* scanBuilt(dim, x, z) {
+  /** @type {number[]} */
+  const tops = [];
+  let floor;
   try {
-    return scanBuilt(dim, x, z);
+    floor = dim.heightRange.min; // superflat: the ground is a few blocks above it, and below it nothing can be read
+    for (let dx = -4; dx <= 4; dx++) {
+      for (let dz = -4; dz <= 4; dz++) {
+        const top = dim.getTopmostBlock({ x: x + dx, z: z + dz });
+        if (!top || BUILT.test(top.typeId)) return true;
+        tops.push(top.y);
+      }
+    }
   } catch {
     return true; // unloaded
   }
-}
-
-/** @param {Dimension} dim @param {number} x @param {number} z */
-function scanBuilt(dim, x, z) {
-  const floor = dim.heightRange.min; // superflat: the ground is a few blocks above it, and below it nothing can be read
-  for (let dx = -4; dx <= 4; dx++) {
-    for (let dz = -4; dz <= 4; dz++) {
-      const top = dim.getTopmostBlock({ x: x + dx, z: z + dz });
-      if (!top) return true;
-      for (let y = top.y; y >= Math.max(top.y - 4, floor); y--) {
-        const b = dim.getBlock({ x: x + dx, y, z: z + dz });
-        if (!b) return true;
-        if (BUILT.test(b.typeId)) return true;
+  for (let i = 0; i < 9; i++) {
+    yield;
+    try {
+      for (let j = 0; j < 9; j++) {
+        const ty = tops[i * 9 + j];
+        const bottom = Math.max(ty - 4, floor);
+        for (let y = ty - 1; y >= bottom; y--) {
+          const b = dim.getBlock({ x: x + i - 4, y, z: z + j - 4 });
+          if (!b || BUILT.test(b.typeId)) return true;
+        }
       }
+    } catch {
+      return true; // unloaded
     }
   }
   return false;
+}
+
+/**
+ * Runs `scanBuilt` one step a tick (10 ticks for a clean spot), then calls `done(built)`.
+ * @param {Dimension} dim @param {number} x @param {number} z @param {(built: boolean) => void} done
+ */
+function scanBuiltSliced(dim, x, z, done) {
+  const steps = scanBuilt(dim, x, z);
+  const step = () => {
+    const r = steps.next();
+    if (!r.done) system.runTimeout(step, 1);
+    else done(r.value === true);
+  };
+  step();
 }
 
 /**
@@ -697,15 +765,28 @@ function storm(champ) {
   const nearSpawn = Math.hypot(x - spawn.x, z - spawn.z) < CONFIG.avoidSpawn;
   // Safe zones, land claims and towns are protected: lightning there would start fires and turn villagers into
   // witches and pigs into piglins.
-  if (nearSpawn || isProtected(dim.id, x + 0.5, z + 0.5) || nearBuilt(dim, x, z)) {
-    // Near builds (or the spawn area, or in a safe zone) it only crackles: lightning would set them on fire.
-    dim.playSound("ambient.weather.thunder", at, { volume: 0.6, pitch: 1.4 });
+  // Near builds (or the spawn area, or in a safe zone) it only crackles: lightning would set them on fire.
+  const crackle = () => dim.playSound("ambient.weather.thunder", at, { volume: 0.6, pitch: 1.4 });
+  if (nearSpawn || isProtected(dim.id, x + 0.5, z + 0.5)) {
+    crackle();
     return;
   }
-  dim.spawnEntity("minecraft:lightning_bolt", at);
+  // The build check reads about 1,460 blocks: spread over 10 ticks (half a second) so a strike is no long tick.
   const fireAt = { x, y: surf.y + 1, z };
-  system.runTimeout(() => putOutFire(dim, fireAt), 2);
-  system.runTimeout(() => putOutFire(dim, fireAt), 20);
+  scanBuiltSliced(dim, x, z, (built) => {
+    try {
+      if (!thunder || !stillValid(champ)) return; // the storm ended or the champion went meanwhile
+      if (built) {
+        crackle();
+        return;
+      }
+      dim.spawnEntity("minecraft:lightning_bolt", at);
+      system.runTimeout(() => putOutFire(dim, fireAt), 2);
+      system.runTimeout(() => putOutFire(dim, fireAt), 20);
+    } catch (e) {
+      if (!String(e).includes("LocationInUnloadedChunk")) console.warn(`[elite] storm: ${e}`);
+    }
+  });
 }
 
 system.runInterval(() => {
@@ -742,6 +823,17 @@ const NO_STEP_ON = /fence|wall|_gate|magma|campfire|fire|cactus|sweet_berry|powd
  * instead of once per look. Only within a run (one tick): nothing is kept between runs. @type {Map<string, BlockLook | undefined> | undefined}
  */
 let runBlocks;
+/** The dimension object a step reads through and its id, read once per step instead of once per block lookup. @type {Dimension | undefined} */
+let keyDim;
+let keyDimId = "";
+/** The id of `dim` (an approach step passes one Dimension object to every lookup). @param {Dimension} dim */
+function dimKey(dim) {
+  if (dim !== keyDim) {
+    keyDimId = dim.id;
+    keyDim = dim;
+  }
+  return keyDimId;
+}
 /**
  * A block's air, liquid and type, read once per approach run (`runBlocks`), or straight from the game outside a run.
  * Only the type is read from the game: air and liquid follow from it (one native read a block instead of three).
@@ -749,7 +841,7 @@ let runBlocks;
  * @param {Dimension} dim @param {Vector3} at @returns {BlockLook | undefined}
  */
 function lookAt(dim, at) {
-  const key = runBlocks && `${dim.id}|${at.x}|${at.y}|${at.z}`;
+  const key = runBlocks && `${dimKey(dim)}|${at.x}|${at.y}|${at.z}`;
   if (key && runBlocks?.has(key)) return runBlocks.get(key);
   const b = dim.getBlock(at);
   const typeId = b?.typeId;
@@ -868,15 +960,15 @@ function bodyStep(dim, at, a, step) {
  * Where a champion stands for a step: its location, or, in a small hop (a mob pressing on toward its
  * target keeps jumping at a wall, and a step waited for it to land, so it could stand there for good),
  * the ground under it. Undefined while it falls, flies or is knocked back: it lands first.
- * @param {Entity} e
+ * @param {Entity} e @param {Dimension} dim its dimension
  */
-function feet(e) {
+function feet(e, dim) {
   const at = e.location;
   if (e.isOnGround) return at;
   const v = e.getVelocity();
   if (v.y < -0.5 || Math.hypot(v.x, v.z) > 0.4) return undefined;
   for (let y = Math.floor(at.y + 0.01); y >= Math.floor(at.y) - 2; y--) {
-    const b = lookAt(e.dimension, { x: Math.floor(at.x), y: y - 1, z: Math.floor(at.z) });
+    const b = lookAt(dim, { x: Math.floor(at.x), y: y - 1, z: Math.floor(at.z) });
     if (!b || b.isLiquid) return undefined;
     if (ground(b)) return at.y - y <= 1.3 ? { x: at.x, y, z: at.z } : undefined;
     if (!open(b)) return undefined;
@@ -893,7 +985,8 @@ function approachStep(e, step, units = 1) {
   if (ownedElsewhere(e)) return; // its caller drops a champion that is gone (it throws on the first read)
   if (e.isInWater) return;
   const dim = e.dimension;
-  const at = feet(e);
+  const dimId = dimKey(dim);
+  const at = feet(e, dim);
   if (!at) return;
   const range = Number(get("approach.range")) || CONFIG.approach.range;
   const stop = CONFIG.approach.stopDistance;
@@ -904,7 +997,7 @@ function approachStep(e, step, units = 1) {
   let best = Infinity;
   for (const p of dim.getPlayers({ location: at, maxDistance: range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], excludeTags: ["afk"] })) {
     const l = p.location;
-    if (isProtected(dim.id, l.x, l.z)) continue;
+    if (isProtected(dimId, l.x, l.z)) continue;
     const d = dist(l, at);
     if (d < best) {
       best = d;
@@ -930,11 +1023,11 @@ function approachStep(e, step, units = 1) {
     detours.set(e.id, d);
   }
   const base = Math.atan2(dz, dx);
-  const inZone = isProtected(dim.id, at.x, at.z);
+  const inZone = isProtected(dimId, at.x, at.z);
   const reach = Math.min(LEASH_MAX, Math.max(LEASH, (d?.hit ?? flat) + LEASH_GRACE));
   /** Step at angle a if it can: true when it moved. @param {number} a */
   const go = (a) => {
-    if (!inZone && isProtected(dim.id, at.x + Math.cos(a) * (step + BODY), at.z + Math.sin(a) * (step + BODY))) return false; // safe zones and claims: not by our hand
+    if (!inZone && isProtected(dimId, at.x + Math.cos(a) * (step + BODY), at.z + Math.sin(a) * (step + BODY))) return false; // safe zones and claims: not by our hand
     const to = bodyStep(dim, at, a, step);
     if (!to) return false;
     const after = Math.hypot(target.x - to.x, target.z - to.z);
@@ -1090,6 +1183,7 @@ function approachRun() {
     approachTurns(turn.batch, speed, now);
   } finally {
     runBlocks = undefined;
+    keyDim = undefined;
   }
 }
 
@@ -1175,7 +1269,10 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     info = known.get(id);
   }
   if (!info) return;
-  if (info.gear) purgeGear(info.dim, info.at, info.gear, fresh ? 2.5 : 6);
+  if (info.gear) {
+    gearDiedAt = system.currentTick;
+    purgeGear(info.dim, info.at, info.gear, fresh ? 2.5 : 6);
+  }
   try {
     slain(info, damageSource.damagingEntity, hitters.get(id), id);
   } catch (e) {
@@ -1296,12 +1393,39 @@ function unChampion(e) {
   }
 }
 
+/**
+ * Known champions a refresh gives the full upkeep (name tag, buffs, helmet), in a round robin: the others only get
+ * their place updated, so 32 loaded champions cost about 170 native calls every 5 seconds instead of about 600 in
+ * one tick. A champion not known yet (loaded since, or tagged by hand) always gets the full upkeep at once.
+ */
+const UPKEEP_PER_REFRESH = 4;
+/** The last known champion the upkeep round robin served. @type {string | undefined} */
+let upkeepCursor;
+
 function refresh() {
   let n = 0;
   const seen = new Set();
+  /** Known champions found this refresh, for the upkeep round robin. @type {Map<string, Entity>} */
+  const kept = new Map();
   for (const id of DIMS) {
     try {
       for (const e of world.getDimension(id).getEntities({ tags: [CHAMP] })) {
+        const eid = e.id;
+        const info = known.get(eid);
+        if (info) {
+          // Known (it passed the mob check below when it became known): its place only, the full upkeep in its turn.
+          n++;
+          seen.add(eid);
+          kept.set(eid, e);
+          live.set(eid, e);
+          try {
+            info.at = e.location;
+            info.dim = id;
+          } catch {
+            // unloaded this tick: the place from before
+          }
+          continue;
+        }
         // Not a mob (an item tagged by mistake when the game handed back the wrong entity): no champion, and it
         // doesn't take a place under maxAlive.
         if (!e.getComponent("minecraft:health")) {
@@ -1309,7 +1433,7 @@ function refresh() {
           continue;
         }
         n++;
-        seen.add(e.id);
+        seen.add(eid);
         try {
           upkeep(e);
         } catch (err) {
@@ -1318,6 +1442,15 @@ function refresh() {
       }
     } catch (e) {
       console.warn(`[elite] ${e}`);
+    }
+  }
+  const turn = turnOf([...kept.keys()], upkeepCursor, UPKEEP_PER_REFRESH);
+  upkeepCursor = turn.last ?? upkeepCursor;
+  for (const eid of turn.batch) {
+    try {
+      upkeep(/** @type {Entity} */ (kept.get(eid)));
+    } catch (err) {
+      console.warn(`[elite] upkeep: ${err}`);
     }
   }
   loaded = n;

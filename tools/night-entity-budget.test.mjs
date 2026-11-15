@@ -35,6 +35,8 @@ function stmt(source, name) {
 }
 
 const vec = (x, y = 64, z = 0) => ({ x, y, z });
+/** The approach's dimension-id cache (ENT-31), when the pack has it. */
+const KEY_DIM = /^function dimKey\(/m.test(elite) ? `let keyDim;\nlet keyDimId = "";\n${fn(elite, "dimKey")}` : "";
 const OVER = "minecraft:overworld";
 
 function eliteContext({ champions, players, config = {}, tick = 1000, at = (i) => vec(i, 64, 0) }) {
@@ -128,6 +130,7 @@ function eliteContext({ champions, players, config = {}, tick = 1000, at = (i) =
     optFn(elite, "approachRun"),
     optFn(elite, "approachTurns"),
     /^let runBlocks;/m.test(elite) ? "let runBlocks;" : "",
+    KEY_DIM,
     fn(elite, "convert").replace(/\n {2}if \(get\("surfaceOnly"\)[\s\S]*$/, "\n  return true;\n}"),
     "globalThis.api = { aura, convert, set loaded(v) { loaded = v; }, detours };",
   ].join("\n");
@@ -407,6 +410,7 @@ test("approach: one run reads each block once, however many angles its steps try
     stmt(elite, "WALK_THROUGH"),
     line(elite, "NO_STEP_ON"),
     "let runBlocks;",
+    KEY_DIM,
     optFn(elite, "lookAt"),
     line(elite, "open"),
     line(elite, "ground"),
@@ -440,6 +444,7 @@ test("approach: a block look reads only the block's type from the game, and stil
     stmt(elite, "WALK_THROUGH"),
     line(elite, "NO_STEP_ON"),
     "let runBlocks;",
+    KEY_DIM,
     fn(elite, "lookAt"),
     line(elite, "open"),
     line(elite, "ground"),
@@ -475,6 +480,7 @@ test("approach: a step reads each nearby player's place once and a champion's ta
     stmt(elite, "WALK_THROUGH"),
     line(elite, "NO_STEP_ON"),
     "let runBlocks;",
+    KEY_DIM,
     optFn(elite, "lookAt"),
     line(elite, "open"),
     line(elite, "ground"),
@@ -495,9 +501,12 @@ test("approach: a step reads each nearby player's place once and a champion's ta
     fn(elite, "approachStep"),
     "globalThis.step = (e) => approachStep(e, 0.5, 1);",
   ].join("\n");
-  const counts = { playerPlace: 0, tags: 0, teleports: 0 };
+  const counts = { playerPlace: 0, tags: 0, teleports: 0, dimId: 0 };
   const dim = {
-    id: OVER,
+    get id() {
+      counts.dimId++;
+      return OVER;
+    },
     getBlock: ({ x, y }) => ({ isAir: !(y < 64 || x >= 3), isLiquid: false, typeId: y < 64 || x >= 3 ? "minecraft:stone" : "minecraft:air" }),
     getPlayers: () =>
       [0, 1, 2, 3, 4].map((i) => ({
@@ -529,4 +538,5 @@ test("approach: a step reads each nearby player's place once and a champion's ta
   assert.ok(counts.teleports > 0, "the champion stepped round the wall");
   assert.ok(counts.playerPlace <= 4 * 5, `4 steps with 5 players read ${counts.playerPlace} player places`);
   assert.equal(counts.tags, 1, "tags read once");
+  assert.ok(counts.dimId <= 4, `4 steps read the dimension's id ${counts.dimId} times (once a step at most)`);
 });
