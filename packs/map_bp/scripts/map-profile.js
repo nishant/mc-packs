@@ -44,8 +44,8 @@ export const BALANCED = Object.freeze({
   "label": "V2 BALANCED"
 });
 export const SURVEY = Object.freeze({...SPEED,id:"v1_survey",label:"PARCHMENT SURVEY / MARKED DISPLAY ESTIMATES",estimateRadiusBlocks:8});
-// The shipped profile. Its time budgets (W5b, map-radar-perf on BDS, November 2026): the scanner 1.5 ms a tick,
+// The shipped profile. Its time budgets (W5b, map-radar-perf on BDS, November 2026): the scanner 2.5 ms a tick (planning in its first 1 ms),
 // terrain pictures 0.75 and drawing 0.4 (each carrying an overrun into the next ticks), all of the feature's timed
 // work 3 ms; with 6 + 2 + 1 and 11 ms the radar cost 11 ms a tick with movers at 10 and at 40 players.
-export const INTEGRATED=Object.freeze({...SURVEY,scanMs:1.5,rebuildMs:0.75,drawMs:0.4,featureMs:3,renderReserve:0.5,id:"oak_integrated",label:"OAK INTEGRATED / RAY / MARKED CONSENSUS"});
+export const INTEGRATED=Object.freeze({...SURVEY,scanMs:2.5,rebuildMs:0.75,drawMs:0.4,featureMs:4,renderReserve:0.5,id:"oak_integrated",label:"OAK INTEGRATED / RAY / MARKED CONSENSUS"});
 export const MAP_PROFILE = INTEGRATED;

@@ -1022,8 +1022,11 @@ const STORE_IDLE_CHECK = 200;
 /** The largest /realm:minimap scan radius for players who are not operators (operators: MANUAL_SCAN_MAX_RADIUS). */
 const PLAYER_SCAN_MAX_RADIUS = 128;
 const PLAN_EACH_TICK = 2;
+/** How far (in radii) a viewer may have moved since their plan and still be rolled instead of planned again: with
+ * plans spread over the ticks a flier can be 30 blocks on before their turn, and a full plan costs ten rolls. */
+const ROLL_REACH = 1.5;
 /** Of the scan time a tick, what planning may start in (whole ms: Date.now() is the only clock). */
-const PLAN_MS = Math.max(1, EXP.scanMs / 2);
+const PLAN_MS = 1;
 const PLAN_EVERY = EXP.checkEvery;
 /** Viewers to check first: their radar was just built (a new list of what it misses) or they move fast. @type {Set<string>} */
 const planNow = new Set();
@@ -1466,7 +1469,7 @@ function planFor(player, now,trustedRoster=false) {
   // Reads that failed (unloaded chunks) come due: put the ones still in the circle back in the queue, instead of a
   // full plan (on BDS a flier outrunning chunk loading made one every tick or two, about 10 ms each).
   if(same&&state&&state.retryDeadline!==undefined&&now>=state.retryDeadline&&EXP.rolling===true&&!EXP.preview&&!EXP.persistence)requeueFailed(old,state,store,at,pr.revealRadius,now,idOf(player));
-  if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*.75)**2&&keptDemand(store,state,pr.revealRadius)){
+  if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*ROLL_REACH)**2&&keptDemand(store,state,pr.revealRadius)){
     if(old.picks.length-old.pos>ROLL_WALK_MAX){
       // A long queue: add what the move brought in instead of walking it all (rollIncremental). Its order is not
       // redone, so a reorder that comes due waits until the queue is short.
