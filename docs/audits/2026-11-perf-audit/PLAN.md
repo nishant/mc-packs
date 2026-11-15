@@ -113,7 +113,7 @@ None changes a pack, so none needs a pack release; each still merges through the
 `% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts, flaky scenarios, the bundle's
 per-pack table by `scripts/<pack>/` path, a phase table per soak (empty, one, ramp, steady, churn, and a stormy night
 on bundle-40, in a world pinned at noon and clear weather) and a table per profiled suite scenario; a merge is
-validated in about 31 minutes against the last master commit with a finished validation, and the memory soak runs
+validated in about 37 minutes against the last master commit with a finished validation, and the memory soak runs
 nightly.
 
 **W0c (left): A/B scenarios that phases cannot hold** (S each). The phases, the pinned world, the per-scenario
