@@ -26,8 +26,9 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+  # Needs nothing from the check job (it builds its own bundle), so the two run side by side (PIPE-18); the release
+  # workflow still waits for the whole check workflow, so a failure in either stops a release.
   bds-smoke:
-    needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -46,10 +47,14 @@ jobs:
             echo "BDS_HARNESS_LOGS=$RUNNER_TEMP/bds-harness-logs"
           } >> "$GITHUB_ENV"
       - run: npm ci
+      # Keyed on the BDS version, not the whole of lib/server.mjs, which changes often (PIPE-21).
+      - name: BDS version
+        id: bds
+        run: echo "version=$(sed -n 's/^export const BDS_VERSION = "\([^"]*\)".*/\1/p' tools/test-bds/lib/server.mjs)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/bds
-          key: bds-${{ runner.os }}-${{ hashFiles('tools/test-bds/lib/server.mjs') }}
+          key: bds-${{ runner.os }}-${{ steps.bds.outputs.version }}-${{ hashFiles('tools/test-bds/setup.mjs') }}
       - run: node tools/test-bds/setup.mjs
         timeout-minutes: 8
       - name: BDS shared libraries are present

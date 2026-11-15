@@ -1,11 +1,14 @@
 // Fails if a generator or sync tool has a --check that npm run check doesn't run, or a check tool isn't run at all.
 // Every generated file (catalogs, news, resource packs, shared copies) is only as current as its --check in the
 // pipeline: a tool added without one lets a stale pack be published (history C7).
+// The steps live in tools/check-steps.txt (run by tools/check.mjs, which package.json's check script must call).
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { STEPS_FILE, parseSteps } from "./check.mjs";
 
 const root = join(import.meta.dirname, "..");
-const check = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts.check;
+const steps = parseSteps(readFileSync(STEPS_FILE, "utf8"));
+const check = steps.map((s) => s.cmd).join("\n");
 const walk = (/** @type {string} */ dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? (e.name === "test-bds" || e.name === "node_modules" ? [] : walk(join(dir, e.name))) : [join(dir, e.name)]));
 const problems = [];
 for (const f of walk(join(root, "tools"))) {
@@ -26,6 +29,10 @@ for (const f of readdirSync(examples).filter((x) => x.endsWith(".js"))) {
   }
 }
 if (!/npm run (--silent )?test\b/.test(check)) problems.push("npm run check doesn't run the unit tests (npm run test)");
+const script = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts.check;
+if (script !== "node tools/check.mjs") problems.push(`package.json's check script is "${script}": it must be "node tools/check.mjs" (the steps go in tools/check-steps.txt)`);
+const ordered = steps.filter((s) => !s.parallel);
+if (ordered.at(-1)?.cmd !== "node tools/check-versions.mjs") problems.push("node tools/check-versions.mjs must be the last ordered step in tools/check-steps.txt");
 if (problems.length) {
   console.error(`npm run check is missing steps:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
   process.exit(1);

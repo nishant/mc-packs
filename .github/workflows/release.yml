@@ -90,7 +90,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: mc-packs/package-lock.json
+          cache-dependency-path: |
+            mc-packs/package-lock.json
+            hosting/minecraft/package-lock.json
       # publish-packs runs mc-packs' catalog checks (admin-catalog.mjs reads @minecraft/server's typings), so mc-packs
       # needs its packages; without them the first release run failed with "Cannot find module '@minecraft/server/...'".
       - name: Install the mc-packs tools
@@ -99,9 +101,14 @@ jobs:
       # Installs hosting/minecraft's locked tools (marked, Playwright, qrcode) from its package-lock.json, with no install scripts.
       - name: Install the hosting tools
         working-directory: hosting/minecraft
-        run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          npx playwright install --with-deps chromium
+        timeout-minutes: 6
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      # Cached on the locked Playwright version, with a time limit and one retry (PIPE-12).
+      - name: Chromium for Playwright
+        uses: ./mc-packs/.github/actions/playwright
+        timeout-minutes: 10
+        with:
+          working-directory: hosting/minecraft
       - name: Release (open the hosting PR, do not merge it)
         id: release
         env:
@@ -169,7 +176,7 @@ jobs:
     needs: [token, release, upload]
     if: needs.release.outputs.branch != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 75 # up to 45 waiting on the hosting PR, then check-live
+    timeout-minutes: 90 # up to 45 waiting on the hosting PR, then check-live (up to 3 attempts, 3 minutes apart)
     steps:
       - name: Check out mc-packs master
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -191,15 +198,22 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: mc-packs/package-lock.json
+          cache-dependency-path: |
+            mc-packs/package-lock.json
+            hosting/minecraft/package-lock.json
       - name: Install the mc-packs tools
         working-directory: mc-packs
         run: npm ci --ignore-scripts
       - name: Install the hosting tools
         working-directory: hosting/minecraft
-        run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          npx playwright install --with-deps chromium
+        timeout-minutes: 6
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      # Cached on the locked Playwright version, with a time limit and one retry (PIPE-12).
+      - name: Chromium for Playwright
+        uses: ./mc-packs/.github/actions/playwright
+        timeout-minutes: 10
+        with:
+          working-directory: hosting/minecraft
       - name: Merge the hosting PR once its checks pass, and check the live site
         env:
           GH_TOKEN: ${{ secrets.HOSTING_TOKEN }}

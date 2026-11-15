@@ -1,0 +1,42 @@
+# Chromium for hosting/minecraft's Playwright (check-site realm in release.yml's release job, check-live in its merge
+# job), after that folder's `npm ci`. The browser is cached in ~/.cache/ms-playwright, keyed on the Playwright version
+# locked in its package-lock.json, so a release downloads it only when hosting bumps Playwright (PIPE-12: the
+# uncached install took 15 to 66 s, 245 s once, and once hung until the 45-minute job limit canceled the release).
+# The system libraries (install-deps, an apt-get run) are installed only when Chromium can't start without them, and
+# each install has a 4-minute limit and one retry, so a hung mirror costs minutes, not the release.
+name: playwright-chromium
+description: Cached Playwright Chromium for hosting/minecraft, with a time limit and one retry
+inputs:
+  working-directory:
+    description: The folder with the package-lock.json and node_modules that hold Playwright
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Locked Playwright version
+      id: version
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        v=$(node -p "const p = require('./package-lock.json').packages ?? {}; (p['node_modules/playwright-core'] ?? p['node_modules/playwright'] ?? {}).version ?? ''")
+        if [ -z "$v" ]; then v="lock-$(sha256sum package-lock.json | cut -c1-16)"; fi
+        echo "Playwright $v"
+        echo "version=$v" >> "$GITHUB_OUTPUT"
+    - name: Cached Chromium
+      id: cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-chromium-${{ runner.os }}-${{ steps.version.outputs.version }}
+    - name: Install Chromium (4-minute limit, one retry)
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        HIT: ${{ steps.cache.outputs.cache-hit }}
+      run: |
+        try() { timeout 240 "$@" || { echo "::warning::'$*' failed or took over 4 minutes; trying once more"; timeout 240 "$@"; }; }
+        launch() { node -e "require('playwright-core').chromium.launch().then((b) => b.close()).catch((e) => { console.error(e.message.split('\n')[0]); process.exit(1); })"; }
+        start=$(date +%s)
+        if [ "$HIT" != "true" ]; then try npx playwright install chromium; fi
+        if launch; then echo "Chromium starts without install-deps"; else try npx playwright install-deps chromium; launch; fi
+        echo "Chromium ready in $(( $(date +%s) - start )) s (cache hit: ${HIT:-false})"
