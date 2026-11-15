@@ -8,8 +8,8 @@
 #     the pair spans;
 #   bundle-10, bundle-40 (5 min each run): the genuine one-context Realm Bundle under the same soak, both trees built, one
 #     harness, run base, head, head, base and compared by lows and means (PIPE-07);
-#   listener (about 25 min): the idle bundle unprofiled (run.mjs --meter) with no events, 5 noop: events a tick and 5
-#     realm: events a tick, base and head, twice: the CPU of one script event listener wake-up (examples/listener-cost.js),
+#   listener (about 30 min): the idle bundle unprofiled (run.mjs --meter) with no events, 20 noop: events a tick and 20
+#     realm: events a tick, base and head, three rounds: the CPU of one script event listener wake-up (examples/listener-cost.js),
 #     then one short --native-profile pass;
 #   every soak and bundle job pins noon and clear weather and adds perf-soak's phases (empty, one, ramp, steady, churn;
 #     bundle-40 also a 60 s night in a thunderstorm): only the steady window is compared and judged;
@@ -247,20 +247,23 @@ jobs:
               done ;;
             listener)
               # One script event listener wake-up, engine side included (PIPE-03 (2)): each side's bundle idle and
-              # unprofiled (--meter) with no events, 5 noop: and 5 realm: events a tick; twice, alternating the order.
+              # unprofiled (--meter) with no events, 20 noop: and 20 realm: events a tick (20, not 5: a CPU figure of an
+              # idle server moves by about 0.3 ms/tick run to run, and 5 x 67 wake-ups measured about 0.4); three rounds,
+              # each in another order of sides and variants.
               for side in base head; do (cd "${!side}" && node tools/bundle.mjs --all > /dev/null); cp "${!side}/dist/realm_bundle.mcpack" "$RUNNER_TEMP/$side.mcpack"; done
+              sha256sum "$RUNNER_TEMP"/base.mcpack "$RUNNER_TEMP"/head.mcpack
               cost() { # side variant round
-                rate=5 ns=$2
+                rate=20 ns=$2
                 if [ "$2" = idle ]; then rate=0 ns=noop; fi
                 node tools/test-bds/run.mjs --quiet --no-relay --flat --meter --profile-json "$OUT/$1-$2-$3.json" --bundle "$RUNNER_TEMP/$1.mcpack" --scenario tools/test-bds/examples/listener-cost.js --arg rate="$rate" --arg ns="$ns" --arg seconds="$SECONDS_" --timeout $((SECONDS_ + 300)) > "$OUT/$1-$2-$3.out" 2>&1 || true
                 echo "$1 $2 $3: $(grep -m1 "CPU ms/tick" "$OUT/$1-$2-$3.out" || tail -1 "$OUT/$1-$2-$3.out")"
               }
-              for r in 1 2; do
-                if [ "$r" = 1 ]; then order="base head"; else order="head base"; fi
-                for side in $order; do for v in idle noop realm; do cost "$side" "$v" "$r"; done; done
+              for r in 1 2 3; do
+                case $r in 1) order="base head" vs="idle noop realm" ;; 2) order="head base" vs="realm noop idle" ;; 3) order="base head" vs="noop realm idle" ;; esac
+                for side in $order; do for v in $vs; do cost "$side" "$v" "$r"; done; done
               done
-              # BDS's own script profiler and watchdog statistics, a separate short pass (PIPE-03 (3)).
-              node tools/test-bds/run.mjs --quiet --no-relay --flat --meter --native-profile --bundle "$RUNNER_TEMP/head.mcpack" --scenario tools/test-bds/examples/listener-cost.js --arg rate=0 --arg seconds=20 --arg settle=5 --timeout 300 > "$OUT/native.out" 2>&1 || true
+              # BDS's own script profiler, a separate short pass under 5 realm: events a tick (PIPE-03 (3)).
+              node tools/test-bds/run.mjs --quiet --no-relay --flat --meter --native-profile --bundle "$RUNNER_TEMP/head.mcpack" --scenario tools/test-bds/examples/listener-cost.js --arg rate=5 --arg ns=realm --arg seconds=20 --arg settle=5 --timeout 300 > "$OUT/native.out" 2>&1 || true
               sed -n '/^native profile:/,/^log:/p' "$OUT/native.out" | head -60
               cp -r "$BDS_HARNESS_LOGS"/*.native "$OUT/" 2>/dev/null || true ;;
             memory)

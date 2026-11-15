@@ -52,7 +52,9 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--no-relay` | off | The shim does not relay pack messages (`t.messages()` stays empty; forms still work). For profiling. |
 | `--profile` | off | Time every pack's callbacks during the scenario (see "Profiling" below). |
 | `--profile-every <s>` | 60 | With `--profile`: also print an interim report every s seconds (0 = off). |
-| `--profile-json <file>` | log + `.profile.json` | With `--profile`: where the JSON report goes. |
+| `--profile-json <file>` | log + `.profile.json` | With `--profile` or `--meter`: where the JSON report goes. |
+| `--meter` | off | The tick meter and `bedrock_server` CPU alone, no profiler (see "The meter" below). `--profile` includes it. |
+| `--native-profile` | off | Also send BDS's own `script profiler start` / `stop` and `script watchdog exportstats` (see "The meter" below). |
 | `-h`, `--help` | | Print the usage and exit. |
 
 Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or `/home/user/bds` on Linux; downloaded by `setup.mjs` if
@@ -77,8 +79,11 @@ same `this` and arguments and returns their result, so the pack behaves the same
 `world`/`system` `beforeEvents`/`afterEvents` subscription (unsubscribe takes the pack's own function
 as before) and custom command callbacks. It also counts `setDynamicProperty` writes (world, entity,
 item, and the characters written), `setActionBar`, `setTitle` and `runCommand` calls, and script events by id: what each pack sends (`system.sendScriptEvent`) and what its `scriptEventReceive` listeners spend per id (calls and ms). The summary prints the most-sent ids per tick; the JSON has them per pack (`scriptEventsSent`, `scriptEventsHandled`) and summed in `bundle.scriptEvents` (`sentPerTick`, `senders`, `handledPerTick`), counted over the whole profiled window. Each callback
-is named by its kind and the `file:line` that handed it over (`runInterval(20) @ main.js:148`). The
-window starts when the scenario starts (startup and module loading are not measured) and ends when
+is named by its kind and the `file:line` that handed it over (`runInterval(20) @ main.js:148`), read from a stack
+capture once per subscription or interval. A `system.run` or `runTimeout` made inside a timed callback (deferring work
+to a later tick, often every tick) is named by its parent's `file:line` instead, with no stack capture, so the
+profiler does not charge the pack tens of microseconds per deferral (PIPE-08); `stacks` in each pack's counters says
+how many captures were taken. The window starts when the scenario starts (startup and module loading are not measured) and ends when
 it finishes; with `t.restart()` only the last phase is reported. The test pack also measures the
 wall time between ticks (TPS, tick interval p95), and on Linux `run.mjs` reads `bedrock_server`'s CPU
 time and memory from `/proc`.
@@ -105,6 +110,37 @@ the scenario itself also cost server time that no pack is charged for.
 ```bash
 node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=120 --timeout 900
 ```
+
+### The meter (`--meter`) and the engine's side
+
+The profiler times only the inside of the callbacks: building each event object and entering the script engine for
+every listener, native work a call queues for later and the profiler's own bookkeeping are in no figure. `--meter`
+runs a scenario unprofiled and reports what the engine sees: TPS, tick interval average, p50, p95, p99 and max (the
+test pack's tick meter) and `bedrock_server` CPU ms/tick (from `/proc`, Linux only), over the scenario from its start
+(or from `t.measure()`, which starts the window there) to its end. Its JSON (`--profile-json`) has `server`,
+`process`, `workload` and every `t.report()` under `reports`. Comparing CPU ms/tick of one workload profiled and
+unprofiled bounds the profiler's own cost.
+
+`examples/listener-cost.js` uses it for the cost of one script event listener wake-up, engine side included: the
+Realm Bundle idle for 60 s three times, with no events, with `rate` `noop:` events a tick (no listener takes that
+namespace) and with `rate` `realm:` events a tick (every member's `script-events.js` wakes once per event). (realm - noop)
+CPU ms/tick / (rate x 67) is one wake-up; (noop - idle) / rate is one send. CI uses rate 20: an idle server's CPU
+figure moves by about 0.3 ms/tick from run to run. `validate.yml`'s `listener` job runs it on the
+base's and the head's bundle on every merge (see its header for the command).
+
+`--native-profile` sends BDS's own `script profiler start` when the scenario starts and `script profiler stop` and
+`script watchdog exportstats` when it ends, prints every server line that follows and copies the files BDS wrote
+into `<log>.native/`. Run it as its own short pass, never inside a measured soak: the native profiler has its own
+overhead. What BDS 1.26.52 does with these commands (tried in CI, validate run 43664028385):
+- `script profiler start` / `stop` exist. `stop` answers `Profile saved to './profiles/<name>.cpuprofile'` (Chrome's
+  format, a sample about every 2 ms, native calls such as `System::currentTick` or
+  `ScriptEventCommandMessageAfterEvent::sourceEntity` as frames of their own under the calling script file).
+  `run.mjs` copies it out and prints its samples by pack folder and the top functions (`lib/native-profile.mjs`). The
+  profile has no idle node, so on an idle server most samples land on whatever frame ran last: read its shares under
+  load, as where script time goes, not how much of it there is.
+- `script watchdog exportstats` does not exist (`Syntax error: Unexpected "watchdog"`), so nothing reports script
+  memory yet. `script diagnostics startcapture` / `stopcapture` are also sent; the listener job's native pass shows
+  what they answer.
 
 Performance runs use 10 players (the Realm has at most 10) and 40 players (a scalability check), never other
 counts. During development use 120 s windows (the default); release validation uses 300 s (`--arg seconds=300`).

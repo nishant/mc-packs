@@ -5,7 +5,7 @@
 // no listener at all (the harness's own listeners take only `harness:`). Run unprofiled with --meter, three times:
 // rate=0 (idle), ns=noop and ns=realm. Then (realm - noop) bedrock_server CPU ms/tick / (rate x members) is one wake-up
 // and (noop - idle) / rate is the cost of sending one event. validate.yml's `listener` job runs the three on the base's
-// and the head's bundle, twice in alternating order, and the report prints both figures (validate-report.mjs).
+// and the head's bundle (rate 20), three rounds in rotating order, and the report prints both figures (validate-report.mjs).
 //   node tools/test-bds/run.mjs --quiet --no-relay --flat --meter --bundle dist/realm_bundle.mcpack --scenario tools/test-bds/examples/listener-cost.js --arg rate=5 --arg ns=realm --arg seconds=60 --timeout 400
 // Arguments (--arg key=value): rate (events a tick, default 5; 0 = idle), ns (realm or noop, default realm), seconds
 // (the measured window, default 60), settle (seconds before it, default 15: the packs' startup work is not measured).

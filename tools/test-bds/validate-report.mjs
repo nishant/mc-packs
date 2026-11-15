@@ -336,7 +336,7 @@ function main() {
       if (!Number.isFinite(c.head?.wakeUs)) { L.push("No wake-up figure for the head (a run failed: see the job's .out files).", ""); red = true; }
       const native = read(path.join(at, "native.out")).split("\n");
       const from = native.findIndex((l) => l.startsWith("native profile:"));
-      if (from >= 0) L.push("<details><summary>Native script profiler and watchdog statistics (--native-profile)</summary>", "", "```", ...native.slice(from, from + 60).filter((l) => /^(native profile:| {2}[|]| {2}file| {4})/.test(l)).map((l) => l.slice(0, 400)), "```", "", "</details>", "");
+      if (from >= 0) L.push("<details><summary>Native script profiler and watchdog statistics (--native-profile)</summary>", "", "```", ...native.slice(from, from + 60).filter((l) => /^(native profile:| {2}[|]| {2}file| {2}cpuprofile| {4})/.test(l)).map((l) => l.slice(0, 400)), "```", "", "</details>", "");
       continue;
     }
     const side = (/** @type {string} */ s) => files.filter((f) => new RegExp(`^${s}(-\\d+)?\\.json$`).test(f)).map((f) => json(path.join(at, f))).filter(Boolean);

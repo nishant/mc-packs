@@ -10,6 +10,7 @@ import { parseArgs } from "node:util";
 import { HERE, IS_WIN, BDS_BIN, makeServerDir, writeProps, baseProps, reservePort, recordOwner, startBds, stopBds, ensureTemplate, copyTemplate, bdsDir, tmpRoot } from "./lib/server.mjs";
 import { findPacks, loadBundle, installBehaviorPack, installResourcePack, installHarnessPack, HARNESS_PACK } from "./lib/packs.mjs";
 import { Profile } from "./lib/profile-report.mjs";
+import { cpuProfileLines, summarizeCpuProfile } from "./lib/native-profile.mjs";
 
 const USAGE = `usage: node run.mjs --packs <dir> [options]
   --packs <dir>        folder containing pack folders (default: ../../packs from this script, if present)
@@ -238,10 +239,13 @@ const nativeLines = [];
 function nativeStart() {
   nativeAt = Date.now();
   bds.send("script profiler start");
+  bds.send("script diagnostics startcapture");
 }
 function nativeStop() {
   if (!nativeAt) return;
   bds.send("script profiler stop");
+  bds.send("script diagnostics stopcapture");
+  // Not on BDS 1.26.52 ('Syntax error: Unexpected "watchdog"'); still sent, so a BDS that has it is noticed.
   bds.send("script watchdog exportstats");
 }
 
@@ -434,8 +438,12 @@ function summary(reason) {
     for (const l of nativeLines.slice(0, 40)) L.push(`  | ${l.slice(0, 300)}`);
     for (const f of files) {
       L.push(`  file ${f.file} (${f.bytes} bytes) -> ${f.dest}`);
-      if (f.bytes < 2e6 && /\.(json|txt|csv|cpuprofile)$/i.test(f.file)) {
-        try { L.push(`    ${fs.readFileSync(f.dest, "utf8").replace(/\s+/g, " ").slice(0, 600)}`); } catch { /* unreadable */ }
+      if (f.bytes < 2e7 && /\.(json|txt|csv|cpuprofile)$/i.test(f.file) && !/Dedicated_Server\.txt$/.test(f.file)) {
+        try {
+          const text = fs.readFileSync(f.dest, "utf8");
+          if (/\.cpuprofile$/i.test(f.file)) L.push(...cpuProfileLines(summarizeCpuProfile(JSON.parse(text)), f.file));
+          else L.push(`    ${text.replace(/\s+/g, " ").slice(0, 600)}`);
+        } catch { /* unreadable */ }
       }
     }
   }
