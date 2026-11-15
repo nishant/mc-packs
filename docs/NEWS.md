@@ -7,6 +7,12 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Cleaner building outlines
+
+- Easy Building: shape outlines are now a few clean lines along the shape's edges instead of a box around every block, for building and digging. Big or bumpy shapes no longer flood your screen with particles.
+- Easy Building: a Mirror shows only the planes you turned on, as simple lines.
+- Easy Building: your preview outlines and mirror guides are only shown to you now, not to players around you.
+
 ## Town spots
 
 - Town Projects: towns pick spots for their projects faster, especially on hillsides.

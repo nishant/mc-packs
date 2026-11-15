@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Easy Building: outlines and mirror guides are drawn as a few lines each, for the builder only, so big and rough-ground previews no longer flood phones with particles; with nobody building, Easy Building costs the server almost nothing.",
     "Town Projects picks spots for its projects much faster on hillsides, stops rescanning the same ground every 5 seconds, and tells operators and the players in a town when no good spot can be found.",
     "Daily Quests, Skills, Milestones, Titles & Trails, Atlas of the Realm and Realm News write their saved data less often (Daily Quests no longer on every counted block), and Skills no longer forgets blocks placed just before the Realm closes.",
     "Champions and the Bounty Board cost the server less: mob farms and dropped items no longer wake Champions up, and a Stormcaller strike or a new bounty target no longer makes one long tick.",
@@ -19,6 +20,7 @@
     "Minimap radar: with players moving it costs the server about a third of what it did (about 4 ms a tick instead of 11 to 14), and with 10 players the land under the radar fills in far faster."
   ],
   "resourceNotes": [
+    "Easy Building Guides: new line particles for build and destroy outlines and mirror and radial guides.",
     "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens.",
     "Realistic Rain: the long thunderstorm, wind and muffled-rain clips are streamed as they play instead of loaded whole into memory, which should leave phones more memory during storms.",
     "Realm Skies: new particles for the little rainbow over a pot of gold and a NOS boost's plume, and a tornado funnel of fewer, slightly bigger clouds that looks the same at about half the particles."
@@ -101,8 +103,8 @@
       "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "build_bp": {
-      "version": "3.0.18",
-      "notes": "Build, destroy, copy, cut and paste read their cells in runJob jobs within a shared 4 ms a tick (one read per cell for filter and undo), stop if the owner leaves, dies or changes dimension before anything is charged, cut writes air through the placement queue, Instant and destroy writes share the budget, an undo stops a build still being written and refunds the rest, queued writes finish after their player leaves, and collected destroy drops are handed over as stacks for any size. Before that (3.0.17): the deferred preview solves a shape once while the aim rests and reads big shapes over a few ticks; queued blocks open a chunk loader only once one comes back unloaded (at most two), wait up to a minute, and are refunded to survival players when given up."
+      "version": "3.0.19",
+      "notes": "Outlines (build, destroy, copy, paste) are the shape's outer edges as line particles, at most 250, paced by their count; a mirror plane is six lines and only planes that are on are drawn; previews and guides go to the builder only. Digging tools' uses left are read once per inventory change, a steady action bar line is resent once a second unless it changes, an open panel works out its aim once a tick. Every per-tick loop runs only while it has work; the stray sweeps take turns once a minute; one hit listener for panels and books; player data forgotten on leave."
     },
     "map_bp": {
       "version": "1.5.9",
@@ -153,8 +155,8 @@
       "notes": "Saving the regions found and the sites built writes only the parts that changed, and in a big world the region or site at the edge of two saved parts is no longer lost on a restart."
     },
     "news_bp": {
-      "version": "1.7.113",
-      "notes": "Realm News shows the town spot changes."
+      "version": "1.7.114",
+      "notes": "The news entry for Easy Building's cleaner outlines."
     },
     "cooking_bp": {
       "version": "1.1.20",
@@ -163,6 +165,10 @@
     "guilds_bp": {
       "version": "1.1.19",
       "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
+    },
+    "build_rp": {
+      "version": "2.1.17",
+      "notes": "New line particles eb:edge_x, eb:edge_y, eb:edge_z and eb:edge_ray for outlines and modifier guides; the unused eb:mod_x and eb:mod_z are gone."
     }
   }
 }
