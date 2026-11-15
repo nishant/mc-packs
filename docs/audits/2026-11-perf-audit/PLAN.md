@@ -419,7 +419,12 @@ and time-limited, the bundle smoke beside `check`, the BDS cache keyed on its ve
 Left: confirm them on real releases, which could not run while `nishant/hosting`'s Actions budget was exhausted:
 merge-to-live time and the "Chromium for Playwright" step times over the next five releases (9 to 14 minutes and
 15 to 245 s before, no reruns wanted). The upload job's 2-minute listing of 76 releases is in hosting's
-`archive-packs.mjs` (PIPE-12: one GraphQL query instead), a hosting change.
+`archive-packs.mjs` (PIPE-12: one GraphQL query instead), a hosting change. `npm run check` in two lanes took 41 s
+to 24 s on the PC but 85 s to 83 s in CI: on the 4-vCPU runner the unit tests alone keep every core busy (220 files,
+about 83 s of process time, mostly each file's own process start and imports; the slowest are `map-art-themes`,
+`map-hotpaths` and `suite-stage`, about 7 s each), so CI time drops only with less test work. One process for all
+files (`--experimental-test-isolation=none`) did not finish within 3 minutes on the PC: some tests depend on their own
+process.
 
 ## 5. Order and what can run together
 
