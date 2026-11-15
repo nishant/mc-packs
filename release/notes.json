@@ -79,7 +79,7 @@
     },
     "map_bp": {
       "version": "1.5.8",
-      "notes": "The radar keeps filling in when its terrain cache is full or over its cap (after a big scan or when players leave), plans travel at the cap far more cheaply, re-reads a still radar's land over about 15 seconds instead of in one burst, and frees terrain nobody has looked at for 5 minutes. /realm:minimap scan is limited to radius 128 for players (operators keep 384)."
+      "notes": "The radar keeps filling in when its terrain cache is full or over its cap (after a big scan or when players leave), plans travel at the cap far more cheaply, and frees terrain nobody has looked at for 5 minutes. /realm:minimap scan is limited to radius 128 for players (operators keep 384)."
     }
   }
 }

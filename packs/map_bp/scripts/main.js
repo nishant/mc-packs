@@ -1014,15 +1014,6 @@ let readCost = 0.06;
 let readMsSum = 0;
 let readOpsSum = 0;
 const SCAN_MAX_AGE = 2400;
-/**
- * A plan notices columns past SCAN_MAX_AGE this many ticks after the first of them, so the columns a radar read in
- * the same few ticks are re-read together and the plan is not rebuilt on every check while they expire one by one.
- */
-const STALE_BATCH = 200;
-/** Re-reads of columns past SCAN_MAX_AGE (operations a tick, all viewers together): a still radar's 2-minute re-read is
- * spread over about 15 s instead of 25 ticks at the scan ceiling (HUD-30). New land always goes first. */
-const STALE_OPS = 8;
-let staleOpsTick = -1, staleOps = 0;
 let storeIdleAt = -Infinity, storeTrims = 0, storesFreed = 0;
 /** Ticks with no radar viewer before a store's columns are freed (5 minutes), and how often that is checked. */
 const STORE_IDLE = 6000;
@@ -1344,11 +1335,7 @@ function scanFrame() {
       if(pick.resolution!==COL)return undefined;
       const current=store.cols.get(pick.key);
       if(current&&current.valid!==false&&now-current.tick<=SCAN_MAX_AGE&&(!pick.stale||current.tick>=(pick.since??now)))return "known";
-      if(pick.stale){
-        if(staleOpsTick!==now){staleOpsTick=now;staleOps=0;}
-        if(staleOps>=STALE_OPS)return "defer";
-        staleOps++;return undefined;
-      }
+      if(pick.stale)return undefined;
       if (detailHydrationBlocked || !detailPersistence.ready) return undefined;
       const cached = detailPersistence.lookup(store.id, pick.wx, pick.wz, Date.now());
       if (cached.state === "known") {
@@ -1463,7 +1450,7 @@ function planFor(player, now,trustedRoster=false) {
     const rerank=now>=(state.reorderAt??Infinity);
     const rolled=rollTerrainDemand({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,geometry,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed,rerank});
     if(rolled){old.picks=rolled.picks;old.pos=0;old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;old.rangeDeleted=undefined;
-      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh+STALE_BATCH);
+      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh);
       if(rerank)state.reorderAt=now+80;if(rolled.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,rolled.nextRetry);retryAt.set(idOf(player),Math.min(retryAt.get(idOf(player))??Infinity,rolled.nextRetry));}
       labStats.rolled++;labStats.rollTail+=rolled.stats.tailVisited;labStats.rollEntered+=rolled.stats.entered;labStats.rollRawChecks+=rolled.stats.rawChecks;planTurn.made++;return old;
     }
@@ -1518,7 +1505,7 @@ function planFor(player, now,trustedRoster=false) {
   const plan = { id: idOf(player), player, store, picks: labOrder(picks, now), dim, py, x: at.x, z: at.z,
     at: now, pos: 0, missed: 0, missRun: 0, failed: same ? old.failed : undefined };
   scanPlans.set(idOf(player), plan);
-  labPlans.set(idOf(player), { key: geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,lossSeq:store.lossSeq,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1)+STALE_BATCH,readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
+  labPlans.set(idOf(player), { key: geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,lossSeq:store.lossSeq,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
   if (nextRetry < Infinity) retryAt.set(idOf(player), nextRetry);
   planTurn.made++; labStats.planned++;
   return plan;

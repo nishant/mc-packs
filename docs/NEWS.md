@@ -7,6 +7,10 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Minimap scans
+
+- Minimap: radars keep filling in after a big scan, and players can scan up to 128 blocks (operators 384).
+
 ## Phone HUD, rain and moon fixes
 
 - Side HUD: the boxes on the right now start right under the compass when the Minimap radar is hidden, so they show on short phone screens.
