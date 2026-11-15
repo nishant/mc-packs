@@ -164,16 +164,26 @@ const EMPTY_SEG = segment("", " ", SEG_BYTES);
 const EMPTY_RADAR_SEG = segment("", " ", RADAR_SEG_BYTES);
 const EMPTY_QUEST_SEG = segment("", " ", QUEST_SEG_BYTES);
 
+// An empty quest segment at the end is left off, and an empty radar segment with it (HUD-04): a compass-only title
+// is 1,609 bytes instead of 5,425, 4,913 with the radar. Every Realm Resources version reads it the same: the radar
+// panel is hidden by byte 0 ("N"), and a quest place that slices past the end gets "", which is not its code. The
+// ten box slots (up to byte 1,609) are always sent: a box slice that came out "" would not equal $slot_empty in
+// hud_screen.json and would draw an empty box.
 /** The subtitle for a set of slot texts. @param {Record<string, string>} texts slot -> cleaned text */
 export function compose(texts) {
   let out = texts.radar ? "R00000000" : "N00000000";
   let first = true;
+  let tail = "";
   for (const slot of ALL_SLOTS) {
     const text = texts[slot] ?? "";
     const segBytes = segBytesOf(slot);
-    if (!text) out += slot === "radar" ? EMPTY_RADAR_SEG : slot === "quest" ? EMPTY_QUEST_SEG : EMPTY_SEG;
-    else {
-      out += segment(text, first ? " " : "\n", segBytes);
+    if (!text) {
+      if (slot === "radar") tail += EMPTY_RADAR_SEG;
+      else if (slot === "quest") tail += EMPTY_QUEST_SEG;
+      else out += EMPTY_SEG;
+    } else {
+      out += tail + segment(text, first ? " " : "\n", segBytes);
+      tail = "";
       first = false;
     }
   }
@@ -379,13 +389,19 @@ function composeSlots(slots) {
   const radarEntry = slots.get("radar");
   let out = radarEntry && textOf("radar", radarEntry) ? "R00000000" : "N00000000";
   let first = true;
+  // Empty radar and quest segments wait here and are left off when nothing follows (see compose).
+  let tail = "";
   for (const slot of ALL_SLOTS) {
     const e = slots.get(slot);
     const text = e ? textOf(slot, e) : "";
-    if (!e || !text) out += slot === "radar" ? EMPTY_RADAR_SEG : slot === "quest" ? EMPTY_QUEST_SEG : EMPTY_SEG;
-    else {
+    if (!e || !text) {
+      if (slot === "radar") tail += EMPTY_RADAR_SEG;
+      else if (slot === "quest") tail += EMPTY_QUEST_SEG;
+      else out += EMPTY_SEG;
+    } else {
       if (e.body === undefined) e.body = segment(text, "", segBytesOf(slot));
-      out += (first ? " " : "\n") + e.body;
+      out += tail + (first ? " " : "\n") + e.body;
+      tail = "";
       first = false;
     }
   }
@@ -458,8 +474,16 @@ function draw(player) {
   }
 }
 
-/** @param {string} playerId */
-const playerById = (playerId) => world.getAllPlayers().find((p) => p.id === playerId);
+/** player id -> Player, filled from the roster on a miss (a join, or players already in when the script loads). @type {Map<string, Player>} */
+const roster = new Map();
+/** The online player with this id (HUD-27: a map read, not a search of every player on each draw). @param {string} playerId */
+const playerById = (playerId) => {
+  const p = roster.get(playerId);
+  if (p && p.isValid) return p;
+  roster.clear();
+  for (const q of world.getAllPlayers()) roster.set(q.id, q);
+  return roster.get(playerId);
+};
 
 /**
  * The side boxes for one pack.
@@ -729,6 +753,7 @@ system.runInterval(() => {
 }, SWEEP_TICKS);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  roster.delete(playerId);
   forgetDelivery(playerId);
   picture.delete(playerId);
   inbox.delete(playerId);

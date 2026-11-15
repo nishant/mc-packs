@@ -621,6 +621,55 @@ test("dense producer roundtrips all UI cuts at full capacity without self/quest/
     assert.equal(side.compose({}).slice(0,9),"N00000000");
   }
 });
+// HUD-04: empty radar and quest segments at the end are left off. The HUD (this one and every older Realm Resources,
+// whose cuts are the same) must read the short title exactly like the padded one, and nothing before byte 1,609 may go.
+test("a title without the radar or the quest box leaves their empty segments off and reads the same", () => {
+  const side = loadSide();
+  const radar = Array.from({ length: 33 }, () => G.Q_EMPTY.repeat(33)).join("\n") + SELF_ARROWS[0] + "1";
+  const emptyRadar = side.segment("", " ", side.RADAR_SEG_BYTES);
+  const emptyQuest = side.segment("", " ", side.QUEST_SEG_BYTES);
+  const textExpr = ui.realm_slot_text.bindings.at(-1).source_property_name;
+  const slice = ui.realm_slot_text["$slot_slice|default"];
+  const find = (/** @type {string} */ name, /** @type {any} */ node = ui.realm_side_area) => {
+    for (const control of node.controls ?? []) for (const [key, own] of Object.entries(control)) {
+      if (key.split("@")[0] === "realm_" + name) return own;
+      const nested = find(name, own);
+      if (nested) return nested;
+    }
+  };
+  const q = ui["realm_quest_slot@hud.realm_slot"];
+  /** @type {[string, Record<string, string>, number, string][]} */
+  const cases = [
+    ["nothing", {}, 1609, emptyRadar + emptyQuest],
+    ["the compass strip alone", { top: "N" }, 1609, emptyRadar + emptyQuest],
+    ["the strip and boxes", { top: "N", right1: "§fHi", left4: "x", middle: "m" }, 1609, emptyRadar + emptyQuest],
+    ["the radar and the strip", { top: "N", radar }, 4913, emptyQuest],
+    ["a quest box without the radar", { top: "N", quest: side.questCode("left2") + "§bQuest" }, 5425, ""],
+    ["everything", { top: "N", radar, right2: "b", quest: side.questCode("right1") + "§bQuest" }, 5425, ""],
+  ];
+  for (const [name, texts, bytes, missing] of cases) {
+    const sub = side.compose(texts);
+    assert.equal(Buffer.byteLength(sub), bytes, `${name}: ${bytes} bytes`);
+    const padded = sub + missing;
+    assert.equal(Buffer.byteLength(padded), 5425, `${name}: the padded title is the old 5,425 bytes`);
+    assert.deepEqual(visibleOwners(side.MARK, sub), visibleOwners(side.MARK, padded), `${name}: the same panels draw`);
+    const short = { "#hud_title_text_string": side.MARK, "#hud_subtitle_text_string": sub };
+    const full = { "#hud_title_text_string": side.MARK, "#hud_subtitle_text_string": padded };
+    for (const slot of [...side.SLOTS, "top"]) {
+      const own = find(slot);
+      const vars = { skip: own.$skip, slot_slice: slice };
+      assert.equal(evaluate(textExpr, vars, short, "string"), evaluate(textExpr, vars, full, "string"), `${name}: ${slot} reads the same`);
+    }
+    const qv = { skip: q.$skip, slot_slice: q.$slot_slice };
+    // Without a quest box its places slice past the end ("", hidden like the padded one: visibleOwners above).
+    if (texts.quest) assert.ok(evaluate(textExpr, qv, short, "string").startsWith(texts.quest), `${name}: the quest box reads its text`);
+    else assert.equal(evaluate(textExpr, qv, short, "string"), "", `${name}: the quest box reads nothing`);
+  }
+  // Cutting any box slot off (the "stop after the last non-empty slot" idea) draws empty boxes: never shorter than 1,609.
+  const cut = Buffer.from(side.compose({ right1: "§fHi" })).subarray(0, 9 + 160).toString();
+  assert.notDeepEqual(visibleOwners(side.MARK, cut), ["realm_right1"], "a title cut inside the box slots draws empty boxes");
+});
+
 test("live radar is always north-up: fixed 3-byte self slot and flag 1, four unconditional outside-rim plaques", () => {
   const side = loadSide();
   const grid = Array.from({length:33},()=>G.Q_EMPTY.repeat(33)).join("\n");

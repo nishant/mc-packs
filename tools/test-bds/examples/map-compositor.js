@@ -77,7 +77,7 @@ export default async function (t) {
     timeout: 300,
     message: "a Minimap title carries the HUD's box and the radar",
   });
-  t.check(utf8(both.subtitle).length === 5425, `the subtitle is 5425 bytes (${utf8(both.subtitle).length})`);
+  t.check(utf8(both.subtitle).length === 4913, `the subtitle is 4913 bytes: no quest box, so its empty segment is left off (${utf8(both.subtitle).length})`);
   t.check(events.some((e) => e.id === "realm:side_comp" && e.m.from === "map" && e.m.players.includes(p.id) && e.m.ticks > 0), "the Minimap claims the player (realm:side_comp)");
 
   // --- Steady: turn the player for 10 seconds (many redraws). Nothing from the Minimap on realm:side, and the HUD

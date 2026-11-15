@@ -1,6 +1,6 @@
 // The Minimap's empty panels (map_bp with Side HUD's title protocol). A realm or personal Minimap off must leave the
-// radar's slot EMPTY in the subtitle, byte for byte what hud_rp's `realm_radar_panel` compares with (1101 "§r":
-// 3303 bytes), so the whole radar panel and its black background are hidden, not drawn empty (O69, the black square at
+// radar's slot EMPTY in the subtitle: byte 0 "N" and either the empty cut (1101 "§r": 3303 bytes) or, with no quest
+// box, no radar segment at all (the title ends at byte 1,609), so the whole radar panel and its black background are hidden, not drawn empty (O69, the black square at
 // the top right). The compass strip's slot is checked the same way (53 "§r": 159 bytes), and no pack of this run writes
 // a quest box, so the quest slot never starts with a quest code. Another readout (a probe in Right 1, as another
 // pack's box would be) keeps the Side HUD title on screen while the Minimap parts go, which is when the black square
@@ -88,7 +88,8 @@ export default async function (t) {
   const stripOf = (sub) => cut(sub, 9);
   const probeShows = (sub) => cut(sub, 0).includes("Probe readout");
   const radarOn = (sub) => radarOf(sub) !== EMPTY_RADAR && radarOf(sub).replace(/[~]/g, "").replace(/§r/g, "").length > 100;
-  const radarOff = (sub) => radarOf(sub) === EMPTY_RADAR;
+  // Off: byte 0 is "N" (what hides the panel) and the slot is the empty cut, or left off with the quest box (HUD-04).
+  const radarOff = (sub) => (sub ?? "")[0] === "N" && (radarOf(sub) === EMPTY_RADAR || (radarOf(sub) === "" && utf8(sub).length === 1609));
   const stripOn = (sub) => stripOf(sub) !== EMPTY_SLOT && stripOf(sub).replace(/[~]/g, "").replace(/§r/g, "").length > 0;
   const stripOff = (sub) => stripOf(sub) === EMPTY_SLOT;
 
@@ -105,7 +106,7 @@ export default async function (t) {
   await until((s) => radarOn(s) && stripOn(s), "the radar and the compass strip show");
   probe(p);
   let title = await until((s) => radarOn(s) && stripOn(s) && probeShows(s), "the probe readout shares the title with the radar and the strip");
-  t.check(utf8(title.subtitle).length === 5425, `the subtitle is 5425 bytes (${utf8(title.subtitle).length})`);
+  t.check(utf8(title.subtitle).length === 4913, `the subtitle is 4913 bytes: no quest box, so its empty segment is left off (${utf8(title.subtitle).length})`);
   t.check(!cut(title.subtitle, 11).startsWith("§s§q§"), "no quest box is in this subtitle");
 
   // --- The player's radar off: the radar slot is exactly the empty cut, the strip and the probe stay.
