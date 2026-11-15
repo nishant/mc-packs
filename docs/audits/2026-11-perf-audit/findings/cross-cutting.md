@@ -38,6 +38,13 @@ remaining gains are not in any one pack's steady loop. They are in how 67 packs 
   (building an event object and entering the script engine 67 times per event) is not measured by anything today.
   At the documented 10 us per native transition it would be about 0.7 ms/tick at 40 in the validation workload, a
   third of the bundle's whole figure, but that number is an estimate: measure it first (W0).
+- **Measured (W0d, 2026-11-15, validate run 43665698138, `listener` job):** an idle Realm Bundle under `--meter`,
+  20 no-op versus 20 `realm:` events a tick, three rounds in rotating order: bedrock_server CPU went from 1.61 to
+  2.96 ms/tick (base) and 1.50 to 2.92 (head), so one listener wake-up, engine and each pack's JS dispatch together,
+  costs about **1.0 us**, about 0.07 ms per event sent to 67 packs. At the soak's 0.98 events a tick at 40 players
+  that is about 0.07 ms/tick, not 0.7. The single-listener hub is therefore worth little; the `/realm:help` churn
+  spike (144 to 272 ms, issue #259) is the packs' own handler work inside their callbacks, which is what W1's census
+  changes target.
 - Fix: one native listener per script context. Keep each pack's handler table (order, error handling and "*"
   handlers stay per pack) but register each pack's dispatcher with a hub on `globalThis.__realmEvents`: the hub owns
   the single `scriptEventReceive` subscription and an index `id -> [pack dispatchers that have a handler for it]`

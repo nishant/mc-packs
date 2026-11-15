@@ -1,6 +1,6 @@
 # Full validation after a release (docs/WORKING.md "Testing in CI"): every merge to master runs the long work that no
 # longer blocks a release, every job at once (14 runners by default; the repository variable VALIDATE_PARALLEL or the
-# run's `parallel` input sets 1-20; the repo is public, so GitHub-hosted minutes are free), in about 31 minutes:
+# run's `parallel` input sets 1-20; the repo is public, so GitHub-hosted minutes are free), in about 37 minutes:
 #   soak-10, soak-40 (15 min each; 10 and 40 players only, owner answer October 20, 2026): the profiled perf soak, the
 #     base and this commit back to back on the same runner (runners differ by 10-40%, so only a same-runner pair shows
 #     a change). The base is the newest master commit whose push validation finished (not canceled), so merges whose
