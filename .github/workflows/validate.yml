@@ -6,7 +6,11 @@
 #     a change). The base is the newest master commit whose push validation finished (not canceled), so merges whose
 #     runs were canceled are still compared (tools/test-bds/lib/validate-base.mjs); the report says how many commits
 #     the pair spans;
-#   bundle-10, bundle-40 (5 min each): the genuine one-context Realm Bundle under the same soak, both trees built, one harness;
+#   bundle-10, bundle-40 (5 min each run): the genuine one-context Realm Bundle under the same soak, both trees built, one
+#     harness, run base, head, head, base and compared by lows and means (PIPE-07);
+#   listener (about 25 min): the idle bundle unprofiled (run.mjs --meter) with no events, 5 noop: events a tick and 5
+#     realm: events a tick, base and head, twice: the CPU of one script event listener wake-up (examples/listener-cost.js),
+#     then one short --native-profile pass;
 #   every soak and bundle job pins noon and clear weather and adds perf-soak's phases (empty, one, ramp, steady, churn;
 #     bundle-40 also a 60 s night in a thunderstorm): only the steady window is compared and judged;
 #   suite-1..8: the whole BDS scenario suite, split by the last run's seconds.
@@ -18,6 +22,10 @@
 # (tools/test-bds/scenario-soak.mjs), `repeat` pairs in alternating order; for per-pack perf scenarios such as
 # gear-perf that the soaks don't exercise.
 # Soak and bundle jobs also upload each side's full profile JSON and run.mjs output (<side>.perf-<n>.json / .out).
+# Once a week (Sundays) an A/A run measures the noise: the soak, bundle and listener jobs with the base equal to the
+# head (a dispatch whose base resolves to the head is one too). Its differences are stored (perf-history.json, cached)
+# and printed next to every later comparison of the same job, and every report has a drift table against a pinned
+# baseline run (the first report with none, or a dispatch with `pin`).
 # Then one report: a job summary and an issue labeled perf-report with every table, and the scenario seconds cached
 # for pr-tests.yml's shards. Budgets are reported, not enforced here: the run is red only for a failed scenario or a
 # same-runner regression (tools/test-bds/perf-compare.mjs). Fixes go on a perf branch and ship as a later release.
@@ -27,6 +35,7 @@ on:
     branches: [master]
   schedule:
     - cron: "17 8 * * *" # the nightly memory soak, 02:17 CST / 03:17 CDT
+    - cron: "41 9 * * 0" # the weekly A/A run, Sundays 03:41 CST / 04:41 CDT
   workflow_dispatch:
     inputs:
       parallel:
@@ -49,10 +58,15 @@ on:
       repeat:
         description: "Scenario pairs per entry, alternating the order (1-3)"
         default: "1"
+      pin:
+        description: "Pin this run's heads as the drift baseline"
+        type: boolean
+        default: false
 permissions: { contents: read }
 concurrency:
   # The nightly memory soak has its own group, so it never cancels a merge's queued validation.
-  group: validate-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  # The weekly A/A run has its own group too.
+  group: validate-${{ github.event_name == 'schedule' && (github.event.schedule == '41 9 * * 0' && 'aa' || 'nightly') || github.ref }}
   cancel-in-progress: false
 jobs:
   plan:
@@ -67,6 +81,7 @@ jobs:
       from: ${{ steps.plan.outputs.from }}
       reuse: ${{ steps.plan.outputs.reuse }}
       skip: ${{ steps.plan.outputs.skip }}
+      aa: ${{ steps.plan.outputs.aa }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -84,7 +99,8 @@ jobs:
           PARALLEL: ${{ inputs.parallel || vars.VALIDATE_PARALLEL || '14' }}
           QUICK: ${{ inputs.quick && '1' || '' }}
           MEMORY: ${{ inputs.memory && '1' || '' }}
-          NIGHTLY: ${{ github.event_name == 'schedule' && '1' || '' }}
+          NIGHTLY: ${{ github.event_name == 'schedule' && github.event.schedule != '41 9 * * 0' && '1' || '' }}
+          WEEKLY_AA: ${{ github.event_name == 'schedule' && github.event.schedule == '41 9 * * 0' && '1' || '' }}
           BASE: ${{ inputs.base }}
           SCENARIOS: ${{ inputs.scenarios }}
           GH_TOKEN: ${{ github.token }}
@@ -92,8 +108,10 @@ jobs:
         run: |
           runs() { gh api "repos/$REPO/actions/workflows/validate.yml/runs?branch=master&event=$1&status=completed&per_page=30" > runs.json || echo '{}' > runs.json; }
           field() { node -e 'console.log(JSON.parse(process.argv[1])[process.argv[2]] ?? "")' "$1" "$2"; }
-          skip="" reuse="" from="" span=""
-          if [ -n "$NIGHTLY" ]; then
+          skip="" reuse="" from="" span="" aa=""
+          if [ -n "$WEEKLY_AA" ]; then
+            base=$(git rev-parse HEAD); from="the head itself (weekly A/A)"
+          elif [ -n "$NIGHTLY" ]; then
             # The nightly memory soak: nothing to do when master has not moved since the last one; its head RSS is
             # tonight's base when that artifact still exists.
             runs schedule
@@ -115,10 +133,12 @@ jobs:
           else
             base=$(git rev-parse HEAD^1); from="first parent"
           fi
+          # An A/A run: the base is the head (the weekly run, or a dispatch whose base resolves to it). Only the pairs run.
+          if [ -z "$NIGHTLY" ] && [ "$base" = "$(git rev-parse HEAD)" ]; then aa=true; echo "A/A run: the base is the head"; fi
           span=$(git rev-list --first-parent --count "$base..HEAD" 2>/dev/null || echo "")
           echo "base $base ($from), $span commit(s) on the first-parent line"
           node tools/test-bds/affected.mjs --all --shards 8 --times suite-times.json > plan.json
-          REUSE="$reuse" node > matrix.json <<'EOF'
+          AA="$aa" REUSE="$reuse" node > matrix.json <<'EOF'
           const q = process.env.QUICK === "1";
           const s = (long) => (q ? 60 : long);
           const mem = (side) => ({ name: `memory-40-${side}`, kind: "memory", side, players: 40, seconds: q ? 600 : 3600 });
@@ -135,8 +155,10 @@ jobs:
                   { name: "soak-40", kind: "soak", players: 40, seconds: s(900), perfargs: "phases=1" },
                   { name: "bundle-10", kind: "bundle", players: 10, seconds: s(300), perfargs: "phases=1" },
                   { name: "bundle-40", kind: "bundle", players: 40, seconds: s(300), perfargs: "phases=1 night=60" },
-                  ...(process.env.MEMORY ? [mem("base"), mem("head")] : []),
-                  ...require("./plan.json").shards.map((x) => ({ name: `suite-${x.index}`, kind: "suite", filter: x.filter })),
+                  { name: "listener", kind: "listener", seconds: s(60) },
+                  // An A/A run is the pairs only: the suite and the memory soak compare nothing.
+                  ...(process.env.MEMORY && !process.env.AA ? [mem("base"), mem("head")] : []),
+                  ...(process.env.AA ? [] : require("./plan.json").shards.map((x) => ({ name: `suite-${x.index}`, kind: "suite", filter: x.filter }))),
                 ];
           console.log(JSON.stringify({ include: jobs }));
           EOF
@@ -148,6 +170,7 @@ jobs:
             echo "from=$from"
             echo "reuse=$reuse"
             echo "skip=$skip"
+            echo "aa=$aa"
           } >> "$GITHUB_OUTPUT"
 
   validate:
@@ -212,17 +235,40 @@ jobs:
                 tail -25 "$OUT/$side.out"
               done ;;
             bundle)
-              # Both trees' bundles under this commit's harness, so only the packs differ.
-              for side in base head; do
-                (cd "${!side}" && node tools/bundle.mjs --all > /dev/null)
-                node tools/test-bds/suite.mjs --perf "$PLAYERS" --perf-seconds "$SECONDS_" --perf-bundle "${!side}/dist/realm_bundle.mcpack" --json "$OUT/$side.json" > "$OUT/$side.out" 2>&1 || true
-                keep "$side"
-                tail -25 "$OUT/$side.out"
+              # Both trees' bundles under this commit's harness, so only the packs differ; base, head, head, base, so
+              # neither side always runs second (PIPE-07: the second of a pair was never the faster in six reports).
+              for side in base head; do (cd "${!side}" && node tools/bundle.mjs --all > /dev/null); cp "${!side}/dist/realm_bundle.mcpack" "$RUNNER_TEMP/$side.mcpack"; done
+              r=0
+              for side in base head head base; do
+                r=$((r + 1))
+                node tools/test-bds/suite.mjs --perf "$PLAYERS" --perf-seconds "$SECONDS_" --perf-bundle "$RUNNER_TEMP/$side.mcpack" --json "$OUT/$side-$r.json" > "$OUT/$side-$r.out" 2>&1 || true
+                keep "$side-$r"
+                tail -25 "$OUT/$side-$r.out"
               done ;;
+            listener)
+              # One script event listener wake-up, engine side included (PIPE-03 (2)): each side's bundle idle and
+              # unprofiled (--meter) with no events, 5 noop: and 5 realm: events a tick; twice, alternating the order.
+              for side in base head; do (cd "${!side}" && node tools/bundle.mjs --all > /dev/null); cp "${!side}/dist/realm_bundle.mcpack" "$RUNNER_TEMP/$side.mcpack"; done
+              cost() { # side variant round
+                rate=5 ns=$2
+                if [ "$2" = idle ]; then rate=0 ns=noop; fi
+                node tools/test-bds/run.mjs --quiet --no-relay --flat --meter --profile-json "$OUT/$1-$2-$3.json" --bundle "$RUNNER_TEMP/$1.mcpack" --scenario tools/test-bds/examples/listener-cost.js --arg rate="$rate" --arg ns="$ns" --arg seconds="$SECONDS_" --timeout $((SECONDS_ + 300)) > "$OUT/$1-$2-$3.out" 2>&1 || true
+                echo "$1 $2 $3: $(grep -m1 "CPU ms/tick" "$OUT/$1-$2-$3.out" || tail -1 "$OUT/$1-$2-$3.out")"
+              }
+              for r in 1 2; do
+                if [ "$r" = 1 ]; then order="base head"; else order="head base"; fi
+                for side in $order; do for v in idle noop realm; do cost "$side" "$v" "$r"; done; done
+              done
+              # BDS's own script profiler and watchdog statistics, a separate short pass (PIPE-03 (3)).
+              node tools/test-bds/run.mjs --quiet --no-relay --flat --meter --native-profile --bundle "$RUNNER_TEMP/head.mcpack" --scenario tools/test-bds/examples/listener-cost.js --arg rate=0 --arg seconds=20 --arg settle=5 --timeout 300 > "$OUT/native.out" 2>&1 || true
+              sed -n '/^native profile:/,/^log:/p' "$OUT/native.out" | head -60
+              cp -r "$BDS_HARNESS_LOGS"/*.native "$OUT/" 2>/dev/null || true ;;
             memory)
               for side in ${SIDE:-base head}; do
                 rss "$OUT/$side.rss" & sampler=$!
-                (cd "${!side}" && { node tools/test-bds/run.mjs --quiet --no-relay --scenario tools/test-bds/examples/perf-soak.js --arg players="$PLAYERS" --arg seconds="$SECONDS_" --timeout $((SECONDS_ * 2 + 900)) > "$OUT/$side.out" 2>&1; echo $? > "$OUT/$side.exit"; }) || echo $? > "$OUT/$side.exit"
+                # The meter (PIPE-03 (1)): TPS, tick interval and CPU of the unprofiled run, when that tree's run.mjs has it.
+                meter=""; if grep -q -- "--meter" "${!side}/tools/test-bds/run.mjs"; then meter="--meter --profile-json $OUT/$side.meter.json"; fi
+                (cd "${!side}" && { node tools/test-bds/run.mjs --quiet --no-relay $meter --scenario tools/test-bds/examples/perf-soak.js --arg players="$PLAYERS" --arg seconds="$SECONDS_" --timeout $((SECONDS_ * 2 + 900)) > "$OUT/$side.out" 2>&1; echo $? > "$OUT/$side.exit"; }) || echo $? > "$OUT/$side.exit"
                 kill "$sampler" || true
                 echo "$side: exit $(cat "$OUT/$side.exit"), $(wc -l < "$OUT/$side.rss" 2>/dev/null || echo 0) RSS samples"
               done ;;
@@ -290,15 +336,30 @@ jobs:
           path: suite-times.json
           key: suite-times-${{ github.sha }}
           restore-keys: suite-times-
+      # The A/A spreads and the pinned drift baseline (tools/test-bds/validate-report.mjs --history), saved again below
+      # under this run's key so the cache stays in use.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: perf-history.json
+          key: perf-history-${{ github.run_id }}
+          restore-keys: perf-history-
       - name: Report
         id: report
         env:
+          AA: ${{ needs.plan.outputs.aa == 'true' && '--aa' || '' }}
+          PIN: ${{ inputs.pin && '--pin' || '' }}
           BASE_SHA: ${{ needs.plan.outputs.base }}
           BASE_FROM: ${{ needs.plan.outputs.from }}
           SPAN: ${{ needs.plan.outputs.span }}
           MATRIX: ${{ needs.plan.outputs.matrix }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node tools/test-bds/validate-report.mjs --dir "$RUNNER_TEMP/results" --base "$BASE_SHA" --base-from "$BASE_FROM" --span "$SPAN" --head "$GITHUB_SHA" --run "$RUN_URL" --matrix "$MATRIX" --out report.md --times suite-times.json
+        run: node tools/test-bds/validate-report.mjs --dir "$RUNNER_TEMP/results" --base "$BASE_SHA" --base-from "$BASE_FROM" --span "$SPAN" --head "$GITHUB_SHA" --run "$RUN_URL" --matrix "$MATRIX" --out report.md --times suite-times.json --history perf-history.json $AA $PIN
+      - name: Keep the A/A spreads and the drift baseline
+        if: always() && hashFiles('perf-history.json') != ''
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: perf-history.json
+          key: perf-history-${{ github.run_id }}
       - name: Keep the scenario seconds for pr-tests.yml's shards
         if: always() && hashFiles('suite-times.json') != ''
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -310,8 +371,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # The nightly memory report is its own series: it never closes a merge's full report.
-          WHAT: ${{ github.event_name == 'schedule' && 'Memory' || 'Validation' }}
-          SERIES: ${{ github.event_name == 'schedule' && format('{0} nightly', github.ref_name) || github.ref_name }}
+          # The A/A runs are their own series too ("A/A <sha> (master A/A)").
+          WHAT: ${{ needs.plan.outputs.aa == 'true' && 'A/A' || github.event_name == 'schedule' && 'Memory' || 'Validation' }}
+          SERIES: ${{ needs.plan.outputs.aa == 'true' && format('{0} A/A', github.ref_name) || github.event_name == 'schedule' && format('{0} nightly', github.ref_name) || github.ref_name }}
         run: |
           gh label create perf-report --color 5319e7 --description "Post-release validation (validate.yml)" --force > /dev/null
           url=$(gh issue create --title "$WHAT ${GITHUB_SHA::7} ($SERIES)" --body-file report.md --label perf-report)

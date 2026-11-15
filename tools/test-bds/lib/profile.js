@@ -6,7 +6,9 @@
 // and counts world/entity/item setDynamicProperty writes (and their string size), setActionBar,
 // setTitle and runCommand calls, and script events by id: sent by this pack (system.sendScriptEvent) and handled by its
 // scriptEventReceive listeners (calls and ms per id; which events a tick's listener time goes to). Callbacks are identified by kind plus the pack's file:line where they were handed
-// over (new Error().stack). The pack's behavior is unchanged: wrappers call the original with the
+// over (new Error().stack). A `system.run` or `runTimeout` made inside a timed callback (most of them: deferring work
+// to a later tick) takes its parent's file:line instead, with no stack capture: a capture costs tens of us and was
+// charged to the pack that defers work (PIPE-08). `stacks` in each PROFILE row counts the captures. The pack's behavior is unchanged: wrappers call the original with the
 // same this/arguments and return its result; exceptions pass through.
 // Bedrock scripting has no high-resolution clock (no performance.now), so times are Date.now()
 // differences in ms: one call reads 0 or 1 ms, but the sum over many calls is an unbiased estimate
@@ -27,7 +29,11 @@ let ticks = []; // ms per tick, index = tick - startTick
 let curTick = -1, curMs = 0;
 /** key -> { ms, calls, max } */
 let cbs = new Map();
-let counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0 };
+let counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0, stacks: 0 };
+/** The key of the timed callback running now (null outside one): a deferred call made inside it takes its site. */
+let current = null;
+/** key -> its "file:line" part, so a deferred label costs no string search after the first. */
+const siteOfKey = new Map();
 /** script event id -> times this pack sent it */
 let sent = new Map();
 /** script event id -> { calls, ms } of this pack's scriptEventReceive listeners */
@@ -43,7 +49,7 @@ function reset() {
   ticks = [];
   curTick = -1; curMs = 0;
   cbs = new Map();
-  counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0 };
+  counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0, stacks: 0 };
   sent = new Map();
   handled = new Map();
   heavy = [];
@@ -67,6 +73,7 @@ function record(key, ms) {
 
 /** "file:line" of the first stack frame outside the harness files (and the pack's scripts/diag-core.js and diag.js, which wrap the same calls, and the bundle's shared folder). */
 function site() {
+  counters.stacks++;
   const stack = String(new Error().stack || "").split("\n");
   for (const l of stack) {
     // diag.js: the pack's own diagnostics wrapper (it hands the game its wrapper through these patched calls)
@@ -81,9 +88,12 @@ function timed(fn, key, byEvent = false) {
   if (typeof fn !== "function") return fn;
   const w = byEvent
     ? function (...a) {
+        const prev = current;
+        current = key;
         const s = now();
         try { return fn.apply(this, a); } finally {
           const ms = now() - s;
+          current = prev;
           record(key, ms);
           const id = String(a[0] && a[0].id);
           let h = handled.get(id);
@@ -92,8 +102,10 @@ function timed(fn, key, byEvent = false) {
         }
       }
     : function (...a) {
+        const prev = current;
+        current = key;
         const s = now();
-        try { return fn.apply(this, a); } finally { record(key, now() - s); }
+        try { return fn.apply(this, a); } finally { const ms = now() - s; current = prev; record(key, ms); }
       };
   return w;
 }
@@ -109,19 +121,31 @@ function label(kind, fn) {
   return `${kind}${name} @ ${site()}`;
 }
 
+/** A label for run / runTimeout: inside a timed callback, its parent's site (no stack capture); outside one, label(). */
+function deferredLabel(kind, fn) {
+  if (current === null) return label(kind, fn);
+  let at = siteOfKey.get(current);
+  if (at === undefined) siteOfKey.set(current, (at = current.slice(current.lastIndexOf(" @ ") + 3)));
+  fn = inner(fn);
+  const name = fn && fn.name && fn.name !== "anonymous" ? " " + fn.name : "";
+  return `${kind}${name} @ ${at}`;
+}
+
 function patchSystem() {
   const proto = System.prototype;
   const orig = { run: proto.run, runTimeout: proto.runTimeout, runInterval: proto.runInterval, runJob: proto.runJob };
-  proto.run = function (cb) { return orig.run.call(this, timed(cb, label("run", cb))); };
-  proto.runTimeout = function (cb, t) { return orig.runTimeout.call(this, timed(cb, label("runTimeout", cb)), t); };
+  proto.run = function (cb) { return orig.run.call(this, timed(cb, deferredLabel("run", cb))); };
+  proto.runTimeout = function (cb, t) { return orig.runTimeout.call(this, timed(cb, deferredLabel("runTimeout", cb)), t); };
   proto.runInterval = function (cb, t) { return orig.runInterval.call(this, timed(cb, label(`runInterval(${t ?? 1})`, cb)), t); };
   proto.runJob = function (gen) {
     const key = label("runJob", undefined);
     function* step() {
       while (true) {
+        const prev = current;
+        current = key;
         const s = now();
         let r;
-        try { r = gen.next(); } finally { record(key, now() - s); }
+        try { r = gen.next(); } finally { const ms = now() - s; current = prev; record(key, ms); }
         if (r.done) return r.value;
         yield r.value;
       }

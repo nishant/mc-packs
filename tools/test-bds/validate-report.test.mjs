@@ -175,3 +175,29 @@ test("profiled suite scenarios keep their figures: one table each, against the p
   assert.match(text, /\*\*town-perf\*\*.*previous validation -/);
   assert.ok(!text.includes("smoke"), "unprofiled scenarios have no table");
 });
+
+test("listenerCost turns the three meter runs into one send and one listener wake-up (PIPE-03 (2))", async () => {
+  const { listenerCost, listenerTable } = await import("./validate-report.mjs");
+  const run = (/** @type {string} */ side, /** @type {string} */ variant, /** @type {number} */ cpu) => ({ side, variant, json: { process: { cpuMsPerTick: cpu }, reports: { "listener-cost": { rate: variant === "idle" ? 0 : 5, members: 67 } } } });
+  const c = listenerCost([run("head", "idle", 10), run("head", "noop", 10.1), run("head", "realm", 13.45), run("head", "realm", 13.55), run("base", "idle", 10)]);
+  assert.ok(Math.abs(c.head.sendUs - 20) < 1e-9, "0.1 ms/tick over 5 events: 20 us a send");
+  assert.ok(Math.abs(c.head.wakeUs - 3400 / 335) < 1e-9, "3.4 ms/tick over 5 x 67 wake-ups: about 10 us each");
+  assert.equal(c.base.wakeUs, null, "no realm run on the base: no figure");
+  assert.match(listenerTable(c).join("\n"), /\| head \| 10\.000 \| 10\.100 \| 13\.500 \| 20\.0 \| 10\.1 \| 67 \| 1\/1\/2 \|/);
+});
+
+test("the history keeps A/A spreads and pins the drift baseline once; drift is flagged beyond the A/A spread (PIPE-07 (2), (3))", async () => {
+  const { nextHistory, driftTable } = await import("./validate-report.mjs");
+  const heads = { "bundle-40/40": { bundle: 2, cpu: 20, packs: { map_bp: 0.5 } } };
+  const first = nextHistory(null, { aa: false, pin: false, sha: "aaaaaaa1", run: "r1", spreads: {}, heads });
+  assert.equal(first.pinned, true);
+  assert.equal(first.baseline.sha, "aaaaaaa1");
+  const aa = nextHistory(first, { aa: true, pin: false, sha: "bbbbbbb2", run: "r2", spreads: { "bundle-40/40": { bundlePct: 5, bundleMeanPct: 3, bundleMs: 0.1, packMaxMs: 0.04, packs: 1, packOver: {} } }, heads });
+  assert.equal(aa.pinned, false, "an existing baseline stays pinned");
+  assert.equal(aa.aa["bundle-40/40"].sha, "bbbbbbb2");
+  const later = { "bundle-40/40": { bundle: 2.4, cpu: 21, packs: { map_bp: 0.52 } } };
+  const t = driftTable(aa.baseline, later, aa.aa).join("\n");
+  assert.match(t, /\| bundle-40\/40 \| whole bundle \| 2\.000 \| 2\.400 \| \+20% \| beyond A\/A \|/);
+  assert.match(t, /\| bundle-40\/40 \| map_bp \| 0\.500 \| 0\.520 \| \+4% \| +\|/,"0.02 ms is inside the 0.04 ms A/A pack spread");
+  assert.equal(nextHistory(aa, { aa: false, pin: true, sha: "c", run: "", spreads: {}, heads: later }).baseline.sha, "c", "--pin re-pins");
+});

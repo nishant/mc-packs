@@ -80,6 +80,7 @@ const SPECIAL = {
   "build-beds": { runner: "build-beds.mjs", note: "native main-pipeline proof, not simulated second-input or physical acceptance" },
   "build-beds-modes": { runner: "build-beds.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "build-beds-modes.js")], note: "O47: beds through main.confirmPlacement in every shape mode (bridge confirm, not physical input)" },
   "bundle-smoke": { args: ["--flat", "--bundle", "dist/realm_bundle.mcpack", "--timeout", "300"], prepare: ["tools/bundle.mjs", "--all"], note: "builds the Realm Bundle first (dist/realm_bundle.mcpack), runs it as one script context" },
+  "listener-cost": { args: ["--flat", "--no-relay", "--meter", "--bundle", "dist/realm_bundle.mcpack", "--arg", "seconds=10", "--arg", "settle=5", "--timeout", "300"], prepare: ["tools/bundle.mjs", "--all"], note: "short functional run; validate.yml's listener job measures (60 s, three variants, base and head)" },
   "full-bundle-protocols": { fullBundle: true, note: "builds and stages the genuine 67-member cancellation bundle" },
   "welcome-generic-bundle": { fullBundle: true, note: "checks the default welcome in the genuine 67-member bundle" },
   "stash-page-transfer-restart": { runner: "stash-persistence.mjs", runnerArgs: ["--scenario", path.join(EXAMPLES, "stash-page-transfer-restart.js")], note: "moved native row across two physical restarts" },
@@ -295,9 +296,9 @@ async function perf() {
     const r = await runOne(p, logDir);
     console.log(`[suite] perf ${n}: ${r.result} (${r.seconds.toFixed(0)} s)${r.failure ? ` - ${r.failure.slice(0, 160)}` : ""}`);
     try {
-      reports.set(n, { result: r.result, report: JSON.parse(fs.readFileSync(json, "utf8")) });
+      reports.set(n, { result: r.result, code: r.code, failure: r.failure, report: JSON.parse(fs.readFileSync(json, "utf8")) });
     } catch (e) {
-      reports.set(n, { result: r.result, report: undefined });
+      reports.set(n, { result: r.result, code: r.code, failure: r.failure, report: undefined });
       console.log(`[suite] perf ${n}: no profile report (${e.message})`);
     }
   }
@@ -318,7 +319,11 @@ async function perf() {
   console.log(L.join("\n"));
   if (args.json) {
     fs.mkdirSync(path.dirname(path.resolve(args.json)), { recursive: true });
-    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, perfArgs: extra, invalid: verdict.invalid, over: verdict.over, perf: Object.fromEntries([...reports].map(([n, { report: r }]) => [n, r ? reducedReport(r) : null])) }, null, 2));
+    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, perfArgs: extra, invalid: verdict.invalid, over: verdict.over,
+      // How each soak run ended (run.mjs: 1 a failed scenario, 2 script errors): a soak whose scenario failed is red in
+      // the validation report even when its profile was accepted.
+      runs: Object.fromEntries([...reports].map(([n, x]) => [n, { result: x.result, code: x.code ?? null, failure: x.failure ?? "" }])),
+      perf: Object.fromEntries([...reports].map(([n, { report: r }]) => [n, r ? reducedReport(r) : null])) }, null, 2));
   }
   for (const line of verdict.invalid) console.log(`INVALID (not a budget result, not a pass): ${line}`);
   for (const line of verdict.over) console.log(`OVER BUDGET: ${line}`);

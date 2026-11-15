@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { compare, markdown, sideOf } from "./perf-compare.mjs";
+import { compare, markdown, sideOf, spreadOf } from "./perf-compare.mjs";
 
 /**
  * Memory figures from "epochSeconds kB" lines: start, 10 minutes in, end, max (MB) and growth from 10 minutes.
@@ -179,6 +179,86 @@ export function scenarioPerfTables(results, previous = null) {
 }
 
 /**
+ * The listener job (examples/listener-cost.js under --meter): each side's mean bedrock_server CPU ms/tick for idle,
+ * noop: and realm: events, and from them one send and one listener wake-up in microseconds (PIPE-03 (2), XC-01).
+ * @param {{ side: string, variant: string, json: any }[]} runs meter JSONs, `<side>-<variant>-<r>.json`
+ */
+export function listenerCost(runs) {
+  /** @type {Record<string, any>} */
+  const out = {};
+  for (const side of ["base", "head"]) {
+    /** @type {Record<string, number[]>} */
+    const cpu = { idle: [], noop: [], realm: [] };
+    let rate = 0, members = 0;
+    for (const r of runs.filter((x) => x.side === side)) {
+      const c = r.json?.process?.cpuMsPerTick;
+      const rep = r.json?.reports?.["listener-cost"];
+      if (!Number.isFinite(c) || !rep || !(r.variant in cpu)) continue;
+      cpu[r.variant].push(c);
+      if (rep.rate > 0) rate = rep.rate;
+      if (rep.members > 0) members = rep.members;
+    }
+    const m = (/** @type {number[]} */ xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+    const idle = m(cpu.idle), noop = m(cpu.noop), realm = m(cpu.realm);
+    const wakeUs = realm !== null && noop !== null && rate > 0 && members > 0 ? (1000 * (realm - noop)) / (rate * members) : null;
+    const sendUs = noop !== null && idle !== null && rate > 0 ? (1000 * (noop - idle)) / rate : null;
+    out[side] = { idle, noop, realm, rate, members, wakeUs, sendUs, runs: { idle: cpu.idle.length, noop: cpu.noop.length, realm: cpu.realm.length } };
+  }
+  return out;
+}
+
+/** @param {ReturnType<typeof listenerCost>} c */
+export function listenerTable(c) {
+  const us = (/** @type {any} */ v) => (typeof v === "number" && Number.isFinite(v) ? v.toFixed(1) : "-");
+  const L = ["| side | idle | noop: events | realm: events | one send (us) | one listener wake-up (us) | listeners | runs |", "|---|---:|---:|---:|---:|---:|---:|---|"];
+  for (const side of ["base", "head"]) {
+    const s = c[side];
+    if (s) L.push(`| ${side} | ${n3(s.idle)} | ${n3(s.noop)} | ${n3(s.realm)} | ${us(s.sendUs)} | ${us(s.wakeUs)} | ${s.members || "-"} | ${s.runs.idle}/${s.runs.noop}/${s.runs.realm} |`);
+  }
+  const h = c.head;
+  if (h && Number.isFinite(h.wakeUs)) L.push("", `One script event wakes ${h.members} listeners in the bundle: ${us(h.wakeUs)} us each, ${n3((h.wakeUs * h.members) / 1000)} ms per event sent (head). An event sent once a tick costs that much per tick.`);
+  return L;
+}
+
+/**
+ * A/A spreads and the drift baseline kept between runs (perf-history.json, cached like suite-times.json): this run's
+ * spreads replace the stored ones when it is an A/A run, and its heads become the baseline when none is pinned yet or
+ * `pin` is set.
+ * @param {any} previous @param {{ aa: boolean, pin: boolean, sha: string, run: string, spreads: Record<string, any>, heads: Record<string, any> }} o
+ */
+export function nextHistory(previous, o) {
+  const date = new Date().toISOString();
+  const aa = { ...(previous?.aa ?? {}) };
+  if (o.aa) for (const [k, spread] of Object.entries(o.spreads)) if (spread) aa[k] = { sha: o.sha, date, run: o.run, spread };
+  const pinNow = (o.pin || !previous?.baseline?.jobs) && Object.keys(o.heads).length > 0;
+  const baseline = pinNow ? { sha: o.sha, date, run: o.run, jobs: o.heads } : previous?.baseline ?? null;
+  return { aa, baseline, pinned: pinNow };
+}
+
+/**
+ * Drift of this run's heads from the pinned baseline (another runner, so a trend, never a gate; PIPE-07 (3)): the
+ * whole bundle, CPU and the packs that moved most, flagged when the change is beyond the A/A spread.
+ * @param {any} baseline @param {Record<string, any>} heads @param {Record<string, any>} aa
+ */
+export function driftTable(baseline, heads, aa) {
+  if (!baseline?.jobs) return [];
+  const L = [`Against the pinned baseline ${String(baseline.sha ?? "?").slice(0, 7)} (${String(baseline.date ?? "?").slice(0, 10)}${baseline.run ? `, [run](${baseline.run})` : ""}): the head of each job then and now, on different runners (runners differ by 10-40%: a trend, not a gate). "beyond A/A" marks a change larger than that job's A/A spread.`, "", "| job | figure | baseline | now | change | |", "|---|---|---:|---:|---:|---|"];
+  const pct = (/** @type {number} */ b, /** @type {number} */ h) => (b > 0 ? `${h >= b ? "+" : ""}${(100 * (h / b - 1)).toFixed(0)}%` : "new");
+  for (const [k, now] of Object.entries(heads)) {
+    const then = baseline.jobs[k];
+    if (!then) continue;
+    const s = aa?.[k]?.spread;
+    const beyond = (/** @type {number} */ b, /** @type {number} */ h, /** @type {boolean} */ pack) => (s ? (pack ? Math.abs(h - b) > Math.max(0.01, s.packMaxMs) : b > 0 && Math.abs(100 * (h / b - 1)) > Math.max(Math.abs(s.bundlePct), Math.abs(s.bundleMeanPct))) : false);
+    if (Number.isFinite(then.bundle) && Number.isFinite(now.bundle)) L.push(`| ${k} | whole bundle | ${n3(then.bundle)} | ${n3(now.bundle)} | ${pct(then.bundle, now.bundle)} | ${beyond(then.bundle, now.bundle, false) ? "beyond A/A" : ""} |`);
+    if (Number.isFinite(then.cpu) && Number.isFinite(now.cpu)) L.push(`| ${k} | CPU ms/tick | ${n3(then.cpu)} | ${n3(now.cpu)} | ${pct(then.cpu, now.cpu)} | |`);
+    const names = [...new Set([...Object.keys(then.packs ?? {}), ...Object.keys(now.packs ?? {})])];
+    const moved = names.map((n) => ({ n, b: then.packs?.[n] ?? 0, h: now.packs?.[n] ?? 0 })).filter((x) => Math.abs(x.h - x.b) >= 0.01).sort((x, y) => Math.abs(y.h - y.b) - Math.abs(x.h - x.b)).slice(0, 8);
+    for (const x of moved) L.push(`| ${k} | ${x.n} | ${n3(x.b)} | ${n3(x.h)} | ${pct(x.b, x.h)} | ${beyond(x.b, x.h, true) ? "beyond A/A" : ""} |`);
+  }
+  return L.length > 4 ? L : [];
+}
+
+/**
  * Jobs the plan started that uploaded no artifact (a failed upload or a job that died first).
  * @param {string[]} expected job names from the plan's matrix @param {string[]} present job names with an artifact
  */
@@ -197,12 +277,19 @@ const json = (/** @type {string} */ f) => {
 };
 
 function main() {
-  const { values: a } = parseArgs({ options: { dir: { type: "string" }, base: { type: "string", default: "" }, head: { type: "string", default: "" }, run: { type: "string", default: "" }, out: { type: "string", default: "report.md" }, times: { type: "string" }, matrix: { type: "string" }, span: { type: "string", default: "" }, "base-from": { type: "string", default: "" } } });
+  const { values: a } = parseArgs({ options: { dir: { type: "string" }, base: { type: "string", default: "" }, head: { type: "string", default: "" }, run: { type: "string", default: "" }, out: { type: "string", default: "report.md" }, times: { type: "string" }, matrix: { type: "string" }, span: { type: "string", default: "" }, "base-from": { type: "string", default: "" }, history: { type: "string" }, aa: { type: "boolean", default: false }, pin: { type: "boolean", default: false } } });
+  // --history: A/A spreads and the pinned drift baseline (read, then written back with this run's); --aa: this run's
+  // base is its head, so every pair is noise and its differences become the A/A spread; --pin: re-pin the baseline here.
+  const history = a.history ? json(a.history) : null;
+  /** @type {Record<string, any>} */
+  const spreads = {};
+  /** @type {Record<string, any>} */
+  const headFigures = {};
   const dir = path.resolve(a.dir ?? ".");
   const jobs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((d) => d.startsWith("validate-")).sort() : [];
   const span = Number(a.span);
   const spanText = Number.isFinite(span) && span > 0 ? ` The pair spans ${span} commit${span === 1 ? "" : "s"} on master's first-parent line${span > 1 ? " (merges whose own validation was canceled are included)" : ""}.` : "";
-  const L = [`## Validation ${a.head.slice(0, 7)}`, "", `Base ${a.base.slice(0, 7) || "?"}${a["base-from"] ? ` (${a["base-from"]})` : ""} vs head ${a.head.slice(0, 7) || "?"}, each pair back to back on one runner.${spanText}${a.run ? ` [Run](${a.run})` : ""}`, ""];
+  const L = [`## ${a.aa ? "A/A validation" : "Validation"} ${a.head.slice(0, 7)}`, "", ...(a.aa ? ["An A/A run: the base is the head itself, so every difference below is noise. Its spreads are printed next to every later comparison of the same job.", ""] : []), `Base ${a.base.slice(0, 7) || "?"}${a["base-from"] ? ` (${a["base-from"]})` : ""} vs head ${a.head.slice(0, 7) || "?"}, each pair back to back on one runner.${spanText}${a.run ? ` [Run](${a.run})` : ""}`, ""];
   let red = false;
   const suites = [];
   // The plan's matrix (--matrix, its JSON): a job that uploaded nothing is named, and a missing suite shard counts as a failure.
@@ -214,7 +301,7 @@ function main() {
     if (name.startsWith("suite-")) suites.push({ results: [{ name, result: "fail", failure: "the shard uploaded no artifact" }] });
     else { L.push(`### ${name}: no artifact (the job failed before uploading)`, ""); red = true; }
   }
-  /** @type {Map<string, { name: string, base: ReturnType<typeof rssSummary>, head: ReturnType<typeof rssSummary>, exits: string[] }>} */
+  /** @type {Map<string, { name: string, base: ReturnType<typeof rssSummary>, head: ReturnType<typeof rssSummary>, exits: string[], meters: any[] }>} */
   const memory = new Map();
   for (const d of jobs) {
     const at = path.join(dir, d);
@@ -227,17 +314,31 @@ function main() {
     if (name.startsWith("memory-")) {
       // One job per side (memory-40-base, memory-40-head) or both sides in one job (memory-40).
       const key = name.replace(/-(base|head)$/, "");
-      const m = memory.get(key) ?? { name: key, base: null, head: null, exits: ["", ""] };
+      const m = memory.get(key) ?? { name: key, base: null, head: null, exits: ["", ""], meters: [null, null] };
       for (const [i, side] of /** @type {const} */ (["base", "head"]).entries()) {
         const s = rssSummary(read(path.join(at, `${side}.rss`)));
         if (s) m[side] = s;
         const exit = read(path.join(at, `${side}.exit`)).trim();
         if (exit) m.exits[i] = exit;
+        // run.mjs --meter (PIPE-03 (1)): the unprofiled run's TPS, tick interval and CPU.
+        const meter = json(path.join(at, `${side}.meter.json`));
+        if (meter) m.meters[i] = meter;
       }
       memory.set(key, m);
       continue;
     }
     const files = fs.readdirSync(at);
+    if (name.startsWith("listener")) {
+      // <side>-<variant>-<r>.json meter reports of examples/listener-cost.js, and native.out (the --native-profile pass).
+      const runs = files.map((f) => /^(base|head)-(idle|noop|realm)-\d+\.json$/.exec(f)).filter((m) => m !== null).map((m) => ({ side: m[1], variant: m[2], json: json(path.join(at, m[0])) }));
+      const c = listenerCost(runs);
+      L.push(`### ${name}: script event listener wake-up (bedrock_server CPU ms/tick, unprofiled, idle bundle)`, "", ...listenerTable(c), "");
+      if (!Number.isFinite(c.head?.wakeUs)) { L.push("No wake-up figure for the head (a run failed: see the job's .out files).", ""); red = true; }
+      const native = read(path.join(at, "native.out")).split("\n");
+      const from = native.findIndex((l) => l.startsWith("native profile:"));
+      if (from >= 0) L.push("<details><summary>Native script profiler and watchdog statistics (--native-profile)</summary>", "", "```", ...native.slice(from, from + 60).filter((l) => /^(native profile:| {2}[|]| {2}file| {4})/.test(l)).map((l) => l.slice(0, 400)), "```", "", "</details>", "");
+      continue;
+    }
     const side = (/** @type {string} */ s) => files.filter((f) => new RegExp(`^${s}(-\\d+)?\\.json$`).test(f)).map((f) => json(path.join(at, f))).filter(Boolean);
     const bases = side("base"), heads = side("head");
     const counts = [...new Set([...bases, ...heads].flatMap((r) => Object.keys(r.perf ?? {})))];
@@ -249,25 +350,40 @@ function main() {
     for (const count of counts) {
       const b = sideOf(bases, count), h = sideOf(heads, count);
       const result = compare(b, h);
-      if (result.status !== "ok") red = true;
-      L.push(markdown(count, b, h, result).replace(/^### /, `### ${name}, `), "");
+      const key = `${name}/${count}`;
+      // An A/A regression is the bars catching noise (said in the text, not red); a failed or invalid soak is red.
+      if (result.status !== "ok" && !(a.aa && result.status === "regression")) red = true;
+      if (a.aa) spreads[key] = spreadOf(result);
+      if (h.valid) headFigures[key] = { bundle: h.bundle, cpu: h.cpu, packs: Object.fromEntries([...h.packs].map(([k, v]) => [k, Math.round(v * 1e4) / 1e4])) };
+      L.push(markdown(count, b, h, result, 15, a.history ? history?.aa?.[key] ?? null : undefined).replace(/^### /, `### ${name}, `), "");
       const phases = phaseTable(heads[0]?.perf?.[count], bases[0]?.perf?.[count]);
       if (phases.length) L.push(`Phases of ${name}, ${count} players (the head's figures; ms/tick summed over packs):`, "", ...phases, "");
       const details = profileDetails(heads[0]?.perf?.[count], bases[0]?.perf?.[count]);
       if (details.length) L.push(`<details><summary>${name}, ${count}: CPU, watchdog, tick histogram, worst ticks${heads[0]?.perf?.[count]?.bundle?.byPath ? ", per pack" : ""}</summary>`, "", ...details, "", "</details>", "");
     }
-    const over = (read(path.join(at, "head.out")) || read(path.join(at, "head-1.out"))).split("\n").filter((l) => /^(OVER BUDGET|INVALID)/.test(l));
+    const headOut = files.filter((f) => /^head(-\d+)?\.out$/.test(f)).sort()[0];
+    const over = (headOut ? read(path.join(at, headOut)) : "").split("\n").filter((l) => /^(OVER BUDGET|INVALID)/.test(l));
     if (over.length) L.push("<details><summary>Head against the budget</summary>", "", ...over.map((l) => `- ${l}`), "", "</details>", "");
   }
   if (memory.size) {
     const f = (/** @type {number | undefined} */ v) => (v === undefined ? "-" : v.toFixed(0));
-    L.push("### Memory (bedrock_server RSS, MB, unprofiled)", "", "| run | side | minutes | start | at 10 min | end | max | growth from 10 min | exit |", "|---|---|---:|---:|---:|---:|---:|---:|---|");
+    L.push("### Memory (bedrock_server RSS, MB, unprofiled)", "", "| run | side | minutes | start | at 10 min | end | max | growth from 10 min | exit | CPU ms/tick | TPS | tick p95 / p99 / max ms |", "|---|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---|");
     for (const m of memory.values()) for (const [i, side] of /** @type {const} */ (["base", "head"]).entries()) {
       const s = m[side];
-      L.push(`| ${m.name} | ${side} | ${s ? s.minutes.toFixed(0) : "-"} | ${f(s?.start)} | ${f(s?.at10)} | ${f(s?.end)} | ${f(s?.max)} | ${s ? `${s.growth >= 0 ? "+" : ""}${s.growth.toFixed(0)}` : "-"} | ${m.exits[i] || "-"} |`);
+      L.push(`| ${m.name} | ${side} | ${s ? s.minutes.toFixed(0) : "-"} | ${f(s?.start)} | ${f(s?.at10)} | ${f(s?.end)} | ${f(s?.max)} | ${s ? `${s.growth >= 0 ? "+" : ""}${s.growth.toFixed(0)}` : "-"} | ${m.exits[i] || "-"} | ${n3(m.meters[i]?.process?.cpuMsPerTick)} | ${m.meters[i]?.server ? m.meters[i].server.tps.toFixed(1) : "-"} | ${m.meters[i]?.server ? `${m.meters[i].server.tickIntervalP95Ms} / ${m.meters[i].server.tickIntervalP99Ms} / ${m.meters[i].server.tickIntervalMaxMs}` : "-"} |`);
       if (!s || m.exits[i] !== "0") red = true;
     }
     L.push("");
+  }
+  if (a.history) {
+    const next = nextHistory(history, { aa: a.aa, pin: a.pin, sha: a.head, run: a.run, spreads, heads: headFigures });
+    if (!a.aa) {
+      const drift = driftTable(history?.baseline, headFigures, next.aa);
+      if (drift.length) L.push("### Drift since the pinned baseline", "", ...drift, "");
+    }
+    if (next.pinned) L.push(`The drift baseline is pinned at this run (${a.head.slice(0, 7)}): later reports compare their heads with it.`, "");
+    if (a.aa && Object.keys(spreads).length) L.push("These A/A spreads are stored: every later comparison of the same job prints them.", "");
+    fs.writeFileSync(a.history, JSON.stringify(next, null, 2));
   }
   if (suites.length) {
     const s = suiteSummary(suites);
