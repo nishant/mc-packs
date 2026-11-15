@@ -1,5 +1,6 @@
 // Town Projects, a scan that can only wait (ENT-05): the only player stands at the town's edge, 90 blocks from its
-// center, so the ground near the center is never loaded and the well's scan can only wait. Before, a new scan started
+// center, so the ground near the center is never loaded, and the loaded ground around her is planks (built up), so
+// the well has no spot it could take even after waiting: its scan can only wait. Before, a new scan started
 // from nothing at every 5-second check (12 a minute, each reading every loaded column again); now the next one is held
 // until a player in the town has moved 32 blocks (or a minute per scan that waited has gone by). A walk of 40 blocks
 // along the edge lets it go at once; the well still never ends under "no good spot" in this time.
@@ -25,6 +26,9 @@ export default async function (t) {
   await t.console("tickingarea remove_all");
   await t.loadArea(90, 0, { radius: 2 });
   await t.wait(200);
+  // Everything loaded near the edge (the ticking area: chunks 2 around Ann) is built over (the grass at y -61).
+  for (const [x1, x2] of [[48, 87], [88, 127]])
+    for (const [z1, z2] of [[-32, 7], [8, 47]]) await t.waitUntil(() => t.server(`/fill ${x1} -61 ${z1} ${x2} -61 ${z2} oak_planks`).ok, { timeout: 200, interval: 10, message: `planks ${x1} ${z1}` });
   cfg(true);
   await t.wait(3);
   town("scan");

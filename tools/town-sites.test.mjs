@@ -299,11 +299,13 @@ test("scan: unknown columns wait, and a final scan takes the best valid spot", (
   const world = (x, z) => (Math.hypot(x, z) < 30 ? UNKNOWN : { k: "N", g: 64, top: id("grass_block") });
   const res = run({ ...base, projects: [PROJECTS[0]] }, world);
   assert.deepEqual(res.wait, ["well"], "a nearer candidate might be better: wait");
+  assert.deepEqual(res.hopeful, ["well"], "with a valid spot behind it (a final scan picks it: no hold)");
   assert.equal(res.picks.length, 0);
   const fin = run({ ...base, projects: [PROJECTS[0]], final: true }, world);
   assert.equal(fin.picks.length, 1, "final: the best known spot");
   const all = run({ ...base, projects: [PROJECTS[0]] }, () => UNKNOWN);
   assert.deepEqual(all.wait, ["well"], "nothing loaded: wait, never none");
+  assert.deepEqual(all.hopeful, [], "and nothing a final scan could pick (the caller holds the next scan)");
 });
 
 test("scan: the dock goes on the shore nearest the center, facing the water, with water under its deck", () => {

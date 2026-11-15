@@ -439,9 +439,10 @@ export const colKey = (x, z) => (x + 32768) * 65536 + (z + 32768);
 /**
  * Picks a spot for each project, one after another (the well first), reading columns as it goes (yield). Returns
  * the picks, the projects with no valid spot (`nos`), those waiting for unknown columns (`wait`) and whether a kept
- * column turned out to have changed (`changed`: look again soon).
+ * column turned out to have changed (`changed`: look again soon). `hopeful`: the waiting projects that have a valid
+ * candidate and wait only for a nearer one in unknown ground (a `final` scan picks for them).
  * @param {ScanInput} input
- * @returns {Generator<ScanRequest, { picks: { id: string, spot: AutoSpot }[], nos: string[], wait: string[], changed: boolean }, any>}
+ * @returns {Generator<ScanRequest, { picks: { id: string, spot: AutoSpot }[], nos: string[], wait: string[], hopeful: string[], changed: boolean }, any>}
  */
 export function* scanTown(input) {
   /** Known columns, kept by the caller across scans when it passes them. @type {Map<number, Column>} */
@@ -451,6 +452,8 @@ export function* scanTown(input) {
   /** Columns that read as unknown in this scan (asked again by the next one). @type {Set<number>} */
   const unk = new Set();
   let changed = false;
+  /** Set by decide: the "wait" it just gave has a valid candidate behind it. */
+  let hope = false;
   // Work counted in column lookups (cached or not), so a scan over columns it already read still stops for the
   // tick: without it, later projects re-walk cached rings and evaluate every candidate in one tick (F37 review).
   let work = 0;
@@ -499,7 +502,9 @@ export function* scanTown(input) {
   /** Footprint shapes (all four facings, and `near`) that found no valid spot this scan. @type {Set<string>} */
   const none = new Set();
   /** Shapes that ended "wait" since the last pick (ENT-05): with the same spots taken the next one waits too. @type {Set<string>} */
-  const waited = new Set();
+  const waited = new Map();
+  /** @type {string[]} */
+  const hopeful = [];
   for (const p of order) {
     // A project shaped like one that found no spot finds none either (O79): spots taken since only add to what is in
     // the way. A Village's houses on a steep hillside would otherwise each walk every ring again.
@@ -510,12 +515,15 @@ export function* scanTown(input) {
     }
     if (shape !== undefined && waited.has(shape)) {
       wait.push(p.id);
+      if (waited.get(shape)) hopeful.push(p.id);
       continue;
     }
+    hope = false;
     const res = p.dock ? yield* pickDock(p) : yield* pickBuild(p);
     if (res === "wait") {
       wait.push(p.id);
-      if (shape !== undefined) waited.add(shape);
+      if (hope) hopeful.push(p.id);
+      if (shape !== undefined) waited.set(shape, hope);
     } else if (!res) {
       nos.push(p.id);
       if (shape !== undefined) none.add(shape);
@@ -526,7 +534,7 @@ export function* scanTown(input) {
       waited.clear(); // a spot taken can end a wait (the nearer candidate it waited for is gone)
     }
   }
-  return { picks, nos, wait, changed };
+  return { picks, nos, wait, hopeful, changed };
 
   /** Cheap checks first, no reads: the town's edge, other spots, posts and places, claims. @param {Rect} region */
   function blockedWithoutReads(region) {
@@ -589,7 +597,10 @@ export function* scanTown(input) {
    */
   function* decide(valid, waitDist) {
     valid.sort((a, b) => compareKeys(a.key, b.key));
-    if (valid.length && !input.final && waitDist < valid[0].dist + SCAN.past) return "wait";
+    if (valid.length && !input.final && waitDist < valid[0].dist + SCAN.past) {
+      hope = true;
+      return "wait";
+    }
     for (const c of valid.slice(0, SCAN.finalists)) {
       if (!(yield* stillSo(c.region))) {
         // Kept columns there changed: the candidates were judged on old ground. Wait (the caller looks again soon,

@@ -2318,7 +2318,7 @@ function stepScan() {
   }
 }
 
-/** @param {Town} t0 @param {{ picks: { id: string, spot: Spot }[], nos: string[], wait: string[], changed?: boolean }} res */
+/** @param {Town} t0 @param {{ picks: { id: string, spot: Spot }[], nos: string[], wait: string[], hopeful?: string[], changed?: boolean }} res */
 function finishScan(t0, res) {
   scanJob = undefined;
   const t = allTowns().get(t0.id);
@@ -2328,7 +2328,7 @@ function finishScan(t0, res) {
   // out by the holds below, the last ones taking any valid spot known), what still waits has no good spot in the
   // ground the town's players loaded.
   /** @type {string[]} */
-  const giveUp = !res.changed && waits >= SCAN_GIVE_UP ? res.wait : [];
+  const giveUp = !res.changed && waits >= SCAN_GIVE_UP ? res.wait.filter((id) => !res.hopeful?.includes(id)) : [];
   /** @type {string[]} */
   const got = [];
   for (const { id, spot } of res.picks) {
@@ -2369,9 +2369,10 @@ function finishScan(t0, res) {
   if (!t.nos?.length) delete t.nos;
   if (waits && t.scan?.length) scanWaits.set(t.id, waits);
   else scanWaits.delete(t.id);
-  // A scan that only waited: hold the next one until new ground can have loaded (a kept column that changed is
-  // looked at again at the next check instead).
-  if (!res.changed && !res.picks.length && res.wait.length && t.scan?.length) {
+  // A scan that only waited, with nothing it could pick even when final: hold the next one until new ground can have
+  // loaded. A project with a valid spot that waits for a nearer one is scanned again at the next check, so the final
+  // scan (SCAN_FINAL_AFTER) picks it soon; a kept column that changed is looked at again at the next check too.
+  if (!res.changed && !res.picks.length && res.wait.length && !res.hopeful?.length && t.scan?.length) {
     const r = get("townRadius");
     const at = placesOf(world.getAllPlayers()).filter((q) => q.dim === t.dim && Math.hypot(q.x - t.x, q.z - t.z) <= r).map((q) => ({ x: q.x, z: q.z }));
     scanHolds.set(t.id, { until: system.currentTick + Math.min(10, waits) * 1200, at });
