@@ -4,7 +4,6 @@ import { world } from "@minecraft/server";
 import { STORIES } from "./stories.js";
 import { FAVORS, HOSTILES, WANDER_TEMPLATES } from "./stories/index.js";
 import { PACK, hash, itemName, npcName, send, strangerNames } from "./util.js";
-import { utf8Length } from "./bytes.js";
 
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {import("./types.js").Story} Story */
@@ -321,10 +320,19 @@ export function sagaOf(player) {
 }
 
 /** UTF-8 size of a string (the safe measure for a dynamic property: no more than 32,767). @param {string} s */
-const byteLength = utf8Length;
-
-/** Is this JSON within SAVE_LIMIT bytes? Under a third of it in characters it must be, without counting. @param {string} json */
-const fits = (json) => json.length * 3 <= SAVE_LIMIT || utf8Length(json) <= SAVE_LIMIT;
+function byteLength(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff) {
+      n += 4; // a surrogate pair
+      i++;
+    } else n += 3;
+  }
+  return n;
+}
 
 /**
  * The save as JSON, kept under SAVE_LIMIT: past it, drop (in this order) the "stopped tracking" list, finished daily
@@ -333,22 +341,22 @@ const fits = (json) => json.length * 3 <= SAVE_LIMIT || utf8Length(json) <= SAVE
  */
 function trimSave(saga) {
   let json = JSON.stringify(saga);
-  if (fits(json)) return json;
+  if (byteLength(json) <= SAVE_LIMIT) return json;
   if (saga.ut) {
     delete saga.ut;
     json = JSON.stringify(saga);
   }
-  if (!fits(json) && saga.fv) {
+  if (byteLength(json) > SAVE_LIMIT && saga.fv) {
     const old = Object.entries(saga.fv)
       .filter(([, fs]) => !fs?.a || fs.c)
       .sort((a, b) => (a[1]?.d ?? 0) - (b[1]?.d ?? 0));
     for (const [npc] of old) {
       delete saga.fv[npc];
       json = JSON.stringify(saga);
-      if (fits(json)) break;
+      if (byteLength(json) <= SAVE_LIMIT) break;
     }
   }
-  if (!fits(json) && saga.cx?.length) {
+  if (byteLength(json) > SAVE_LIMIT && saga.cx?.length) {
     // Binary search for how many of the newest codex entries still fit.
     const all = saga.cx;
     let lo = 0;
@@ -356,7 +364,7 @@ function trimSave(saga) {
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
       saga.cx = all.slice(all.length - mid);
-      if (fits(JSON.stringify(saga))) lo = mid;
+      if (byteLength(JSON.stringify(saga)) <= SAVE_LIMIT) lo = mid;
       else hi = mid - 1;
     }
     saga.cx = all.slice(all.length - lo);
@@ -379,7 +387,7 @@ export function codexFits(saga, id) {
   const copy = JSON.parse(JSON.stringify(saga));
   copy.cx = [...(copy.cx ?? []), id];
   const json = trimSave(copy);
-  return fits(json) && copy.cx.includes(id);
+  return byteLength(json) <= SAVE_LIMIT && copy.cx.includes(id);
 }
 
 /** Marks the player's progress to be saved (within a few seconds, or now). @param {Player} player @param {boolean} [now] */
@@ -404,7 +412,7 @@ export function flush(id) {
   let json = "";
   try {
     json = trimSave(saga);
-    if (!fits(json)) console.warn(`[saga] ${player.name}'s progress is ${byteLength(json)} bytes; it may not save`);
+    if (byteLength(json) > SAVE_LIMIT) console.warn(`[saga] ${player.name}'s progress is ${byteLength(json)} bytes; it may not save`);
     player.setDynamicProperty(PROP_PLAYER, json);
     dirty.delete(id);
     tooBig.delete(id);
@@ -414,15 +422,14 @@ export function flush(id) {
       tooBig.add(id);
       console.warn(`[saga] save: ${e}`);
       try {
-        if (!fits(json)) player.sendMessage("§c[Story] Your story progress is too big to save. Tell an operator.");
+        if (byteLength(json) > SAVE_LIMIT) player.sendMessage("§c[Story] Your story progress is too big to save. Tell an operator.");
       } catch {}
     }
   }
 }
 
-/** Saves every player with unsaved progress, or only those `due` picks. @param {(id: string) => boolean} [due] */
-export function flushAll(due) {
-  for (const id of [...dirty.keys()]) if (!due || due(id)) flush(id);
+export function flushAll() {
+  for (const id of [...dirty.keys()]) flush(id);
 }
 
 /** Forgets a player's cached progress (after a reset, or when they leave). @param {string} id */

@@ -380,7 +380,9 @@ PRG-27, PRG-31, PRG-44, PRG-24, PRG-42, HUD-10, HUD-24, BSE-07, BSE-08, BSE-14, 
 `stats_bp`, `skills_bp`, `guilds_bp`, `milestones_bp`, `titles_bp`, `journal_bp`, `saga_bp` (save path only),
 `maps_bp`, `atlas_bp`, `build_bp`, `news_bp`, `nick_bp`.
 - **W14a Write less (what is left).** Quests, Skills (XP blocks only, save on leave, explored chunks), Milestones,
-  Titles, Story, Atlas and News shipped in perf/progress-writes. Left: Skills still rewrites its whole placed-block
+  Titles, Atlas and News shipped in perf/progress-writes. Left: Story progress counted twice in JS per flush (PRG-31): a
+  native byte count and hashed flush seconds measured no gain in saga-perf-quests (saga_bp 0.152 -> 0.150 ms/tick,
+  saves there are small), so it was not shipped; measure it again with a 10 KB+ save (a seeded player) first. And Skills still rewrites its whole placed-block
   set (up to 10,000 keys of XP blocks, 9 world properties) every 30 s while anyone places stone, logs or ores
   (PRG-09 M: a ring of the 9 properties, new keys into the newest, the oldest dropped whole, a dirty flag each, old
   format read as the ring's first lap). It needs a fixture with a full set to measure (a test hook in skills_bp or a

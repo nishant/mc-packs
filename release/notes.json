@@ -1,6 +1,6 @@
 {
   "notes": [
-    "Daily Quests, Skills, Milestones, Titles & Trails, Story Questlines, Atlas of the Realm and Realm News write their saved data less often (Daily Quests no longer on every counted block), and Skills no longer forgets blocks placed just before the Realm closes.",
+    "Daily Quests, Skills, Milestones, Titles & Trails, Atlas of the Realm and Realm News write their saved data less often (Daily Quests no longer on every counted block), and Skills no longer forgets blocks placed just before the Realm closes.",
     "Champions and the Bounty Board cost the server less: mob farms and dropped items no longer wake Champions up, and a Stormcaller strike or a new bounty target no longer makes one long tick.",
     "Quick Stack & Sort costs the server much less while you mine on a nearly full inventory page: auto-store moves pickups at most once a second, all together.",
     "Fishing costs the server much less: one pack follows each bobber and shares every catch with Skills, the Journal, Daily Quests and Story Questlines.",
@@ -52,8 +52,8 @@
       "notes": "Residents can no longer breed; leftovers from Remove spot are capped apart from the town limit; the realm:town_test hook needs the realm_test_hooks objective."
     },
     "saga_bp": {
-      "version": "1.16.26",
-      "notes": "Saving your story progress counts its size once with a native search instead of walking it twice, and players save on different seconds instead of all in one tick."
+      "version": "1.16.25",
+      "notes": "Shared name label update: a label is taken down only 4 blocks past its range, so it no longer flickers for a player standing at the edge."
     },
     "maps_bp": {
       "version": "1.8.19",

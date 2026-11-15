@@ -12,9 +12,8 @@ const slice = (src, from, to) => {
   return src.slice(a, src.indexOf(to, a)).replaceAll("export ", "");
 };
 
-const bytes = read("bytes.js").replaceAll("export ", "");
 const save = runInNewContext(
-  `const SAVE_LIMIT = 30000;\n${bytes}\n${slice(data, "const byteLength", "/** Marks the player's progress")}\n({ byteLength, trimSave, saveRoom, codexFits })`,
+  `const SAVE_LIMIT = 30000;\n${slice(data, "function byteLength", "/** Marks the player's progress")}\n({ byteLength, trimSave, saveRoom, codexFits })`,
   {},
 );
 
@@ -94,7 +93,7 @@ test("over the limit even after the allowed trim: refused, and nothing in the sa
 
 // The real reward() -> grantCodex -> markDirty -> flush(), writing through player.setDynamicProperty.
 const flow = runInNewContext(
-  `const SAVE_LIMIT = 30000; const PROP_PLAYER = "saga:player";\n${bytes}\n${slice(data, "const cache = new Map();", "export function flushAll")}\n${slice(objectives, "export function reward(", "function crownsObjective")}\n({ cache, reward, flush })`,
+  `const SAVE_LIMIT = 30000; const PROP_PLAYER = "saga:player";\n${slice(data, "const cache = new Map();", "export function flushAll")}\n${slice(objectives, "export function reward(", "function crownsObjective")}\n({ cache, reward, flush })`,
   { sagaOf: (p) => flow.cache.get(p.id), send() {}, giveItem() {}, plain: (s) => s, itemName: (s) => s, addCrowns: () => false, console: { warn() {} }, Math },
 );
 
