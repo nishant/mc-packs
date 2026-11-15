@@ -31,8 +31,15 @@ export default async function (t) {
   const typeAt = (pos) => { try { return ow.getBlock(pos)?.typeId; } catch { return undefined; } };
   const phases = [];
   let current = null;
+  // The slowest tick of each phase, as the server ran it (wall time between two ticks, whatever ran in it).
+  let lastTickAt = Date.now();
+  const tickWatch = t.system.runInterval(() => {
+    const now = Date.now();
+    if (current) current.slowestTickMs = Math.max(current.slowestTickMs ?? 0, now - lastTickAt);
+    lastTickAt = now;
+  }, 1);
   const begin = (name) => { current = { name, startTick: t.tick }; t.log(`phase ${name} starts`); };
-  const end = () => { current.endTick = t.tick; phases.push(current); t.log(`phase ${current.name}: ${((current.endTick - current.startTick) / 20).toFixed(1)} s`); current = null; };
+  const end = () => { current.endTick = t.tick; phases.push(current); t.log(`phase ${current.name}: ${((current.endTick - current.startTick) / 20).toFixed(1)} s, slowest tick ${current.slowestTickMs ?? 0} ms`); current = null; };
 
   const pickMode = async (re) => {
     const formP = t.waitForm(p, { timeout: 100 });
@@ -173,6 +180,7 @@ export default async function (t) {
   end();
 
   t.system.clearRun(sampler);
+  t.system.clearRun(tickWatch);
   const ticks = t.tick - phases[0].startTick;
   const seconds = Math.floor(ticks / 20);
   t.report("perf-workload", {
