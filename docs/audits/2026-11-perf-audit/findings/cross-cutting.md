@@ -27,6 +27,9 @@ remaining gains are not in any one pack's steady loop. They are in how 67 packs 
 ## Findings
 
 ### XC-01 One script event listener per pack: every `realm:` event wakes 67 listeners  [high / confirmed / M / medium]
+- Measured (2026-11-15, after the census PR #288): one native wake-up is about 1.3 us (W0d), not 10. With the help
+  census gone the bundle at 40 players sends 0.26 script events a tick (0.84 before), about 17 wake-ups a tick, about
+  0.02 ms a tick in all; callbacks per tick 97 to 58. The hub below is not built (PLAN.md section 7).
 - Where: `tools/events-shared.js:80` (each pack's copy subscribes its own native listener); `tools/bundle.mjs:264`
   keeps `script-events.js` out of the shared list because it holds per-pack state.
 - What happens and how often: in the Realm Bundle each `system.sendScriptEvent("realm:...")` is delivered to 67
