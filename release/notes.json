@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Champions and the Bounty Board cost the server less: mob farms and dropped items no longer wake Champions up, and a Stormcaller strike or a new bounty target no longer makes one long tick.",
     "Quick Stack & Sort costs the server much less while you mine on a nearly full inventory page: auto-store moves pickups at most once a second, all together.",
     "Fishing costs the server much less: one pack follows each bobber and shares every catch with Skills, the Journal, Daily Quests and Story Questlines.",
     "Side HUD: the right-side boxes now show on short phone screens when the Minimap radar is hidden.",
@@ -20,6 +21,14 @@
     "Realm Skies: new particles for the little rainbow over a pot of gold and a NOS boost's plume, and a tornado funnel of fewer, slightly bigger clouds that looks the same at about half the particles."
   ],
   "packNotes": {
+    "elite_bp": {
+      "version": "1.3.22",
+      "notes": "Hurts and spawns anywhere in the world (mob farms, mined blocks, crop drops) are checked against the loaded champions before anything is read from the game; a Stormcaller's build check is spread over half a second; the 5-second upkeep fully checks 4 champions in turn; an approach step reads its dimension once."
+    },
+    "bounty_bp": {
+      "version": "1.3.15",
+      "notes": "A target spot's build check is spread over half a second, the players' places are read once per check, a spawned target is looked up only while a player is within 216 blocks, and cull progress notes show at most twice a second."
+    },
     "hud_rp": {
       "version": "1.6.3",
       "notes": "The right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
