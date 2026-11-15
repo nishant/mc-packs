@@ -719,6 +719,12 @@ function spawnOf(player, id) {
   return sp;
 }
 
+/** Player id -> where and when their last monster search found none, and how long that is trusted while they stay within QUIET_MOVE blocks. @type {Map<string, { tick: number, dim: string, x: number, z: number, radius: number, keep: number }>} */
+const mobQuiet = new Map();
+const MOB_QUIET = 20;
+const MOB_QUIET_MAX = 40;
+/** Moved less than this (blocks, along x plus z) since the last search: still. */
+const QUIET_MOVE = 1;
 /**
  * Markers around the player: two entity searches (townsfolk and wanderers; mobs), the rest from broadcasts.
  * @param {Player} player @param {Seen[]} seen @param {{ mobs: boolean, radius: number, radar: boolean, town: boolean, home: boolean }} pr @param {Here} h where the player is
@@ -745,12 +751,26 @@ function gather(player, seen, pr, h) {
     // Each player's own search: one reaching farther for others to share made every pass about 20% dearer and saved
     // nothing measurable with players in groups (October 2026).
     // Champions and Choir Singers come from champsIn, farther and with their own marker, so not twice.
-    for (const e of dim.getEntities({ location: at, maxDistance: pr.radius, families: ["monster"], excludeTags: [NPC_TAG, CHAMP_TAG, SINGER_TAG], closest: max })) {
-      try {
-        const l = e.location;
-        add("mob", l.x, l.z, true);
-      } catch {
-        // gone meanwhile
+    // A still player whose last search found no monster searches again only after MOB_QUIET ticks, then twice that
+    // (at most MOB_QUIET_MAX): an empty search is the common case and the dearest part of a pass (HUD-03).
+    const now = system.currentTick;
+    const mc = mobQuiet.get(id);
+    const skip = !!mc && mc.dim === dimId && mc.radius === pr.radius && now >= mc.tick && now - mc.tick < mc.keep && Math.abs(mc.x - at.x) + Math.abs(mc.z - at.z) < QUIET_MOVE;
+    if (!skip) {
+      let found = 0;
+      for (const e of dim.getEntities({ location: at, maxDistance: pr.radius, families: ["monster"], excludeTags: [NPC_TAG, CHAMP_TAG, SINGER_TAG], closest: max })) {
+        try {
+          const l = e.location;
+          add("mob", l.x, l.z, true);
+          found++;
+        } catch {
+          // gone meanwhile
+        }
+      }
+      if (found) mobQuiet.delete(id);
+      else {
+        const still = !!mc && mc.dim === dimId && Math.abs(mc.x - at.x) + Math.abs(mc.z - at.z) < QUIET_MOVE;
+        mobQuiet.set(id, { tick: now, dim: dimId, x: at.x, z: at.z, radius: pr.radius, keep: still ? Math.min(MOB_QUIET_MAX, mc.keep * 2) : MOB_QUIET });
       }
     }
     for (const c of champsIn(dim, dimId)) if (Math.hypot(c.x - at.x, c.z - at.z) <= CHAMP_RANGE) add("champ", c.x, c.z, true);
@@ -1243,6 +1263,13 @@ function scanFrame() {
   const planTimeLeft=()=>scanTimeLeft()&&Date.now()-t0<PLAN_MS;
   const enabled=get("enabled")===true;
   if (!enabled&&!manualScans.contexts.size) return;
+  // Nothing to scan (no radar with terrain on, no plan, read, retry or manual scan, and no store to trim): return
+  // before the per-tick lists below (HUD-18; with the radar off for everyone this was about 0.09 ms a tick at 10 players).
+  if (!scanPlans.size && !planNow.size && !retryAt.size && !pendingTerrain.size && !manualScans.contexts.size && !terrain.stores.size) {
+    let wanted = false;
+    for (const p of playersNow()) { const pr = prefsOf(p); if (pr.radar && pr.terrain) { wanted = true; break; } }
+    if (!wanted) { scanBudget.tick(); return; }
+  }
   const readsAtEntry=scanReads;
   const now = system.currentTick;
   scanBudget.tick();
@@ -1873,32 +1900,6 @@ function hidePlayerHud(player) {
   }
 }
 
-/**
- * A still player's passes come less often (HUD-03): a pass that finds the player within QUIET_MOVE blocks of the last
- * one, the same markers and second line, and no monster near doubles the wait for the next (INTERVAL, then 2x, then
- * 4x, at most QUIET_MAX ticks); anything else, or the redraw seeing them move QUIET_MOVE blocks, brings it back to
- * INTERVAL. Player id -> how many quiet passes in a row (up to QUIET_LEVELS), and the extra wait it gives.
- * @type {Map<string, number>}
- */
-const passQuiet = new Map();
-/** @type {Map<string, number>} */
-const passExtra = new Map();
-const QUIET_MOVE = 1;
-const QUIET_LEVELS = 2;
-const QUIET_MAX = 40;
-/** The pass queue's view of passAt: when each player's last pass was, moved later by their quiet wait. */
-/** Something a pass shows changed (a broadcast): that player's (or, without an id, everyone's) next pass comes on the usual INTERVAL. @param {string} [pid] */
-function wakePasses(pid) {
-  if (pid === undefined) {
-    passExtra.clear();
-    passQuiet.clear();
-  } else if (pid) {
-    passExtra.delete(pid);
-    passQuiet.delete(pid);
-  }
-}
-const passDue = { get: (/** @type {string} */ id) => { const at = passAt.get(id); return at === undefined ? undefined : at + (passExtra.get(id) ?? 0); } };
-
 /** @param {Player} player @param {Player[]} all @param {Seen[]} seen @param {number} now */
 function pass(player, all, seen, now) {
   const id = idOf(player);
@@ -1911,8 +1912,6 @@ function pass(player, all, seen, now) {
   if (!showCompass && !showRadar) {
     hidePlayerHud(player);
     arrival(player, destination(player, all, new Map(), h), h);
-    passQuiet.delete(id);
-    passExtra.delete(id);
     return;
   }
   const t0 = Date.now();
@@ -1947,14 +1946,6 @@ function pass(player, all, seen, now) {
   // costs no strip and radar).
   view.dirty = !same || !!old.dirty || !lastSent.has(id) || old.compass !== view.compass || old.radar !== view.radar || old.radius !== view.radius || old.north !== view.north || old.terrain !== view.terrain || view.shownSecond !== view.second || !sameMarkers(view.shown, view.markers);
   views.set(id, view);
-  // The next pass: later while nothing around a still player changes and no monster is near.
-  const quiet = same && Math.abs(old.px - at.x) + Math.abs(old.pz - at.z) < QUIET_MOVE && old.second === view.second && sameMarkers(old.markers, markers) && !markers.some((m) => m.kind === "mob" || m.kind === "champ");
-  const level = quiet ? Math.min(QUIET_LEVELS, (passQuiet.get(id) ?? 0) + 1) : 0;
-  const extra = Math.max(0, Math.min(Math.max(INTERVAL, QUIET_MAX), INTERVAL * 2 ** level) - INTERVAL);
-  if (level) passQuiet.set(id, level);
-  else passQuiet.delete(id);
-  if (extra) passExtra.set(id, extra);
-  else passExtra.delete(id);
   costMs += Date.now() - t0;
   costPlayers++;
   costPassBy.set(id, (costPassBy.get(id) ?? 0) + 1);
@@ -2202,10 +2193,7 @@ system.runInterval(() => {
       // (playerDimensionChange), so the check needn't read it.
       const at = p.location;
       if(residentTrace.active(id))residentTrace.note(id,now,"eligible","pose_observed",{x:at.x,z:at.z,dirty:v.dirty,lag:v.lag,...residentTrace.older(now,at.x,at.z)});
-      const fromPass = Math.abs(at.x - v.px) + Math.abs(at.z - v.pz);
-      // A still player whose passes were spaced out walked off: their next pass comes on the usual INTERVAL (HUD-03).
-      if (fromPass >= QUIET_MOVE && passExtra.size && passExtra.delete(id)) passQuiet.delete(id);
-      if (fromPass > FAR_MOVE) {if(residentTrace.active(id))residentTrace.note(id,now,"scheduler","far_move");continue;}
+      if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) {if(residentTrace.active(id))residentTrace.note(id,now,"scheduler","far_move");continue;}
       /** @type {number | undefined} read only when a new pass didn't already settle it; render() reads it otherwise, inside the draw budget */
       let heading;
       // A stopped sub-MOVE_MIN drift still needs one exact-pose certificate; do not redraw every moving micron.
@@ -2328,17 +2316,6 @@ onChange((key) => {
 /** @type {Seen[]} */
 let seen = [];
 let seenAt = -Infinity;
-/** Player id -> their party tag at the last look: a tag that changed (joined or left a party) changes others' markers, so every pass comes on the usual INTERVAL again. @type {Map<string, string | undefined>} */
-const partyCache = new Map();
-/** @param {Player} p @param {string} id */
-function partyOf(p, id) {
-  const tag = partyTag(p);
-  if (partyCache.get(id) !== tag || !partyCache.has(id)) {
-    if (tag !== undefined || partyCache.get(id) !== undefined) wakePasses();
-    partyCache.set(id, tag);
-  }
-  return tag;
-}
 system.runInterval(() => {
   const featureStarted = featureEnvelope.begin(system.currentTick);
   try {
@@ -2353,7 +2330,7 @@ system.runInterval(() => {
       try {
         const l = p.location;
         const id = idOf(p);
-        seen.push({ id, dim: p.dimension.id, x: l.x, z: l.z, party: partyOf(p, id) });
+        seen.push({ id, dim: p.dimension.id, x: l.x, z: l.z, party: partyTag(p) });
       } catch {
         // left meanwhile
       }
@@ -2363,7 +2340,7 @@ system.runInterval(() => {
   // Out of time (with many players most ticks are, until the budget fills again): nobody to pick.
   if (!passBudget.ok) return;
   const each = Math.min(PASS_EACH, Math.max(1, Math.ceil(all.length / INTERVAL)));
-  const due = oldestDue(all, passDue, now, INTERVAL, each, idOf);
+  const due = oldestDue(all, passAt, now, INTERVAL, each, idOf);
   if (!due.length) return;
   for (const p of due) {
     if (!passBudget.ok) break;
@@ -2396,7 +2373,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   if (roster.delete(playerId)) playersList = [...roster.values()];
   manualScans.cancel(playerId,"Player left",false);
   labPlans.delete(playerId); detailFootprints.delete(playerId);
-  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, passQuiet, passExtra, partyCache, spawnCache, costPassBy, retryAt]) m.delete(playerId);
+  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, spawnCache, mobQuiet, costPassBy, retryAt]) m.delete(playerId);
   planNow.delete(playerId);
   resetChecked.delete(playerId);
   // Lists in parts keyed by this player (their sites, their tracker) that never got their last part (HUD-17).
@@ -2646,7 +2623,6 @@ function onEvent(id, m, source) {
         const s = spotOf(f);
         if (s && typeof f.id === "string" && s.n) folk.set(f.id, s);
       }
-      wakePasses();
       return;
     }
     case "realm:waystones_known": {
@@ -2664,7 +2640,6 @@ function onEvent(id, m, source) {
     }
     case "realm:atlas_region":
       if (pid) regions.set(pid, plain(m.name, 40));
-      wakePasses(pid);
       return;
     case "realm:atlas_sites":
     case "realm:atlas_site": {
@@ -2680,7 +2655,6 @@ function onEvent(id, m, source) {
       }
       // A found site is never lost: keep the list bounded anyway.
       sites.set(pid, out.slice(-1000));
-      wakePasses(pid);
       return;
     }
     case "realm:death_point": {
@@ -2688,7 +2662,6 @@ function onEvent(id, m, source) {
       const s = spotOf(m, "Where I died");
       if (s) deaths.set(pid, s);
       else deaths.delete(pid);
-      wakePasses(pid);
       return;
     }
     case "realm:track": {
@@ -2698,7 +2671,6 @@ function onEvent(id, m, source) {
       const npc = typeof m.npc === "string" ? m.npc : undefined;
       if (n && (s || npc)) tracks.set(pid, { n, ...(s ? { spot: s } : {}), ...(npc ? { npc } : {}) });
       else tracks.delete(pid);
-      wakePasses(pid);
       return;
     }
     case "realm:place_ready": {
@@ -2706,7 +2678,6 @@ function onEvent(id, m, source) {
       const s = spotOf(m, m.label ?? "A Wanderer's Camp");
       if (!s || m.state === "removed" || m.state === "picked") camps.delete(m.wid);
       else camps.set(m.wid, s);
-      wakePasses();
       return;
     }
     case "realm:wander_spawn":
@@ -2727,15 +2698,12 @@ function onEvent(id, m, source) {
         const s = spotOf(t);
         if (s && typeof t.id === "string") towns.set(t.id, { ...s, n: s.n || "Town" });
       }
-      wakePasses();
       return;
     }
     case "realm:rainbow_pot":
       pot = spotOf(m, "Pot of gold");
-      wakePasses();
       return;
     case "realm:siege_marks": {
-      wakePasses();
       const t = m.town && typeof m.town === "object" ? spotOf({ ...m.town, dim: m.dim }) : undefined;
       if (!t) {
         siege = undefined;
@@ -2844,7 +2812,7 @@ function onEvent(id, m, source) {
             data: terrain.get(storeFor(player.id, player.dimension.id), s.x, s.z, s.resolution === PREVIEW ? PREVIEW : s.resolution === 1 ? 1 : COL) ?? null,
           })) : [],
         } : undefined,
-        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, passPerTick: passBudget.perTick, passInterval: INTERVAL, passFewest: passCounts.length ? Math.min(...passCounts) : 0, passMost: passCounts.length ? Math.max(...passCounts) : 0, passQuiet: passExtra.size, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, keepSends, rebuilds: radarRebuilds, reuses: radarReuses, builds: radarBuilds, turnCheckMs, radarMs, readCost },
+        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, passPerTick: passBudget.perTick, passInterval: INTERVAL, passFewest: passCounts.length ? Math.min(...passCounts) : 0, passMost: passCounts.length ? Math.max(...passCounts) : 0, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, keepSends, rebuilds: radarRebuilds, reuses: radarReuses, builds: radarBuilds, turnCheckMs, radarMs, readCost },
         budgets: { draw: drawBudget.left, rebuild: rebuildBudget.left, pass: passBudget.left, scan: scanBudget.left },
         budgetLevel,
         perTick: BUDGETS.reduce((n, b) => n + b.perTick, 0),

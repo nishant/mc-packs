@@ -207,8 +207,8 @@ export default async function (t) {
   husk1.remove();
   husk2.remove();
 
-  // --- HUD-03: a still player's passes are spaced out (up to 40 ticks) while nothing around them changes; a monster
-  // that turns up next to them is still on the strip within about 2 seconds.
+  // --- HUD-03: a still player whose monster searches found nothing searches less often (up to every 40 ticks); a
+  // monster that turns up next to them is still on the strip within about 2 seconds.
   await t.wait(120);
   const husk3 = dim.spawnEntity("minecraft:husk", { x: here.x - 2, y: Y, z: here.z - 8 });
   husk3.addEffect("slowness", 2000, { amplifier: 255, showParticles: false });
@@ -445,13 +445,6 @@ export default async function (t) {
   }
   for (let i = 0; i < 24; i++) {
     const m = dim.spawnEntity("minecraft:husk", { x: (i % 8) * 6, y: Y, z: -300 + (i % 3) * 5 });
-    m.addEffect("slowness", 2000, { amplifier: 255, showParticles: false });
-  }
-  // A monster near every one of them: a still player with nothing around gets a pass less often (HUD-03), and these
-  // checks are about the scheduler sharing the budget among players who all need theirs every interval.
-  for (const q of crowd) {
-    const l = q.location;
-    const m = dim.spawnEntity("minecraft:husk", { x: l.x + 6, y: Y, z: l.z + 6 });
     m.addEffect("slowness", 2000, { amplifier: 255, showParticles: false });
   }
   await t.wait(20);
