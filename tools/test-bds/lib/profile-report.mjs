@@ -75,6 +75,27 @@ export function reducedReport(r) {
   };
 }
 
+const r4 = (/** @type {any} */ v) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v * 1e4) / 1e4 : null);
+/** One window's bundle figures (bundleTicks' shape) cut to what a table needs. @param {any} b */
+const windowFigures = (b) => (b ? { ticks: b.ticks, avg: r4(b.avg), p50: r4(b.p50), p95: r4(b.p95), p99: r4(b.p99), max: r4(b.max), over50: b.over50 ?? null } : null);
+
+/**
+ * What the suite keeps of a profiled scenario's run (PIPE-10): the bundle's whole-run and steady figures, each phase's,
+ * bedrock_server CPU and the 8 dearest packs (by their steady figure when the scenario has a window). Null without rows.
+ * @param {any} r a run.mjs profile JSON
+ */
+export function scenarioPerf(r) {
+  const rows = Array.isArray(r?.packs) ? r.packs : [];
+  if (!rows.length) return null;
+  const fig = (/** @type {any} */ x) => (Number.isFinite(x.steadyMsPerTick) ? x.steadyMsPerTick : x.msPerTick ?? 0);
+  return {
+    ticks: r.ticks ?? null, msPerTick: r4(r.bundle?.msPerTick), acceptance: r.acceptance ? r.acceptance.ok === true : null,
+    cpuMsPerTick: r4(r.process?.cpuMsPerTick), whole: windowFigures(r.bundle?.perTick), steady: windowFigures(r.bundle?.steadyWindow),
+    phases: (r.bundle?.phases ?? []).map((/** @type {any} */ ph) => ({ name: ph.name, players: ph.players ?? null, ...windowFigures(ph.bundle) })),
+    packs: [...rows].sort((a, b) => fig(b) - fig(a)).slice(0, 8).map((x) => ({ pack: x.pack, msPerTick: r4(x.msPerTick), steady: r4(x.steadyMsPerTick), p95: x.p95TickMs ?? null, max: x.maxTickMs ?? null })),
+  };
+}
+
 /** A complete set of parts joined, or null while one is missing. @param {{ n: number, parts: (string | undefined)[] } | undefined} e */
 function joined(e) {
   if (!e || e.parts.filter((x) => x !== undefined).length < e.n) return null;
@@ -372,7 +393,7 @@ export class Profile {
       if (phases.length) {
         for (const r of rows) r.phases = Object.fromEntries(phases.map((ph) => [ph.name, this.packWindowStats(r.pack, ph.startTick, ph.endTick)]));
         this.phaseBundle = phases.map((ph) => ({ ...ph, bundle: this.bundleTicks(ph.startTick, ph.endTick) }));
-        for (const ph of this.phaseBundle) L.push(`  phase ${ph.name} (${ph.bundle?.ticks ?? 0} ticks): ${f3(ph.bundle?.avg)} ms/tick summed over packs, p95 ${ph.bundle?.p95 ?? "-"} / max ${ph.bundle?.max ?? "-"} ms; ${rows.slice(0, 8).map((r) => `${r.pack} ${f3(r.phases[ph.name]?.avg)} (p95 ${r.phases[ph.name]?.p95 ?? "-"}, max ${r.phases[ph.name]?.max ?? "-"})`).join(", ")}`);
+        for (const ph of this.phaseBundle) L.push(`  phase ${ph.name} (${ph.bundle?.ticks ?? 0} ticks${Number.isFinite(ph.players) ? `, ${ph.players} players` : ""}): ${f3(ph.bundle?.avg)} ms/tick summed over packs, p50 ${ph.bundle?.p50 ?? "-"} / p95 ${ph.bundle?.p95 ?? "-"} / p99 ${ph.bundle?.p99 ?? "-"} / max ${ph.bundle?.max ?? "-"} ms; ${rows.slice(0, 8).map((r) => `${r.pack} ${f3(r.phases[ph.name]?.avg)} (p95 ${r.phases[ph.name]?.p95 ?? "-"}, max ${r.phases[ph.name]?.max ?? "-"})`).join(", ")}`);
       }
     }
     const slow = steady ?? bundle;

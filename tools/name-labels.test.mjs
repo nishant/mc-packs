@@ -457,7 +457,11 @@ test("the townsfolk idle loop skips entity and block work beyond its active rang
     NAME_RANGE: 20,
     CONFIG: { respawnRange: 24, idleRange: 12 },
     MISSING_EVERY: 4,
-    world: { getAllPlayers: () => [{ dimension: { id: "minecraft:overworld" }, location: { x: 0, y: 0, z: 0 } }] },
+    playersNow: () => ({ all: [{ dimId: "minecraft:overworld", x: 0, y: 0, z: 0 }] }),
+    activeRangeNow: () => 40,
+    handleOf: () => {
+      entityReads++;
+    },
     list: [{ id: "ida", dim: "minecraft:overworld", x: 1000, y: 0, z: 0 }],
     folk: new Map([["ida", {}]]),
     folkOf: (/** @type {string} */ id) => (id === "ida" ? {} : undefined),
@@ -498,18 +502,85 @@ test("a spawn that hands back another entity (repeating entity ids) is never tag
   assert.equal(dimensions[0].getEntities({ type: "realm:npc_label" }).length, 1, "a real helper once spawning works");
 });
 
-test("stray helpers in whole dimensions are swept only every 10th sync; loaded strays still go at once", () => {
+test("stray helpers in whole dimensions are swept once a minute (and on the first sync); loaded strays still go at once", () => {
+  for (const [syncTicks, perMinute] of [[undefined, 600], [10, 120]]) {
+    const { dimensions, target, viewer } = probeWorld();
+    const labels = createNameLabels({ labelType: "realm:npc_label", syncTicks });
+    let scans = 0;
+    const orig = dimensions[0].getEntities.bind(dimensions[0]);
+    dimensions[0].getEntities = (q) => {
+      scans++;
+      return orig(q);
+    };
+    for (let i = 0; i < perMinute * 2; i++) labels.sync([{ id: "ida", entity: target, name: "Ida" }], [viewer(5)], dimensions);
+    assert.equal(scans, 2, `two dimension scans in two minutes of syncs (syncTicks ${syncTicks})`);
+    dimensions[0].getEntities = orig;
+  }
+});
+
+test("a helper is taken down only 4 blocks past the range, and a new one is not teleported after its spawn", () => {
   const { dimensions, target, viewer } = probeWorld();
   const labels = createNameLabels({ labelType: "realm:npc_label" });
-  let scans = 0;
-  const orig = dimensions[0].getEntities.bind(dimensions[0]);
-  dimensions[0].getEntities = (q) => {
-    scans++;
-    return orig(q);
+  const sync = (x) => labels.sync([{ id: "ida", entity: target, name: "Ida" }], [viewer(x)], dimensions);
+  sync(26);
+  assert.equal(dimensions[0].getEntities({ type: "realm:npc_label" }).length, 0, "none past the range");
+  let teleports = 0;
+  const origSpawn = dimensions[0].spawnEntity.bind(dimensions[0]);
+  dimensions[0].spawnEntity = (type, at) => {
+    const e = origSpawn(type, at);
+    const tp = e.teleport.bind(e);
+    e.teleport = (l) => {
+      teleports++;
+      tp(l);
+    };
+    return e;
   };
-  for (let i = 0; i < 20; i++) labels.sync([{ id: "ida", entity: target, name: "Ida" }], [viewer(5)], dimensions);
-  assert.equal(scans, 2, "two dimension scans in 20 syncs");
-  dimensions[0].getEntities = orig;
+  sync(20);
+  const [helper] = dimensions[0].getEntities({ type: "realm:npc_label" });
+  assert.ok(helper, "spawned in range");
+  assert.equal(teleports, 0, "no teleport to where it was spawned");
+  sync(27);
+  assert.equal(helper.isValid, true, "kept just past the range");
+  sync(29);
+  assert.equal(helper.isValid, false, "taken down past range + 4");
+});
+
+test("with trustHandles a standing target with a fixed head costs no reads between checks, and forget drops its helper", () => {
+  const { dimensions, target } = probeWorld();
+  const labels = createNameLabels({ labelType: "realm:npc_label", syncTicks: 10, trustHandles: true, spectatorsExcluded: true });
+  const head = { x: 0, y: 5.8, z: 0 };
+  const obs = [{ dimId: "minecraft:overworld", x: 5, y: 4, z: 0, id: "a" }];
+  const sync = () => labels.sync([{ id: "ida", entity: target, name: "Ida", dimId: "minecraft:overworld", head }], obs, dimensions);
+  sync();
+  const [helper] = dimensions[0].getEntities({ type: "realm:npc_label" });
+  assert.ok(helper && target.nameTag === "§r");
+  // Count every read of the target and the helper from now on.
+  let reads = 0;
+  const watch = (e) =>
+    new Proxy(e, {
+      get(o, k) {
+        if (typeof k === "string" && !["id", "then"].includes(k)) reads++;
+        return Reflect.get(o, k);
+      },
+    });
+  const wt = watch(target);
+  for (let i = 1; i < 10; i++) labels.sync([{ id: "ida", entity: wt, name: "Ida", dimId: "minecraft:overworld", head }], obs, dimensions);
+  // Syncs 2-10 of 10: the resend toggles write the helper caption and the target's name tag (2 + 2 writes, no reads).
+  assert.ok(reads <= 4, `at most the resend writes on the target (${reads})`);
+  // Far away: the full name goes back on once, then nothing is read or written until the next check.
+  const far = [{ dimId: "minecraft:overworld", x: 500, y: 4, z: 0, id: "a" }];
+  labels.sync([{ id: "ida", entity: target, name: "Ida", dimId: "minecraft:overworld", head }], far, dimensions);
+  assert.equal(target.nameTag, "Ida");
+  assert.equal(helper.isValid, false);
+  reads = 0;
+  for (let i = 0; i < 8; i++) labels.sync([{ id: "ida", entity: wt, name: "Ida", dimId: "minecraft:overworld", head }], far, dimensions);
+  assert.equal(reads, 0, "nothing read on a far target between checks");
+  // Near again, then the target goes (unloaded): forget takes its helper down.
+  labels.sync([{ id: "ida", entity: target, name: "Ida", dimId: "minecraft:overworld", head }], obs, dimensions);
+  const [again] = dimensions[0].getEntities({ type: "realm:npc_label" });
+  assert.ok(again?.isValid);
+  labels.forget("ida");
+  assert.equal(again.isValid, false, "forget removed the helper of a target that went");
 });
 
 test("with syncTicks the resend after a new near viewer comes 1 s and 3 s later in game time", () => {

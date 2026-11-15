@@ -108,32 +108,20 @@ Size is the amount of work: S (one sitting), M (a day of agent work with tests),
 
 ### W0 Make the measurement trustworthy and fast (harness and CI only; no pack changes)
 
-Two PRs, in this order. None changes a pack, so none needs a pack release; each still merges through the normal
-flow and is proven by one `validate.yml` dispatch. The validation report already keeps the full profiles, the tick
-histograms by `tick % 20` to `% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts, flaky
-scenarios and the bundle's per-pack table by `scripts/<pack>/` path; a merge is validated in about 31 minutes against
-the last master commit with a finished validation, and the memory soak runs nightly.
+None changes a pack, so none needs a pack release; each still merges through the normal flow and is proven by one
+`validate.yml` dispatch. The validation report already keeps the full profiles, the tick histograms by `tick % 20` to
+`% 200`, the 10 worst ticks of the steady window and each phase, watchdog counts, flaky scenarios, the bundle's
+per-pack table by `scripts/<pack>/` path, a phase table per soak (empty, one, ramp, steady, churn, and a stormy night
+on bundle-40, in a world pinned at noon and clear weather) and a table per profiled suite scenario; a merge is
+validated in about 37 minutes against the last master commit with a finished validation, and the memory soak runs
+nightly.
 
-**W0c Phases and a pinned world** (M). Findings: PIPE-04, UTL-01, PIPE-10, UTL-07 (confirm), and the measurement
-halves of XC-02, XC-06, XC-07, HUD-01, BSE-27, PRG-16.
-- `perf-soak.js` sets the time and weather itself and reports them, so day and night are measured on purpose. Run
-  the bundle soak and the A/B soak over the same span of the day (PIPE-04 dusk mismatch, UTL-01).
-- Phases, using the profiler's existing phase support (`night-soak.js` shows how): `empty` (20 s before the first
-  player), `one` (30 s with one player), the steady window as today, then `churn`: a leave and a join every 5 s,
-  two deaths and respawns, two dimension changes, block break and place loops on 4 players, 20 summoned mobs killed
-  each second for 20 s, `/realm:help`, `/realm:prefs` and `/realm:config` once each. Each phase reports its own
-  average, percentiles and worst ticks; acceptance still judges the steady window only.
-- A `night` phase with a thunderstorm at the end of the 40-player bundle soak, replacing luck (UTL-01).
-- Keep the numbers of the ten per-pack perf workloads that already run under the profiler on every merge and are
-  discarded today (PIPE-10): a table per scenario in the report.
-- New A/B scenarios for what phases cannot hold (run by hand through `validate.yml` `scenarios`, and by the
-  workstream that needs them): `map-radar-perf` (radar on: standing, walking, flying), `stash-miner-perf` (a nearly
-  full page and a stream of pickups), `build-big-perf` (place, copy and cut a 40x40x30 box; preview held), `saga-quest-perf`
-  exists as `saga-perf-quests` (check it has a quest active for every player), `fishing-perf` (10 bobbers out).
-  Write each with the workstream that uses it if that is simpler; list them in WORKING.md.
-- Confirm or reject UTL-07 (admin_bp's steady cost being the soak emptying the slot its item sits in) with
-  `refill=0`.
-- Proof: the report shows every phase; rerun twice to see the phase figures are stable enough to compare.
+**W0c (left): A/B scenarios that phases cannot hold** (S each). The phases, the pinned world, the per-scenario
+tables and the UTL-07 check shipped; what is left is the scenarios, each best written with the workstream that uses it
+(run by hand through `validate.yml` `scenarios`; list them in WORKING.md): `map-radar-perf` (radar on: standing,
+walking, flying; W5), `stash-miner-perf` (a nearly full page and a stream of pickups; W9), `build-big-perf` (place,
+copy and cut a 40x40x30 box, preview held; W7), `fishing-perf` (10 bobbers out), and a check that `saga-perf-quests`
+has a quest active for every player (W16).
 
 **W0d Trust the comparison, and see the engine** (M). Findings: PIPE-07, PIPE-03, PIPE-08.
 - Bundle pair as base, head, head, base; compare means as well as lows (PIPE-07 (1)). A weekly A/A dispatch (base
@@ -312,21 +300,12 @@ Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
 
 ### W10 Townsfolk, labels and towns (M to L: two PRs)
 
-Findings: ENT-01, ENT-02, ENT-03, ENT-04, ENT-16, ENT-25, ENT-27, ENT-32, ENT-40, ENT-29, ENT-38 (W10a); ENT-05,
-ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `npc_bp`, `town_bp`,
-`wander_bp`, `caravan_bp` (the four with `name-labels.js`), `tools/name-labels-shared.js`, `tools/owed-shared.js`,
-`tools/tether-shared.js`.
-- **W10a Labels and the townsfolk loop.** The "is anyone near" test reads every player's dimension and place once
-  per townsfolk every half second (ENT-01: 3 x players x townsfolk calls, 14 ms bursts at 40 players with nobody
-  near a town): read the players once per run. The label sync's 2 ms is 229 native calls, 3 per observer and 9 per
-  townsfolk whether near or far (ENT-02); the two earlier attempts removed none of them. Learn validity from events
-  instead of asking, and keep fixed anchors for townsfolk that do not move, which takes a standing NPC to about one
-  call. This is OPEN.md O3. For wanderers, split "follow the mob" from "who sees the label" so the 2-tick sync stops
-  repeating every read to move one label (ENT-03); separate create and remove distances at the label range edge
-  (ENT-04); read a caption back only on the sweep (ENT-16). A bug to fix on the way: a townsfolk with no saved skin
-  and any entity within 2 blocks loses and regains its label every 10 s (ENT-25). The 10-second audit of every
-  loaded townsfolk (ENT-40), turning to a player being a teleport (ENT-27), and wander's 405 block reads around
-  each exploring player every minute at night before a 7% roll (ENT-29: roll first).
+Findings: ENT-05, ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `town_bp`,
+`tools/owed-shared.js`, `tools/tether-shared.js`. W10a is #249 (npc_bp, wander_bp, caravan_bp and the
+shared labels); left from it, each only if a measurement asks for it: with a crowd standing around the townsfolk
+the half-second loop is still about 1.2 to 1.6 ms (npc-labels-perf near phase at 40, mostly the turning teleports and
+the players' places, which that phase needs); the label entities' `minecraft:transient` and `minecraft:physics`
+(ENT-32, needs a BDS check); caravan_bp's traders still use the labels' default reads (`trustHandles` off).
 - **W10b The town scan and saved indexes.** A project with no valid spot in the loaded ground is scanned from
   scratch every 5 s while a player is in the town: the column cache dies with each scan, columns past tick distance 4
   are always "unknown", and "unknown" never ends as "no good spot" (ENT-05); walks over cached columns are also
@@ -438,18 +417,6 @@ Findings: PRG-30, PRG-05, PRG-40, PRG-47, PRG-16 (after W2). Packs: `saga_bp`.
   pending place every 2 s (PRG-05), a `getTags()` per player per second for the party story (PRG-47).
 - Proof: `saga-perf-quests` pairs; `check-stories`; the saga scenarios.
 
-### W17 Weather and sky effects (M: two PRs)
-
-Findings: UTL-02, UTL-03, UTL-06, UTL-15, UTL-35, UTL-36, UTL-16, UTL-37, UTL-18. Packs: `rainbow_bp`, `tornado_bp`,
-`elytra_bp`, `claims_bp`, `zones_bp`, `climate_bp`, `leaves_bp`, `rain_bp`, and `sky_rp`, `rain_rp`, `silly_rp`.
-- **W17a Fewer packets.** The rainbow as 7 client emitters instead of 259 server particles twice a second (UTL-02);
-  the tornado's 67 packets a second and about 2,500 live particles per viewer (UTL-03: fewer, larger particles and a
-  per-player density preference); a NOS boost's 41 spawns a tick (UTL-06); claim borders and zone outlines (UTL-15);
-  a new `MolangVariableMap` per player per second (UTL-35); leaf decay's 6 destroy commands a tick (UTL-36).
-- Proof: `weather-crowd`, `tornado-sound-perf` (numbers kept after W0c), the night-and-thunder phase; before and
-  after pictures and clips regenerated (`gen:rain`, `gen:sky`); the looks change, so a NEWS line and the owner's
-  device check (section 6).
-
 ### W18 Small polls that can be events or caches (S each: batch by pack owner)
 
 Findings: UTL-04, UTL-05, UTL-07, UTL-08, UTL-13, UTL-14, UTL-20, UTL-21, UTL-22, UTL-23, UTL-24, UTL-28, UTL-29,
@@ -492,7 +459,7 @@ Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
 
 ## 5. Order and what can run together
 
-1. Hosting H1 (CI minutes), then W0c and W0d here. From here every workstream has cheap, fast, trustworthy
+1. Hosting H1 (CI minutes), then W0d here. From here every workstream has cheap, fast, trustworthy
    measurement with phases.
 2. W1, then W2 (both bump every pack: never in flight together, and nothing else merges between a start and its
    release).
@@ -523,6 +490,9 @@ rest of its workstream.
 
 ## 7. Not planned, and why
 
+- UTL-36 (leaf decay's `setblock ... destroy` commands): each leaf's break particles, sound and drops are the point,
+  and the stable API has no other way to drop a leaf's own loot; the cost is per leaf, not per tick, and
+  `leavesPerTick` already lets operators slow it. No change.
 - A third Realm upload for stable assets: CLAUDE.md keeps it at two.
 - Minifying the bundle: unreadable stacks in the server log for a gain nobody has measured.
 - A central patch of `runInterval` to stagger every pack's timers: it would change timing behind the packs' backs.

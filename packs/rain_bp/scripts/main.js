@@ -6,6 +6,9 @@ import { get, getFor, onChange, setFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
 const PROP_WEATHER = "rain:weather"; // world: overworld weather from the last change ("Clear", "Rain" or "Thunder"); scripts can't read the current weather
+// Player property "rain:fogs": false once no fog of ours is on the player (true while one is), so a join or a script
+// reload removes our fogs only when one may be left; a player who never had it (before 1.5.21) is cleared once.
+const PROP_FOGS = "rain:fogs";
 // Player property "rain:off" (true = extras off, false = on, only stored when it differs from defaultOff)
 // is the "off" preference in settings.js, which /realm:prefs changes too.
 
@@ -30,6 +33,8 @@ const WIND_EVERY = 8; // seconds between wind plays: the clips are 10 s with 2 s
 const ROOF_EVERY = 3; // the roof clips are 3.6 s
 const BED_EVERY = 18; // the thunderstorm clips are 20 s with 2 s crossfades
 const INSIDE_EVERY = 18; // the muffled rain clips are 20 s with 2 s crossfades
+/** How long each of our clips plays (seconds), so stopping the sounds stops only those still playing. */
+const CLIP_SECONDS = new Map([[WIND, 10], [WIND_INSIDE, 10], [ROOF, 3.6], [BED, 20], [BED_INSIDE, 20], [RAIN_INSIDE, 20], [RAIN_ENTER, 20]]);
 
 // Performance: the loop only exists while there's something to do, runs 4 times a second and handles a
 // quarter of the players each time, so every player costs about one update per second.
@@ -56,9 +61,11 @@ const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]
 /** @typedef {"out" | "in" | "none"} Place where the player hears the weather from: outdoors (or under a tree), indoors, or out of its reach */
 /**
  * @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number,
- *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean, open: boolean, covered: number, tagged: boolean }} State muffle: stop the game's rain
+ *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean, open: boolean, covered: number, tagged: boolean,
+ *   playing: Map<string, number> }} State muffle: stop the game's rain
  *   for this player; open: the game's rain played unmuffled for them at the last update (it rained and they were in its
- *   reach); covered: updates in a row with a roof overhead; tagged: the player carries MUFFLED_TAG
+ *   reach); covered: updates in a row with a roof overhead; tagged: the player carries MUFFLED_TAG; playing: our sounds
+ *   started for them, each with the tick its clip ends
  */
 /** @typedef {{ level: number, stepIn: number }} Roll a fog that rolls in or out in steps */
 
@@ -86,7 +93,7 @@ function extrasOff(player) {
 function stateOf(player) {
   let st = players.get(player.id);
   if (!st) {
-    players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false, open: false, covered: 0, tagged: false }));
+    players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false, open: false, covered: 0, tagged: false, playing: new Map() }));
     try {
       if (player.hasTag(MUFFLED_TAG)) player.removeTag(MUFFLED_TAG); // left over from before a restart or a leave
     } catch {
@@ -134,14 +141,15 @@ world.afterEvents.worldLoad.subscribe(() => {
   // Ask the Weather Almanac (if it's installed) for its plan a little later: every weather pack asks, and it answers once.
   system.runTimeout(() => system.sendScriptEvent("realm:weather_ask", "{}"), 100);
   // After a script reload our fogs may still be on players we no longer track: clear them, the loop re-adds them.
-  for (const player of world.getAllPlayers()) clearFogs(player);
+  for (const player of world.getAllPlayers()) clearLeftFogs(player);
   wake();
 });
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
-  // Our fogs can survive a relog: clear them, and the loop puts back whatever the weather calls for.
-  clearFogs(player);
+  // Our fogs can survive a relog: clear them (when the saved flag says one may be left), and the loop puts back
+  // whatever the weather calls for.
+  clearLeftFogs(player);
   const st = stateOf(player);
   st.fog = 0;
   st.haze = 0;
@@ -327,10 +335,26 @@ function removeFog(player, id) {
   }
 }
 
-/** @param {Player} player */
-function clearFogs(player) {
-  removeFog(player, FOG_ID);
-  removeFog(player, HAZE_ID);
+/** Removes our fogs from a player who may still have one (PROP_FOGS not false), then notes that none is left. @param {Player} player */
+function clearLeftFogs(player) {
+  try {
+    if (player.getDynamicProperty(PROP_FOGS) === false) return;
+    removeFog(player, FOG_ID);
+    removeFog(player, HAZE_ID);
+    player.setDynamicProperty(PROP_FOGS, false);
+  } catch (e) {
+    console.warn(`[rain] ${e}`);
+  }
+}
+
+/** Keeps PROP_FOGS in step after a fog change: true while a fog of ours is on. @param {Player} player @param {State} st */
+function noteFogs(player, st) {
+  try {
+    const on = st.fog > 0 || st.haze > 0;
+    if (player.getDynamicProperty(PROP_FOGS) !== on) player.setDynamicProperty(PROP_FOGS, on);
+  } catch {
+    // gone
+  }
 }
 
 /** @param {Player} player @param {string} fogId @param {string} id */
@@ -347,6 +371,7 @@ function setFog(player, st, level) {
   removeFog(player, FOG_ID);
   if (level > 0) pushFog(player, STORM_FOGS[level - 1], FOG_ID);
   st.fog = level; // even after an error, so a broken /fog isn't retried every second
+  noteFogs(player, st);
 }
 
 /** @param {Player} player @param {State} st @param {number} level 0 = none */
@@ -354,6 +379,7 @@ function setHaze(player, st, level) {
   removeFog(player, HAZE_ID);
   if (level > 0) pushFog(player, HAZE_FOGS[level - 1], HAZE_ID);
   st.haze = level;
+  noteFogs(player, st);
 }
 
 // ---------------------------------------------------------------------------
@@ -382,29 +408,41 @@ function sounds(player, st, place, roofNear, rainWasOpen) {
     // The game's rain stops this tick (in tick()), all at once. Walking in, the muffled rain starts as the open rain at the
     // same level and closes down to the muffled one over about 1.5 s, so the rain never cuts off; then 20 s clips crossfade.
     const volume = get("roof.volume");
-    if (volume > 0) player.playSound(rainWasOpen ? RAIN_ENTER : RAIN_INSIDE, { volume });
+    if (volume > 0) play(player, st, rainWasOpen ? RAIN_ENTER : RAIN_INSIDE, volume);
     st.insideIn = INSIDE_EVERY;
   }
   if (weather === WeatherType.Thunder && get("stormSound.enabled") && st.bedIn <= 0) {
     const volume = get("stormSound.volume");
-    if (volume > 0) player.playSound(place === "out" ? BED : BED_INSIDE, { volume });
+    if (volume > 0) play(player, st, place === "out" ? BED : BED_INSIDE, volume);
     st.bedIn = BED_EVERY;
   }
   if (get("wind.enabled") && st.windIn <= 0) {
     const volume = weather === WeatherType.Thunder ? get("wind.inThunder") : get("wind.inRain");
-    if (volume > 0) player.playSound(place === "out" ? WIND : WIND_INSIDE, { volume });
+    if (volume > 0) play(player, st, place === "out" ? WIND : WIND_INSIDE, volume);
     st.windIn = WIND_EVERY;
   }
   if (roofNear && get("roof.enabled") && st.roofIn <= 0) {
     const volume = get("roof.volume");
-    if (volume > 0) player.playSound(ROOF, { volume });
+    if (volume > 0) play(player, st, ROOF, volume);
     st.roofIn = ROOF_EVERY;
   }
 }
 
-/** @param {Player} player @param {State} st */
+/** Plays one of our clips for this player and notes when it ends. @param {Player} player @param {State} st @param {string} id @param {number} volume */
+function play(player, st, id, volume) {
+  player.playSound(id, { volume });
+  st.playing.set(id, system.currentTick + Math.ceil((CLIP_SECONDS.get(id) ?? 20) * 20));
+}
+
+/**
+ * Stops our sounds that are still playing for this player: usually two or three (before 1.5.21, all seven, one command
+ * each, on every walk through a door). After a script reload the clips started before it aren't known: they play out.
+ * @param {Player} player @param {State} st
+ */
 function stopSounds(player, st) {
-  for (const id of [WIND, WIND_INSIDE, BED, BED_INSIDE, RAIN_INSIDE, RAIN_ENTER, ROOF]) stopSound(player, id);
+  const now = system.currentTick;
+  for (const [id, ends] of st.playing) if (ends > now) stopSound(player, id);
+  st.playing.clear();
   st.place = "none";
 }
 
