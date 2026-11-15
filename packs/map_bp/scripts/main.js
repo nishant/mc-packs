@@ -13,8 +13,9 @@
 // again from the pass's markers for players who turned or moved, so the compass follows the view; only a part whose
 // text changed is sent. The terrain under the radar is read by a scanner and drawn from what it stored.
 // The cost is capped, not the player count: each kind of work (drawing, building a radar's terrain picture, passes,
-// the scanner) has a time budget a tick (budget.js; about 3 ms a tick in all at budgetLevel "normal", saved up when
-// there's little to do).
+// the scanner) has a time budget a tick (map-profile.js; 0.4 + 0.75 + 0.2 + 2.5 ms at budgetLevel "normal", an overrun
+// paid back by the next ticks; measured about 3.8 ms a tick at 10 players and 4.6 at 40 with every radar on and players
+// moving, map-radar-perf).
 // With many players moving at once each one's strip and radar come a few ticks later, the longest-waiting first.
 // The broadcasts (each message under 2048 characters, long lists in parts):
 //   realm:npc_places      { part, parts, folk: [{ id, n, dim, x, z }] }            <- Townsfolk; realm:npc_places_ping {}
