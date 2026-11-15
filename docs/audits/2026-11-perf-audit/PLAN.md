@@ -426,20 +426,14 @@ Findings: PRG-30, PRG-05, PRG-40, PRG-47, PRG-16 (after W2). Packs: `saga_bp`.
   pending place every 2 s (PRG-05), a `getTags()` per player per second for the party story (PRG-47).
 - Proof: `saga-perf-quests` pairs; `check-stories`; the saga scenarios.
 
-### W17 Weather and sky effects (M: two PRs)
+### W17 Weather and sky effects (W17b left)
 
-Findings: UTL-02, UTL-03, UTL-06, UTL-15, UTL-35, UTL-36, UTL-16, UTL-37, UTL-18. Packs: `rainbow_bp`, `tornado_bp`,
-`elytra_bp`, `claims_bp`, `zones_bp`, `climate_bp`, `leaves_bp`, `rain_bp`, and `sky_rp`, `rain_rp`, `silly_rp`.
-- **W17a Fewer packets.** The rainbow as 7 client emitters instead of 259 server particles twice a second (UTL-02);
-  the tornado's 67 packets a second and about 2,500 live particles per viewer (UTL-03: fewer, larger particles and a
-  per-player density preference); a NOS boost's 41 spawns a tick (UTL-06); claim borders and zone outlines (UTL-15);
-  a new `MolangVariableMap` per player per second (UTL-35); leaf decay's 6 destroy commands a tick (UTL-36).
+W17a shipped (rainbow emitters, a lighter tornado with a per-player density, the NOS plume, claim and zone outlines,
+UTL-35, rain_bp's sounds and join fogs; UTL-36 unchanged, see section 7). Left: `rain_rp` (UTL-16, UTL-37).
 - **W17b What devices load.** `rain_rp`'s ten 20-second clips loaded as samples and all marked for low-memory
   devices (UTL-16: needs a memory reading on the phone before and after); the vanilla rain splash redefined with 300
   particles and per-frame work (UTL-37).
-- Proof: `weather-crowd`, `tornado-sound-perf` (numbers kept after W0c), the night-and-thunder phase; before and
-  after pictures and clips regenerated (`gen:rain`, `gen:sky`); the looks change, so a NEWS line and the owner's
-  device check (section 6).
+- Proof: the owner's device check (section 6).
 
 ### W18 Small polls that can be events or caches (S each: batch by pack owner)
 
@@ -514,6 +508,9 @@ rest of its workstream.
 
 ## 7. Not planned, and why
 
+- UTL-36 (leaf decay's `setblock ... destroy` commands): each leaf's break particles, sound and drops are the point,
+  and the stable API has no other way to drop a leaf's own loot; the cost is per leaf, not per tick, and
+  `leavesPerTick` already lets operators slow it. No change.
 - A third Realm upload for stable assets: CLAUDE.md keeps it at two.
 - Minifying the bundle: unreadable stacks in the server log for a gain nobody has measured.
 - A central patch of `runInterval` to stagger every pack's timers: it would change timing behind the packs' backs.
