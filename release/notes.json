@@ -8,7 +8,8 @@
     "Mining the same stone spot again within 5 minutes gives no Mining XP, so cobblestone and basalt generators do not farm it.",
     "The sky-wonder bonus in Frogs in Three Voices also works with Rainbows, Tornadoes or Storm Cells.",
     "Town Projects residents can no longer breed.",
-    "Townsfolk cost the server much less, most of all with many players online away from town; a townsfolk standing next to an armor stand, painting or pet no longer has its name label flicker every 10 seconds."
+    "Townsfolk cost the server much less, most of all with many players online away from town; a townsfolk standing next to an armor stand, painting or pet no longer has its name label flicker every 10 seconds.",
+    "Minimap radar: a full terrain cache no longer leaves radars blank for minutes after a big scan, and costs the server less while players travel; players can scan up to 128 blocks with /realm:minimap scan (operators 384)."
   ],
   "resourceNotes": [
     "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
@@ -81,6 +82,10 @@
     "caravan_bp": {
       "version": "1.2.14",
       "notes": "Cheaper on the server: the schedule is read from the world once a minute, not every 2 seconds. Traders turn toward you in steps of 10 degrees or more."
+    },
+    "map_bp": {
+      "version": "1.5.8",
+      "notes": "The radar keeps filling in when its terrain cache is full or over its cap (after a big scan or when players leave), plans travel at the cap far more cheaply, and frees terrain nobody has looked at for 5 minutes. /realm:minimap scan is limited to radius 128 for players (operators keep 384)."
     }
   }
 }
