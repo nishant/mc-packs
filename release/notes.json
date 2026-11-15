@@ -79,8 +79,8 @@
       "notes": "Cheaper on the server: the once-a-minute roll comes before the look around for old stones at night, and the name labels read less between checks."
     },
     "titles_bp": {
-      "version": "1.2.18",
-      "notes": "The config comment lists every trail a built-in title can unlock."
+      "version": "1.2.19",
+      "notes": "Your built-in title stats are saved once a minute only when they changed, each player on their own second, instead of everyone's every minute in the same tick; titles you already have are no longer checked every second."
     },
     "fishing_bp": {
       "version": "1.1.19",
