@@ -737,7 +737,7 @@ A news popup with what changed in the latest update (written automatically for e
 
 ### "Welcome back"
 
-Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You were away 3d 5h.` It appears at the top of the news popup if there's unseen news, otherwise in chat. Last-seen time is refreshed every minute while online.
+Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You were away 3d 5h.` It appears at the top of the news popup if there's unseen news, otherwise in chat. Last-seen time is refreshed every 10 minutes while online and as the player leaves.
 
 ### Tips
 
