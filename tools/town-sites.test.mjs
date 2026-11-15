@@ -299,11 +299,13 @@ test("scan: unknown columns wait, and a final scan takes the best valid spot", (
   const world = (x, z) => (Math.hypot(x, z) < 30 ? UNKNOWN : { k: "N", g: 64, top: id("grass_block") });
   const res = run({ ...base, projects: [PROJECTS[0]] }, world);
   assert.deepEqual(res.wait, ["well"], "a nearer candidate might be better: wait");
+  assert.deepEqual(res.hopeful, ["well"], "with a valid spot behind it (a final scan picks it: no hold)");
   assert.equal(res.picks.length, 0);
   const fin = run({ ...base, projects: [PROJECTS[0]], final: true }, world);
   assert.equal(fin.picks.length, 1, "final: the best known spot");
   const all = run({ ...base, projects: [PROJECTS[0]] }, () => UNKNOWN);
   assert.deepEqual(all.wait, ["well"], "nothing loaded: wait, never none");
+  assert.deepEqual(all.hopeful, [], "and nothing a final scan could pick (the caller holds the next scan)");
 });
 
 test("scan: the dock goes on the shore nearest the center, facing the water, with water under its deck", () => {
@@ -369,7 +371,7 @@ test("scan pacing: work on columns already read still ends the tick (F37 review)
   // Each position costs at least 8 units of SCAN.workTick, so at most workTick / 8 (plus the one that crosses it).
   assert.ok(most <= SCAN.workTick / 8 + 1, `positions looked at between two requests: ${most}`);
   const src = readFileSync(new URL("../packs/town_bp/scripts/main.js", import.meta.url), "utf8");
-  assert.match(src, /if \(q\[0\] === "tick"\) return;/, "stepScan ends its tick on the scan's request");
+  assert.match(src, /if \(q\[0\] === "tick"\) \{\s*\/\/[^\n]*\n[^\n]*\n\s*if \(reads > 0 \|\| \+\+checkpoints >= SCAN_CHECKPOINTS \|\| Date\.now\(\) !== started\) return;/, "stepScan ends its tick on the scan's request once it read the world, or after its checkpoints");
 });
 
 test("scan pacing: no single step does much more than SCAN.workTick lookups, grading plans included (QuickJS spikes)", () => {
@@ -465,4 +467,76 @@ test("gradeGrid (the scan's plans, O79) gives the same answer as gradePlan on ra
       assert.deepEqual(b.t, a.t, `case ${n}: plan`);
     }
   }
+});
+
+/** A scan run to the end, counting column requests and "tick" yields. */
+function counted(input, colAt) {
+  const gen = scanTown(input);
+  let reads = 0;
+  let ticks = 0;
+  let r = gen.next();
+  while (!r.done) {
+    const q = r.value;
+    if (q[0] === "c") reads++;
+    if (q[0] === "tick") ticks++;
+    r = gen.next(q[0] === "c" ? colAt(q[1], q[2]) : q[0] === "b" ? { id: id("stone") } : q[0] === "claims" ? 0 : undefined);
+  }
+  return { ...r.value, reads, ticks };
+}
+
+test("ENT-05: a kept column cache makes the next scan read only the finalists' regions again, with the same picks", () => {
+  // town-hillside's terraces (1 block every 4, rising east), unknown past 66 blocks (tick distance 4).
+  const hill = (x, z) => (Math.hypot(x, z) > 66 ? UNKNOWN : { k: "N", g: -61 + Math.max(0, Math.floor((Math.min(x, 70) + 70) / 4)), top: id("grass_block") });
+  const projects = [...PROJECTS, ...["house_1", "house_2"].map((h) => ({ id: h, box: box("house") }))];
+  const plain = counted({ ...base, projects }, hill);
+  const cache = new Map();
+  const first = counted({ ...base, projects, cache }, hill);
+  const second = counted({ ...base, projects, cache }, hill);
+  assert.deepEqual(first.picks, plain.picks, "the same picks with a cache");
+  assert.deepEqual(second.picks, plain.picks, "and again from the kept columns");
+  assert.ok(![...cache.values()].some((c) => c.k === "U"), "unknown columns are never kept");
+  assert.ok(second.reads < first.reads / 5, `the second scan reads ${second.reads} columns (the first ${first.reads})`);
+});
+
+test("ENT-05: a kept column that changed is never picked from: the project waits (changed) and the next scan sees the new ground", () => {
+  const flat = worldOf(() => 64);
+  const cache = new Map();
+  const one = [PROJECTS[0]];
+  const s0 = counted({ ...base, projects: one, cache }, flat).picks[0].spot;
+  // A player builds a cabin on that spot.
+  const fp = rectOf(PROJECTS[0].box(s0));
+  const over = new Map();
+  for (let x = fp.x1; x <= fp.x2; x++) for (let z = fp.z1; z <= fp.z2; z++) over.set(`${x},${z}`, { k: "M", g: 66 });
+  const built = worldOf(() => 64, over);
+  const again = counted({ ...base, projects: one, cache }, built);
+  assert.equal(again.picks.length, 0, "nothing picked from the old columns");
+  assert.deepEqual(again.wait, ["well"]);
+  assert.equal(again.changed, true);
+  const third = counted({ ...base, projects: one, cache }, built);
+  assert.equal(third.picks.length, 1);
+  assert.ok(!overlaps(regionOf(rectOf(PROJECTS[0].box(third.picks[0].spot))), fp), "the new spot keeps off the cabin");
+  assert.equal(third.changed, false);
+});
+
+test("ENT-05: houses shaped like one that waited wait too, without walking the rings again", () => {
+  const world = (x, z) => (Math.hypot(x, z) < 30 ? UNKNOWN : { k: "N", g: 64, top: id("grass_block") });
+  const one = counted({ ...base, projects: [{ id: "house_1", box: box("house") }] }, world);
+  const four = counted({ ...base, projects: ["house_1", "house_2", "house_3", "house_4"].map((h) => ({ id: h, box: box("house") })) }, world);
+  assert.deepEqual(one.wait, ["house_1"]);
+  assert.deepEqual(four.wait, ["house_1", "house_2", "house_3", "house_4"]);
+  assert.equal(four.ticks, one.ticks, `the other 3 cost no tick (${one.ticks} vs ${four.ticks})`);
+});
+
+test("ENT-05: on a slope a footprint's corners and center rule it out before the rest is read", () => {
+  const steep = worldOf((x) => 64 + 2 * x);
+  let reads = 0;
+  const gen = scanTown({ ...base, projects: [{ id: "house_1", box: box("house") }] });
+  let r = gen.next();
+  while (!r.done) {
+    if (r.value[0] === "c") reads++;
+    r = gen.next(r.value[0] === "c" ? steep(r.value[1], r.value[2]) : r.value[0] === "b" ? { id: id("stone") } : 0);
+  }
+  assert.deepEqual(r.value.nos, ["house_1"]);
+  // Before: every footprint column of each position (49 for a 7 x 7 house), shared between neighbors.
+  assert.ok(reads < 12000, `${reads} columns read`);
 });

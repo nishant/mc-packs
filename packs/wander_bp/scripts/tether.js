@@ -76,12 +76,22 @@ const open = (b) => !!b && !b.isLiquid && (b.isAir || PASSABLE.test(b.typeId));
 /** @param {any} b */
 const floor = (b) => !!b && !b.isAir && !b.isLiquid && !PASSABLE.test(b.typeId) && !BAD_FLOOR.test(b.typeId);
 
-/** @param {any} dim @param {number} x @param {number} y @param {number} z */
+/** Liquids as `Block.isLiquid` has them: water and lava (flowing too), not a waterlogged block. */
+const LIQUID = /^minecraft:(flowing_)?(water|lava)$/;
+
+/**
+ * A block as the tether reads it: its id, and air and liquid worked out from the id, so a block costs one getBlock and
+ * one typeId read instead of up to five native calls (ENT-37). A column that isn't ticking hands back a block that
+ * throws when read: undefined, like an unloaded one.
+ * @param {any} dim @param {number} x @param {number} y @param {number} z
+ * @returns {{ typeId: string, isAir: boolean, isLiquid: boolean } | undefined}
+ */
 function block(dim, x, y, z) {
   try {
     const b = dim.getBlock({ x, y, z });
-    if (b) void b.typeId; // a column that isn't ticking hands back a block that throws when read
-    return b;
+    if (!b) return undefined;
+    const typeId = String(b.typeId);
+    return { typeId, isAir: typeId === "minecraft:air", isLiquid: LIQUID.test(typeId) };
   } catch {
     return undefined;
   }
@@ -103,14 +113,25 @@ export function freeSpotNear(dim, home, radius, seed = 0) {
   const rings = [];
   for (let r = 1.5; r <= Math.max(1.5, radius); r += 1.5) rings.push(r);
   const turn = ((seed % 8) + 8) % 8;
+  // Each block once per search: the rings and the lines to them cross the same blocks again and again.
+  /** @type {Map<string, ReturnType<typeof block>>} */
+  const seen = new Map();
+  /** @param {number} x @param {number} y @param {number} z */
+  const look = (x, y, z) => {
+    const k = `${x},${y},${z}`;
+    if (seen.has(k)) return seen.get(k);
+    const b = block(dim, x, y, z);
+    seen.set(k, b);
+    return b;
+  };
   /** @param {number} x @param {number} z @param {number[]} dys */
   const at = (x, z, dys) => {
     for (const dy of dys) {
       const y = hy + dy;
-      const feet = block(dim, x, y, z);
+      const feet = look(x, y, z);
       if (!open(feet)) continue;
-      if (!open(block(dim, x, y + 1, z))) continue;
-      if (!floor(block(dim, x, y - 1, z))) continue;
+      if (!open(look(x, y + 1, z))) continue;
+      if (!floor(look(x, y - 1, z))) continue;
       return { x: x + 0.5, y, z: z + 0.5 };
     }
     return undefined;
@@ -125,9 +146,9 @@ export function freeSpotNear(dim, home, radius, seed = 0) {
       const cx = Math.floor(home.x + ((tx - home.x) * i) / n);
       const cz = Math.floor(home.z + ((tz - home.z) * i) / n);
       if ((cx === hx && cz === hz) || (cx === x && cz === z)) continue;
-      const b = block(dim, cx, hy, cz);
+      const b = look(cx, hy, cz);
       if (open(b)) continue;
-      if (!b || NO_STEP.test(b.typeId) || !open(block(dim, cx, hy + 1, cz)) || !open(block(dim, cx, hy + 2, cz))) return false;
+      if (!b || NO_STEP.test(b.typeId) || !open(look(cx, hy + 1, cz)) || !open(look(cx, hy + 2, cz))) return false;
     }
     return true;
   };

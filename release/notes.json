@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Town Projects picks spots for its projects much faster on hillsides, stops rescanning the same ground every 5 seconds, and tells operators and the players in a town when no good spot can be found.",
     "Daily Quests, Skills, Milestones, Titles & Trails, Atlas of the Realm and Realm News write their saved data less often (Daily Quests no longer on every counted block), and Skills no longer forgets blocks placed just before the Realm closes.",
     "Champions and the Bounty Board cost the server less: mob farms and dropped items no longer wake Champions up, and a Stormcaller strike or a new bounty target no longer makes one long tick.",
     "Quick Stack & Sort costs the server much less while you mine on a nearly full inventory page: auto-store moves pickups at most once a second, all together.",
@@ -28,16 +29,16 @@
       "notes": "Hurts and spawns anywhere in the world (mob farms, mined blocks, crop drops) are checked against the loaded champions before anything is read from the game; a Stormcaller's build check is spread over half a second; the 5-second upkeep fully checks 4 champions in turn; an approach step reads its dimension once."
     },
     "bounty_bp": {
-      "version": "1.3.15",
-      "notes": "A target spot's build check is spread over half a second, the players' places are read once per check, a spawned target is looked up only while a player is within 216 blocks, and cull progress notes show at most twice a second."
+      "version": "1.3.16",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
     },
     "hud_rp": {
       "version": "1.6.3",
       "notes": "The right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
     },
     "relics_bp": {
-      "version": "1.2.21",
-      "notes": "Rain Charm and Tide Boots count natural sand, red sand, terracotta, snow and ice as dry ground only; sandstone, glazed terracotta, stairs and slabs do not, and sand next to water (a beach) counts as rained on."
+      "version": "1.2.22",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
     },
     "moon_bp": {
       "version": "1.2.19",
@@ -48,12 +49,12 @@
       "notes": "Logs and stone you placed just before the Realm closed no longer give XP again after a restart (placed blocks are saved as players leave). Only blocks that could give XP are remembered as placed, so building with dirt, planks or glass no longer rewrites that list, and explored chunks write only what changed."
     },
     "town_bp": {
-      "version": "1.7.7",
-      "notes": "Residents can no longer breed; leftovers from Remove spot are capped apart from the town limit; the realm:town_test hook needs the realm_test_hooks objective."
+      "version": "1.7.8",
+      "notes": "Picking project spots: a town keeps the ground it read between scans, waits for players to move instead of rescanning every 5 seconds, and says when no good spot exists; spot scans on hillsides finish much sooner; operator-set builds go up a few blocks a tick; outlines use half the particles."
     },
     "saga_bp": {
-      "version": "1.16.25",
-      "notes": "Shared name label update: a label is taken down only 4 blocks past its range, so it no longer flickers for a player standing at the edge."
+      "version": "1.16.26",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "maps_bp": {
       "version": "1.8.19",
@@ -72,20 +73,20 @@
       "notes": "Auto-store moves pickups to your other pages at most once a second (several pickups in one save) and looks only after an inventory change; a lost page button is put back within 30 s instead of 5 s. The pack reads and saves its page index and retired-snapshot list far less often."
     },
     "npc_bp": {
-      "version": "1.9.6",
-      "notes": "Much cheaper on the server: every player is read once per check (not once per townsfolk), and a standing townsfolk's label needs no reads of it. Its name label no longer flickers every 10 seconds when an armor stand, painting or pet stands next to it. Townsfolk turn toward you in steps of 10 degrees or more."
+      "version": "1.9.7",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "wander_bp": {
-      "version": "1.2.26",
-      "notes": "Cheaper on the server: the once-a-minute roll comes before the look around for old stones at night, and the name labels read less between checks."
+      "version": "1.2.27",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "titles_bp": {
       "version": "1.2.19",
       "notes": "Your built-in title stats are saved once a minute only when they changed, each player on their own second, instead of everyone's every minute in the same tick; titles you already have are no longer checked every second."
     },
     "fishing_bp": {
-      "version": "1.1.19",
-      "notes": "Casting a rod costs the server much less: the light-block check for Dynamic Lightning now runs only on a new bobber and only when that add-on is installed, and where a catch happened is worked out once a minute per spot. Every catch is now shared with the packs that count catches."
+      "version": "1.1.20",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
     },
     "journal_bp": {
       "version": "1.1.16",
@@ -96,8 +97,8 @@
       "notes": "Quest progress is saved every 5 seconds and as you leave, instead of on every block, kill or step that counts; a finished quest is saved at once, before its reward."
     },
     "caravan_bp": {
-      "version": "1.2.14",
-      "notes": "Cheaper on the server: the schedule is read from the world once a minute, not every 2 seconds. Traders turn toward you in steps of 10 degrees or more."
+      "version": "1.2.15",
+      "notes": "Townsfolk and wanderers put back home look for a free spot with about half the native calls."
     },
     "build_bp": {
       "version": "3.0.18",
@@ -152,8 +153,16 @@
       "notes": "Saving the regions found and the sites built writes only the parts that changed, and in a big world the region or site at the edge of two saved parts is no longer lost on a restart."
     },
     "news_bp": {
-      "version": "1.7.112",
-      "notes": "Realm News shows the Skills and Atlas fixes; last seen is saved every 10 minutes and on leave instead of every minute."
+      "version": "1.7.113",
+      "notes": "Realm News shows the town spot changes."
+    },
+    "cooking_bp": {
+      "version": "1.1.20",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
+    },
+    "guilds_bp": {
+      "version": "1.1.19",
+      "notes": "Offline rewards: the list of who is owed is read once and written once for many players, so a finished project with many absent contributors no longer stalls the server."
     }
   }
 }

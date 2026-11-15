@@ -295,16 +295,13 @@ function payNow(p, crowns, quests, why, keep) {
   }
 }
 
-/** @param {string} pid @param {number} crowns @param {[string, string, string]} quest */
-function owe(pid, crowns, quest) {
-  const saved = owedStore.update(pid, (cur) => {
-    const o = cur ? normalizeOwed(cur) : { cr: 0, q: [] };
-    o.cr += crowns;
-    o.q = [...o.q, quest].slice(-10);
-    return o;
-  });
-  if (!saved) console.warn(`[town] owed: ${crowns} Crowns for ${pid} could not be saved`);
-}
+/** What an offline contributor is owed for a project, as a change to their saved entry. @param {number} crowns @param {[string, string, string]} quest */
+const oweFn = (crowns, quest) => (/** @type {any} */ cur) => {
+  const o = cur ? normalizeOwed(cur) : { cr: 0, q: [] };
+  o.cr += crowns;
+  o.q = [...o.q, quest].slice(-10);
+  return o;
+};
 
 /** @param {Player} p */
 function payOwed(p) {
@@ -437,17 +434,20 @@ function finishProject(t, p, pr) {
   if (get("announce") === true) {
     world.sendMessage(line);
     for (const pl of world.getAllPlayers()) pl.playSound("random.levelup", { pitch: 1, volume: 0.7 });
-  } else {
-    for (const [id] of ranked) online(id)?.sendMessage(line);
   }
+  // Who is online, read once (ENT-26), not once per contributor.
+  const on = new Map(world.getAllPlayers().map((pl) => [pl.id, pl]));
+  if (get("announce") !== true) for (const [id] of ranked) on.get(id)?.sendMessage(line);
   /** @type {[string, string, string]} */
   const quest = [`town_${t.id}_${p.id}`, `Town project: ${p.name} (${t.n})`, guildFor(p)];
   // Townsfolk gossip (Hearth & Hearsay) about the top contributor.
   if (ranked[0]) gossip(`${t.id}:${p.id}`, { kind: "town_project", player: ranked[0][0], name: ranked[0][1], place: `${p.name} in ${t.n}` });
   let letters = 0;
+  /** What the offline contributors are owed, saved at once below (ENT-11: the owed index is written once). @type {[string, (cur: any) => any][]} */
+  const owedNow = [];
   ranked.forEach(([id, name, n], i) => {
     const crowns = CONFIG.topCrowns[i] ?? 0;
-    const pl = online(id);
+    const pl = on.get(id);
     if (pl)
       payNow(pl, crowns, [quest], `${p.name}, ${t.n}`, (kept) => {
         // The quest lines went out already: only the Crowns that could not be added are owed.
@@ -457,7 +457,7 @@ function finishProject(t, p, pr) {
         });
       });
     else {
-      owe(id, crowns, quest);
+      owedNow.push([id, oweFn(crowns, quest)]);
       if (letters++ >= LETTERS_MAX) return;
       const body =
         `${name},\n\n${t.n} finished its ${p.name} while you were away. You delivered ${fmt(n)} items for it` +
@@ -465,6 +465,7 @@ function finishProject(t, p, pr) {
       send("realm:mail_send", { to: id, from: `${t.n}`.replace(/§./g, "").slice(0, 32), subject: `${p.name} is finished`.slice(0, 40), body: body.slice(0, 600) });
     }
   });
+  if (owedNow.length) owedStore.updateMany(owedNow).forEach((ok, i) => ok || console.warn(`[town] owed: Crowns for ${owedNow[i][0]} could not be saved`));
   build(t, p, true);
   levelUp(t);
   refreshBoard(t);
@@ -584,22 +585,20 @@ function build(t, p, fresh) {
   const box = clampBox(footprint(p, s), dim);
   if (!boxLoaded(dim, box)) return waiting();
   if (!s.snap && !s.old) snapshot(t, p, s, dim, box);
-  clearMobs(dim, box); // nothing walled in (O80)
-  let skipped = 0;
-  let placed = 0;
   try {
     const structure = p.structure ? world.structureManager.get(p.structure) : undefined;
-    if (structure) {
-      const rotation = [StructureRotation.None, StructureRotation.Rotate90, StructureRotation.Rotate180, StructureRotation.Rotate270][s.f] ?? StructureRotation.None;
-      world.structureManager.place(structure, dim, { x: s.x, y: s.y, z: s.z }, { rotation, includeEntities: false });
-      placed = 1;
-    } else {
+    if (!structure) {
       if (p.structure) console.warn(`[town] structure "${p.structure}" for ${p.id} isn't saved in this world; building the ${p.build} instead`);
-      const result = placeDesign(dim, s, p);
-      // Part of it is in a chunk that isn't loaded: build all of it later rather than half of it now.
-      if (!result) return waiting();
-      ({ placed, skipped } = result);
+      // The design goes up a few blocks a tick through the build job (ENT-39), as at an automatic spot.
+      const key = `${t.id}:${p.id}`;
+      if (fresh) manualFresh.add(key);
+      if (buildJob?.key !== key && !buildQueue.includes(key)) buildQueue.push(key);
+      ensureJobs();
+      return true;
     }
+    clearMobs(dim, box); // nothing walled in (O80)
+    const rotation = [StructureRotation.None, StructureRotation.Rotate90, StructureRotation.Rotate180, StructureRotation.Rotate270][s.f] ?? StructureRotation.None;
+    world.structureManager.place(structure, dim, { x: s.x, y: s.y, z: s.z }, { rotation, includeEntities: false });
   } catch (e) {
     console.warn(`[town] build ${p.id}: ${e}`);
     if (fresh) tellOps(`§c[Town Projects] ${t.n}'s ${p.name} couldn't be built: ${e}`);
@@ -607,8 +606,56 @@ function build(t, p, fresh) {
   }
   pr.built = 1;
   saveProgress(t, p, pr);
-  announceBuilt(t, p, s, dim, placed, skipped);
+  announceBuilt(t, p, s, dim, 1, 0);
   return true;
+}
+
+/** Builds at operator-set spots queued with an operator to tell when they fail ("town:project"). @type {Set<string>} */
+const manualFresh = new Set();
+
+/**
+ * A tick of a build at a spot an operator set (ENT-39): its design, APPLY_TICK steps a tick. It is marked half built
+ * (bs) while it goes up, so moving or removing the spot meanwhile puts the saved ground back; with part of it not
+ * loaded nothing is placed and it waits for the next build check, like build() does.
+ * @param {NonNullable<typeof buildJob>} job @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim
+ */
+function stepPlace(job, t, p, s, dim) {
+  try {
+    if (!job.gen) {
+      const box = clampBox(footprint(p, s), dim);
+      if (!boxLoaded(dim, box)) {
+        buildJob = undefined; // again when someone is near
+        return;
+      }
+      clearMobs(dim, box); // nothing walled in (O80)
+      job.out = { placed: 0, skipped: 0 };
+      job.gen = placeDesignSteps(dim, s, p, false, job.out);
+    }
+    const out = /** @type {{ placed: number, skipped: number }} */ (job.out);
+    for (let i = 0; i < APPLY_TICK; i++) {
+      const r = job.gen.next();
+      if (!r.done) {
+        if (out.placed > 0 && !s.bs && s.snap) {
+          s.bs = 1;
+          saveTown(t);
+        }
+        continue;
+      }
+      buildJob = undefined;
+      if (!r.value) return; // part of it isn't loaded: all of it later (nothing was placed)
+      const pr = progressOf(t, p);
+      pr.built = 1;
+      saveProgress(t, p, pr);
+      if (s.bs) delete s.bs;
+      saveTown(t);
+      announceBuilt(t, p, s, dim, out.placed, out.skipped);
+      return;
+    }
+  } catch (e) {
+    buildJob = undefined; // a chunk unloaded mid-way: the next build check places the rest (what stands stays)
+    console.warn(`[town] build ${p.id}: ${e}`);
+    if (job.fresh) tellOps(`§c[Town Projects] ${t.n}'s ${p.name} couldn't be built: ${e}`);
+  }
 }
 
 /** @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim @param {number} placed @param {number} skipped */
@@ -912,24 +959,11 @@ const SIDES = [
 const keyOf = (v) => `${v.x},${v.y},${v.z}`;
 
 /**
- * Places a built-in design. Returns undefined (and changes nothing) while any of its blocks is in an unloaded
- * chunk. Blocks in the way are left alone. Water goes in last, and only where it's held in on every side and
- * below (by a block, or by more of the design's water), so it can never spill out and wash away torches,
- * redstone or crops nearby; a lily pad only goes on water that was placed.
- * @param {Dimension} dim @param {Spot} s @param {Project} p
- * @returns {{ placed: number, skipped: number } | undefined}
- */
-function placeDesign(dim, s, p) {
-  const out = { placed: 0, skipped: 0 };
-  const steps = placeDesignSteps(dim, s, p, false, out);
-  let r = steps.next();
-  while (!r.done) r = steps.next();
-  return r.value ? out : undefined;
-}
-
-/**
- * placeDesign a block at a time: yields after each block it changes (the build job spreads them over ticks), returns
- * false (changing nothing) when a block isn't loaded. `auto` (a spot picked automatically): "ground" places may also
+ * Places a built-in design a block at a time: yields after each block it reads or changes (the build job spreads them
+ * over ticks), returns false (changing nothing) while any of its blocks is in an unloaded chunk. Blocks in the way are
+ * left alone. Water goes in last, and only where it's held in on every side and below (by a block, or by more of the
+ * design's water), so it can never spill out and wash away torches, redstone or crops nearby; a lily pad only goes on
+ * water that was placed. `auto` (a spot picked automatically): "ground" places may also
  * replace the natural ground they sit in (sand, gravel, stone), which the spot's snapshot keeps.
  * `mine(x, y, z)`: a block a player may have placed (applyBuild's), never replaced.
  * @param {Dimension} dim @param {Spot} s @param {Project} p @param {boolean} auto @param {{ placed: number, skipped: number }} out
@@ -1080,8 +1114,9 @@ function tellOps(text) {
 system.runInterval(() => {
   try {
     mayorMigrate();
-    const players = world.getAllPlayers();
-    if (!players.length) return;
+    const all = world.getAllPlayers();
+    if (!all.length) return;
+    const players = placesOf(all); // read once for every check below (ENT-28)
     mayorCheck(players);
     autoTick(players);
     residentTick(players);
@@ -1092,7 +1127,7 @@ system.runInterval(() => {
         if (!s) continue;
         const pr = progressOf(t, p);
         if (!pr.done || pr.built) continue;
-        if (!players.some((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - s.x, pl.location.z - s.z) <= NEAR_SPOT)) continue;
+        if (!players.some((q) => q.dim === t.dim && Math.hypot(q.x - s.x, q.z - s.z) <= NEAR_SPOT)) continue;
         build(t, p, false);
       }
     }
@@ -1718,7 +1753,8 @@ function drawPreview(player, pv) {
   }
   for (const x of [lo.x, hi.x]) for (const z of [lo.z, hi.z]) edges.push([{ x, y: lo.y, z }, { x, y: hi.y, z }]);
   const total = edges.reduce((sum, [a, b]) => sum + Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z), 0);
-  const step = Math.max(0.5, total / 400);
+  // A dot every block (every half block was about 250 particles a draw, ENT-34), more apart on a big build.
+  const step = Math.max(1, total / 200);
   /** @param {string} id @param {Vector3} at */
   const dot = (id, at) => {
     try {
@@ -1843,6 +1879,9 @@ function deleteTown(t) {
   world.setDynamicProperty(TOWN_PREFIX + t.id, undefined);
   placedCells.delete(t.id);
   if (scanJob?.town === t.id) scanJob = undefined;
+  townCols.delete(t.id);
+  scanHolds.delete(t.id);
+  scanWaits.delete(t.id);
   for (const p of ALL) cancelAutoBuild(`${t.id}:${p.id}`);
   for (let k = 0; k < 2; k++) world.setDynamicProperty(`${PLACED_PREFIX}${t.id}:${k}`, undefined);
   // Its paths, lanterns and pen stay standing, like its builds.
@@ -1972,7 +2011,8 @@ const SCAN_READS_TICK = 12; // column (or block) reads a tick
 const SCAN_STEPS_TICK = 4000; // candidate steps a tick, so the scan's own work stays small too
 const SCAN_FINAL_AFTER = 3; // scans that waited for unloaded ground; then the best known spot is taken
 const CHECK_TICK = 32; // block reads a tick while a spot is checked (2 native calls each)
-const APPLY_TICK = 48; // steps a tick while it is built: one block read, and at most one change, each
+const APPLY_TICK = 48;
+const ONSPOT_TICKS = 10; // ticks between looks for players (and mobs) on a spot being built // steps a tick while it is built: one block read, and at most one change, each
 const CLAIMS_WAIT = 20; // ticks to wait for Land Claims (no answer: it isn't installed)
 const OUTLINE_NEAR = 32;
 const POST_KEEP = 6; // blocks from a townsfolk's post (their house)
@@ -2033,8 +2073,23 @@ function fillTop(s) {
   return NATURAL.has(id) && id !== "minecraft:snow_layer" ? id : "minecraft:grass_block";
 }
 
-/** @param {Player[]} players @param {Town} t */
-const playerIn = (players, t) => players.some((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= get("townRadius"));
+/** Where a player is, read once: their dimension and place. @typedef {{ dim: string, x: number, z: number }} PlayerAt */
+/**
+ * Each player's dimension and place, read once (3 native calls a player) for every check that asks where players are
+ * (ENT-28: the 5-second check read each player about 16 times per town). @param {Player[]} players @returns {PlayerAt[]}
+ */
+function placesOf(players) {
+  return players.map((pl) => {
+    const l = pl.location;
+    return { dim: pl.dimension.id, x: l.x, z: l.z };
+  });
+}
+
+/** Is a player in the town? @param {PlayerAt[]} at @param {Town} t */
+const playerIn = (at, t) => {
+  const r = get("townRadius");
+  return at.some((q) => q.dim === t.dim && Math.hypot(q.x - t.x, q.z - t.z) <= r);
+};
 
 /** Story places (Story Questlines' realm:place_ready, asked with realm:place_ping at load), name -> where. @type {Map<string, { dim: string, x: number, z: number }>} */
 const storyPlaces = new Map();
@@ -2062,19 +2117,22 @@ function blockInfo(dim, x, y, z) {
   }
 }
 
-/** One column for the scan (sites.js readColumn), unknown where it isn't loaded. @param {Dimension} dim @param {number} x @param {number} z */
-function readCol(dim, x, z) {
+/**
+ * One column for the scan (sites.js readColumn), unknown where it isn't loaded. `maxY`: the dimension's
+ * heightRange.max, read once per scan (ENT-15). @param {Dimension} dim @param {number} x @param {number} z @param {number} maxY
+ */
+function readCol(dim, x, z, maxY) {
   try {
     const top = dim.getTopmostBlock({ x, z });
     if (!top) return UNKNOWN;
     const topY = top.location.y;
-    if (topY >= dim.heightRange.max - 1) return UNKNOWN; // C16: not ticking
+    if (topY >= maxY - 1) return UNKNOWN; // C16: not ticking
     const id = top.typeId;
     const first = isLeaves(id) ? { id, persistent: top.permutation.getState(/** @type {any} */ ("persistent_bit")) === true } : { id };
     const surface = () => {
       // getTopmostBlock skips water (C15): the first block from above, water included.
       try {
-        const w = dim.getBlockBelow({ x, y: Math.min(dim.heightRange.max - 1, topY + 64), z }, { includeLiquidBlocks: true, maxDistance: 80 });
+        const w = dim.getBlockBelow({ x, y: Math.min(maxY - 1, topY + 64), z }, { includeLiquidBlocks: true, maxDistance: 80 });
         return w && w.isLiquid ? w.location.y : undefined;
       } catch {
         return undefined;
@@ -2088,14 +2146,51 @@ function readCol(dim, x, z) {
 
 /**
  * The scan in progress: the town, sites.js's generator, the request it waits on, and a Land Claims question.
- * @type {{ town: string, dim?: Dimension, gen?: Generator<ScanRequest, any, any>, pending?: ScanRequest, answer?: any, claims?: { x1: number, z1: number, x2: number, z2: number }[], ask?: { id: string, until: number } } | undefined}
+ * `idle`: the tick nobody was in the town any more (the scan pauses, ENT-06); `seen`: the last tick that was asked.
+ * @type {{ town: string, dim?: Dimension, maxY?: number, gen?: Generator<ScanRequest, any, any>, pending?: ScanRequest, answer?: any, claims?: { x1: number, z1: number, x2: number, z2: number }[], ask?: { id: string, until: number }, idle?: number, seen?: number } | undefined}
  */
 let scanJob;
 /** Scans that waited for unloaded ground, by town, this session. @type {Map<string, number>} */
 const scanWaits = new Map();
+/** Scans started this session (realm:town_test dump: scenarios count them). */
+let scansStarted = 0;
+/**
+ * A town whose last scan only waited (ENT-05): its next scan starts once a player in the town is SCAN_MOVED blocks from
+ * where the players in it were (new ground is loaded) or at `until` (a minute more for each scan that waited).
+ * @type {Map<string, { until: number, at: { x: number, z: number }[] }>}
+ */
+const scanHolds = new Map();
+/**
+ * Columns each town's scans read, kept for the next scan (ENT-05: a scan used to start from nothing every 5 s), until
+ * COLS_KEEP ticks after the first one was read. Only known columns; a kept one is read again before a spot is picked
+ * from it (sites.js stillSo). @type {Map<string, { cols: Map<number, import("./sites.js").Column>, born: number }>}
+ */
+const townCols = new Map();
+const COLS_KEEP = 12000; // 10 minutes
+const SCAN_MOVED = 32;
+const SCAN_GIVE_UP = 6; // scans that waited, the last ones with SCAN_FINAL_AFTER: then "no good spot"
+const SCAN_IDLE_DROP = 1200; // ticks a paused scan (nobody in the town) is kept
+const SCAN_PRESENCE = 20; // ticks between "is a player in the town" checks while it scans
+const SCAN_CHECKPOINTS = 20; // the scan's own work units (SCAN.workTick each) a tick at most while it reads nothing
+
+/** The kept columns of a town, fresh ones when they are too old. @param {Town} t */
+function colsOf(t) {
+  const now = system.currentTick;
+  let c = townCols.get(t.id);
+  if (!c || now - c.born > COLS_KEEP) townCols.set(t.id, (c = { cols: new Map(), born: now }));
+  return c.cols;
+}
+
+/** Drops kept columns that are too old, and those of towns that are gone. */
+function pruneCols() {
+  const now = system.currentTick;
+  for (const [id, c] of townCols) if (now - c.born > COLS_KEEP || !allTowns().has(id)) townCols.delete(id);
+}
 
 /** @param {Town} t */
 function startScan(t) {
+  scansStarted++;
+  scanHolds.delete(t.id);
   const r = get("townRadius");
   const job = { town: t.id, ask: { id: "", until: system.currentTick + CLAIMS_WAIT } };
   job.ask.id = askClaims(t.dim, { x1: t.x - r, z1: t.z - r, x2: t.x + r, z2: t.z + r }, (claims) => {
@@ -2140,16 +2235,33 @@ function scanInput(t, claims) {
     claimsMore: claims.length >= 10,
     placed: (r, y1, y2) => touches(cellsOf(t), t, r, y1, y2),
     final: (scanWaits.get(t.id) ?? 0) >= SCAN_FINAL_AFTER,
+    cache: colsOf(t),
   };
 }
 
-/** A tick of the scan: up to SCAN_READS_TICK reads, ended early when the scan says its own work is used up ("tick"). */
+/**
+ * A tick of the scan: up to SCAN_READS_TICK reads. When the scan says its own work for a tick is used up ("tick"),
+ * the tick ends if it read anything; while it reads nothing (walking columns it already has), it goes on, up to
+ * SCAN_CHECKPOINTS such steps or a millisecond (ENT-05: cached lookups get their own budget).
+ */
 function stepScan() {
   const job = scanJob;
   if (!job) return;
   const t = allTowns().get(job.town);
-  if (!t || get("autoSpots") !== true || !playerIn(world.getAllPlayers(), t)) {
+  if (!t || get("autoSpots") !== true) {
     scanJob = undefined; // t.scan stays: it starts again when a player is in the town
+    return;
+  }
+  // Nobody in the town: the scan pauses (ENT-06), and is dropped after SCAN_IDLE_DROP (its columns stay kept). Asked
+  // every SCAN_PRESENCE ticks, not every tick.
+  const now = system.currentTick;
+  if (job.seen === undefined || now - job.seen >= SCAN_PRESENCE) {
+    job.seen = now;
+    if (playerIn(placesOf(world.getAllPlayers()), t)) job.idle = undefined;
+    else job.idle ??= now;
+  }
+  if (job.idle !== undefined) {
+    if (now - job.idle > SCAN_IDLE_DROP) scanJob = undefined;
     return;
   }
   if (job.ask) {
@@ -2163,10 +2275,14 @@ function stepScan() {
   }
   if (!job.gen) {
     job.dim = world.getDimension(t.dim);
+    job.maxY = job.dim.heightRange.max;
     job.gen = scanTown(scanInput(t, job.claims ?? []));
   }
   const dim = /** @type {Dimension} */ (job.dim);
+  const maxY = /** @type {number} */ (job.maxY);
   let reads = 0;
+  let checkpoints = 0;
+  const started = Date.now();
   for (let steps = 0; steps < SCAN_STEPS_TICK; steps++) {
     let q = job.pending;
     if (!q) {
@@ -2175,7 +2291,12 @@ function stepScan() {
       if (r.done) return finishScan(t, r.value);
       q = r.value;
     }
-    if (q[0] === "tick") return; // the scan's own work for this tick is used up (SCAN.workTick)
+    if (q[0] === "tick") {
+      // A share of the scan's own work (SCAN.workTick) is done: the tick ends when it read the world, or after
+      // SCAN_CHECKPOINTS shares, or once a millisecond went by.
+      if (reads > 0 || ++checkpoints >= SCAN_CHECKPOINTS || Date.now() !== started) return;
+      continue;
+    }
     if (q[0] === "claims") {
       job.pending = undefined;
       const [, x1, z1, x2, z2] = /** @type {["claims", number, number, number, number]} */ (q);
@@ -2193,15 +2314,21 @@ function stepScan() {
     reads++;
     job.pending = undefined;
     const [kind, a, b, c] = /** @type {any[]} */ (q);
-    job.answer = kind === "c" ? readCol(dim, a, b) : blockInfo(dim, a, b, c);
+    job.answer = kind === "c" ? readCol(dim, a, b, maxY) : blockInfo(dim, a, b, c);
   }
 }
 
-/** @param {Town} t0 @param {{ picks: { id: string, spot: Spot }[], nos: string[], wait: string[] }} res */
+/** @param {Town} t0 @param {{ picks: { id: string, spot: Spot }[], nos: string[], wait: string[], hopeful?: string[], changed?: boolean }} res */
 function finishScan(t0, res) {
   scanJob = undefined;
   const t = allTowns().get(t0.id);
   if (!t) return;
+  const waits = res.changed ? scanWaits.get(t.id) ?? 0 : res.wait.length ? (scanWaits.get(t.id) ?? 0) + 1 : 0;
+  // Unknown ground isn't "no good spot" at once, but it ends (ENT-05): after SCAN_GIVE_UP scans that waited (spread
+  // out by the holds below, the last ones taking any valid spot known), what still waits has no good spot in the
+  // ground the town's players loaded.
+  /** @type {string[]} */
+  const giveUp = !res.changed && waits >= SCAN_GIVE_UP ? res.wait.filter((id) => !res.hopeful?.includes(id)) : [];
   /** @type {string[]} */
   const got = [];
   for (const { id, spot } of res.picks) {
@@ -2223,10 +2350,33 @@ function finishScan(t0, res) {
     t.nos = [...new Set([...(t.nos ?? []), id])];
     tellOps(`§e[Town Projects] No good spot was found for ${t.n}'s ${p.name}: an operator can set one (Set a project spot in /realm:town).`);
   }
+  /** @type {string[]} */
+  const ended = [];
+  for (const id of giveUp) {
+    const p = byId.get(id);
+    if (!p || t.spots[id]) continue;
+    t.scan = t.scan?.filter((x) => x !== id);
+    t.nos = [...new Set([...(t.nos ?? []), id])];
+    ended.push(p.name);
+  }
+  if (ended.length) {
+    // Operators, and the players in the town (who walked it while it looked).
+    const msg = `§e[Town Projects] No good spot was found for ${t.n}'s ${ended.join(", ")} in the ground around the town's players: an operator can set one (Set a project spot in /realm:town) or Find spots again.`;
+    const r = get("townRadius");
+    for (const pl of world.getAllPlayers()) if (isOp(pl) || (pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= r)) pl.sendMessage(msg);
+  }
   if (!t.scan?.length) delete t.scan;
   if (!t.nos?.length) delete t.nos;
-  if (res.wait.length) scanWaits.set(t.id, (scanWaits.get(t.id) ?? 0) + 1);
+  if (waits && t.scan?.length) scanWaits.set(t.id, waits);
   else scanWaits.delete(t.id);
+  // A scan that only waited, with nothing it could pick even when final: hold the next one until new ground can have
+  // loaded. A project with a valid spot that waits for a nearer one is scanned again at the next check, so the final
+  // scan (SCAN_FINAL_AFTER) picks it soon; a kept column that changed is looked at again at the next check too.
+  if (!res.changed && !res.picks.length && res.wait.length && !res.hopeful?.length && t.scan?.length) {
+    const r = get("townRadius");
+    const at = placesOf(world.getAllPlayers()).filter((q) => q.dim === t.dim && Math.hypot(q.x - t.x, q.z - t.z) <= r).map((q) => ({ x: q.x, z: q.z }));
+    scanHolds.set(t.id, { until: system.currentTick + Math.min(10, waits) * 1200, at });
+  } else scanHolds.delete(t.id);
   saveTown(t);
   if (got.length) console.warn(`[town] ${t.n}: spots picked for ${got.join(", ")}`);
   // Finished projects that just got a spot go up when someone is near (the build check), or now.
@@ -2243,6 +2393,8 @@ function findSpotsAgain(t, tell) {
   queueWorks(t);
   queueScan(t, ALL.filter((p) => (isWork(p) ? progressOf(t, p).done === 1 : p.level <= t.lvl) && !progressOf(t, p).built).map((p) => p.id));
   scanWaits.delete(t.id);
+  scanHolds.delete(t.id);
+  townCols.delete(t.id); // and every column read afresh
   saveTown(t);
   if (get("autoSpots") !== true) return tell("§ePick project spots automatically (autoSpots) is Disabled in /realm:config.");
   tell(t.scan?.length ? `§a${t.n} looks for spots again for ${t.scan.map((id) => byId.get(id)?.name ?? id).join(", ")}, a few blocks at a time while a player is in the town.` : `§7Every project of ${t.n} up to its level has a spot.`);
@@ -2271,7 +2423,10 @@ function autoGeometry(p, s) {
  * `resume`: a half-done build (bs) picked up again, maybe long after its check: the outline and the region check are
  * not done again (its ground is half leveled), but players are still waited off the spot, claims checked again, and the
  * blocks players placed since are left alone (applyBuild's `mine`).
- * @type {{ key: string, town: string, project: string, phase: "outline" | "check" | "standing" | "claims" | "apply", resume?: boolean, start: number, until?: number, said?: number, gen?: Generator<any, any, any>, ask?: { id: string, until: number }, claims?: number, out?: { placed: number, skipped: number }, changes?: number } | undefined}
+ * @type {{ key: string, town: string, project: string, phase: "outline" | "check" | "standing" | "claims" | "apply" | "place", resume?: boolean, fresh?: boolean, start: number, until?: number, said?: number, gen?: Generator<any, any, any>, ask?: { id: string, until: number }, claims?: number, out?: { placed: number, skipped: number }, changes?: number, geo?: Geometry, geoOf?: Spot, onAt?: number, on?: boolean } | undefined}
+ * `place`: a build at a spot an operator set (ENT-39): its design a few blocks a tick, as an automatic spot's is;
+ * nothing is leveled. `geo`: the spot's geometry, worked out once (ENT-14); `onAt`/`on`: when players on the spot
+ * were last looked for, and whether there were any (every ONSPOT_TICKS, not every tick).
  */
 let buildJob;
 /** Half-done builds that wait for an operator this session (key -> why): a claim or a player's blocks in a structure's box. @type {Map<string, string>} */
@@ -2467,31 +2622,43 @@ function stepBuild() {
     const t = allTowns().get(town);
     const p = byId.get(project);
     const s = t && p ? t.spots[p.id] : undefined;
-    if (!t || !p || !s?.a) return;
+    if (!t || !p || !s) return;
     const pr = progressOf(t, p);
     if (!pr.done || pr.built) return;
-    const outline = Math.max(0, Math.min(15, Math.floor(Number(get("outlineSeconds")) || 0)));
-    buildJob = { key, town, project, phase: s.bs ? "standing" : outline > 0 ? "outline" : "check", resume: !!s.bs, start: system.currentTick, until: system.currentTick + outline * 20 };
+    if (!s.a) {
+      buildJob = { key, town, project, phase: "place", fresh: manualFresh.has(key), start: system.currentTick };
+      manualFresh.delete(key);
+    } else {
+      const outline = Math.max(0, Math.min(15, Math.floor(Number(get("outlineSeconds")) || 0)));
+      buildJob = { key, town, project, phase: s.bs ? "standing" : outline > 0 ? "outline" : "check", resume: !!s.bs, start: system.currentTick, until: system.currentTick + outline * 20 };
+    }
   }
   const job = buildJob;
   const t = allTowns().get(job.town);
   const p = byId.get(job.project);
   const s = t && p ? t.spots[p.id] : undefined;
-  if (!t || !p || !s?.a || progressOf(t, p).built) {
+  if (!t || !p || !s || !s.a !== (job.phase === "place") || progressOf(t, p).built) {
     buildJob = undefined;
     return;
   }
   const dim = world.getDimension(t.dim);
-  const geo = autoGeometry(p, s);
+  if (job.phase === "place") return stepPlace(job, t, p, s, dim);
+  if (job.geoOf !== s) {
+    job.geo = autoGeometry(p, s);
+    job.geoOf = s;
+  }
+  const geo = /** @type {Geometry} */ (job.geo);
   const now = system.currentTick;
   switch (job.phase) {
     case "outline": {
-      const near = playersNear(t, s);
+      // Players near are looked for only on the ticks it is drawn (ENT-14).
+      const draw = (now - job.start) % 10 === 0;
+      const near = now === job.start || draw ? playersNear(t, s) : [];
       if (now === job.start) {
         const secs = Math.round(((job.until ?? now) - now) / 20);
         for (const pl of near) pl.sendMessage(`§e${t.n}'s ${p.name} goes up here in ${secs} second${secs === 1 ? "" : "s"}.`);
       }
-      if ((now - job.start) % 10 === 0) for (const pl of near) drawPreview(pl, { p, s });
+      if (draw) for (const pl of near) drawPreview(pl, { p, s });
       if (now >= (job.until ?? now)) job.phase = "check";
       return;
     }
@@ -2540,18 +2707,26 @@ function stepBuild() {
       return;
     }
     case "apply": {
-      // Someone walked onto the spot meanwhile: wait, so no fill or wall goes up around them.
-      const on = playersOn(t, geo);
-      if (on.length) {
-        if (now - (job.said ?? -1000) >= 200) {
+      // Someone walked onto the spot meanwhile: wait, so no fill or wall goes up around them. Looked for (and mobs
+      // cleared) every ONSPOT_TICKS, not every tick (ENT-14).
+      if (job.onAt === undefined || now - job.onAt >= ONSPOT_TICKS) {
+        job.onAt = now;
+        const on = playersOn(t, geo);
+        job.on = on.length > 0;
+        if (on.length && now - (job.said ?? -1000) >= 200) {
           job.said = now;
           for (const pl of on) pl.sendMessage(`§eStep off the spot: ${t.n}'s ${p.name} goes up here.`);
         }
+        if (!job.on && cellsOf(t)) {
+          // Mobs and items on the region (a resident strolling by) step aside first, so nothing is walled in (O80).
+          clearMobs(dim, { min: { x: geo.region.x1, y: geo.pad - 4, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.fpBox.max.y + 2, z: geo.region.z2 } });
+        }
+      }
+      if (job.on) return;
+      if (!cellsOf(t)) {
+        job.onAt = undefined; // the placed cells aren't readable yet: look again (and clear) once they are
         return;
       }
-      if (!cellsOf(t)) return; // the placed cells aren't readable yet
-      // Mobs and items on the region (a resident strolling by) step aside first, so nothing is walled in (O80).
-      clearMobs(dim, { min: { x: geo.region.x1, y: geo.pad - 4, z: geo.region.z1 }, max: { x: geo.region.x2, y: geo.fpBox.max.y + 2, z: geo.region.z2 } });
       job.out ??= { placed: 0, skipped: 0 };
       job.gen ??= applyBuild(dim, p, s, geo, job.out, placedBy(t));
       try {
@@ -2618,7 +2793,7 @@ function ensureJobs() {
 /**
  * On the build check (every 100 ticks): towns from before automatic spots queue their projects once (the current
  * level's and finished ones without a spot), and a town with projects to place is scanned while a player is in it.
- * @param {Player[]} players
+ * @param {PlayerAt[]} players
  */
 function autoTick(players) {
   if (!towns) return;
@@ -2631,9 +2806,28 @@ function autoTick(players) {
     saveTown(t);
   }
   lifeTick(players);
-  if (get("autoSpots") !== true || scanJob) return;
-  const t = [...allTowns().values()].find((x) => scanIds(x).length && playerIn(players, x));
+  pruneCols();
+  // A scan paused in a town nobody is in (ENT-06) gives way to a town a player is in.
+  if (get("autoSpots") !== true || (scanJob && scanJob.idle === undefined)) return;
+  const t = [...allTowns().values()].find((x) => x.id !== scanJob?.town && scanIds(x).length && playerIn(players, x) && !held(x, players));
   if (t) startScan(t);
+}
+
+/**
+ * Is the town's next scan held (its last one only waited, ENT-05)? It is let go once a player in the town is
+ * SCAN_MOVED blocks from every place the town's players stood at that scan's end, or when the hold runs out.
+ * @param {Town} t @param {PlayerAt[]} players
+ */
+function held(t, players) {
+  const h = scanHolds.get(t.id);
+  if (!h) return false;
+  const r = get("townRadius");
+  const moved = players.some((q) => q.dim === t.dim && Math.hypot(q.x - t.x, q.z - t.z) <= r && h.at.every((a) => Math.hypot(q.x - a.x, q.z - a.z) >= SCAN_MOVED));
+  if (moved || system.currentTick >= h.until) {
+    scanHolds.delete(t.id);
+    return false;
+  }
+  return true;
 }
 
 onScriptEvent(["realm:place_ready", "realm:claims_check_result"], ({ id, message }) => {
@@ -2733,7 +2927,7 @@ const penAt = new Map();
  * (instantly past 128 blocks), so a pen whose animals vanished gets them back (life.js penMissing: never the ones that
  * died). Only for a pen a player has been within PEN_NEAR of since the last check, so its animals are loaded and a
  * missing one is really gone; one town's pen at most every PEN_CHECK ticks.
- * @param {Player[]} players
+ * @param {PlayerAt[]} players
  */
 function penTick(players) {
   if (get("townLife") !== true) return;
@@ -2742,7 +2936,7 @@ function penTick(players) {
     const s = t.spots[PEN_ID];
     const pr = s ? progressOf(t, PEN) : undefined;
     if (!s || !pr?.built || !pr.an) continue;
-    const near = players.some((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - s.x, pl.location.z - s.z) <= PEN_NEAR);
+    const near = players.some((q) => q.dim === t.dim && Math.hypot(q.x - s.x, q.z - s.z) <= PEN_NEAR);
     if (!near) {
       penSeen.delete(t.id);
       continue;
@@ -2883,7 +3077,7 @@ function startLife(t, kind, id, area) {
 /**
  * On the build check (every 100 ticks), while a player is in a town (townLife): what a removal couldn't reach is put
  * back; a build at an automatic spot without its path gets one; a town at a new level gets its lantern posts once no
- * build of it is waiting to go up. One job at a time. @param {Player[]} players
+ * build of it is waiting to go up. One job at a time. @param {PlayerAt[]} players
  */
 function lifeTick(players) {
   for (const t of allTowns().values()) {
@@ -2915,7 +3109,7 @@ function stepLife() {
   const job = lifeJob;
   if (!job) return;
   const t = allTowns().get(job.town);
-  if (!t || get("townLife") !== true || !playerIn(world.getAllPlayers(), t)) {
+  if (!t || get("townLife") !== true || !playerIn(placesOf(world.getAllPlayers()), t)) {
     lifeJob = undefined; // again on a later check
     return;
   }
@@ -3150,10 +3344,10 @@ onScriptEvent(
       if (m.action === "zones") return broadcastZones();
       if (!t) return tell("no town");
       if (m.action === "dump")
-        return tell(JSON.stringify({ town: t, progress: ALL.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, residents: residentsOf(t), homes: homesOf(t), life: lifeOf(t), living: lifeJob ? [lifeJob.kind, lifeJob.id] : null, regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
+        return tell(JSON.stringify({ town: t, progress: ALL.map((x) => [x.id, progressOf(t, x)]), placed: places ? [...places.keys()] : null, scanning: scanJob?.town ?? null, scans: scansStarted, held: scanHolds.has(t.id), waits: scanWaits.get(t.id) ?? 0, building: buildJob ? [buildJob.key, buildJob.phase] : null, cells: cellsOf(t)?.list.length ?? 0, residents: residentsOf(t), homes: homesOf(t), life: lifeOf(t), living: lifeJob ? [lifeJob.kind, lifeJob.id] : null, regions: Object.fromEntries(Object.entries(t.spots).flatMap(([id, sp]) => (byId.has(id) ? [[id, Object.values(regionOf(rectOf(footprint(/** @type {Project} */ (byId.get(id)), sp))))]] : []))) }));
       if (m.action === "scan") {
         findSpotsAgain(t, tell);
-        if (!scanJob && get("autoSpots") === true && t.scan?.length) startScan(t);
+        if ((!scanJob || scanJob.idle !== undefined) && get("autoSpots") === true && t.scan?.length) startScan(t);
         return;
       }
       if (m.action === "census") {
@@ -3259,7 +3453,7 @@ function mayorSet(t, at, yaw, tell) {
 /**
  * Every 100 ticks: a town whose own mayor Townsfolk doesn't have placed is asked for again when a player is in the
  * town (at most every 30 s per town), at the town's center.
- * @param {Player[]} players
+ * @param {PlayerAt[]} players
  */
 function mayorCheck(players) {
   if (get("townMayors") !== true || !places) return;
@@ -3268,7 +3462,7 @@ function mayorCheck(players) {
   for (const t of allTowns().values()) {
     if (!isTownMayorId(t.m) || places.has(t.m)) continue;
     if (now - (lastSet.get(t.id) ?? -MAYOR_RESEND_TICKS) < MAYOR_RESEND_TICKS) continue;
-    if (!players.some((pl) => pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= r)) continue;
+    if (!players.some((q) => q.dim === t.dim && Math.hypot(q.x - t.x, q.z - t.z) <= r)) continue;
     mayorSet(t, { x: t.x, y: t.y, z: t.z }, 0);
   }
 }
@@ -3779,7 +3973,7 @@ function census(t) {
   lifeNews(t, `fam${rs.n}`);
 }
 
-/** On the build check (every 100 ticks): the census of one town with a player in it, when its time has come. @param {Player[]} players */
+/** On the build check (every 100 ticks): the census of one town with a player in it, when its time has come. @param {PlayerAt[]} players */
 function residentTick(players) {
   if (get("residents") !== true || !residentGate) return;
   const now = system.currentTick;

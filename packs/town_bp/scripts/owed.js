@@ -89,24 +89,44 @@ export function createOwedStore(world, options) {
 
   let migrated = false;
 
+  // The index as last read or written (ENT-11): its text, its ids and a set of them. The text is read again on every
+  // use (one native call) and parsed only when it differs, so a change made behind the store's back (the
+  // diagnostics' forget) is still seen, while a finished project with 100 offline contributors parses it once instead
+  // of 100 times. readIndex hands out a copy: callers change it.
+  /** @type {{ raw: unknown, ids: string[], set: Set<string> } | undefined} */
+  let idx;
+
+  /** @returns {{ ids: string[], set: Set<string> }} */
+  function indexNow() {
+    const raw = world.getDynamicProperty(indexKey);
+    if (idx && idx.raw === raw) return idx;
+    /** @type {string[]} */
+    let ids = [];
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) throw new Error("not a list");
+        ids = parsed.filter((x) => typeof x === "string");
+      } catch (e) {
+        // The values are still found by id; only listing and the cap lose these players.
+        warn(`index unreadable (${e}); rebuilt as players are added`);
+      }
+    }
+    idx = { raw, ids, set: new Set(ids) };
+    return idx;
+  }
+
   /** @returns {string[]} */
   function readIndex() {
-    const raw = world.getDynamicProperty(indexKey);
-    if (typeof raw !== "string") return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) throw new Error("not a list");
-      return parsed.filter((x) => typeof x === "string");
-    } catch (e) {
-      // The values are still found by id; only listing and the cap lose these players.
-      warn(`index unreadable (${e}); rebuilt as players are added`);
-      return [];
-    }
+    return [...indexNow().ids];
   }
 
   /** @param {string[]} ids */
   function writeIndex(ids) {
-    world.setDynamicProperty(indexKey, ids.length ? JSON.stringify(ids) : undefined);
+    const raw = ids.length ? JSON.stringify(ids) : undefined;
+    idx = undefined; // a failed write leaves the old text: read it again
+    world.setDynamicProperty(indexKey, raw);
+    idx = { raw, ids: [...ids], set: new Set(ids) };
   }
 
   /** Drops the oldest ids beyond the cap from `ids` (in place) and returns them. @param {string[]} ids */
@@ -243,12 +263,10 @@ export function createOwedStore(world, options) {
   /** @param {string} id */
   function dropFromIndex(id) {
     try {
+      if (!indexNow().set.has(id)) return;
       const index = readIndex();
-      const at = index.indexOf(id);
-      if (at >= 0) {
-        index.splice(at, 1);
-        writeIndex(index);
-      }
+      index.splice(index.indexOf(id), 1);
+      writeIndex(index);
     } catch (e) {
       warn(`index update failed: ${e}`);
     }
@@ -284,8 +302,8 @@ export function createOwedStore(world, options) {
         if (text === undefined) throw new Error("nothing to save");
         if (utf8Length(text) > MAX_VALUE_BYTES) throw new Error(`${utf8Length(text)} bytes is over the ${MAX_VALUE_BYTES} limit`);
         world.setDynamicProperty(keyOf(id), text);
-        const index = readIndex();
-        if (!index.includes(id)) {
+        if (!indexNow().set.has(id)) {
+          const index = readIndex();
           index.push(id);
           const dropped = overflow(index);
           writeIndex(index);
@@ -309,6 +327,56 @@ export function createOwedStore(world, options) {
         return store.remove(id);
       }
       return store.set(id, next);
+    },
+    /**
+     * update for many players at once (a finished project's offline contributors): each value is read, changed and
+     * saved as update does, and the index is written once for all the new ids instead of once per player (ENT-11).
+     * An id listed twice is changed twice, in order.
+     * @param {[string, (current: any) => any][]} changes @returns {boolean[]} whether each was saved
+     */
+    updateMany(changes) {
+      migrate();
+      if (!migrated) return changes.map(() => false);
+      /** @type {string[]} */
+      const added = [];
+      const has = new Set(indexNow().set);
+      const out = changes.map(([id, fn]) => {
+        if (!validId(id)) return false;
+        const next = fn(read(id));
+        if (next === undefined) {
+          const gone = store.remove(id);
+          if (gone) has.delete(id);
+          return gone;
+        }
+        try {
+          const text = JSON.stringify(next);
+          if (text === undefined) throw new Error("nothing to save");
+          if (utf8Length(text) > MAX_VALUE_BYTES) throw new Error(`${utf8Length(text)} bytes is over the ${MAX_VALUE_BYTES} limit`);
+          world.setDynamicProperty(keyOf(id), text);
+        } catch (e) {
+          warn(`not saved for ${id}: ${e}`);
+          return false;
+        }
+        if (!has.has(id)) {
+          has.add(id);
+          added.push(id);
+        }
+        return true;
+      });
+      if (added.length) {
+        try {
+          const fresh = new Set(added);
+          const index = readIndex().filter((id) => !fresh.has(id));
+          index.push(...added);
+          const dropped = overflow(index);
+          writeIndex(index);
+          discard(dropped);
+        } catch (e) {
+          // The values are saved and still found by id; only listing and the cap miss them until the next write.
+          warn(`index update failed: ${e}`);
+        }
+      }
+      return out;
     },
     /** Removes the player's entry (and its index slot). @param {string} id @returns {boolean} whether it is gone */
     remove(id) {

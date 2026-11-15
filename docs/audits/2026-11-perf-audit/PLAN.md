@@ -299,27 +299,14 @@ Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
   the live page, after a written crash analysis. Batching past one second is an owner trade-off (pickups on a page
   with no free slot wait longer on the ground), not planned.
 
-### W10 Townsfolk, labels and towns (M to L: two PRs)
+### W10 Townsfolk and labels: what is left
 
-Findings: ENT-05, ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `town_bp`,
-`tools/owed-shared.js`, `tools/tether-shared.js`. W10a is #249 (npc_bp, wander_bp, caravan_bp and the
-shared labels); left from it, each only if a measurement asks for it: with a crowd standing around the townsfolk
-the half-second loop is still about 1.2 to 1.6 ms (npc-labels-perf near phase at 40, mostly the turning teleports and
-the players' places, which that phase needs); the label entities' `minecraft:transient` and `minecraft:physics`
-(ENT-32, needs a BDS check); caravan_bp's traders still use the labels' default reads (`trustHandles` off).
-- **W10b The town scan and saved indexes.** A project with no valid spot in the loaded ground is scanned from
-  scratch every 5 s while a player is in the town: the column cache dies with each scan, columns past tick distance 4
-  are always "unknown", and "unknown" never ends as "no good spot" (ENT-05); walks over cached columns are also
-  capped at 100 lookups a tick. Keep the cache across scans, give an unknown result a back-off and an end, and give
-  cached lookups their own budget. The scan is dropped when the town is empty, and that test runs every tick
-  (ENT-06). The 5-second check reads every player about 16 times per town (ENT-28: 32 ms in one tick at 40 players
-  and 5 towns). A finished project parses and rewrites the owed index once per offline contributor (ENT-11,
-  ENT-26). A build at an operator-set spot saves its snapshot and places the whole design in one tick (ENT-39); a
-  build in progress decodes its plan every tick (ENT-14); an outline is about 250 particle calls per player per draw
-  (ENT-34).
-- Proof: `npc-labels-perf` with players away from town and near it, `town-capital-perf`, `town-hillside` (962 s
-  today: also the suite's slowest scenario, so this shortens every full run), `wander-*`; the label timing check on
-  a real client stays with the owner (O11).
+W10a is #249 (npc_bp, wander_bp, caravan_bp and the shared labels) and W10b (the town scan and saved indexes) is
+#278. Left from W10a, each only if a measurement asks for it: with a crowd standing around the townsfolk the
+half-second loop is still about 1.2 to 1.6 ms (npc-labels-perf near phase at 40, mostly the turning teleports and the
+players' places, which that phase needs); the label entities' `minecraft:transient` and `minecraft:physics` (ENT-32,
+needs a BDS check); caravan_bp's traders still use the labels' default reads (`trustHandles` off). The label timing
+check on a real client stays with the owner (O11).
 
 ### W11 Champions, bounties, dolphins and other mobs: what is left
 
