@@ -78,19 +78,20 @@ class LabBudget {
   /** @param {number} ms */
   spend(ms) { this.left -= ms; }
 }
-/** How many ticks' worth of overrun a budget or the feature envelope carries into the next ticks at most. */
+/** How many ticks' worth of overrun a budget carries into the next ticks at most. */
 const DEBT_TICKS = 4;
+// The feature envelope carries no debt: drawing and passes always run (a title must not fade), so a debt there would
+// stop the scanner for good (map-radar-perf: 0 reads at 40 players). Each budget below carries its own.
 class LabEnvelope {
-  constructor() { this.at = -1; this.used = 0; this.last = 0; this.peak = 0; this.debt = 0; }
+  constructor() { this.at = -1; this.used = 0; this.last = 0; this.peak = 0; }
   /** @param {number} tick */
   begin(tick) {
-    if (this.at !== tick) { this.debt = Math.min(DEBT_TICKS * EXP.featureMs, Math.max(0, this.debt + this.used - EXP.featureMs)); this.last = this.used; this.used = 0; this.at = tick; }
+    if (this.at !== tick) { this.last = this.used; this.used = 0; this.at = tick; }
     return Date.now();
   }
   /** @param {number} start */
   end(start) { this.used += Math.max(0, Date.now() - start); this.peak = Math.max(this.peak, this.used); }
-  /** What the whole feature may still spend this tick, less the overrun carried from the ticks before. */
-  get room() { return Math.max(0, EXP.featureMs - this.used - this.debt); }
+  get room() { return Math.max(0, EXP.featureMs - this.used); }
 }
 // Disabled means no terrain persistence IO, including the legacy preview provider.
 // Player preferences / waypoints still use their existing storage.
