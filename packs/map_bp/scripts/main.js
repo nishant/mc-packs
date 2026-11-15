@@ -2328,15 +2328,15 @@ onChange((key) => {
 /** @type {Seen[]} */
 let seen = [];
 let seenAt = -Infinity;
-/** Player id -> their party tag and when it was read: `getTags()` builds an array, so it is read every PARTY_KEEP ticks, not every INTERVAL (HUD-02). @type {Map<string, { tick: number, tag: string | undefined }>} */
+/** Player id -> their party tag at the last look: a tag that changed (joined or left a party) changes others' markers, so every pass comes on the usual INTERVAL again. @type {Map<string, string | undefined>} */
 const partyCache = new Map();
-const PARTY_KEEP = 100;
-/** @param {Player} p @param {string} id @param {number} now */
-function partyOf(p, id, now) {
-  const hit = partyCache.get(id);
-  if (hit && now - hit.tick < PARTY_KEEP && now >= hit.tick) return hit.tag;
+/** @param {Player} p @param {string} id */
+function partyOf(p, id) {
   const tag = partyTag(p);
-  partyCache.set(id, { tick: now, tag });
+  if (partyCache.get(id) !== tag || !partyCache.has(id)) {
+    if (tag !== undefined || partyCache.get(id) !== undefined) wakePasses();
+    partyCache.set(id, tag);
+  }
   return tag;
 }
 system.runInterval(() => {
@@ -2353,7 +2353,7 @@ system.runInterval(() => {
       try {
         const l = p.location;
         const id = idOf(p);
-        seen.push({ id, dim: p.dimension.id, x: l.x, z: l.z, party: partyOf(p, id, now) });
+        seen.push({ id, dim: p.dimension.id, x: l.x, z: l.z, party: partyOf(p, id) });
       } catch {
         // left meanwhile
       }

@@ -95,7 +95,7 @@
     },
     "map_bp": {
       "version": "1.5.10",
-      "notes": "A still player's marker passes come less often (every 1 to 2 seconds while nothing around them changes and no monster is near; moving, a monster or a broadcast about them brings them back to every half second), each pass reads the player's place once and the respawn point and party tag every 5 seconds, townsfolk searches are kept 5 seconds without the radar, a radar whose text is the same after a move is not sent again, and a placed or broken block costs nothing while no radar has drawn land. The Realm Configuration option Markers update every (ticks) now works (read when the world starts)."
+      "notes": "A still player's marker passes come less often (every 1 to 2 seconds while nothing around them changes and no monster is near; moving, a monster or a broadcast about them brings them back to every half second), each pass reads the player's place once and the respawn point every 5 seconds, townsfolk searches are kept 5 seconds without the radar, a radar whose text is the same after a move is not sent again, and a placed or broken block costs nothing while no radar has drawn land. The Realm Configuration option Markers update every (ticks) now works (read when the world starts)."
     },
     "sky_rp": {
       "version": "1.4.0",
