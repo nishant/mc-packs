@@ -11,10 +11,12 @@
     "Townsfolk cost the server much less, most of all with many players online away from town; a townsfolk standing next to an armor stand, painting or pet no longer has its name label flicker every 10 seconds.",
     "Easy Building: a resting preview no longer flips between the box and the shape, big previews no longer stall the server, and survival blocks that could not reach an unloaded chunk are handed back instead of lost.",
     "Minimap radar: a full terrain cache no longer leaves radars blank for minutes after a big scan, and costs the server less while players travel; players can scan up to 128 blocks with /realm:minimap scan (operators 384).",
-    "Easy Building: big builds, digs, copies, cuts and pastes no longer freeze the server: the blocks are read and written a few at a time, and an undo while a build is still going stops it."
+    "Easy Building: big builds, digs, copies, cuts and pastes no longer freeze the server: the blocks are read and written a few at a time, and an undo while a build is still going stops it.",
+    "Weather and sky effects cost phones and the server much less: the little rainbow over a pot of gold, the tornado funnel, a NOS boost and claim and zone outlines send far fewer particles, and players can lower a tornado's funnel density for their own screen in /realm:prefs."
   ],
   "resourceNotes": [
-    "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
+    "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens.",
+    "Realm Skies: new particles for the little rainbow over a pot of gold and a NOS boost's plume, and a tornado funnel of fewer, slightly bigger clouds that looks the same at about half the particles."
   ],
   "packNotes": {
     "hud_rp": {
@@ -92,6 +94,38 @@
     "map_bp": {
       "version": "1.5.8",
       "notes": "The radar keeps filling in when its terrain cache is full or over its cap (after a big scan or when players leave), plans travel at the cap far more cheaply, and frees terrain nobody has looked at for 5 minutes. /realm:minimap scan is limited to radius 128 for players (operators keep 384)."
+    },
+    "sky_rp": {
+      "version": "1.4.0",
+      "notes": "New realm:sky_arc (one band of the little rainbow over a pot of gold), realm:nos_ring and realm:nos_ribbon (a NOS boost's slipstream ring and afterburner ribbon); realm:sky_tornado rings are 14-34 slightly bigger clouds living 1.2-1.8 s (were 18-44 living 1.05-1.55 s)."
+    },
+    "rainbow_bp": {
+      "version": "1.5.0",
+      "notes": "The little rainbow over a pot of gold is 7 Realm Skies emitters sent every 2 s instead of 259 vanilla flames twice a second; it needs Realm Skies (in Realm Resources) to show."
+    },
+    "tornado_bp": {
+      "version": "1.3.0",
+      "notes": "Each ring is redrawn every 0.8 s instead of 0.5 s and the ground skirt and storm collar half as often (about 37% fewer particle packets); players can set their own funnel density in /realm:prefs; no isValid reads on kept handles."
+    },
+    "elytra_bp": {
+      "version": "1.4.0",
+      "notes": "A NOS boost's plume is two Realm Skies emitters, one vanilla flame and a lava pop a tick (was 41 spawns a tick at full boost)."
+    },
+    "claims_bp": {
+      "version": "1.5.13",
+      "notes": "Claim borders are drawn at one height for the 6 nearest claims (were two heights for every claim in range)."
+    },
+    "zones_bp": {
+      "version": "1.0.15",
+      "notes": "Zone outlines are drawn at one height for the 6 nearest shapes (were two heights for every shape)."
+    },
+    "climate_bp": {
+      "version": "1.0.15",
+      "notes": "One reused MolangVariableMap for the sand and snow gusts; a join removes the fog only when the new climate:fog flag says one may be left."
+    },
+    "rain_bp": {
+      "version": "1.5.21",
+      "notes": "Walking in or out stops only the sounds still playing (usually 2 or 3 stopsound commands instead of 7); a join removes the fogs only when the new rain:fogs flag says one may be left."
     }
   }
 }

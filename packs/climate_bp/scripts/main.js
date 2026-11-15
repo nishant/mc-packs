@@ -8,6 +8,9 @@ import { onScriptEvent } from "./script-events.js";
 const PROP_WEATHER = "climate:weather"; // world: overworld weather at the last change; scripts can't read the current weather
 const PROP_DRY = "climate:dry"; // world: when the last rain ended (ms), for fog banks
 const PROP_SEEN = "climate:seen"; // player: conditions already sent to the Journal, "sandstorm,blizzard"
+// Player: false once our fog is off the player (true while it's on), so a join or a script reload removes it only when
+// it may be left; a player who never had it (before 1.0.15) is cleared once.
+const PROP_FOG = "climate:fog";
 
 const OVERWORLD = "minecraft:overworld";
 const FOG_ID = "climate_sky"; // our /fog entry's name, so only ours is ever removed
@@ -37,9 +40,10 @@ const KINDS = {
 
 /**
  * @typedef {{ group: number, cond: Cond, until: number, fog: string, debt: number,
- *   fireAt: number, fire: boolean, waterAt: number, water: boolean, beachAt: number, beach: boolean, noted: Record<string, number> }} State
+ *   fireAt: number, fire: boolean, waterAt: number, water: boolean, beachAt: number, beach: boolean, noted: Record<string, number>,
+ *   fogSaved: boolean }} State
  * cond: the condition the player is in; until: tick it lingers to after it was last seen;
- * fog: the fog id we pushed for them ("" = none); fire / water: cached scans and when they ran.
+ * fog: the fog id we pushed for them ("" = none); fire / water: cached scans and when they ran; fogSaved: PROP_FOG is true.
  */
 
 /** @type {WeatherType} */
@@ -58,7 +62,7 @@ const players = new Map();
 function stateOf(player) {
   let st = players.get(player.id);
   if (!st) {
-    st = { group: nextGroup++ % GROUPS, cond: "", until: 0, fog: "", debt: 0, fireAt: -1e9, fire: false, waterAt: -1e9, water: false, beachAt: -1e9, beach: false, noted: {} };
+    st = { group: nextGroup++ % GROUPS, cond: "", until: 0, fog: "", debt: 0, fireAt: -1e9, fire: false, waterAt: -1e9, water: false, beachAt: -1e9, beach: false, noted: {}, fogSaved: false };
     players.set(player.id, st);
   }
   return st;
@@ -110,7 +114,7 @@ world.afterEvents.worldLoad.subscribe(() => {
     console.warn(`[climate] ${e}`);
   }
   // After a script reload our fog may still be on players we no longer track: clear it, the loop puts it back.
-  for (const player of world.getAllPlayers()) removeFog(player);
+  for (const player of world.getAllPlayers()) clearLeftFog(player);
   wake();
   // Ask the Weather Almanac (if it's installed) for its plan a little later: every weather pack asks, and it answers once.
   system.runTimeout(() => system.sendScriptEvent("realm:weather_ask", "{}"), 100);
@@ -118,7 +122,7 @@ world.afterEvents.worldLoad.subscribe(() => {
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
-  removeFog(player); // a fog can survive a relog
+  clearLeftFog(player); // a fog can survive a relog
   const st = stateOf(player);
   st.fog = "";
   st.cond = "";
@@ -345,6 +349,17 @@ function removeFog(player) {
   }
 }
 
+/** Removes our fog from a player who may still have it (PROP_FOG not false), then notes it's off. @param {Player} player */
+function clearLeftFog(player) {
+  try {
+    if (player.getDynamicProperty(PROP_FOG) === false) return;
+    removeFog(player);
+    player.setDynamicProperty(PROP_FOG, false);
+  } catch (e) {
+    console.warn(`[climate] ${e}`);
+  }
+}
+
 /** @param {Player} player @param {State} st @param {string} fog "" = none */
 function setFog(player, st, fog) {
   if (st.fog) removeFog(player);
@@ -356,7 +371,16 @@ function setFog(player, st, fog) {
     }
   }
   st.fog = fog; // even after an error, so a broken /fog isn't retried every second
+  try {
+    if (!fog !== !st.fogSaved) player.setDynamicProperty(PROP_FOG, !!fog);
+    st.fogSaved = !!fog;
+  } catch {
+    // gone
+  }
 }
+
+/** @type {MolangVariableMap | undefined} made on first use: not while the scripts load */
+let windVars;
 
 /** Sand or snow blowing past from upwind, or fog puffs on the ground nearby. @param {Player} player @param {State} st @param {Exclude<Cond, "">} cond */
 function particles(player, st, cond) {
@@ -366,7 +390,8 @@ function particles(player, st, cond) {
   const feet = player.location;
   const speed = Number(CONFIG.wind.speed) || 0;
   const wx = Math.cos(windAngle), wz = Math.sin(windAngle);
-  const vars = new MolangVariableMap();
+  // One map, reused (spawnParticle copies its values): before 1.0.15 a new one per player per second.
+  const vars = (windVars ??= new MolangVariableMap());
   if (cond !== "fogbank") {
     vars.setFloat("variable.wx", wx * speed);
     vars.setFloat("variable.wz", wz * speed);
