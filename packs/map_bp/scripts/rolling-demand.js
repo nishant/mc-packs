@@ -67,6 +67,8 @@ export function rollTerrainDemand(input){
 
 /** A queue longer than this (picks still unread) is never walked whole by a roll: rollIncremental only adds to it. */
 export const ROLL_WALK_MAX = 256;
+/** Unread picks a rolled queue keeps at most (a circle is about 1,100): when the scanner is behind, the oldest go. */
+export const QUEUE_MAX = 2048;
 /** @typedef {{store:import('./terrain.js').Store,picks:import('./terrain.js').Pick[],pos:number,at:number,previous:Point,current:Point,radius:number,now:number,maxAge:number,missRetry:number,failed?:Map<string,import('./terrain.js').Pick>}} IncrementalInput */
 /**
  * The moving roll in time proportional to the move, not to the queue: the columns the move brought into the circle
@@ -74,19 +76,28 @@ export const ROLL_WALK_MAX = 256;
  * go to the front. Picks the move took out of the circle stay queued and are dropped as they come up (the scanner's
  * range check), so nothing already queued is walked. On BDS a whole-queue roll of about 1,000 picks took about 7 ms
  * and a flier needs one every tick (map-radar-perf); rollTerrainDemand still reorders a short queue.
- * @param {IncrementalInput} input mutates input.picks
+ * The queue stays bounded: read picks in front are dropped once there are many, and unread ones past QUEUE_MAX (the
+ * oldest first) when the scanner can't keep up; a dropped column is planned again by the next full plan.
+ * @param {IncrementalInput} input mutates input.picks @returns {{pos:number,nextFresh:number,nextRetry:number,stats:Record<string,number>}}
  */
 export function rollIncremental(input){
- const{store,picks,pos,previous,current,radius,now,maxAge,missRetry}=input;
- const stats={tailVisited:0,entered:0,exited:0,rawChecks:0,added:0,nearPromoted:0};
+ const{store,picks,previous,current,radius,now,maxAge,missRetry}=input;let pos=input.pos;
+ const stats={tailVisited:0,entered:0,exited:0,rawChecks:0,added:0,nearPromoted:0,dropped:0};
  let nextFresh=Infinity,nextRetry=Infinity;
+ if(pos>4*QUEUE_MAX){picks.splice(0,pos);pos=0;}
+ if(picks.length-pos>QUEUE_MAX){stats.dropped=picks.length-pos-QUEUE_MAX;picks.splice(pos,stats.dropped);}
  /** @param {number} key @param {number} x @param {number} z @param {number} [age] when it was queued, if it is @returns {RollingPick|undefined} */
  const pickFor=(key,x,z,age=now)=>{
   stats.rawChecks++;const sample=store.cols.get(key),valid=!!sample&&sample.valid!==false;
   if(valid&&now-sample.tick<=maxAge){nextFresh=Math.min(nextFresh,sample.tick+maxAge+1);return undefined;}
-  const miss=store.miss.get(key);if(miss!==undefined&&now-miss<missRetry){nextRetry=Math.min(nextRetry,miss+missRetry);return undefined;}
   const old=input.failed?.get(store.id+'|'+key),dx=x-current.x,dz=z-current.z;
-  return{wx:x,wz:z,key,resolution:COL,d:dx*dx+dz*dz,stale:valid,visible:true,queuedAt:old?.queuedAt??age,since:valid?now:now-maxAge};
+  /** @type {RollingPick} */const p={wx:x,wz:z,key,resolution:COL,d:dx*dx+dz*dz,stale:valid,visible:true,queuedAt:old?.queuedAt??age,since:valid?now:now-maxAge};
+  const miss=store.miss.get(key);
+  if(miss!==undefined&&now-miss<missRetry){
+   // Cooling after a failed read: remembered with the failures, so the retry puts it back in the queue.
+   nextRetry=Math.min(nextRetry,miss+missRetry);if(input.failed&&!old&&input.failed.size<4096)input.failed.set(store.id+'|'+key,p);return undefined;
+  }
+  return p;
  };
  for(const change of circleDelta(previous,current,radius,COL,colKey)){
   if(change.kind==='exited'){stats.exited++;continue;}stats.entered++;
@@ -100,6 +111,11 @@ export function rollIncremental(input){
   const inside=(wx-previous.x)**2+(wz-previous.z)**2<=radius*radius;
   const p=pickFor(key,wx,wz,inside?Math.min(now,input.at):now);if(p&&!p.stale)focus.push(p);
  }
- if(focus.length){focus.sort((a,b)=>a.d-b.d||a.key-b.key);picks.splice(pos,0,...focus);stats.nearPromoted=focus.length;}
- return{nextFresh,nextRetry,stats};
+ if(focus.length){
+  focus.sort((a,b)=>a.d-b.d||a.key-b.key);stats.nearPromoted=focus.length;
+  // In front of the queue: over read slots when there are enough (no copy of the whole queue), else spliced in.
+  if(pos>=focus.length){pos-=focus.length;for(let i=0;i<focus.length;i++)picks[pos+i]=focus[i];}
+  else picks.splice(pos,0,...focus);
+ }
+ return{pos,nextFresh,nextRetry,stats};
 }

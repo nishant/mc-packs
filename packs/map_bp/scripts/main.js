@@ -110,7 +110,7 @@ function experimentNative() { return EXP.palette === "native"; }
 const labPlans = new Map();
 /** @type {Map<string,{storeId:string,x:number,z:number,sample:import("./detail-persistence.js").Raw,wall:number}>} */
 const labPendingWrites = new Map();
-const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rolledIncremental:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
+const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rolledIncremental:0,requeued:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
 const LAB_SAVE_LIMIT = 2048;
 
 /** Sorts fresh work without losing its original request age. Native4 can only seed one genuine2 anchor. */
@@ -1409,6 +1409,34 @@ function keptDemand(store, state, radius) {
   return true;
 }
 
+/**
+ * Puts a plan's failed reads that are still in its circle and past their retry wait back at the front of its queue.
+ * Columns skipped while cooling (full plans and rolls) are in plan.failed too, so nothing waits on a full plan.
+ * @param {ScanPlan} plan @param {{retryDeadline?:number}} state @param {import("./terrain.js").Store} store @param {{x:number,z:number}} at @param {number} radius @param {number} now @param {string} id
+ */
+function requeueFailed(plan, state, store, at, radius, now, id) {
+  let next = Infinity;
+  /** @type {import("./terrain.js").Pick[]} */ const back = [];
+  if (plan.failed) for (const [k, p] of plan.failed) {
+    if ((p.store && p.store !== store) || (p.resolution ?? COL) !== COL) { plan.failed.delete(k); continue; }
+    if ((p.wx - at.x) ** 2 + (p.wz - at.z) ** 2 > radius * radius) continue; // kept: its age counts if it comes back into the circle
+    const c = store.cols.get(p.key);
+    if (c && c.valid !== false && now - c.tick <= SCAN_MAX_AGE) { plan.failed.delete(k); continue; }
+    const miss = store.miss.get(p.key);
+    if (miss !== undefined && now - miss < MISS_RETRY) { next = Math.min(next, miss + MISS_RETRY); continue; }
+    plan.failed.delete(k);
+    back.push(p);
+  }
+  // In front: they were being read when they failed, near the viewer (over read slots, else spliced in).
+  if (back.length) {
+    if (plan.pos >= back.length) { plan.pos -= back.length; for (let i = 0; i < back.length; i++) plan.picks[plan.pos + i] = back[i]; }
+    else plan.picks.splice(plan.pos, 0, ...back);
+  }
+  state.retryDeadline = next < Infinity ? next : undefined;
+  if (next < Infinity) retryAt.set(id, Math.min(retryAt.get(id) ?? Infinity, next));
+  labStats.requeued++;
+}
+
 /** @param {Player} player @param {number} now @param {boolean} [trustedRoster] */
 function planFor(player, now,trustedRoster=false) {
   if(!trustedRoster&&!player.isValid)return undefined;
@@ -1424,12 +1452,15 @@ function planFor(player, now,trustedRoster=false) {
   const geometryKey = store.id + "|" + Math.round(at.x) + "|" + Math.round(at.z) + "|" + pr.radarRadius;
   let version="";
   const sameFootprint = state && state.key === geometryKey && state.x === at.x && state.z === at.z;
+  // Reads that failed (unloaded chunks) come due: put the ones still in the circle back in the queue, instead of a
+  // full plan (on BDS a flier outrunning chunk loading made one every tick or two, about 10 ms each).
+  if(same&&state&&state.retryDeadline!==undefined&&now>=state.retryDeadline&&EXP.rolling===true&&!EXP.preview&&!EXP.persistence)requeueFailed(old,state,store,at,pr.revealRadius,now,idOf(player));
   if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*.75)**2&&keptDemand(store,state,pr.revealRadius)){
     if(old.picks.length-old.pos>ROLL_WALK_MAX){
       // A long queue: add what the move brought in instead of walking it all (rollIncremental). Its order is not
       // redone, so a reorder that comes due waits until the queue is short.
-      const inc=rollIncremental({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed});
-      old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;
+      const inc=rollIncremental({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed??=new Map()});
+      old.pos=inc.pos;old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;
       state.key=geometryKey;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,inc.nextFresh);
       if(inc.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,inc.nextRetry);retryAt.set(idOf(player),Math.min(retryAt.get(idOf(player))??Infinity,inc.nextRetry));}
       labStats.rolled++;labStats.rolledIncremental++;labStats.rollEntered+=inc.stats.entered;labStats.rollRawChecks+=inc.stats.rawChecks;planTurn.made++;return old;
@@ -1466,6 +1497,7 @@ function planFor(player, now,trustedRoster=false) {
   if (same) for (let i = old.pos; i < old.picks.length; i++) ages.set(old.picks[i].key, old.picks[i].queuedAt ?? old.at);
   if(same)for(const pick of old.failed?.values()??[]){const identity=pick.key;ages.set(identity,Math.min(ages.get(identity)??Infinity,pick.queuedAt??old.at));}
   /** @type {LabPick[]} */ const picks=[];
+  /** @type {LabPick[]} */ const cooling=[];
   const seenKeys=new Set();
   let nextRetry = Infinity,nextRefresh=Infinity;
   const add = (/** @type {number} */ key, /** @type {number} */ x, /** @type {number} */ z, /** @type {number} */ resolution, visible=false) => {
@@ -1478,7 +1510,7 @@ function planFor(player, now,trustedRoster=false) {
     const valid = !!sample && (!("valid" in sample) || sample.valid !== false);
     if(valid&&now-sample.tick<=SCAN_MAX_AGE){nextRefresh=Math.min(nextRefresh,sample.tick+SCAN_MAX_AGE+1);return;}
     const miss = (resolution === PREVIEW ? store.previewMiss : store.miss).get(key);
-    if (miss !== undefined && now - miss < MISS_RETRY) { nextRetry = Math.min(nextRetry, miss + MISS_RETRY); return; }
+    if (miss !== undefined && now - miss < MISS_RETRY) { nextRetry = Math.min(nextRetry, miss + MISS_RETRY); if (resolution === COL) cooling.push({ wx: x, wz: z, key, resolution, d, stale: valid, visible, queuedAt: ages.get(identity) ?? now, since: valid ? now : now - SCAN_MAX_AGE }); return; }
     const stale = valid;
     picks.push({ wx: x, wz: z, key, resolution, d, stale, visible, queuedAt: ages.get(identity) ?? now, since: stale ? now : now - SCAN_MAX_AGE });
   };
@@ -1494,6 +1526,7 @@ function planFor(player, now,trustedRoster=false) {
   for(const anchor of anchors)add(anchor.key,anchor.x,anchor.z,COL,false);
   const plan = { id: idOf(player), player, store, picks: labOrder(picks, now), dim, py, x: at.x, z: at.z,
     at: now, pos: 0, missed: 0, missRun: 0, failed: same ? old.failed : undefined };
+  if (cooling.length) { const failed = plan.failed ??= new Map(); for (const c of cooling) if (!failed.has(store.id + "|" + c.key) && failed.size < 4096) failed.set(store.id + "|" + c.key, c); }
   scanPlans.set(idOf(player), plan);
   labPlans.set(idOf(player), { key: geometryKey, geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,lossSeq:store.lossSeq,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
   if (nextRetry < Infinity) retryAt.set(idOf(player), nextRetry);
