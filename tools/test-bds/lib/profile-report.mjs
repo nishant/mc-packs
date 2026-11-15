@@ -59,7 +59,7 @@ export function byPackPath(callbacks, ticks) {
   return [...by.values()].map((e) => ({ ...e, msPerTick: e.ms / n, callsPerTick: e.calls / n })).sort((a, b) => b.ms - a.ms || b.calls - a.calls);
 }
 
-const COUNTERS = ["ticks", "calls", "callsPerTick", "callbacks", "dynWrites", "dynBytes", "dynWorld", "dynEntity", "dynItem", "actionBar", "titles", "commands", "stacks", "p95TickMs", "maxTickMs"];
+const COUNTERS = ["ticks", "calls", "callsPerTick", "callbacks", "dynWrites", "dynBytes", "dynWorld", "dynEntity", "dynItem", "actionBar", "titles", "commands", "stacks", "particles", "p95TickMs", "maxTickMs"];
 /**
  * suite.mjs --perf --json's form of one profile JSON: the bundle, server, process, workload and watchdog figures, and
  * each pack's whole and steady ms/tick with its top and slowest callbacks and counters (the full JSON is uploaded too).
@@ -453,7 +453,7 @@ export class Profile {
         // is not attributed (see lib/profile.js), and a run of separate packs sums separate script contexts.
         measurement: { unattributed: ["time after an await inside an async callback"], contexts: rows.length },
         bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, steadyWindow: steady, phases: this.phaseBundle ?? undefined, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks, scriptEvents: events, byPath: byPath ?? undefined } : null,
-        packs: rows.map(({ callbacksAll, ...r }) => ({ ...r, callbackList: callbacksAll ?? undefined, dynWritesPerTick: r.dynWrites / r.ticks, actionBarPerTick: r.actionBar / r.ticks, setTitlePerTick: r.titles / r.ticks, runCommandPerTick: r.commands / r.ticks })),
+        packs: rows.map(({ callbacksAll, ...r }) => ({ ...r, callbackList: callbacksAll ?? undefined, dynWritesPerTick: r.dynWrites / r.ticks, actionBarPerTick: r.actionBar / r.ticks, setTitlePerTick: r.titles / r.ticks, runCommandPerTick: r.commands / r.ticks, particlesPerTick: (r.particles ?? 0) / r.ticks })),
       }, null, 2));
     } catch (e) {
       this.say(`[profile] could not write ${this.json}: ${e}`);

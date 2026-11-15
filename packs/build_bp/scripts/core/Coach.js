@@ -18,6 +18,7 @@ import {
     lineBetween, floorRect, hollowCircleXZ, shellSphere, hollowCylinder, hollowCone, hollowArch, diagonalWall, slopeFloor, boxEdges,
 } from "../utils/GeometryUtils.js";
 import { t } from "../utils/Text.js";
+import { wakeLoop, slowSweep } from "../utils/wake-loop.js";
 
 const CARD          = PANELS.coach;
 const MARKER_ID     = "eb:coach_marker";
@@ -40,7 +41,6 @@ const FRAME_AHEAD   = 3;
 const GHOST_TICKS   = 8;
 const GHOST_CAP     = 160;
 const GHOST_PARTICLE = "eb:coach_ghost";
-const SWEEP_TICKS   = 200;
 const COUNTER_STEPS = 8;
 const DP_STEP       = "eb:coachStep";
 const DP_DONE       = "eb:coachDone";
@@ -195,6 +195,7 @@ function fade(entity) {
     if (!isLive(entity)) return;
     try { entity.setProperty("eb:closing", true); } catch {}
     fading.push({ entity, removeAt: system.currentTick + SHUT_TICKS });
+    coachLoop?.wake();
 }
 
 function snapshot(player) {
@@ -485,6 +486,7 @@ export function startCoach(player, { restart = false, lesson = null } = {}) {
     if (index >= COACH_STEPS.length) index = COACH_STEPS.length - 1;
     const coach = { player, index, lesson: -1, skipped: false, stuck: false, card: null, ghost: [], markers: [], markerYaws: new Map(), okn: 0, toastn: 0, finished: false, endAt: null, movedAt: -100, clickAt: -100 };
     coaches.set(player.id, coach);
+    coachLoop?.wake();
     begin(coach);
     try { player.sendMessage(t("eb.coach.started")); } catch {}
 }
@@ -647,8 +649,9 @@ export function startCoachLoop() {
         keep: () => [...coaches.values()].map(coach => coach.card?.entity).concat(fading.map(gone => gone.entity)).filter(isLive).map(entity => entity.id),
     });
 
-    let ticks = 0;
-    system.runInterval(() => {
+    // Runs while someone is coached or a card is fading out (BSE-31); strays go in the shared slow sweep (BSE-20).
+    coachLoop = wakeLoop(1, () => {
+        if (coaches.size === 0 && fading.length === 0) return false;
         const tick = system.currentTick;
         while (fading.length > 0 && tick >= fading[0].removeAt) {
             const gone = fading.shift();
@@ -663,6 +666,9 @@ export function startCoachLoop() {
                 try { tickCoach(coach, tick); } catch (e) { console.warn(`[EB] coach failed: ${e}`); }
             }
         }
-        if (ticks++ % SWEEP_TICKS === 0) sweepStrays();
-    }, 1);
+    }, () => coaches.size > 0 || fading.length > 0);
+    slowSweep(sweepStrays);
 }
+
+/** @type {ReturnType<typeof wakeLoop> | undefined} */
+let coachLoop;

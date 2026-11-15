@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { world, system, Player } from "@minecraft/server";
+import { world, system } from "@minecraft/server";
 import { allPlayers } from "../utils/Items.js";
 import { GUIDE_LANGUAGES } from "./GuideBookData.js";
 import {
@@ -7,6 +7,8 @@ import {
 } from "./LanguagePickerData.js";
 import { setBookLanguage, getBookLanguage, hasBookLanguage, getCursor } from "./Settings.js";
 import { spotInFront, yawToward } from "../utils/InFront.js";
+import { wakeLoop, slowSweep } from "../utils/wake-loop.js";
+import { onPlayerHit } from "../utils/panel-hits.js";
 
 const PICKER_ID      = "eb:language_picker";
 const DISTANCE       = 2.7;
@@ -16,7 +18,6 @@ const LEASH          = 5;
 const SHUT_TICKS     = 7;
 const CLICK_COOLDOWN = 4;
 const AIM_MARGIN     = 2;
-const SWEEP_TICKS    = 200;
 const CAMERA_ABOVE_HEAD = 0.1;
 const BUTTON_INDEX   = PICKER_TILES.length + 1;
 const DIMENSIONS     = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"];
@@ -124,6 +125,7 @@ export function openPicker(player, { pinned = false } = {}) {
         try { entity.setProperty("eb:selected", selected); } catch {}
     }
     pickers.set(player.id, { entity, origin, yaw, hover: 0, selected, shutAt: null, pinned });
+    pickerLoop?.wake();
     sound(player, "item.book.put", 1.2, 0.6);
 }
 
@@ -192,15 +194,12 @@ export function startLanguagePicker() {
         system.run(() => pickerClick(player));
     });
 
-    world.afterEvents.entityHitEntity.subscribe(ev => {
-        if (ev.hitEntity?.typeId !== PICKER_ID) return;
-        if (!(ev.damagingEntity instanceof Player)) return;
-        pickerClick(ev.damagingEntity);
-    });
+    onPlayerHit([PICKER_ID], (player) => pickerClick(player));
 
-    let ticks = 0;
-    system.runInterval(() => {
-        if (pickers.size > 0) {
+    // Runs while a picker is open (BSE-31); strays left by a crash go in the shared slow sweep (BSE-20).
+    pickerLoop = wakeLoop(1, () => {
+        if (pickers.size === 0) return false;
+        {
             const online = new Map(allPlayers().map(player => [player.id, player]));
             for (const [playerId, picker] of pickers) {
                 try {
@@ -223,6 +222,9 @@ export function startLanguagePicker() {
                 } catch {}
             }
         }
-        if (ticks++ % SWEEP_TICKS === 0) sweepStrays();
-    }, 1);
+    }, () => pickers.size > 0);
+    slowSweep(sweepStrays);
 }
+
+/** @type {ReturnType<typeof wakeLoop> | undefined} */
+let pickerLoop;

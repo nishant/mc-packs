@@ -41,6 +41,8 @@ function builder(x0, held, gameMode = "survival") {
     setDynamicProperty: (k, v) => { if (v === undefined) props.delete(k); else props.set(k, v); },
     getComponent: () => ({ container: { size: 36, getItem: (i) => slots.get(i), setItem: (i, it) => { if (it) slots.set(i, it); else slots.delete(i); } } }),
     sendMessage() {}, playSound() {}, onScreenDisplay: { setActionBar: (text) => bars.push(text) }, hasTag: () => false,
+    // Previews go to the builder only (BSE-05); outlines are line segments (eb:edge_*) at block corners.
+    spawnParticle: (id, at) => { particles.push({ id, at, owner: true }); },
   };
   p.bars = bars;
   p.slots = slots;

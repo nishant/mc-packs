@@ -94,7 +94,17 @@ function setHand(player, typeId) {
     handDirty.delete(id);
     if (isBookId(next)) bookHands.set(id, player); else bookHands.delete(id);
     if (next === TUTORIAL_BOOK_ID) tutorialHands.set(id, player); else tutorialHands.delete(id);
-    if (!had || prev !== next) markHolderDirty(id);
+    if (!had || prev !== next) {
+        markHolderDirty(id);
+        if (isBookId(next) || next === TUTORIAL_BOOK_ID) for (const wake of bookWakers) wake();
+    }
+}
+
+/** @type {(() => void)[]} loops that walk only book holders and sleep while there are none (wake-loop.js) */
+const bookWakers = [];
+/** @param {() => void} wake called when someone starts holding the Building Book or the Tutorial Book */
+export function onBookHand(wake) {
+    bookWakers.push(wake);
 }
 
 /** Reads the hand of every player whose hand changed since the last look (once each). */
@@ -143,6 +153,9 @@ export function refreshHand(player) {
 export function markHandDirty(player) {
     if (!player?.id) return;
     handDirty.set(player.id, player);
+    // Whoever looks next reads it: the tool gate does, so its loops wake for one look (BSE-31: nothing polls the
+    // hands every tick any more).
+    markHolderDirty(player.id);
 }
 
 /**

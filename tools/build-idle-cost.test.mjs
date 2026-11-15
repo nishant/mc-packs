@@ -60,6 +60,26 @@ test("O48: 40 survival players with building off cost almost no native calls per
   assert.ok(perTick.playerLists <= 0.1, `player list fetches per tick ${perTick.playerLists}`);
 });
 
+test("BSE-31: with nobody building no loop runs every tick, and a builder wakes them", async () => {
+  const { runningLoops } = await import("../packs/build_bp/scripts/utils/wake-loop.js");
+  const { setMode } = await import("../packs/build_bp/scripts/core/PlayerState.js");
+  const { visualizationIdle } = await import("../packs/build_bp/scripts/utils/tool-gate.js");
+  mc.flushIntervals(40);
+  assert.equal(runningLoops(), 0, "every on-demand loop is asleep");
+  // The loops still registered: the hand sweep every 10 ticks and the stray sweep every 300 (and nothing else).
+  const before = mc.intervalCount();
+  assert.ok(before <= 3, `${before} intervals left with nobody building`);
+  const p = idlePlayer(200);
+  mc.flushIntervals(12);
+  setMode(p, "line");
+  mc.flushIntervals(2);
+  assert.ok(!visualizationIdle(), "a builder with a block in hand opens the gate");
+  assert.ok(runningLoops() >= 2, `${runningLoops()} loops run while someone builds`);
+  setMode(p, "disable");
+  mc.flushIntervals(30);
+  assert.equal(runningLoops(), 0, "and they stop when nobody does");
+});
+
 test("a hotbar slot set without an event is still noticed: at once while building, within half a second otherwise", async () => {
   const { buildingBookHands, tutorialBookHands } = await import("../packs/build_bp/scripts/utils/Items.js");
   const { setMode } = await import("../packs/build_bp/scripts/core/PlayerState.js");

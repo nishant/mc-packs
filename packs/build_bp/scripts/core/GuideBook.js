@@ -1,6 +1,8 @@
 // @ts-nocheck
-import { world, system, Player } from "@minecraft/server";
-import { idleSkip, allPlayers, tutorialBookHands } from "../utils/Items.js";
+import { world, system } from "@minecraft/server";
+import { idleSkip, allPlayers, tutorialBookHands, onBookHand } from "../utils/Items.js";
+import { wakeLoop, slowSweep } from "../utils/wake-loop.js";
+import { onPlayerHit } from "../utils/panel-hits.js";
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { GUIDE_SPREADS, GUIDE_CHAPTER_SPREADS, GUIDE_LANGUAGES } from "./GuideBookData.js";
 import { getBookLanguage, hasBookLanguage } from "./Settings.js";
@@ -19,7 +21,6 @@ const OPEN_CHECKS   = 3;
 const CLOSE_CHECKS  = 2;
 const TURN_COOLDOWN = 4;
 const SHUT_TICKS    = 14;
-const SWEEP_CHECKS  = 100;
 const DIMENSIONS    = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"];
 
 const books      = new Map();
@@ -61,6 +62,7 @@ function removeBook(book) {
 }
 
 function closeBook(player, playerId = player?.id) {
+    guideLoop?.wake();
     const book = books.get(playerId);
     books.delete(playerId);
     if (!isLive(book)) return;
@@ -97,6 +99,7 @@ function finishShutting() {
 }
 
 function openBook(player) {
+    guideLoop?.wake();
     const at  = spotForBook(player);
     const yaw = yawToward(at, player.location);
     let book;
@@ -210,17 +213,13 @@ export function startGuideBook() {
         system.run(() => turn(player, 1));
     });
 
-    world.afterEvents.entityHitEntity.subscribe(ev => {
-        if (ev.hitEntity?.typeId !== GUIDE_ID) return;
-        if (!(ev.damagingEntity instanceof Player)) return;
-        turn(ev.damagingEntity, -1);
-    });
+    onPlayerHit([GUIDE_ID], (player) => turn(player, -1));
 
-    let checks = 0;
     /** Players with the tutorial book in hand, open or choosing its language. */
     const guideBusy = new WeakSet();
     const guideClock = createIdleClock();
-    system.runInterval(() => {
+    // Runs while someone holds the Tutorial Book or a book is open or closing (BSE-31).
+    guideLoop = wakeLoop(CHECK_TICKS, () => {
         // Nobody else is looked at: who holds the Tutorial Book comes from the hand events, without a read.
         const holders = tutorialBookHands();
         for (const [id, player] of holders) watch.set(id, player);
@@ -290,7 +289,11 @@ export function startGuideBook() {
             }
         }
         finishShutting();
-
-        if (checks++ % SWEEP_CHECKS === 0) sweepStrays();
-    }, CHECK_TICKS);
+        return holders.size > 0 || watch.size > 0 || books.size > 0 || shutting.size > 0;
+    }, () => tutorialBookHands().size > 0 || watch.size > 0 || books.size > 0 || shutting.size > 0);
+    onBookHand(guideLoop.wake);
+    slowSweep(sweepStrays);
 }
+
+/** @type {ReturnType<typeof wakeLoop> | undefined} */
+let guideLoop;

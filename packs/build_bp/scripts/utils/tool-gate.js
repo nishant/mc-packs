@@ -123,9 +123,18 @@ export function createToolGate() {
 
 const gate = createToolGate();
 
+/** @type {(() => void)[]} the loops that sleep while the gate is idle (wake-loop.js): a mark wakes them */
+const wakers = [];
+
+/** @param {() => void} wake called on every mark (a hand, mode, anchor or modifier change, a spawn) */
+export function onHolderMark(wake) {
+    wakers.push(wake);
+}
+
 /** @param {string} id */
 export function markHolderDirty(id) {
     gate.mark(id);
+    for (const wake of wakers) wake();
 }
 
 /** @param {string} id */

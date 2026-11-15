@@ -3,6 +3,13 @@ import { world, system } from "@minecraft/server";
 import { openPanel, openPanelName, closePanel, releasePanel } from "./EntityPanel.js";
 import { usesFloatingUI } from "../utils/CustomUI.js";
 import { isBook, heldItem } from "../utils/Items.js";
+import { wakeLoop } from "../utils/wake-loop.js";
+
+// Runs while a book press is being timed (BSE-31).
+const pressLoop = wakeLoop(1, () => {
+    if (presses.size === 0) return false;
+    watchPresses();
+}, () => presses.size > 0);
 
 const WHEEL       = "ring";
 const HOLD_TICKS  = 5;
@@ -44,6 +51,7 @@ export function bookPressed(player, onTap) {
         player, tap: onTap, at: system.currentTick, opened: false,
         started: startedAt.get(player.id) === system.currentTick,
     });
+    pressLoop.wake();
 }
 
 export function cleanupHoldWheel(playerId) {
@@ -73,31 +81,31 @@ export function startHoldWheel() {
         presses.delete(ev.source.id);
         if (openPanelName(ev.source.id) === WHEEL) releasePanel(ev.source);
     });
+}
 
-    system.runInterval(() => {
-        const tick = system.currentTick;
-        for (const [playerId, press] of presses) {
-            if (!press.player || press.player.isValid !== true) {
-                presses.delete(playerId);
-                closePanel(playerId);
-                continue;
-            }
-            const held = tick - press.at;
-            if (!press.started) {
-                if (held >= TAP_TICKS) tap(playerId, press);
-                continue;
-            }
-            let holding = false;
-            try { holding = isBook(heldItem(press.player)); } catch {}
-            if (!holding) {
-                presses.delete(playerId);
-                if (press.opened && openPanelName(playerId) === WHEEL) closePanel(playerId);
-            } else if (!press.opened && held >= HOLD_TICKS) {
-                press.opened = true;
-                if (!openWheel(press.player)) tap(playerId, press);
-            } else if (press.opened && openPanelName(playerId) !== WHEEL) {
-                presses.delete(playerId);
-            }
+function watchPresses() {
+    const tick = system.currentTick;
+    for (const [playerId, press] of presses) {
+        if (!press.player || press.player.isValid !== true) {
+            presses.delete(playerId);
+            closePanel(playerId);
+            continue;
         }
-    }, 1);
+        const held = tick - press.at;
+        if (!press.started) {
+            if (held >= TAP_TICKS) tap(playerId, press);
+            continue;
+        }
+        let holding = false;
+        try { holding = isBook(heldItem(press.player)); } catch {}
+        if (!holding) {
+            presses.delete(playerId);
+            if (press.opened && openPanelName(playerId) === WHEEL) closePanel(playerId);
+        } else if (!press.opened && held >= HOLD_TICKS) {
+            press.opened = true;
+            if (!openWheel(press.player)) tap(playerId, press);
+        } else if (press.opened && openPanelName(playerId) !== WHEEL) {
+            presses.delete(playerId);
+        }
+    }
 }
