@@ -5,6 +5,7 @@ import { CONFIG, DEFAULTS } from "./config.js";
 import { RELEASE } from "./release.js";
 import { get, set } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 
 const PROP_NEWS = "news:news"; // world: JSON { title, body }
 const PROP_REVISION = "news:revision"; // world: bumped when news should be re-shown
@@ -43,23 +44,14 @@ const writeJson = (prop, value) => world.setDynamicProperty(prop, JSON.stringify
 /** @returns {{ title: string, body: string }} */
 const getNews = () => ({ ...DEFAULTS.news, ...readJson(PROP_NEWS, {}) });
 
-/** @type {Set<string> | undefined} the pack folders that answered the last realm:help_ping (undefined: not asked yet) */
+/** Which packs are installed: one census for the whole script context (scripts/census.js). */
+const census = createCensus("news_bp", onScriptEvent);
+/** @type {Set<string> | undefined} the installed pack folders (undefined: the census hasn't answered yet) */
 let installedPacks;
-/** @type {Set<Set<string>>} answer sets of pings still waiting */
-const pongs = new Set();
 
-/** Asks which packs are installed (each answers /realm:help's ping with its folder). */
+/** Waits for the installed-packs list (at once after the census a few seconds after the world loads). */
 async function askInstalled() {
-  /** @type {Set<string>} */
-  const got = new Set(["news_bp"]);
-  pongs.add(got);
-  try {
-    system.sendScriptEvent("realm:help_ping", "");
-    await system.waitTicks(10);
-  } finally {
-    pongs.delete(got);
-  }
-  installedPacks = got;
+  installedPacks = await census.whenReady();
 }
 
 /** The default tips for the packs installed here (all of them before the first answer). */
@@ -252,7 +244,7 @@ system.runInterval(() => {
 
 async function broadcastTip() {
   minutesSinceTip = 0;
-  await askInstalled(); // packs can be added or removed while the world runs
+  if (!installedPacks) await askInstalled(); // packs can't change while the world runs: a restart reloads every script
   const tips = getTips();
   if (tips.length === 0) return;
   world.sendMessage(CONFIG.tipPrefix + tips[tipIndex++ % tips.length]);
@@ -600,9 +592,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 onScriptEvent(
-  ["realm:help_ping", "realm:help_pong"],
-  ({ id, message }) => {
+  "realm:help_ping",
+  ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "news_bp");
-    else if (id === "realm:help_pong") for (const got of pongs) got.add(message); // askInstalled
   },
 );

@@ -12,6 +12,9 @@ import { OP_COLOR, SETUP, SIZES, SIZE_OPTIONS } from "./presets.js";
 import { alive, genOf } from "./lifecycle.js";
 import { offScriptEvent, onScriptEvent } from "./script-events.js";
 
+/** The packs whose options the Server size presets set: only they answer its realm:cfg_ping. */
+const SIZE_PACKS = [...new Set(SIZE_OPTIONS.map((o) => o.pack))];
+
 const TITLE = "Realm Configuration";
 /** World: { d: {step: 1}, s: {step: 1}, f?: 1 finished, x?: 1 dismissed, size?: "small" | "large" } (only ids from SETUP). */
 const STATE_PROP = "admin:setup";
@@ -164,7 +167,7 @@ export async function facts(ctx, player, withSize = false) {
       ctx.pingZones();
       system.sendScriptEvent("realm:npc_places_ping", "{}");
       system.sendScriptEvent("realm:waystones_known_ping", JSON.stringify({ player: player.id }));
-      if (withSize) system.sendScriptEvent("realm:cfg_ping", JSON.stringify({ id }));
+      if (withSize) system.sendScriptEvent("realm:cfg_ping", JSON.stringify({ id, packs: SIZE_PACKS }));
       await system.waitTicks(ctx.answerTicks());
       // a long answer comes in parts: wait once more if a pack said more parts are coming (as sizeOptions does)
       if ((folkParts > 0 && folk.size < folkParts) || (wayParts > 0 && ways.size < wayParts)) await system.waitTicks(ctx.answerTicks());
@@ -465,7 +468,7 @@ async function sizeOptions(ctx) {
       got.set(m.pack, g);
     },
     async () => {
-      system.sendScriptEvent("realm:cfg_ping", JSON.stringify({ id }));
+      system.sendScriptEvent("realm:cfg_ping", JSON.stringify({ id, packs: SIZE_PACKS }));
       await system.waitTicks(ctx.answerTicks());
       if (!complete()) await system.waitTicks(ctx.answerTicks()); // a long answer comes in parts
     }

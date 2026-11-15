@@ -22,6 +22,7 @@ import { get, onChange } from "./settings.js";
 import { facts, markOf, remind, sizePage, state as setupState, statusOf, wizard } from "./setup.js";
 import { allZones, pingZones } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 
 // Realm Configuration: one item, one menu, every realm: command. Every player gets the item and sees the
 // commands they may use; operators see everything, their own entries in red. The commands come from
@@ -75,34 +76,17 @@ const errText = (e) => plain(e instanceof Error ? e.message : String(e)).split("
 // Which packs are installed (they answer /realm:help's ping)
 // ---------------------------------------------------------------------------
 
-/** @type {Set<Set<string>>} */
-const listening = new Set();
-/** @type {{ tick: number, set: Set<string> | undefined }} */
-let installedCache = { tick: -1e9, set: undefined };
+/** Which packs are installed: one census for the whole script context (scripts/census.js). */
+const census = createCensus("admin_bp", onScriptEvent);
 
-onScriptEvent(
-  ["realm:help_pong", "realm:help_ping"],
-  ({ id, message }) => {
-    if (id === "realm:help_pong") for (const s of listening) s.add(message);
-    // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-    else if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "admin_bp");
-  },
-);
+onScriptEvent("realm:help_ping", ({ id }) => {
+  // /realm:help lists this pack while it's installed: answer its ping with the folder name.
+  if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "admin_bp");
+});
 
-/** The installed pack folders, or undefined if nobody answered (then every command shows). */
+/** The installed pack folders (the census a few seconds after the world loads; at once after it). */
 async function installed() {
-  if (installedCache.set && system.currentTick - installedCache.tick < 1200) return installedCache.set;
-  /** @type {Set<string>} */
-  const got = new Set();
-  listening.add(got);
-  try {
-    system.sendScriptEvent("realm:help_ping", "");
-    await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10));
-  } finally {
-    listening.delete(got);
-  }
-  installedCache = { tick: system.currentTick, set: got.size ? got : undefined };
-  return installedCache.set;
+  return census.ready() ? census.installed() : await census.whenReady();
 }
 
 /** Commands this player may run, from installed packs. @param {Player} player */

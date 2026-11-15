@@ -29,6 +29,7 @@ import { PREFABS, turn } from "./prefabs.js";
 import { get, getFor } from "./settings.js";
 import { protectedBox } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 import { spreadPlayers } from "./spread.js";
 import { spawnFresh } from "./spawn.js";
 
@@ -388,10 +389,8 @@ const tabletCount = (d) => TABLETS.reduce((n, _, i) => n + (hasTablet(d, i) ? 1 
 
 /** Main acts each player has finished, from realm:saga_progress. @type {Map<string, number>} */
 const acts = new Map();
-/** Installed packs (realm:help_pong), refreshed now and then. @type {Set<string>} */
-let installed = new Set();
-/** @type {Set<string> | undefined} */
-let scanning;
+/** Installed packs: one census for the whole script context (scripts/census.js; packs can't change while it runs). */
+const census = createCensus("atlas_bp", onScriptEvent);
 /** Story places and camps (realm:place_ready). @type {Map<string, { dim: string, x: number, z: number }>} */
 const places = new Map();
 /** The Realm day from realm:calendar, when heard. @type {number | undefined} */
@@ -399,15 +398,7 @@ let realmDay;
 /** Claims check answers waiting. @type {Map<string, (claims: number) => void>} */
 const claimAsks = new Map();
 
-function scanPacks() {
-  scanning = new Set();
-  send("realm:help_ping", {});
-  system.runTimeout(() => {
-    if (scanning) installed = scanning;
-    scanning = undefined;
-  }, 40);
-}
-const sagaInstalled = () => installed.has("saga_bp");
+const sagaInstalled = () => census.installed().has("saga_bp");
 
 /** The Realm day (Townsfolk's counter when it's there, else the world's day). */
 function today() {
@@ -421,13 +412,13 @@ function today() {
 
 /** Finished main acts (0-5); without Story Questlines every tablet reads in full. @param {Player} player */
 function actOf(player) {
-  if (!sagaInstalled() && installed.size) return 5;
+  if (!sagaInstalled() && census.ready()) return 5;
   return acts.get(player.id) ?? pdata(player).a ?? 0;
 }
 
 /** Asks Land Claims whether any claim reaches within `r` of x, z (no answer within a second: none). @param {number} x @param {number} z @param {number} r */
 function claimsNear(x, z, r) {
-  if (installed.size && !installed.has("claims_bp")) return Promise.resolve(0);
+  if (census.ready() && !census.installed().has("claims_bp")) return Promise.resolve(0);
   const id = `atlas${system.currentTick}${Math.floor(Math.random() * 1e6)}`;
   return new Promise((resolve) => {
     claimAsks.set(id, resolve);
@@ -1302,7 +1293,7 @@ function poolDust(player, rec) {
     return;
   }
   const n = Math.max(1, Number(CONFIG.poolFlour) || 2);
-  if (installed.has("cooking_bp") || !installed.size) {
+  if (census.installed().has("cooking_bp") || !census.ready()) {
     send("realm:ingredient_give", { player: player.id, ingredient: "starwright_flour", amount: n });
     player.sendMessage(`§d[Atlas] Star-dust gathers in your hands: Starwright Flour x${n} (Kitchen).`);
   } else {
@@ -1867,12 +1858,8 @@ function debug(msg) {
 const EVENTS = new Set(["realm:saga_progress", "realm:place_ready", "realm:sky_event", "realm:calendar", "realm:claims_check_result", "realm:atlas_debug", "realm:atlas_ping"]);
 
 onScriptEvent(
-  ["realm:help_pong", ...EVENTS],
+  [...EVENTS],
   ({ id, message, sourceEntity }) => {
-    if (id === "realm:help_pong") {
-      scanning?.add(message.trim());
-      return;
-    }
     if (!EVENTS.has(id)) return;
     /** @type {any} */
     let msg;
@@ -1949,7 +1936,6 @@ world.afterEvents.worldLoad.subscribe(() => {
   loadWorld();
   readyAt = Date.now() + 15000;
   system.runTimeout(() => {
-    scanPacks();
     send("realm:place_ping", {});
     send("realm:saga_progress_ping", {});
   }, 60);
@@ -1964,7 +1950,6 @@ world.afterEvents.worldLoad.subscribe(() => {
   }, 120);
   for (const e of world.getDimension(OVERWORLD).getEntities({ tags: [MOB_TAG] })) sweepMob(e);
 });
-system.runInterval(scanPacks, 12000);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (initialSpawn) send("realm:saga_progress_ping", {});

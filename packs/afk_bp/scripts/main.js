@@ -203,11 +203,16 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
   if (dimension === "minecraft:overworld" || dimension === "overworld") setThundering(newWeather === WeatherType.Thunder);
 });
 
+/** The sleep status last put on the bars, and when: an unchanged one is drawn again every other check, not every second. */
+let lastStatus = "";
+let statusAt = -Infinity;
+
 function checkSleep() {
   const all = world.getAllPlayers();
   const sleeping = all.filter((p) => p.isSleeping);
   if (sleeping.length === 0) {
     sleepTicks = 0;
+    lastStatus = "";
     return;
   }
 
@@ -223,14 +228,20 @@ function checkSleep() {
   const awake = counted.filter((p) => !p.isSleeping);
   const names = awake.length && awake.length <= 3 ? ` §7- awake: ${awake.map((p) => p.name).join(", ")}` : "";
   const status = `§eZzz ${sleeping.length}/${needed} sleeping${names}${afkCount ? ` §7(${afkCount} AFK ignored)` : ""}`;
-  for (const p of all) {
-    try {
-      if (p.dimension.id !== "minecraft:overworld") continue;
-      // The action bar protocol: other bar writers (the Coordinates HUD...) leave the status alone until the next check.
-      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: CHECK_TICKS * 2, from: "afk_bp" }));
-      p.onScreenDisplay.setActionBar(status);
-    } catch {
-      // left meanwhile: the night still gets its count
+  const now = system.currentTick;
+  // A new count goes out at once; the same one again every 2 checks (the hold covers 3, so nothing redraws between).
+  if (status !== lastStatus || now - statusAt >= CHECK_TICKS * 2) {
+    lastStatus = status;
+    statusAt = now;
+    for (const p of all) {
+      try {
+        if (p.dimension.id !== "minecraft:overworld") continue;
+        // The action bar protocol: other bar writers (the Coordinates HUD...) leave the status alone until after the next draw.
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: CHECK_TICKS * 3, from: "afk_bp" }));
+        p.onScreenDisplay.setActionBar(status);
+      } catch {
+        // left meanwhile: the night still gets its count
+      }
     }
   }
 

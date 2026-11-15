@@ -160,3 +160,87 @@ test("the Large profile allows personal tickers with this Realm's enabled defaul
     assert.match(presets, new RegExp(`pack: "stats_bp", key: "${key}", large: true`));
   }
 });
+
+/** The answer to one realm:cfg_ping, as the old code built it: the whole envelope stringified again for every option. */
+function oldAnswer(req, pack, title, described) {
+  const bytes = (s) => {
+    let n = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      n += c < 0x80 ? 1 : c < 0x800 ? 2 : c >= 0xd800 && c < 0xdc00 ? 2 : 3;
+    }
+    return n;
+  };
+  const envelope = (options, part, parts) => JSON.stringify({ id: req.id, pack, title, part, parts, options });
+  const parts = [[]];
+  for (const o of described) {
+    const last = parts.at(-1);
+    if (last.length && bytes(envelope([...last, o], 99, 99)) > 2048) parts.push([o]);
+    else last.push(o);
+  }
+  return parts.map((options, i) => envelope(options, i + 1, parts.length));
+}
+
+function schemaFixture(count) {
+  const sent = [];
+  const handlers = [];
+  const options = [];
+  for (let i = 0; i < count; i++) {
+    const help = `Option ${i} ${"é".repeat(i % 7)}${"x".repeat((i * 37) % 160)} §7gray`;
+    if (i % 3 === 0) options.push({ key: `p${i}`, scope: "player", type: "bool", label: `Player ${i}`, help, default: i % 2 === 0 });
+    else options.push({ key: `w${i}`, scope: "world", type: "int", label: `World ${i}`, help, min: 0, max: 100 + i });
+  }
+  const BASE = Object.fromEntries(options.filter((o) => o.scope === "world").map((o, i) => [o.key, i]));
+  class Player {
+    getDynamicProperty(key) {
+      return key === "big:pref" ? JSON.stringify({ p0: false, p3: true }) : undefined;
+    }
+  }
+  const player = new Player();
+  const context = {
+    Player,
+    system: { sendScriptEvent: (id, message) => sent.push({ id, message }) },
+    world: { getDynamicProperty: () => undefined, setDynamicProperty() {}, getEntity: (id) => (id === "P1" ? player : undefined) },
+    console,
+    handlers,
+    OPTS: options,
+    BASE,
+  };
+  runInNewContext(`${factory}
+globalThis.api = createSettings({ PACK: "big_bp", PREFIX: "big", TITLE: "Big Pack", BASE, OPTIONS: OPTS, onScriptEvent: (ids, fn) => handlers.push({ ids, fn }) });`, context);
+  const ping = (req) => {
+    sent.length = 0;
+    for (const h of handlers) if (h.ids.includes("realm:cfg_ping")) h.fn({ id: "realm:cfg_ping", message: JSON.stringify(req) });
+    return sent.filter((e) => e.id === "realm:cfg_schema").map((e) => e.message);
+  };
+  return { ping, options };
+}
+
+test("cfg_schema parts are byte-identical to the old whole-envelope packing", () => {
+  for (const count of [0, 1, 5, 40, 120]) {
+    const { ping } = schemaFixture(count);
+    for (const req of [{ id: "a1" }, { id: "b2", player: "P1" }, { player: "P1" }]) {
+      const got = ping(req);
+      const described = got.flatMap((m) => JSON.parse(m).options);
+      assert.deepEqual(got, oldAnswer(req, "big_bp", "Big Pack", described), `${count} options, ${JSON.stringify(req)}`);
+      assert.ok(got.every((m) => Buffer.byteLength(m) <= 2048), "every part fits");
+      if (count >= 40) assert.ok(got.length > 1, "a long answer comes in parts");
+    }
+  }
+});
+
+test("a cfg_ping that names other packs gets no answer from this one", () => {
+  const { ping } = schemaFixture(5);
+  assert.equal(ping({ id: "x", pack: "other_bp" }).length, 0);
+  assert.equal(ping({ id: "x", packs: ["other_bp", "more_bp"] }).length, 0);
+  assert.equal(ping({ id: "x", pack: "big_bp" }).length, 1);
+  assert.equal(ping({ id: "x", packs: ["other_bp", "big_bp"] }).length, 1);
+  assert.equal(ping({ id: "x" }).length, 1);
+});
+
+test("a player's answer reads their saved preferences", () => {
+  const { ping } = schemaFixture(6);
+  const opts = ping({ id: "p", player: "P1" }).flatMap((m) => JSON.parse(m).options);
+  assert.equal(opts.find((o) => o.key === "p0").value, false);
+  assert.equal(opts.find((o) => o.key === "p3").value, true);
+});

@@ -261,7 +261,7 @@ for (const pack of selected) {
  * Modules that have no module-level per-pack state and no relative imports, so one copy can serve every pack.
  * Keep script-events.js, side.js and zones.js out: they hold per-pack state or import script-events.js.
  */
-const SHARED = ["diag-core.js", "settings-core.js", "tether.js", "owed.js", "name-labels.js", "spread.js", "gossip.js", "spawn.js", "prune.js", "weather-plan.js"];
+const SHARED = ["diag-core.js", "settings-core.js", "tether.js", "owed.js", "name-labels.js", "spread.js", "gossip.js", "spawn.js", "prune.js", "weather-plan.js", "census.js"];
 /** Relative import specifiers: `from "./x.js"`, `import "./x.js"`, `import("./x.js")`. */
 const RELATIVE_IMPORT = /(\bfrom\s*|\bimport\s*\(?\s*)(["'])(\.{1,2}\/[^"'\n]*)\2/g;
 

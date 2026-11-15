@@ -2,9 +2,9 @@ import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { PACKS } from "./catalog.js";
-import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 
 /** @typedef {typeof PACKS[number]} Pack */
 
@@ -12,32 +12,21 @@ const SELF = "help_bp";
 const ALL = "all";
 
 // ---------------------------------------------------------------------------
-// Which packs are installed: each one answers "realm:help_ping" with its folder
+// Which packs are installed: the context's own packs, and the others from one realm:help_ping census at world load
+// (scripts/census.js), so /realm:help sends no events and opens in the tick of the command
 // ---------------------------------------------------------------------------
 
-/** @type {Set<Set<string>>} the answer sets of pings still waiting */
-const waiting = new Set();
+const census = createCensus(SELF, onScriptEvent);
 
-onScriptEvent(
-  ["realm:help_pong", "realm:help_ping"],
-  ({ id, message }) => {
-    if (id === "realm:help_pong") for (const answers of waiting) answers.add(message);
-    // Other packs ping too (the Realm Configuration menu lists /realm:help only while it's installed).
-    else if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", SELF);
-  },
-);
+// Other packs ping too (the Realm Configuration menu lists /realm:help only while it's installed).
+onScriptEvent("realm:help_ping", ({ id }) => {
+  if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", SELF);
+});
 
 /** @returns {Promise<Pack[]>} the installed packs, in docs order */
 async function installed() {
-  const answers = new Set([SELF]);
-  waiting.add(answers);
-  try {
-    system.sendScriptEvent("realm:help_ping", "");
-    await system.waitTicks(CONFIG.answerTicks);
-  } finally {
-    waiting.delete(answers);
-  }
-  return PACKS.filter((p) => answers.has(p.folder));
+  const known = census.ready() ? census.installed() : await census.whenReady();
+  return PACKS.filter((p) => known.has(p.folder));
 }
 
 // ---------------------------------------------------------------------------

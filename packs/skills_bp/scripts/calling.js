@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecra
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { createCensus } from "./census.js";
 
 // Callings (docs/RPG_DESIGN.md section 5): at a total skill level of `callings.unlockTotal` a player picks one of
 // six Callings. Each has an active ability on the Calling Sigil and a talent tree of 3 tiers x 3 talents. Everything
@@ -207,7 +208,6 @@ world.afterEvents.worldLoad.subscribe(() => {
   }
   // Who is here: the Townsfolk pack (Hollis and Moss) changes where Callings can be chosen. The Realm Calendar's day.
   system.runTimeout(() => {
-    system.sendScriptEvent("realm:help_ping", "");
     system.sendScriptEvent("realm:calendar_ping", "{}");
     system.sendScriptEvent("realm:npc_flags_ping", "{}");
   }, 120);
@@ -805,8 +805,13 @@ world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
 // Choosing, spending, resetting, switching
 // ---------------------------------------------------------------------------
 
-/** Is the Townsfolk pack here (it answered a realm:help_ping)? Without it Callings are chosen from the menu anywhere. */
+/** Is the Townsfolk pack here (the context-wide installed-packs census)? Without it Callings are chosen from the menu anywhere. */
 let townsfolk = false;
+const census = createCensus("skills_bp", onScriptEvent);
+census.onAdded((folder) => {
+  if (folder === "npc_bp") townsfolk = true;
+});
+if (census.installed().has("npc_bp")) townsfolk = true;
 /** Players whose Brother Hollis is lost to the story (Story Questlines' `g:hollis`): Moss stands in. @type {Set<string>} */
 const hollisLost = new Set();
 
@@ -1067,7 +1072,6 @@ export function menuLabel(player) {
 
 onScriptEvent(
   [
-    "realm:help_pong",
     "realm:calendar",
     "realm:calling_ping",
     "realm:npc_flags",
@@ -1075,10 +1079,6 @@ onScriptEvent(
     "realm:npc_choose",
   ],
   ({ id, message }) => {
-    if (id === "realm:help_pong") {
-      if (message === "npc_bp") townsfolk = true;
-      return;
-    }
     if (id !== "realm:calendar" && id !== "realm:calling_ping" && id !== "realm:npc_flags" && id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     try {
       if (id === "realm:calling_ping") {
