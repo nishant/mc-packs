@@ -1,7 +1,7 @@
 import {selectNetherLayer} from "../packs/map_bp/scripts/nether-layer.js";
 import {RADAR_PIXELS,snapshotCoverage,rasterCadenceReady} from "../packs/map_bp/scripts/raster-work.js";
 import {reconstructRaster} from "../packs/map_bp/scripts/terrain-estimate.js";
-import {rollTerrainDemand} from "../packs/map_bp/scripts/rolling-demand.js";
+import {rollTerrainDemand,rollIncremental,ROLL_WALK_MAX} from "../packs/map_bp/scripts/rolling-demand.js";
 import { ManualScanner } from "../packs/map_bp/scripts/manual-scanner.js";
 import { MAP_PROFILE } from "../packs/map_bp/scripts/map-profile.js";
 import * as terrainWork from "../packs/map_bp/scripts/terrain-work.js";
@@ -78,7 +78,7 @@ export function fixture(count = 3, options = {}) {
         p.playSound = (...args) => messages.push(["sound", p.id, ...args]);
         p.onScreenDisplay = { setTitle: (...args) => { if (titleFailure) throw new Error("injected title failure"); messages.push(["title", p.id, ...args]); } };
     }
-    const context = { createStatePacketizer, selectNetherLayer,RADAR_PIXELS,snapshotCoverage,rasterCadenceReady,reconstructRaster, estimatedPaletteGlyph, rollTerrainDemand, ManualScanner, ...terrainWork, EXP: options.profile ?? MAP_PROFILE, ...terrainAPI, ...resetAPI, spendBudget: terrainAPI.spendBudget,
+    const context = { createStatePacketizer, selectNetherLayer,RADAR_PIXELS,snapshotCoverage,rasterCadenceReady,reconstructRaster, estimatedPaletteGlyph, rollTerrainDemand, rollIncremental, ROLL_WALK_MAX, ManualScanner, ...terrainWork, EXP: options.profile ?? MAP_PROFILE, ...terrainAPI, ...resetAPI, spendBudget: terrainAPI.spendBudget,
         ResidentTrace, DetailPersistence, isDetailStore, orderTerrainWork, CatchupWindow, FeatureEnvelope, SCAN_POLICY, Budget, oldestDue, CONFIG: config, G, overlayGlyph, SELF_ARROWS, PreviewPersistence,
         Player: class {
         }, CommandPermissionLevel: {Any:0,GameDirectors:1,Admin:2}, CustomCommandParamType: {}, CustomCommandStatus: {},

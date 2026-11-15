@@ -64,3 +64,42 @@ export function rollTerrainDemand(input){
  while(s<stale.length)out.push(stale[s++]);
  return{picks:out,nextFresh,nextRetry,stats};
 }
+
+/** A queue longer than this (picks still unread) is never walked whole by a roll: rollIncremental only adds to it. */
+export const ROLL_WALK_MAX = 256;
+/** @typedef {{store:import('./terrain.js').Store,picks:import('./terrain.js').Pick[],pos:number,at:number,previous:Point,current:Point,radius:number,now:number,maxAge:number,missRetry:number,failed?:Map<string,import('./terrain.js').Pick>}} IncrementalInput */
+/**
+ * The moving roll in time proportional to the move, not to the queue: the columns the move brought into the circle
+ * are appended (the leading edge, read after what is already queued) and the unknown columns right around the viewer
+ * go to the front. Picks the move took out of the circle stay queued and are dropped as they come up (the scanner's
+ * range check), so nothing already queued is walked. On BDS a whole-queue roll of about 1,000 picks took about 7 ms
+ * and a flier needs one every tick (map-radar-perf); rollTerrainDemand still reorders a short queue.
+ * @param {IncrementalInput} input mutates input.picks
+ */
+export function rollIncremental(input){
+ const{store,picks,pos,previous,current,radius,now,maxAge,missRetry}=input;
+ const stats={tailVisited:0,entered:0,exited:0,rawChecks:0,added:0,nearPromoted:0};
+ let nextFresh=Infinity,nextRetry=Infinity;
+ /** @param {number} key @param {number} x @param {number} z @param {number} [age] when it was queued, if it is @returns {RollingPick|undefined} */
+ const pickFor=(key,x,z,age=now)=>{
+  stats.rawChecks++;const sample=store.cols.get(key),valid=!!sample&&sample.valid!==false;
+  if(valid&&now-sample.tick<=maxAge){nextFresh=Math.min(nextFresh,sample.tick+maxAge+1);return undefined;}
+  const miss=store.miss.get(key);if(miss!==undefined&&now-miss<missRetry){nextRetry=Math.min(nextRetry,miss+missRetry);return undefined;}
+  const old=input.failed?.get(store.id+'|'+key),dx=x-current.x,dz=z-current.z;
+  return{wx:x,wz:z,key,resolution:COL,d:dx*dx+dz*dz,stale:valid,visible:true,queuedAt:old?.queuedAt??age,since:valid?now:now-maxAge};
+ };
+ for(const change of circleDelta(previous,current,radius,COL,colKey)){
+  if(change.kind==='exited'){stats.exited++;continue;}stats.entered++;
+  const p=pickFor(change.key,change.x,change.z);if(p){picks.push(p);stats.added++;}
+ }
+ /** @type {RollingPick[]} */const focus=[];
+ const cx=sampleCoord(current.x,COL),cz=sampleCoord(current.z,COL);
+ for(let z=-1;z<=1;z++)for(let x=-1;x<=1;x++){
+  const wx=cx+x*COL,wz=cz+z*COL,key=colKey(wx,wz,COL);if(key<0)continue;
+  // Inside the last circle it is already queued, since the plan was made: this copy keeps that age.
+  const inside=(wx-previous.x)**2+(wz-previous.z)**2<=radius*radius;
+  const p=pickFor(key,wx,wz,inside?Math.min(now,input.at):now);if(p&&!p.stale)focus.push(p);
+ }
+ if(focus.length){focus.sort((a,b)=>a.d-b.d||a.key-b.key);picks.splice(pos,0,...focus);stats.nearPromoted=focus.length;}
+ return{nextFresh,nextRetry,stats};
+}

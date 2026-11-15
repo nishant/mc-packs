@@ -59,7 +59,7 @@ import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetP
 import { MAP_PROFILE as EXP } from "./map-profile.js";
 import { MANUAL_SCAN_MAX_RADIUS, circleCandidates, circleAnchors, insideRadar, circularMarker, radarBadgeCells, circularMarkerNeighbors, orderLatticeWork } from "./terrain-work.js";
 import { ManualScanner } from "./manual-scanner.js";
-import { rollTerrainDemand } from "./rolling-demand.js";
+import { ROLL_WALK_MAX, rollIncremental, rollTerrainDemand } from "./rolling-demand.js";
 import { reconstructRaster } from "./terrain-estimate.js";
 import { RADAR_PIXELS, snapshotCoverage, rasterCadenceReady } from "./raster-work.js";
 import { selectNetherLayer } from "./nether-layer.js";
@@ -106,11 +106,11 @@ class LabDisabledPersistence {
 }
 function experimentNative() { return EXP.palette === "native"; }
 /** @typedef {import("./terrain.js").Pick & {d:number,stale:boolean,queuedAt:number,visible?:boolean}} LabPick */
-/** @type {Map<string,{key:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,lossSeq?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
+/** @type {Map<string,{key:string,geometryKey?:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,lossSeq?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
 const labPlans = new Map();
 /** @type {Map<string,{storeId:string,x:number,z:number,sample:import("./detail-persistence.js").Raw,wall:number}>} */
 const labPendingWrites = new Map();
-const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
+const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rolledIncremental:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
 const LAB_SAVE_LIMIT = 2048;
 
 /** Sorts fresh work without losing its original request age. Native4 can only seed one genuine2 anchor. */
@@ -1445,12 +1445,21 @@ function planFor(player, now,trustedRoster=false) {
   let version="";
   const sameFootprint = state && state.key === geometryKey && state.x === at.x && state.z === at.z;
   if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*.75)**2&&keptDemand(store,state,pr.revealRadius)){
+    if(old.picks.length-old.pos>ROLL_WALK_MAX){
+      // A long queue: add what the move brought in instead of walking it all (rollIncremental). Its order is not
+      // redone, so a reorder that comes due waits until the queue is short.
+      const inc=rollIncremental({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed});
+      old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;
+      state.key=geometryKey;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,inc.nextFresh);
+      if(inc.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,inc.nextRetry);retryAt.set(idOf(player),Math.min(retryAt.get(idOf(player))??Infinity,inc.nextRetry));}
+      labStats.rolled++;labStats.rolledIncremental++;labStats.rollEntered+=inc.stats.entered;labStats.rollRawChecks+=inc.stats.rawChecks;planTurn.made++;return old;
+    }
     // The rounded position (and so the geometry) is often the same as last time for a walker.
-    const geometry=state.key===geometryKey?state.geometry:northUpRadarGeometry(store.id,Math.round(at.x),Math.round(at.z),pr.radarRadius,R,state.geometry);
+    const geometry=(state.geometryKey??state.key)===geometryKey?state.geometry:northUpRadarGeometry(store.id,Math.round(at.x),Math.round(at.z),pr.radarRadius,R,state.geometry);
     const rerank=now>=(state.reorderAt??Infinity);
     const rolled=rollTerrainDemand({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,geometry,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed,rerank});
     if(rolled){old.picks=rolled.picks;old.pos=0;old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;old.rangeDeleted=undefined;
-      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh);
+      state.key=geometryKey;state.geometryKey=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh);
       if(rerank)state.reorderAt=now+80;if(rolled.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,rolled.nextRetry);retryAt.set(idOf(player),Math.min(retryAt.get(idOf(player))??Infinity,rolled.nextRetry));}
       labStats.rolled++;labStats.rollTail+=rolled.stats.tailVisited;labStats.rollEntered+=rolled.stats.entered;labStats.rollRawChecks+=rolled.stats.rawChecks;planTurn.made++;return old;
     }
@@ -1458,7 +1467,8 @@ function planFor(player, now,trustedRoster=false) {
   if(same&&sameFootprint&&(state.retryDeadline===undefined||now<state.retryDeadline)){
     const complete=old.pos>=old.picks.length;
     if(!complete&&now<(state.freshUntil??0)&&(!EXP.persistence||state.storeVersion===store.ver)&&keptDemand(store,state,pr.revealRadius)){
-      if(now>=(state.reorderAt??Infinity)){old.picks=labOrder(old.picks.slice(old.pos).map(p=>({...p,d:(p.wx-at.x)**2+(p.wz-at.z)**2,stale:p.stale===true,queuedAt:p.queuedAt??old.at,visible:"visible" in p?p.visible!==false:undefined})),now);old.pos=0;state.reorderAt=now+80;}
+      if(now>=(state.reorderAt??Infinity)&&old.picks.length-old.pos>ROLL_WALK_MAX)state.reorderAt=now+80; // a long queue keeps its order (a reorder walks and sorts it all)
+      else if(now>=(state.reorderAt??Infinity)){old.picks=labOrder(old.picks.slice(old.pos).map(p=>({...p,d:(p.wx-at.x)**2+(p.wz-at.z)**2,stale:p.stale===true,queuedAt:p.queuedAt??old.at,visible:"visible" in p?p.visible!==false:undefined})),now);old.pos=0;state.reorderAt=now+80;}
       return old;
     }
     // Any drained nonempty queue must be verified once: same-color renewals do not bump visual versions.
@@ -1469,7 +1479,7 @@ function planFor(player, now,trustedRoster=false) {
     }
   }
   version ||= terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);
-  const geometry = state?.key === geometryKey ? state.geometry : northUpRadarGeometry(store.id, Math.round(at.x), Math.round(at.z), pr.radarRadius, R,state?.geometry);
+  const geometry = state && (state.geometryKey ?? state.key) === geometryKey ? state.geometry : northUpRadarGeometry(store.id, Math.round(at.x), Math.round(at.z), pr.radarRadius, R,state?.geometry);
   const footprintKey=[store.id,pr.revealRadius,sampleCoord(at.x-pr.revealRadius,COL),sampleCoord(at.x+pr.revealRadius,COL),sampleCoord(at.z-pr.revealRadius,COL),sampleCoord(at.z+pr.revealRadius,COL)].join("|");
   const anchors=state?.footprintKey===footprintKey&&state.anchors?state.anchors:circleCandidates(at,pr.revealRadius,sampleCoord,colKey).anchors;
   const ages = new Map();
@@ -1505,7 +1515,7 @@ function planFor(player, now,trustedRoster=false) {
   const plan = { id: idOf(player), player, store, picks: labOrder(picks, now), dim, py, x: at.x, z: at.z,
     at: now, pos: 0, missed: 0, missRun: 0, failed: same ? old.failed : undefined };
   scanPlans.set(idOf(player), plan);
-  labPlans.set(idOf(player), { key: geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,lossSeq:store.lossSeq,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
+  labPlans.set(idOf(player), { key: geometryKey, geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,lossSeq:store.lossSeq,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
   if (nextRetry < Infinity) retryAt.set(idOf(player), nextRetry);
   planTurn.made++; labStats.planned++;
   return plan;
