@@ -77,7 +77,7 @@ const NEAR_RESEND_SQ = NEAR_RESEND_RANGE * NEAR_RESEND_RANGE;
  * `trustHandles`, of whether the tracked entities are still valid: every 10th sync. */
 const SWEEP_EVERY = 10;
 /** A helper is taken down only this far past `observerRange`, so a viewer at the edge doesn't remove and spawn it again. */
-const KEEP_MARGIN = 0;
+const KEEP_MARGIN = 4;
 /** Ticks between scans of whole dimensions for strays (a helper the tracked list lost). Loaded strays are removed on
  * their load event already, so this is only a backstop: once a minute (and on the first sync). */
 const STRAY_TICKS = 1200;
@@ -117,7 +117,7 @@ export function createNameLabels(opts) {
     trustHandles = false,
   } = opts;
   const resendSteps = syncTicks ? RESEND_TICKS.map((t) => Math.max(1, Math.round(t / syncTicks))) : NEAR_RESEND_STEPS;
-  const strayEvery = SWEEP_EVERY;
+  const strayEvery = syncTicks ? Math.max(1, Math.round(STRAY_TICKS / syncTicks)) : STRAY_SYNCS;
   /**
    * @type {Map<string, {
    *   target: Entity,
@@ -166,13 +166,13 @@ export function createNameLabels(opts) {
   };
 
   /**
-   * restoreFallback for a target with no helper, written once: later syncs trust it until the next check, a new
-   * entity or a new text. @param {string} key @param {Entity} target @param {string} name @param {boolean} check
+   * restoreFallback for a target with no helper; with trustHandles written once: later syncs trust it until the next
+   * check, a new entity or a new text. @param {string} key @param {Entity} target @param {string} name @param {boolean} check
    */
   const restoreOnce = (key, target, name, check) => {
     const tid = target.id;
     const was = restored.get(key);
-    if (!check && was && was.tid === tid && was.text === name) return;
+    if (!check && trustHandles && was && was.tid === tid && was.text === name) return;
     restoreFallback(target, name);
     restored.set(key, { tid, text: name });
   };
@@ -427,7 +427,8 @@ export function createNameLabels(opts) {
           entry.helper.teleport(anchor);
           entry.at = anchor;
         }
-        if (entry.targetTag === undefined) entry.targetTag = target.nameTag;
+        // Without trustHandles the target's own name tag is read every sync (the caller may rename it itself).
+        if (entry.targetTag === undefined || !trustHandles) entry.targetTag = target.nameTag;
         if (entry.targetTag !== targetWanted) {
           target.nameTag = targetWanted;
           entry.targetTag = targetWanted;

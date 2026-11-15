@@ -71,7 +71,11 @@ const LOOP_TICKS = 10; // facing, idle lines and keeping them on their spot
 const MISSING_EVERY = 4; // loops between checks for a missing NPC (2 s)
 const MISSING_CHECKS = 3; // checks in a row before a missing NPC is spawned again (6 s): its chunk may still be loading
 const LABEL_TICKS = 10; // how often the name labels are synced
-const AUDIT_TICKS = 200; // every 10 s, look for duplicates, leftovers and changed names
+// Every minute, look for duplicates, leftovers and changed names (each townsfolk is also audited when it loads, and the
+// loop checks a sunk post every 10 s while a player is near).
+const AUDIT_TICKS = 1200;
+const LIFT_EVERY = 20; // loops between checks for a post sunk into a block laid later (10 s)
+const SKIN_RETRY_TICKS = 1200; // a skin snapshot refused (an entity next to it) is tried again a minute later
 const OFFER_TICKS = 4; // how long other packs have to answer realm:npc_talk
 const MAX_OFFERS = 16;
 const TAP_COOLDOWN = 10;
@@ -79,7 +83,7 @@ const MOVE_DISTANCE = 1.5; // farther than this from where it belongs, an NPC is
 const SPOT_SHARED = 1.5; // two townsfolk's spots closer than this: operators are warned
 const SPOT_CLEAR = 0.9; // someone within this of an NPC's spot: it isn't put back there until they move off
 const TURN_STEP = 45; // degrees an NPC turns per loop at most, so it turns rather than snaps
-const TURN_MIN = 4; // smaller differences aren't worth a teleport
+const TURN_MIN = 10; // smaller differences aren't worth a teleport (a move packet to every viewer)
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -634,13 +638,20 @@ function audit(entity) {
   }
   handles.set(entity.id, entity);
   dress(entity, t);
-  if (!hasSkin(rec.id)) saveSkin(entity, rec.id); // the first snapshot of its skin (not while another townsfolk stands on it)
-  // A spot inside a block (sunk into a path laid later, or saved a block low): lifted and the NPC put on top.
-  if (liftSaved(rec)) {
-    const at = anchorOf(rec);
-    const st = stateOf(rec.id);
-    if (entity.dimension.id === rec.dim && loaded(entity.dimension, at)) entity.teleport(at, { rotation: { x: 0, y: st.yaw ?? rec.yaw } });
-  }
+  // The first snapshot of its skin (not while another entity stands next to it; after a refusal, a minute later).
+  if (system.currentTick >= (skinRetry.get(rec.id) ?? 0) && !hasSkin(rec.id) && !saveSkin(entity, rec.id)) skinRetry.set(rec.id, system.currentTick + SKIN_RETRY_TICKS);
+  liftOnto(rec, entity);
+}
+
+/**
+ * A spot inside a block (sunk into a path laid later, or saved a block low): lifted and the NPC put on top.
+ * @param {Placed} rec @param {Entity} entity
+ */
+function liftOnto(rec, entity) {
+  if (!liftSaved(rec)) return;
+  const at = anchorOf(rec);
+  const st = stateOf(rec.id);
+  if (entity.dimension.id === rec.dim && loaded(entity.dimension, at)) entity.teleport(at, { rotation: { x: 0, y: st.yaw ?? rec.yaw } });
 }
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
@@ -666,7 +677,6 @@ function auditAll() {
       console.warn(`[npc] audit: ${e}`);
     }
   }
-  updateLabels();
 }
 
 // An NPC that dies anyway (/kill) is spawned again at the next missing check, if anyone is around. (BDS 1.26 never
@@ -886,6 +896,7 @@ function loop() {
         continue;
       }
       stateOf(rec.id).missing = 0;
+      if (loops % LIFT_EVERY === 0) liftOnto(rec, entity);
       behave(rec, t, entity, lively, checkDim);
     } catch (e) {
       // A handle that went without an entityRemove (rare): dropped quietly, the next run looks it up again.
@@ -917,6 +928,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   for (const d of DIMENSIONS) tryCommand(world.getDimension(d), `tickingarea remove ${HOUSES_AREA}`);
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
+  updateLabels();
   system.runInterval(loop, LOOP_TICKS);
   // Every half second: they stand still (a speech line or a resend redraws at once), and each sync reads every
   // player near them (about 1 ms with 12 of them and 40 players around).
@@ -1854,6 +1866,8 @@ const SKIN_PREFIX = "realm_npc:";
 const SKIN_SAVE_AFTER = [100, 600, 2400]; // ticks after an operator opens the NPC editor (5 s, 30 s, 2 min)
 /** Townsfolk ids known to have a saved skin. @type {Set<string>} */
 const skins = new Set();
+/** Townsfolk id -> the tick before which the audit doesn't try its first skin snapshot again (one was refused). @type {Map<string, number>} */
+const skinRetry = new Map();
 
 /** @param {string} id */
 function hasSkin(id) {
@@ -1874,13 +1888,15 @@ function hasSkin(id) {
 function saveSkin(entity, id) {
   try {
     if (!entity.isValid) return false;
-    nameLabels.removeFor(id);
     const dim = entity.dimension;
     const loc = entity.location;
+    // Checked before its label comes down: a refusal (a painting, an armor stand, a pet next to it) leaves the label
+    // alone, where it used to be removed and spawned again at every try (ENT-25).
+    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player" && e.typeId !== LABEL_TYPE)) return false; // players aren't saved
+    nameLabels.removeFor(id);
     for (const e of dim.getEntities({ type: LABEL_TYPE, location: loc, maxDistance: 3 })) {
       if (e.isValid) e.remove();
     }
-    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player" && e.typeId !== LABEL_TYPE)) return false; // players aren't saved
     const from = { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) };
     const sm = world.structureManager;
     const key = SKIN_PREFIX + skinKey(id);

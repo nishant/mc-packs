@@ -7,7 +7,8 @@
     "Story Blood Moons and Harvest Moons never come two nights in a row, and never replace a moon an operator chose.",
     "Mining the same stone spot again within 5 minutes gives no Mining XP, so cobblestone and basalt generators do not farm it.",
     "The sky-wonder bonus in Frogs in Three Voices also works with Rainbows, Tornadoes or Storm Cells.",
-    "Town Projects residents can no longer breed."
+    "Town Projects residents can no longer breed.",
+    "Townsfolk cost the server much less, most of all with many players online away from town; a townsfolk standing next to an armor stand, painting or pet no longer has its name label flicker every 10 seconds."
   ],
   "resourceNotes": [
     "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
@@ -34,8 +35,8 @@
       "notes": "Residents can no longer breed; leftovers from Remove spot are capped apart from the town limit; the realm:town_test hook needs the realm_test_hooks objective."
     },
     "saga_bp": {
-      "version": "1.16.24",
-      "notes": "Fish objectives count the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
+      "version": "1.16.25",
+      "notes": "Shared name label update: a label is taken down only 4 blocks past its range, so it no longer flickers for a player standing at the edge."
     },
     "maps_bp": {
       "version": "1.8.19",
@@ -54,12 +55,12 @@
       "notes": "Auto-store moves pickups to your other pages at most once a second (several pickups in one save) and looks only after an inventory change; a lost page button is put back within 30 s instead of 5 s. The pack reads and saves its page index and retired-snapshot list far less often."
     },
     "npc_bp": {
-      "version": "1.9.5",
-      "notes": "Setting crownedGain to 0 now means no gain below Friend for the Hollow-Crowned."
+      "version": "1.9.6",
+      "notes": "Much cheaper on the server: every player is read once per check (not once per townsfolk), and a standing townsfolk's label needs no reads of it. Its name label no longer flickers every 10 seconds when an armor stand, painting or pet stands next to it. Townsfolk turn toward you in steps of 10 degrees or more."
     },
     "wander_bp": {
-      "version": "1.2.25",
-      "notes": "A wrongly accused friendly wanderer no longer adds to an unused counter; small comment fixes."
+      "version": "1.2.26",
+      "notes": "Cheaper on the server: the once-a-minute roll comes before the look around for old stones at night, and the name labels read less between checks."
     },
     "titles_bp": {
       "version": "1.2.18",
@@ -76,6 +77,10 @@
     "quests_bp": {
       "version": "1.3.13",
       "notes": "Fish quests count the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
+    },
+    "caravan_bp": {
+      "version": "1.2.14",
+      "notes": "Cheaper on the server: the schedule is read from the world once a minute, not every 2 seconds. Traders turn toward you in steps of 10 degrees or more."
     }
   }
 }
