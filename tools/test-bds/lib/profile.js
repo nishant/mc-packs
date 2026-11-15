@@ -18,7 +18,7 @@
 // `scriptevent harness:profile_dump`; `harness:profile_reset` starts a new window. The final dump also sends, in
 // 1,500-character parts: PROFILE_TICKS (ms per tick), PROFILE_CALLBACKS (every callback that took any time, as a JSON
 // list) and PROFILE_HEAVY (every single call of 1 ms or more as "tick:ms:index" into that list, for the worst ticks).
-import { world, system, System, World, Entity, ItemStack, ScreenDisplay, Dimension, CustomCommandRegistry } from "@minecraft/server";
+import { world, system, System, World, Entity, ItemStack, ScreenDisplay, Dimension, Player, CustomCommandRegistry } from "@minecraft/server";
 
 const PACK = __PACK__;
 const now = Date.now;
@@ -29,7 +29,7 @@ let ticks = []; // ms per tick, index = tick - startTick
 let curTick = -1, curMs = 0;
 /** key -> { ms, calls, max } */
 let cbs = new Map();
-let counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0, stacks: 0 };
+let counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0, stacks: 0, particles: 0 };
 /** The key of the timed callback running now (null outside one): a deferred call made inside it takes its site. */
 let current = null;
 /** key -> its "file:line" part, so a deferred label costs no string search after the first. */
@@ -49,7 +49,7 @@ function reset() {
   ticks = [];
   curTick = -1; curMs = 0;
   cbs = new Map();
-  counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0, stacks: 0 };
+  counters = { dynWrites: 0, dynBytes: 0, dynWorld: 0, dynEntity: 0, dynItem: 0, actionBar: 0, titles: 0, commands: 0, stacks: 0, particles: 0 };
   sent = new Map();
   handled = new Map();
   heavy = [];
@@ -204,6 +204,9 @@ function patchCounters() {
   if (ScreenDisplay) count(ScreenDisplay.prototype, "setActionBar", () => counters.actionBar++);
   if (ScreenDisplay) count(ScreenDisplay.prototype, "setTitle", () => counters.titles++);
   count(Entity.prototype, "runCommand", () => counters.commands++);
+  // Particles spawned (to every player near: Dimension; to one player: Player), for the particle budgets (W8).
+  if (Dimension) count(Dimension.prototype, "spawnParticle", () => counters.particles++);
+  if (Player) count(Player.prototype, "spawnParticle", () => counters.particles++);
   if (Dimension) count(Dimension.prototype, "runCommand", () => counters.commands++);
   count(System.prototype, "sendScriptEvent", (a) => {
     const id = String(a[0]);
