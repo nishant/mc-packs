@@ -439,7 +439,7 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
     if (blockers.length < 4 && op) blockers.push(op);
     const roles = new Set([...blockers, ...dying, op]);
     const leavers = [...land.slice(6), ...players.filter((s) => s.kind !== "land")].filter((s) => !roles.has(s));
-    churn = { seconds: CHURN_S, left: 0, rejoined: 0, rejoinFailed: 0, deaths: 0, respawns: 0, dimensionChanges: 0, placed: 0, broken: 0, mobsSummoned: 0, mobsKilled: 0, menus: /** @type {string[]} */ ([]), minValid: Infinity, endValid: 0 };
+    churn = { seconds: CHURN_S, left: 0, rejoined: 0, rejoinFailed: 0, deaths: 0, respawns: 0, dimensionChanges: 0, placed: 0, broken: 0, mobsSummoned: 0, mobsKilled: 0, menus: /** @type {string[]} */ ([]), menuTicks: /** @type {number[]} */ ([]), minValid: Infinity, endValid: 0 };
     // The block loops run side by side near the spawn, under a ticking area of the soak's own for the phase: a
     // simulated player's own chunks were "not loaded and ticking" when its block events reached the packs (the first
     // W0c run). Each player stands 1.5 blocks off its spot (a block can't be placed where its player stands).
@@ -550,9 +550,10 @@ const REFILL_EVERY = Math.max(0, Number(a.refill ?? 20));
           }
         }
       }
-      // The three heavy menus, once each, 4 s apart (each form is canceled by the harness after 100 ticks).
+      // The three heavy menus, once each, 4 s apart (each form is canceled by the harness after 100 ticks); the tick of each
+      // command goes into the report (menuTicks), so its slowest tick can be told from the others in the worst-ticks list.
       const m = (sec - 44) / 4;
-      if (Number.isInteger(m) && m >= 0 && m < MENUS.length && valid(op.p)) { t.cmd(op.p, MENUS[m]); churn.menus.push(MENUS[m]); }
+      if (Number.isInteger(m) && m >= 0 && m < MENUS.length && valid(op.p)) { churn.menuTicks.push(t.tick); t.cmd(op.p, MENUS[m]); churn.menus.push(MENUS[m]); }
       let validNow = 0;
       for (let i = 0; i < players.length; i++) {
         const s = players[i];

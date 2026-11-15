@@ -151,7 +151,7 @@ export function phaseTable(head, base = null) {
   const world = w.world;
   if (world) L.push("", `World: time ${world.time >= 0 ? world.time : "running"}, weather ${world.weather}; over the steady window the time went ${world.start?.timeOfDay ?? "?"} -> ${world.end?.timeOfDay ?? "?"} and the weather ${world.start?.weather ?? "?"} -> ${world.end?.weather ?? "?"}.`);
   const c = w.churn;
-  if (c) L.push("", `Churn (not judged; its players are not counted against retention): ${c.left} left and ${c.rejoined} rejoined${c.rejoinFailed ? ` (${c.rejoinFailed} could not)` : ""}, ${c.deaths} deaths and ${c.respawns} respawns, ${c.dimensionChanges} dimension changes, ${c.broken} blocks broken and ${c.placed} placed, ${c.mobsKilled} of ${c.mobsSummoned} summoned mobs killed, menus ${(c.menus ?? []).join(", ") || "none"}; fewest players in the world ${c.minValid}, at the end ${c.endValid}.`);
+  if (c) L.push("", `Churn (not judged; its players are not counted against retention): ${c.left} left and ${c.rejoined} rejoined${c.rejoinFailed ? ` (${c.rejoinFailed} could not)` : ""}, ${c.deaths} deaths and ${c.respawns} respawns, ${c.dimensionChanges} dimension changes, ${c.broken} blocks broken and ${c.placed} placed, ${c.mobsKilled} of ${c.mobsSummoned} summoned mobs killed, menus ${(c.menus ?? []).map((m, i) => (Number.isFinite(c.menuTicks?.[i]) ? `${m} (tick ${c.menuTicks[i]})` : m)).join(", ") || "none"}; fewest players in the world ${c.minValid}, at the end ${c.endValid}.`);
   if (w.night) L.push("", `Night: ${w.night.start?.timeOfDay ?? "?"} -> ${w.night.end?.timeOfDay ?? "?"}, weather ${w.night.start?.weather ?? "?"} -> ${w.night.end?.weather ?? "?"}, fewest players ${w.night.minValid}.`);
   return L;
 }
