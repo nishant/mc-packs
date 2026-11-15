@@ -6,7 +6,7 @@ import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/Inve
 import { t } from "../utils/Text.js";
 import { enqueue } from "./PlacementQueue.js";
 import { reportPlaced } from "../utils/PlacedReport.js";
-import { captureSnapshot, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
+import { snapshotJob, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
 import { overBudget, sliceDue, runJobAsync, ownerHere, inTurn } from "./TickBudget.js";
 import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern } from "./Palette.js";
 import { getPlacementStatesFromAir } from "../modes/AirBuildMode.js";
@@ -198,7 +198,7 @@ function* placeJob(player, startDim, positions, anchor, typeId, blockStates, opt
     try { player.playSound("block.end_portal_frame.fill", { pitch: 0.6 }); } catch { }
     const perPosTypeIds  = assignments ? assignments.map(a => a.typeId) : null;
     const undoThreshold  = getUndoThreshold(player);
-    const snapshot = captureSnapshot(dim, toPlace, typeId, blockStates ?? {}, perPosTypeIds, undoThreshold);
+    const snapshot = yield* snapshotJob(dim, toPlace, typeId, blockStates ?? {}, perPosTypeIds, undoThreshold);
     if (snapshot) snapshot.survival = survival;
     if (!snapshot) {
         lockActionBar(player.id, 1500);
@@ -412,6 +412,7 @@ function* placeJob(player, startDim, positions, anchor, typeId, blockStates, opt
                 if (sliceDue()) yield;
             }
             const shellList = [...shellMap.keys()].sort((a, b) => a - b).map(k => shellMap.get(k));
+            yield;
             ordered = keepBedHalvesTogether(shellList.flat());
         }
         if (ctl.stopped) {
@@ -421,6 +422,7 @@ function* placeJob(player, startDim, positions, anchor, typeId, blockStates, opt
             scheduleOrdered(ordered, waveTicks <= 1 ? 256 : Math.min(64, Math.max(1, Math.ceil(ordered.length / waveTicks))));
         }
     }
+    if (!options.immediate) yield;
     reportPlaced(dim.id, toPlace, (p) => (assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? p.typeId ?? typeId) : (p.typeId ?? typeId)));
     return total;
 }

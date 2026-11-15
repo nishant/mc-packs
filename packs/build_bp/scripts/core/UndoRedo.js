@@ -144,7 +144,8 @@ function routePush(player, type, entry) {
     let threshold = 0;
     try { threshold = getUndoThreshold(player); } catch { }
     let persistent = false;
-    if (!(threshold > 0 && entry.bef.length > threshold)) {
+    // Each block takes over 30 characters in each image, so a big entry can never be saved: no JSON of it.
+    if (!(threshold > 0 && entry.bef.length > threshold) && entry.bef.length <= 1000) {
         let json = null;
         try { json = JSON.stringify(entry); } catch { }
         persistent = json !== null && json.length <= 30000;
@@ -176,23 +177,37 @@ function routeClear(player, type) {
  * `_bs`, its states: read once with the filter, BSE-01) is not read again.
  */
 export function captureSnapshot(dim, toPlace, typeId, blockStates, perPosTypeIds, threshold = 200) {
+    const job = snapshotJob(dim, toPlace, typeId, blockStates, perPosTypeIds, threshold);
+    let step = job.next();
+    while (!step.done) step = job.next();
+    return step.value;
+}
+/** captureSnapshot as a job step: yields when the tick's budget is spent (a 50,000-block image is a lot of script). */
+export function* snapshotJob(dim, toPlace, typeId, blockStates, perPosTypeIds, threshold = 200) {
     if (threshold === 0) return null;
     if (toPlace.length > MAX_SNAPSHOT_BLOCKS) return null;
-    const bef = toPlace.map(pos => {
-        if (pos._bt !== undefined) return { x: pos.x, y: pos.y, z: pos.z, t: pos._bt, s: pos._bs ?? {} };
-        let t = "air", s = {};
-        try {
-            const block = dim.getBlock(pos);
-            if (block) { t = pack(block.typeId); s = block.permutation.getAllStates(); }
-        } catch {  }
-        return { x: pos.x, y: pos.y, z: pos.z, t, s };
-    });
-    const aft = toPlace.map((pos, i) => ({
-        x: pos.x, y: pos.y, z: pos.z,
-        t: pack(perPosTypeIds ? perPosTypeIds[i] : typeId),
-        s: pos._resolvedStates ?? (perPosTypeIds ? {} : (blockStates ?? {})),
-        u: pos._bedHead || pos._resolvedStates?.head_piece_bit === true ? 0 : 1,
-    }));
+    const bef = new Array(toPlace.length);
+    const aft = new Array(toPlace.length);
+    for (let i = 0; i < toPlace.length; i++) {
+        if (sliceDue()) yield;
+        const pos = toPlace[i];
+        if (pos._bt !== undefined) {
+            bef[i] = { x: pos.x, y: pos.y, z: pos.z, t: pos._bt, s: pos._bs ?? {} };
+        } else {
+            let t = "air", s = {};
+            try {
+                const block = dim.getBlock(pos);
+                if (block) { t = pack(block.typeId); s = block.permutation.getAllStates(); }
+            } catch {  }
+            bef[i] = { x: pos.x, y: pos.y, z: pos.z, t, s };
+        }
+        aft[i] = {
+            x: pos.x, y: pos.y, z: pos.z,
+            t: pack(perPosTypeIds ? perPosTypeIds[i] : typeId),
+            s: pos._resolvedStates ?? (perPosTypeIds ? {} : (blockStates ?? {})),
+            u: pos._bedHead || pos._resolvedStates?.head_piece_bit === true ? 0 : 1,
+        };
+    }
     return { dim: dim.id, bef, aft };
 }
 /** snapshot id -> stops that build's remaining scheduled writes (and refunds them), while they run */

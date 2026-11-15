@@ -4,7 +4,7 @@ import { getState } from "./PlayerState.js";
 import { isCreative, countBlocks, removeBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 import { getMaxBlocks, getUndoThreshold, getReplaceBlocks, getAllowDestroy, getDestroyCreativeOnly } from "./Settings.js";
-import { captureSnapshot, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
+import { snapshotJob, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
 import { sliceDue, runJobAsync, ownerHere, inTurn } from "./TickBudget.js";
 import { enqueue, cancelQueued } from "./PlacementQueue.js";
 import { reportPlaced } from "../utils/PlacedReport.js";
@@ -254,7 +254,8 @@ export async function cutAndCapture(player, corner1, corner2) {
     clipboard.isCut = !creative;
     clipboard.cutId = clipboard.version;
     const undoThreshold = getUndoThreshold(player);
-    const snapshot = captureSnapshot(dim, cutPositions, "minecraft:air", {}, null, undoThreshold);
+    const snapshot = await runJobAsync(snapshotJob(dim, cutPositions, "minecraft:air", {}, null, undoThreshold));
+    if (!ownerHere(player, dimId) || state.clipboard !== clipboard) return 0;
     // The cells go to air through the placement queue, within the shared tick budget (it was every cell in one
     // tick). A cell that holds something else by its turn is left as it is, and an undo drops the air still waiting.
     const playerId = player.id;
@@ -370,10 +371,11 @@ export async function executePaste(player, origin) {
     const perPosTypeIds = entries.map(e => e.typeId);
 
     const undoThreshold = getUndoThreshold(player);
-    const snapshot = captureSnapshot(
+    const snapshot = await runJobAsync(snapshotJob(
         dim, positions, entries[0]?.typeId ?? "minecraft:air", {},
         perPosTypeIds, undoThreshold,
-    );
+    ));
+    if (!ownerHere(player, dimId) || getState(player).clipboard !== clipboard) return 0;
     if (snapshot) snapshot.survival = !creative && !isCut;
     if (!snapshot) {
         lockActionBar(player.id, 1500);
