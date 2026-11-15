@@ -56,6 +56,7 @@ const nameLabels = createNameLabels({
   labelIdTag: LABEL_ID_TAG,
   observerRange: LABEL_OBSERVER_RANGE,
   spectatorsExcluded: true,
+  trustHandles: true, // lost() and the label entityRemove below call forget
 });
 
 const LOOP_TICKS = 20; // upkeep: timers, camps, sparkles, keep ghosts in place
@@ -366,8 +367,8 @@ function ruinsAround(player) {
   for (let dx = -4; dx <= 4; dx++)
     for (let dz = -4; dz <= 4; dz++)
       for (let dy = -2; dy <= 2; dy++) {
-        const b = blockAt(dim, { x: Math.floor(p.x) + dx, y: Math.floor(p.y) + dy, z: Math.floor(p.z) + dz });
-        if (b && (b.typeId === "minecraft:mossy_cobblestone" || b.typeId === "minecraft:cracked_stone_bricks" || b.typeId === "minecraft:mossy_stone_bricks")) if (++n >= 6) return true;
+        const id = blockAt(dim, { x: Math.floor(p.x) + dx, y: Math.floor(p.y) + dy, z: Math.floor(p.z) + dz })?.typeId; // read once
+        if (id === "minecraft:mossy_cobblestone" || id === "minecraft:cracked_stone_bricks" || id === "minecraft:mossy_stone_bricks") if (++n >= 6) return true;
       }
   return false;
 }
@@ -569,16 +570,27 @@ function roll(player, opts = {}) {
   if (onRoad.length >= Number(get("maxOnRoad"))) return "the roads are full";
   if (entityCount() >= CONFIG.maxEntities) return "too many wanderers";
   const st = states.get(player.id);
-  const ar = opts.archetype ?? archetypeFor(player);
+  let ar = opts.archetype;
   const night = isNight();
   const hostileOk =
     !!st && !st.q && st.h.length > 0 && now - (pd.lh ?? 0) >= Number(get("hostileGapMinutes")) * 60000 && !hurt(player) && onRoad.filter((l) => l.h).length < CONFIG.maxHostile;
   if (!opts.force && !opts.sure) {
     let chance = Number(get("rollChance"));
     if (siteNear(player.dimension.id, player.location, 128)) chance *= CONFIG.siteBonus;
-    if (night && (ar === "ghost" || hostileOk)) chance *= CONFIG.nightBonus;
-    if (Math.random() >= chance) return "no luck this minute";
+    // The roll comes first, against the best chance this player could have: who they would meet (at night up to 405
+    // block reads around them, for a ghost's ruins) is worked out only when it passed (ENT-29). A second roll keeps the
+    // exact chance: best x (exact / best) = exact.
+    const boosted = chance * CONFIG.nightBonus;
+    const ghostOnly = night && !hostileOk;
+    const best = Math.min(1, night ? (ghostOnly ? Math.max(chance, boosted) : boosted) : chance);
+    if (Math.random() >= best) return "no luck this minute";
+    if (ghostOnly) {
+      ar ??= archetypeFor(player);
+      const exact = Math.min(1, ar === "ghost" ? boosted : chance);
+      if (exact < best && Math.random() >= exact / best) return "no luck this minute";
+    }
   }
+  ar ??= archetypeFor(player);
   // Who: a hostile in disguise, a Recurring Wanderer whose chain this player can start (or has lost the camp of), or a Stranger.
   /** @type {string | undefined} */
   let hostile = opts.hostile;
@@ -722,7 +734,7 @@ let labelRun = 0;
  * The wanderers with a player within LABEL_HOT at the last full pass, and those players: the 2-tick syncs until the next
  * full pass reuse both instead of asking the game again (one native query per wanderer every 2 ticks was half of this
  * pack's time with a few wanderers near 40 players), since a player farther than LABEL_HOT can't reach LABEL_REACH in a second.
- * @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string }[]}
+ * @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string, dimId?: string }[]}
  */
 let hotTargets = [];
 /** @type {Player[]} */
@@ -764,7 +776,7 @@ function updateLabels(full = false) {
     nameLabels.sync(hotTargets, hotTargets.length ? hotObservers : [], labelDims);
     return;
   }
-  /** @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string }[]} */
+  /** @type {{ id: string, entity: import("@minecraft/server").Entity, name: string, suppressedName: string, dimId?: string }[]} */
   const targets = [];
   for (const rec of Object.values(live)) {
     const id = `road:${rec.w}`;
@@ -805,6 +817,7 @@ function updateLabels(full = false) {
     try {
       const l = t.entity.location;
       const dimId = t.entity.dimension.id;
+      t.dimId = dimId; // the 2-tick syncs until the next full pass don't read it again
       let near = false;
       for (const a of at) {
         if (a.dimId !== dimId || (a.x - l.x) ** 2 + (a.y - l.y) ** 2 + (a.z - l.z) ** 2 > hotSq) continue;
@@ -956,8 +969,12 @@ const roadTether = createTether({ soft: ROAD_SOFT, hard: TETHER_MAX, holeDrop: H
 /** Walkers someone is talking to (they stand still, slowed, while the form is open): not steered meanwhile. @type {Set<string>} */
 const talking = new Set();
 
-/** One walker's check: its look, its tether, its protection. @param {Entity} ent @param {{ x: number, y: number, z: number }} home @param {import("./tether.js").Tether} t */
-function tether(ent, home, t) {
+/** Tether runs between protection checks (5 s): Resistance V lasts, and effectAdd already stops invisibility. */
+const PROTECT_EVERY = 10;
+let tetherRuns = 0;
+
+/** One walker's check: its look, its tether, its protection (every PROTECT_EVERY runs). @param {Entity} ent @param {{ x: number, y: number, z: number }} home @param {import("./tether.js").Tether} t @param {boolean} [guard] */
+function tether(ent, home, t, guard = true) {
   try {
     const look = dressing.get(ent.id);
     if (look) {
@@ -965,7 +982,7 @@ function tether(ent, home, t) {
       else dress(ent, look);
     }
     if (!talking.has(ent.id)) t.check(ent, home, system.currentTick);
-    protect(ent);
+    if (guard) protect(ent);
   } catch {
     // unloaded
   }
@@ -973,15 +990,16 @@ function tether(ent, home, t) {
 
 function tetherAll() {
   if (!ready) return;
+  const guard = tetherRuns++ % PROTECT_EVERY === 0;
   for (const rec of Object.values(live)) {
     const ent = entityById(rec.e);
-    if (ent && WALKERS.has(ent.typeId)) tether(ent, rec, roadTether);
-    else if (ent && ent.typeId === GHOST) protect(ent);
+    if (ent && WALKERS.has(ent.typeId)) tether(ent, rec, roadTether, guard);
+    else if (guard && ent && ent.typeId === GHOST) protect(ent);
   }
   for (const c of Object.values(camps)) {
     const ent = entityById(c.e);
-    if (ent && WALKERS.has(ent.typeId)) tether(ent, c, campTether);
-    else if (ent && ent.typeId === GHOST) protect(ent);
+    if (ent && WALKERS.has(ent.typeId)) tether(ent, c, campTether, guard);
+    else if (guard && ent && ent.typeId === GHOST) protect(ent);
   }
 }
 
@@ -1229,6 +1247,7 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
  */
 function lost(id) {
   handles.delete(id);
+  nameLabels.forget(id);
   campTether.forget(id);
   roadTether.forget(id);
   talking.delete(id);
@@ -1246,6 +1265,8 @@ world.afterEvents.entityRemove.subscribe(
   },
   { entityTypes: TYPES },
 );
+
+world.afterEvents.entityRemove.subscribe(({ removedEntityId }) => nameLabels.forget(removedEntityId), { entityTypes: [LABEL_TYPE] });
 
 world.afterEvents.entityDie.subscribe(
   ({ deadEntity }) => {

@@ -1,7 +1,7 @@
 import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
-import { COLORS, SPREAD, antisolarAngle, arcDots } from "./sky.js";
+import { SPREAD, antisolarAngle, arcBands } from "./sky.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -12,7 +12,7 @@ import { onScriptEvent } from "./script-events.js";
 // inventory). Cleared once the pot expires. Pots saved by versions before 1.4.0 also have ang, by and ground
 // (the old sky arc's plane and ground height): ignored.
 //
-// The way there is the Minimap's compass; near the end (ARC_SEE) a small rainbow of vanilla colored flame
+// The way there is the Minimap's compass; near the end (ARC_SEE) a small rainbow of glowing Realm Skies
 // particles stands over it, one foot on the pot, until the pot is found or expires. While a pot is up and not found,
 // realm:rainbow_pot { dim, x, z } says where it is (when it appears, when its chest moves it, on
 // realm:rainbow_ping and once after world load); realm:rainbow_pot {} says there is none.
@@ -27,8 +27,8 @@ const STORY_GAP = 30 * 60000; // at most one story rainbow per 30 real minutes
 const MAX_LEFT = 20;
 const OVERWORLD = "minecraft:overworld";
 const ARC_SEE = 96; // the rainbow over the end is drawn while a player is this close to it
-const ARC_TICKS = 10; // and redrawn this often (the flame dots fade fast)
-const ARC_PARTICLE = "minecraft:colored_flame_particle"; // vanilla: takes variable.color, needs no resource pack
+const ARC_TICKS = 40; // and each band's emitter is sent again this often (it lives as long, plus a little)
+const ARC_PARTICLE = "realm:sky_arc"; // from Realm Skies (sky_rp): one steady emitter per band, drawn by each device
 const MAX_SEE = 512; // players farther than this from the rainbow's end don't see it (no Journal entry)
 const PLACE_DISTANCE = 40; // the pot's chest is placed when a player comes this close (its chunk is loaded then)
 const FIND_DISTANCE = 3;
@@ -362,15 +362,17 @@ system.runInterval(() => {
 
 // ---------------------------------------------------------------------------
 // The rainbow over the end: while the pot is up and unfound and a player is within ARC_SEE, a small rainbow of
-// colored flame dots stands at its real spot, its outer foot on the pot (the chest once it's placed). It stands
+// glowing dots (7 Realm Skies emitters) stands at its real spot, its outer foot on the pot (the chest once it's placed). It stands
 // across the line from the first player who comes near, so they see it face on. Before the chest is placed its
 // foot is the surface at the end (the water's surface on water), read once the land there is loaded.
 // ---------------------------------------------------------------------------
 
-/** The current arc: for which pot and spot, and its dots. @type {{ key: string, ang: number, dots: { x: number, y: number, z: number, band: number }[] } | undefined} */
+/**
+ * The current arc: for which pot and spot, where its middle is, and one MolangVariableMap per band (its radius, plane
+ * and color), made when the arc changes (a MolangVariableMap can't be made while the scripts load).
+ * @type {{ key: string, ang: number, center: { x: number, y: number, z: number }, bands: MolangVariableMap[] } | undefined}
+ */
 let arc;
-/** One color per band, made on first use (a MolangVariableMap can't be made while the scripts load). @type {MolangVariableMap[] | undefined} */
-let arcColors;
 
 /** @param {Pot} p0 */
 function drawArc(p0) {
@@ -394,16 +396,25 @@ function drawArc(p0) {
   if (arc?.key !== key) {
     // Keep the plane when only the foot moved (the chest went up to 12 blocks away): across the first viewer's line.
     const ang = arc && arc.key.startsWith(`${p0.id}|`) ? arc.ang : Math.atan2(cz - near.location.z, cx - near.location.x) + (p0.id % 2 ? Math.PI / 2 : -Math.PI / 2);
-    arc = { key, ang, dots: arcDots({ x: cx, y: y + (p0.placed ? 0.9 : 0.2), z: cz }, ang) };
+    const shape = arcBands({ x: cx, y: y + (p0.placed ? 0.9 : 0.2), z: cz }, ang);
+    const bands = shape.bands.map(({ r, color }) => {
+      const m = new MolangVariableMap();
+      m.setFloat("variable.r", r);
+      m.setFloat("variable.ux", shape.ux);
+      m.setFloat("variable.uz", shape.uz);
+      m.setFloat("variable.cr", color[0]);
+      m.setFloat("variable.cg", color[1]);
+      m.setFloat("variable.cb", color[2]);
+      m.setFloat("variable.life", ARC_TICKS / 20 + 0.1);
+      return m;
+    });
+    arc = { key, ang, center: shape.center, bands };
   }
-  arcColors ??= COLORS.map(([red, green, blue]) => {
-    const m = new MolangVariableMap();
-    m.setColorRGB("variable.color", { red, green, blue });
-    return m;
-  });
-  for (const d of arc.dots) {
+  // Seven emitters, one per band, each keeping its band filled with glowing dots on the device for ARC_TICKS (and a
+  // little more, so the next one takes over without a gap). Before 1.5.0 this was 259 vanilla flames every 10 ticks.
+  for (const vars of arc.bands) {
     try {
-      dim.spawnParticle(ARC_PARTICLE, d, arcColors[d.band]);
+      dim.spawnParticle(ARC_PARTICLE, arc.center, vars);
     } catch {
       // that part isn't loaded
     }

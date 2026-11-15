@@ -7,6 +7,22 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Fixes for Skills and the Atlas
+
+- Skills: logs and stone you placed just before the server restarted no longer give Mining or Woodcutting XP again.
+- Atlas of the Realm: very large atlases no longer lose places at the edges of their saved pages.
+
+## Lighter Minimap radar
+
+- Minimap: the radar costs the server about a third of what it did while players move, and its land fills in faster on a small server.
+
+## Lighter weather on phones
+
+- Rainbows: the little rainbow over a pot of gold is drawn by your own device now, with far less sent by the server. It needs Realm Resources, as the other sky effects do.
+- Tornadoes: the funnel is drawn with fewer, slightly bigger clouds, about half as many for your phone to draw. If a tornado still slows your device down, lower Tornado funnel density in /realm:prefs, for your own screen only.
+- Elytra HUD: a NOS boost's flames are drawn by your device from two particles a tick instead of 41.
+- Land Claims and Safe Zones: border and outline sparkles are one row at your height, for the 6 nearest claims or zones.
+
 ## Smoother building
 
 - Easy Building: big builds, copies, cuts and pastes no longer freeze the server. They start a moment later and fill in over a few seconds.

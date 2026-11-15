@@ -466,10 +466,14 @@ function inPlacedBox(dimId, x, y, z) {
   return false;
 }
 
+/** Can breaking this block give XP once it was placed? Stone, ores, logs and crops with no growth state (melons, pumpkins). @param {string} id */
+const xpBlock = (id) => mineBlocks.has(id) || logs.has(id) || (crops.has(id) && crops.get(id)?.state === undefined);
+
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
-    // Planted crops with a growth state count anyway once grown: no need to remember them.
-    if (crops.get(block.typeId)?.state !== undefined) return;
+    // Only blocks that could give XP are remembered: dirt, planks or glass never do, and planted crops with a growth
+    // state count anyway once grown.
+    if (!xpBlock(block.typeId)) return;
     markPlaced(spot(block.dimension.id, block.location));
   } catch (e) {
     console.warn(`[skills] ${e}`);
@@ -481,7 +485,7 @@ world.afterEvents.pistonActivate.subscribe(({ dimension, piston }) => {
     // Only blocks that give XP matter (flying machines of slime and observers mark nothing).
     const locs = piston
       .getAttachedBlocks()
-      .filter((b) => mineBlocks.has(b.typeId) || logs.has(b.typeId) || (crops.has(b.typeId) && crops.get(b.typeId)?.state === undefined))
+      .filter((b) => xpBlock(b.typeId))
       .map((b) => b.location);
     for (const l of locs) {
       for (const [dx, dy, dz] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
@@ -818,7 +822,11 @@ function dec(s) {
   return n;
 }
 
-/** @typedef {{ areas: Map<string, number[]>, dirty: boolean }} Visited key = dimension + area x + area z (9 characters), value = [low, high] */
+/**
+ * @typedef {{ areas: Map<string, number[]>, recs: Map<string, string>, written: string[], dirty: boolean }} Visited
+ * `areas`: key = dimension + area x + area z (9 characters), value = [low, high]; `recs`: each area's encoded record,
+ * dropped when its chunks change; `written`: the text of each skills:map property as last read or written.
+ */
 
 /** @type {Map<string, Visited>} */
 const visited = new Map();
@@ -829,10 +837,13 @@ function visitedOf(player) {
   if (v) return v;
   /** @type {Map<string, number[]>} */
   const areas = new Map();
+  /** @type {string[]} */
+  const written = [];
   try {
     for (let i = 0; ; i++) {
       const raw = player.getDynamicProperty(`${MAP_PROP}${i}`);
       if (typeof raw !== "string") break;
+      written.push(raw);
       for (let at = 0; at + RECORD <= raw.length; at += RECORD) {
         const rec = raw.slice(at, at + RECORD);
         const lo = dec(rec.slice(9, 15));
@@ -843,19 +854,31 @@ function visitedOf(player) {
   } catch (e) {
     console.warn(`[skills] explored chunks: ${e}`);
   }
-  visited.set(player.id, (v = { areas, dirty: false }));
+  visited.set(player.id, (v = { areas, recs: new Map(), written, dirty: false }));
   return v;
 }
 
-/** @param {Player} player */
+/** Writes the explored chunks: only the properties whose text changed, re-encoding only the areas that changed. @param {Player} player */
 function saveVisited(player) {
   const v = visited.get(player.id);
   if (!v || !v.dirty) return;
   try {
-    const records = [...v.areas].map(([key, [lo, hi]]) => key + enc(lo, 6) + enc(hi, 6));
+    /** @type {string[]} */
+    const records = [];
+    for (const [key, [lo, hi]] of v.areas) {
+      let rec = v.recs.get(key);
+      if (rec === undefined) v.recs.set(key, (rec = key + enc(lo, 6) + enc(hi, 6)));
+      records.push(rec);
+    }
     let i = 0;
-    for (; i * PER_PROP < records.length; i++) player.setDynamicProperty(`${MAP_PROP}${i}`, records.slice(i * PER_PROP, (i + 1) * PER_PROP).join(""));
-    for (; player.getDynamicProperty(`${MAP_PROP}${i}`) !== undefined; i++) player.setDynamicProperty(`${MAP_PROP}${i}`, undefined);
+    for (; i * PER_PROP < records.length; i++) {
+      const text = records.slice(i * PER_PROP, (i + 1) * PER_PROP).join("");
+      if (v.written[i] === text) continue;
+      player.setDynamicProperty(`${MAP_PROP}${i}`, text);
+      v.written[i] = text;
+    }
+    for (; i < v.written.length; i++) player.setDynamicProperty(`${MAP_PROP}${i}`, undefined);
+    v.written.length = Math.ceil(records.length / PER_PROP);
     v.dirty = false;
   } catch (e) {
     console.warn(`[skills] saving explored chunks: ${e}`);
@@ -876,10 +899,17 @@ function visit(player, dim, cx, cz) {
   const fresh = (area[half] & mask) === 0;
   // Most recently visited last, so the oldest go first when there are too many.
   v.areas.delete(key);
-  if (fresh) area[half] = (area[half] | mask) >>> 0;
+  if (fresh) {
+    area[half] = (area[half] | mask) >>> 0;
+    v.recs.delete(key);
+  }
   v.areas.set(key, area);
   const max = Math.max(1, Math.floor(CONFIG.exploration.maxAreas));
-  while (v.areas.size > max) v.areas.delete(/** @type {string} */ (v.areas.keys().next().value));
+  while (v.areas.size > max) {
+    const old = /** @type {string} */ (v.areas.keys().next().value);
+    v.areas.delete(old);
+    v.recs.delete(old);
+  }
   if (fresh) v.dirty = true;
   return fresh;
 }
@@ -927,6 +957,7 @@ world.beforeEvents.playerLeave.subscribe(({ player }) => {
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  savePlaced(); // a Realm closes soon after the last player leaves: don't wait for the 30-second save
   travel.delete(playerId);
   modes.delete(playerId);
   dims.delete(playerId);

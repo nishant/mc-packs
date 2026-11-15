@@ -353,21 +353,7 @@ test("one scanner wrapper delegates to a bounded independent planner, never rely
   runInVm(`(${scanner[0].getText(mainAst)})`, scannerContext)();
   assert.equal(frames, 1, "the actual registered wrapper reaches the scanner exactly once");
   assert.equal(scannerContext.featureEnvelope.tick, 20, "the real V2 envelope receives the game tick");
-  assert.match(functionSource("scanFrame"), /if \(!planIdle\(idOf\(p\), now\)\) planFor\(p, now,\s*true\);/);
-  const plan = { dim: { id: "minecraft:overworld" }, x: 0, z: 0, py: 64, at: 10 };
-  Object.defineProperty(plan, "player", { get() { assert.fail("idle admission may not read a native player handle"); return undefined; } });
-  const view = { dim: "minecraft:overworld", x: 0, y: -40, z: 0 };
-  const memo = { needAt: 10 };
-  const sandbox = { scanPlans: new Map([["p", plan]]), views: new Map([["p", view]]), terrainBaseMemo: new Map([["p", memo]]) };
-  const constants = ["IDLE_MOVE", "NETHER_BAND"].map(name => mainSource.match(new RegExp(`^const ${name} = .+;$`, "m"))?.[0]).join("\n");
-  const idle = runInVm(`${constants}\n${functionSource("planIdle")}\nplanIdle`, sandbox);
-  assert.equal(idle("p", 20), false, "independent planner is consulted; its own profile/state throttles apply");
-  memo.needAt = 11; assert.equal(idle("p", 20), false, "a newer terrain request is never idled");
-  memo.needAt = 10; view.x = 16; assert.equal(idle("p", 20), false, "chunk movement replans");
-  view.x = 0; view.dim = "minecraft:the_end"; assert.equal(idle("p", 20), false, "dimension changes invalidate idle state");
-  plan.dim.id = view.dim = "minecraft:nether"; plan.py = 44; view.y = 47;
-  assert.equal(idle("p", 20), false, "planner itself validates/reuses the same Nether footprint");
-  view.y = 48; assert.equal(idle("p", 20), false, "crossing a Nether band replans");
+  assert.match(functionSource("scanFrame"), /planFor\(p, now, true\);/, "the rotating check asks planFor, which reuses an unchanged plan itself (HUD-08: no idle stub)");
 });
 
 test("a title about to fade is refreshed on time even when it isn't the player's turn to be checked (O5, 100 players)", () => {

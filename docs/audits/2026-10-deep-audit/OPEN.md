@@ -14,11 +14,8 @@ reference in PRs. Performance counts are 10 and 40 players only (owner answer, O
   1.852 as one Realm Bundle (goal 5). check: the same issue lists stash_bp at 0.154 ms/tick at 40 against its 0.15
   budget (one pack, 0.004 over); look at the next perf-report before touching it, and delete this entry once map_bp
   and stash_bp are both within budget on it.
-- O3 npc_bp label loop (`updateLabels`, main.js around :1510) costs about 2 ms a sync at 40 players. A per-dimension
-  observer list, cached names and helper lookups gave no gain in two A/B rounds (reverted, `1ecf250c`); cap the work
-  per entity count or find where the rest of the time goes. elite night load is within run-to-run noise.
-- O10 Still to measure and act on only if over budget (10 and 40 players, no profiler): npc_bp label loop (see O3)
-  and the build_bp preview floor (about 0.38 ms).
+- O10 Still to measure and act on only if over budget (10 and 40 players, no profiler): the build_bp preview floor
+  (about 0.38 ms).
 - O79 Optional perf follow-up: the town spot scan still takes minutes on a hillside (town-hillside Village about 7.2
   minutes); a cheaper column lookup on QuickJS would be needed, which jitless node cannot measure. Do it only if the
   owner wants it faster.

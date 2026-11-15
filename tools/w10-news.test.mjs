@@ -644,7 +644,7 @@ function milestoneSession(record, milestones, valueOf = () => 0, titles = true) 
     const m = id === "realm:title_unlock" ? JSON.parse(payload) : undefined;
     if (titles && m?.ack) api.confirmTitle({ player: m.player, title: m.title, ack: m.ack });
   };
-  api = evalPack(pack("milestones_bp"), ["check", "topTier", "recheck", "sendTop", "confirmTitle", "markConfirmed"], ["gossip"], {
+  api = evalPack(pack("milestones_bp"), ["check", "topTier", "recheck", "sendTop", "confirmTitle", "markConfirmed", "markUrgent"], ["gossip"], {
     ...box,
     unconfirmed: new Map(),
     records: () => new Map([["ada", record]]),
@@ -652,6 +652,7 @@ function milestoneSession(record, milestones, valueOf = () => 0, titles = true) 
     milestones,
     backfilled: new Set(),
     dirty: new Set(),
+    urgent: new Set(),
     title: (m, tier) => m.name + " " + tier,
     valueOf,
     tiersFor: () => 3,
@@ -774,7 +775,7 @@ test("the owning report reads the saved flag, not another add-on's store", () =>
     seedCache: new Map([["ada", { n: "Ann", c: {}, g: { joins: 3 } }]]),
     seedDirty: new Set(),
     console,
-  }, "let cache = seedCache;\nconst dirty = seedDirty;\nconst RECORD_PREFIX = 'milestones:p:';");
+  }, "let cache = seedCache;\nconst dirty = seedDirty;\nconst urgent = new Set();\nconst RECORD_PREFIX = 'milestones:p:';");
   api.reportSaved({ id: "ada", name: "Ann" });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].id, "realm:milestones_test_report");

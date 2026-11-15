@@ -68,7 +68,7 @@ const BUY_MAX = 16;
 const LLAMA_LEASH = 10; // a llama farther than this from its spot is brought back (the last resort)
 const LLAMA_SOFT = 5; // past this, a llama is slowed and turned back toward its spot (no teleport)
 const TURN_STEP = 45;
-const TURN_MIN = 4;
+const TURN_MIN = 10; // smaller differences are not worth a teleport (a move packet to every viewer)
 // Where the traders stand around the spot (the first at the spot itself).
 const OFFSETS = [
   { x: 0, z: 0 },
@@ -301,9 +301,25 @@ function when(t) {
 
 const stayMs = () => Math.max(1, Number(get("stayMinutes")) || 40) * 60000;
 
+/** caravan:last as last read or written, read again at most once a minute (the 2-second check read it every time). */
+/** @type {number | undefined} */
+let lastCache;
+let lastAt = -Infinity;
 function lastHandled() {
-  const v = world.getDynamicProperty(PROP_LAST);
-  return isNum(v) ? /** @type {number} */ (v) : undefined;
+  const tick = system.currentTick;
+  if (tick - lastAt >= 1200 || tick < lastAt) {
+    const v = world.getDynamicProperty(PROP_LAST);
+    lastCache = isNum(v) ? /** @type {number} */ (v) : undefined;
+    lastAt = tick;
+  }
+  return lastCache;
+}
+
+/** @param {number} slot */
+function setLastHandled(slot) {
+  world.setDynamicProperty(PROP_LAST, slot);
+  lastCache = slot;
+  lastAt = system.currentTick;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +399,7 @@ function giveGood(player, g, total) {
 /** @param {number | undefined} slot the scheduled arrival this visit is for, or undefined when called by an operator */
 function arrive(slot) {
   const now = Date.now();
-  world.setDynamicProperty(PROP_LAST, slot ?? slotAt(now)); // a called caravan stands in for the one due now
+  setLastHandled(slot ?? slotAt(now)); // a called caravan stands in for the one due now
   /** @type {Spot} */
   let spot;
   let surface = false;
@@ -785,7 +801,7 @@ function upkeep() {
   const slot = slotAt(now);
   const last = lastHandled();
   if (last === undefined) {
-    world.setDynamicProperty(PROP_LAST, slot); // first run: the first caravan is the next scheduled one
+    setLastHandled(slot); // first run: the first caravan is the next scheduled one
     return;
   }
   const late = Math.max(stayMs(), CONFIG.lateHours * HOUR);

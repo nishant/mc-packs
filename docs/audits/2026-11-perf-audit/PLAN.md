@@ -214,13 +214,14 @@ Findings: XC-08, XC-09, PIPE-17, PIPE-22, HUD-41, XC-10, XC-11.
 
 ### W5 Minimap (L: two PRs left)
 
-Findings: HUD-01, HUD-06, HUD-02, HUD-03, HUD-08, HUD-14, HUD-31, HUD-36, HUD-37, HUD-38,
+Findings: HUD-01, HUD-06, HUD-02, HUD-03, HUD-14, HUD-31, HUD-36, HUD-37, HUD-38,
 HUD-16, HUD-17, HUD-20, HUD-21. Packs: `map_bp` (and `hud_rp` only through W6).
 
-**W5b Budgets** (M). With the numbers from `map-radar-perf` (`tools/test-bds/examples/`), set the scan, rebuild and draw ceilings (6 + 2 + 1 ms today) so one flier
-costs 2 ms or less and several share a per-tick envelope that carries overruns into the next tick (HUD-01). Make
-`config.js`, PACKS.md and CLAUDE.md's "about 1 ms" say what is true. Finish or delete the planner's idle skip and
-its dead limits (HUD-08). The radar fills more slowly at the same budget: a NEWS line.
+**W5b (what is left) 40 radar viewers moving** (M). Minimap 1.5.9 rolls a long queue incrementally, gives planning
+the first 1 ms of a 2.5 ms scanner budget and carries overruns: `map-radar-perf` went from 11-14 to 3.8 ms a tick at 10
+and 4.6 at 40. At 40 viewers moving, planning (about 140 full plans of ~30 ms and the rotating checks) still uses most
+of the scanner's time and only a few hundred columns are read in 150 s: make a full plan splittable over ticks (or
+cheaper), then check one flier alone against the 2 ms target.
 **W5c Idle floor and resends** (S to M). One read of each player value per pass instead of 20 + n (HUD-02); a longer
 pass interval for players who have not moved, with the mob search skipped when nothing nearby changed (HUD-03,
 HUD-19); no
@@ -288,21 +289,12 @@ Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
 
 ### W10 Townsfolk, labels and towns (M to L: two PRs)
 
-Findings: ENT-01, ENT-02, ENT-03, ENT-04, ENT-16, ENT-25, ENT-27, ENT-32, ENT-40, ENT-29, ENT-38 (W10a); ENT-05,
-ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `npc_bp`, `town_bp`,
-`wander_bp`, `caravan_bp` (the four with `name-labels.js`), `tools/name-labels-shared.js`, `tools/owed-shared.js`,
-`tools/tether-shared.js`.
-- **W10a Labels and the townsfolk loop.** The "is anyone near" test reads every player's dimension and place once
-  per townsfolk every half second (ENT-01: 3 x players x townsfolk calls, 14 ms bursts at 40 players with nobody
-  near a town): read the players once per run. The label sync's 2 ms is 229 native calls, 3 per observer and 9 per
-  townsfolk whether near or far (ENT-02); the two earlier attempts removed none of them. Learn validity from events
-  instead of asking, and keep fixed anchors for townsfolk that do not move, which takes a standing NPC to about one
-  call. This is OPEN.md O3. For wanderers, split "follow the mob" from "who sees the label" so the 2-tick sync stops
-  repeating every read to move one label (ENT-03); separate create and remove distances at the label range edge
-  (ENT-04); read a caption back only on the sweep (ENT-16). A bug to fix on the way: a townsfolk with no saved skin
-  and any entity within 2 blocks loses and regains its label every 10 s (ENT-25). The 10-second audit of every
-  loaded townsfolk (ENT-40), turning to a player being a teleport (ENT-27), and wander's 405 block reads around
-  each exploring player every minute at night before a 7% roll (ENT-29: roll first).
+Findings: ENT-05, ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `town_bp`,
+`tools/owed-shared.js`, `tools/tether-shared.js`. W10a is #249 (npc_bp, wander_bp, caravan_bp and the
+shared labels); left from it, each only if a measurement asks for it: with a crowd standing around the townsfolk
+the half-second loop is still about 1.2 to 1.6 ms (npc-labels-perf near phase at 40, mostly the turning teleports and
+the players' places, which that phase needs); the label entities' `minecraft:transient` and `minecraft:physics`
+(ENT-32, needs a BDS check); caravan_bp's traders still use the labels' default reads (`trustHandles` off).
 - **W10b The town scan and saved indexes.** A project with no valid spot in the loaded ground is scanned from
   scratch every 5 s while a player is in the town: the column cache dies with each scan, columns past tick distance 4
   are always "unknown", and "unknown" never ends as "no good spot" (ENT-05); walks over cached columns are also
@@ -317,23 +309,17 @@ ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). P
   today: also the suite's slowest scenario, so this shortens every full run), `wander-*`; the label timing check on
   a real client stays with the owner (O11).
 
-### W11 Champions, bounties, dolphins and other mobs (S to M)
+### W11 Champions, bounties, dolphins and other mobs: what is left
 
-Findings: ENT-07, ENT-08, ENT-09, ENT-31, ENT-20, ENT-10, ENT-33, ENT-19, ENT-12, ENT-24. Packs: `elite_bp`,
-`bounty_bp`, `dolphin_bp`.
-- Champions: every `entityHurt` in the world costs 3 to 5 native calls before the known-champion test (ENT-07);
-  every spawned mob 3 to 5 and every item entity 5 (ENT-08: test the type first; do not gate on a death window, the
-  item's spawn event can arrive before the death event). The pack's 0.04 to 0.09 ms spread between runs is the
-  workload, not the code: its cost follows mob spawns, burns and deaths and whether a champion rolled, and the soak
-  pins neither time nor spawning (ENT-09: W0c fixes the measurement; the 5-second upkeep is a spike only at the
-  32-champion cap, slice it). An approach step is about 50 native calls, 18 of them `dim.id` for cache keys
-  (ENT-31). `convert` reads 150 block calls before a spacing test that needs none (ENT-20).
-- Bounties: a clean spot reads 81 columns in one tick (ENT-10, shared with elite: slice and back off); the 2-second
-  target check reads each player's place twice (ENT-33).
-- Dolphins: the whole index copied and every loaded dolphin queried each second (ENT-12); a ridden dolphin costs
-  about 16 native calls per rider per tick (ENT-24).
-- Proof: `night-soak` for champions (its numbers are kept after W0c), the churn phase's kill loop, `bounty-*`,
-  `dolphin-*`.
+Shipped in PR #265 (ENT-07, ENT-08, ENT-09, ENT-31, ENT-20, ENT-10, ENT-33, ENT-19; `tools/test-bds/examples/mobs-perf.js`).
+Left:
+- Dolphins (ENT-12, ENT-24): measured no gain, not shipped. In `mobs-perf` (validation #270) two riders cost
+  dolphin_bp 0.002 to 0.085 ms/tick on the base and the head alike (a mount check every 5 ticks, the index worked on in
+  place and a swimming dolphin written after 16 blocks): the per-rider calls are far cheaper than the 10 us estimate.
+  Retry only with a scenario that holds the dolphins' figure steady (more riders, a moving dolphin).
+- The upkeep slice (ENT-09) and the bounty parts (ENT-33, ENT-19, and the bounty copy of the sliced build scan) shipped
+  without a figure of their own: no scenario reaches 32 champions, a board-placed target or a cull note burst. The
+  sliced scan is the same code as the Stormcaller one, measured in `mobs-perf`'s storm phase.
 
 ### W12 Game event filters and cheap first lines (M: one PR per group of packs)
 
@@ -381,17 +367,16 @@ Findings: PRG-37 (the map of what each pack saves, how big and how often), PRG-0
 PRG-27, PRG-31, PRG-44, PRG-24, PRG-42, HUD-10, HUD-24, BSE-07, BSE-08, BSE-14, UTL-31, UTL-32. Packs: `quests_bp`,
 `stats_bp`, `skills_bp`, `guilds_bp`, `milestones_bp`, `titles_bp`, `journal_bp`, `saga_bp` (save path only),
 `maps_bp`, `atlas_bp`, `build_bp`, `news_bp`, `nick_bp`.
-- **W14a Write less.** Quests writing the player's property, with a stringify and a preference parse, on every
-  counted block, kill or catch (PRG-03: dirty flag, flush once a second and on leave). Skills remembering every
-  placed block, not only XP blocks, and rewriting the whole 10,000-key set (150 KB in 9 world properties) every 30 s
-  while anyone builds (PRG-09: remember only blocks that give XP first, then hashed buckets with a dirty flag each,
-  old format read forever; also a bug: no save on leave, so logs placed in the last 30 s give XP again after a
-  restart). Skills rewriting all of a player's explored chunks for one new chunk (PRG-10). Milestones writing a world
-  record per moving player every 10 s (PRG-11). Titles marking every online player dirty every second (PRG-44).
-  Story progress stringified and walked twice per flush, all dirty players in one tick (PRG-31). Atlas rewriting
-  every 24,000-character part when one record changes (HUD-24). Easy Building rewriting all 10 undo entries per
-  build (BSE-07: a ring index) and stringifying the whole clipboard on every copy (BSE-08). News writing a property
-  for every online player every minute (UTL-31).
+- **W14a Write less (what is left).** Quests, Skills (XP blocks only, save on leave, explored chunks), Milestones,
+  Titles, Atlas and News shipped in perf/progress-writes. Left: Story progress counted twice in JS per flush (PRG-31): a
+  native byte count and hashed flush seconds measured no gain in saga-perf-quests (saga_bp 0.152 -> 0.150 ms/tick,
+  saves there are small), so it was not shipped; measure it again with a 10 KB+ save (a seeded player) first. And Skills still rewrites its whole placed-block
+  set (up to 10,000 keys of XP blocks, 9 world properties) every 30 s while anyone places stone, logs or ores
+  (PRG-09 M: a ring of the 9 properties, new keys into the newest, the oldest dropped whole, a dirty flag each, old
+  format read as the ring's first lap). It needs a fixture with a full set to measure (a test hook in skills_bp or a
+  bundle-store seed), so it was left for its own PR; Guilds' 5,000-key set (rarely dirty: ores and stateless crops
+  only) can share it. Easy Building rewriting all 10 undo entries per build (BSE-07: a ring index) and stringifying
+  the whole clipboard on every copy (BSE-08).
 - **W14b Bound what grows.** Stats boards never lose a name and the ticker reads a whole board every 5 s per shown
   stat (PRG-04: prune by last seen, cap the ticker; first verify PRG-48, whether the sidebar sends a board of every
   name ever seen to every client). 20 scoreboard objectives and the Milestones records grow with
@@ -413,21 +398,6 @@ Findings: PRG-30, PRG-05, PRG-40, PRG-47, PRG-16 (after W2). Packs: `saga_bp`.
   tag queries over a whole dimension with no location (PRG-40), `places.js` asking for every player's place once per
   pending place every 2 s (PRG-05), a `getTags()` per player per second for the party story (PRG-47).
 - Proof: `saga-perf-quests` pairs; `check-stories`; the saga scenarios.
-
-### W17 Weather and sky effects (M: two PRs)
-
-Findings: UTL-02, UTL-03, UTL-06, UTL-15, UTL-35, UTL-36, UTL-16, UTL-37, UTL-18. Packs: `rainbow_bp`, `tornado_bp`,
-`elytra_bp`, `claims_bp`, `zones_bp`, `climate_bp`, `leaves_bp`, `rain_bp`, and `sky_rp`, `rain_rp`, `silly_rp`.
-- **W17a Fewer packets.** The rainbow as 7 client emitters instead of 259 server particles twice a second (UTL-02);
-  the tornado's 67 packets a second and about 2,500 live particles per viewer (UTL-03: fewer, larger particles and a
-  per-player density preference); a NOS boost's 41 spawns a tick (UTL-06); claim borders and zone outlines (UTL-15);
-  a new `MolangVariableMap` per player per second (UTL-35); leaf decay's 6 destroy commands a tick (UTL-36).
-- **W17b What devices load.** `rain_rp`'s ten 20-second clips loaded as samples and all marked for low-memory
-  devices (UTL-16: needs a memory reading on the phone before and after); the vanilla rain splash redefined with 300
-  particles and per-frame work (UTL-37).
-- Proof: `weather-crowd`, `tornado-sound-perf` (numbers kept after W0c), the night-and-thunder phase; before and
-  after pictures and clips regenerated (`gen:rain`, `gen:sky`); the looks change, so a NEWS line and the owner's
-  device check (section 6).
 
 ### W18 Small polls that can be events or caches (S each: batch by pack owner)
 
@@ -502,6 +472,9 @@ rest of its workstream.
 
 ## 7. Not planned, and why
 
+- UTL-36 (leaf decay's `setblock ... destroy` commands): each leaf's break particles, sound and drops are the point,
+  and the stable API has no other way to drop a leaf's own loot; the cost is per leaf, not per tick, and
+  `leavesPerTick` already lets operators slow it. No change.
 - A third Realm upload for stable assets: CLAUDE.md keeps it at two.
 - Minifying the bundle: unreadable stacks in the server log for a gain nobody has measured.
 - A central patch of `runInterval` to stagger every pack's timers: it would change timing behind the packs' backs.
@@ -509,3 +482,6 @@ rest of its workstream.
 - XC-12 (a timeout scheduled before a profiling window is not counted in it): documented behavior of
   `/realm:diag`, not worth the code. BSE-18 is a measurement note, not a change.
 - Everything under "Checked and fine" and "Rejected leads" in the findings files.
+- UTL-37 (the redefined rain splash): vanilla's own `rain_splash_particle` has the same 300-particle cap, collision and
+  per-frame acceleration; Realistic Rain's is a third of the area and a little shorter-lived, so it draws no more than
+  vanilla. Nothing to change.

@@ -54,7 +54,30 @@ function countdown(label, n, need) {
 
 /** @type {Map<string, Day>} */
 const cache = new Map();
+/** Players whose progress changed since it was saved: written every 5 seconds and as they leave. @type {Map<string, Player>} */
+const dirty = new Map();
+
+/** Writes the cached day of a player whose progress changed. @param {string} id */
+function flush(id) {
+  const player = dirty.get(id);
+  dirty.delete(id);
+  const day = cache.get(id);
+  if (!player || !day) return;
+  try {
+    player.setDynamicProperty(PROP_DAY, JSON.stringify(day));
+  } catch (e) {
+    console.warn(`[quests] save: ${e}`);
+  }
+}
+system.runInterval(() => {
+  for (const id of [...dirty.keys()]) flush(id);
+}, 100);
+// Player properties can still be written while the player leaves.
+world.beforeEvents.playerLeave.subscribe(({ player }) => {
+  if (dirty.has(player.id)) flush(player.id);
+});
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  dirty.delete(playerId);
   cache.delete(playerId);
   travel.delete(playerId);
   announced.delete(playerId);
@@ -79,6 +102,7 @@ function roll() {
 /** @param {Player} player @param {Day} day */
 function save(player, day) {
   cache.set(player.id, day);
+  dirty.delete(player.id);
   player.setDynamicProperty(PROP_DAY, JSON.stringify(day));
 }
 
@@ -125,7 +149,8 @@ function wants(player, kind) {
 }
 
 /**
- * Adds progress to every unfinished quest of this kind that `id` counts for.
+ * Adds progress to every unfinished quest of this kind that `id` counts for. A finished quest is saved before its
+ * reward is given; other progress is saved within 5 seconds (and as the player leaves), not on every block.
  * @param {Player} player @param {Kind} kind @param {string} id @param {number} [n]
  */
 function progress(player, kind, id, n = 1) {
@@ -140,10 +165,12 @@ function progress(player, kind, id, n = 1) {
     changed = true;
     if (p.p >= q.count) {
       p.done = 1;
+      save(player, day);
+      changed = false;
       complete(player, q, day);
-    } else if (getFor(player, "progressNotes") === true) {
+    } else {
       const step = q.count / 4;
-      if (Math.floor(before / step) !== Math.floor(p.p / step)) {
+      if (Math.floor(before / step) !== Math.floor(p.p / step) && getFor(player, "progressNotes") === true) {
         // The action bar protocol: ask the Coordinates HUD and other steady lines, if installed, to leave the note on
         // screen for a moment, before writing it.
         system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "quests_bp" }));
@@ -151,7 +178,7 @@ function progress(player, kind, id, n = 1) {
       }
     }
   }
-  if (changed) save(player, day);
+  if (changed) dirty.set(player.id, player);
 }
 
 /** Day number each online player was last told about. @type {Map<string, number>} */

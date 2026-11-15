@@ -165,27 +165,36 @@ test("milestones: playtime and distance count the same spread over the second; A
   assert.ok(lookups <= 20 * 8, `objective lookups: ${lookups}`);
 });
 
-test("titles: distance counts the same and saves once a minute, 40 players a run", async () => {
+test("titles: distance counts the same and saves once a minute, each player on their own second, 40 players a run", async () => {
   const sim = createSim();
   const w = walkers(sim, 40);
   await loadReal(sim, "titles_bp");
   /** @type {Map<number, number>} */
   const savesAt = new Map();
+  /** @type {Map<string, number>} */
+  const savesOf = new Map();
   const set = sim.server.world.setDynamicProperty;
   sim.server.world.setDynamicProperty = (k, v) => {
-    if (String(k).startsWith("titles:p:")) savesAt.set(sim.game.tick, (savesAt.get(sim.game.tick) ?? 0) + 1);
+    if (String(k).startsWith("titles:p:")) {
+      savesAt.set(sim.game.tick, (savesAt.get(sim.game.tick) ?? 0) + 1);
+      savesOf.set(String(k), (savesOf.get(String(k)) ?? 0) + 1);
+    }
     return set(k, v);
   };
-  sim.step(1300);
+  sim.step(2500);
   for (const p of w.players) {
     const r = JSON.parse(sim.props.get(`titles:p:${p.id}`) ?? "null");
-    // 4 blocks a second, saved once a minute: at least 59 seconds' worth by 65 seconds
-    assert.ok(r && r.s.d >= 4 * 50 && r.s.d <= 4 * 65, `${p.name} traveled ${r?.s?.d}`);
+    // 4 blocks a second, saved once a minute on the player's own second: by 125 seconds the last save is at most
+    // 60 seconds old, so at least about 64 seconds' worth (less the first second)
+    assert.ok(r && r.s.d >= 4 * 60 && r.s.d <= 4 * 125, `${p.name} traveled ${r?.s?.d}`);
+    const n = savesOf.get(`titles:p:${p.id}`) ?? 0;
+    assert.ok(n >= 1 && n <= 3, `${p.name} saved ${n} times in 125 s`);
   }
   // MCP-160, measured 2026-11-09: one tick visits all 40 players; that bound is off until the pack is fixed.
   assertSweepBounds(w.perTick, { spread: false });
+  // 40 players over 60 seconds: a few share a second, never all of them (before, all 40 saved in one tick).
   const most = Math.max(...savesAt.values());
-  assert.ok(most <= 40, `each player saved at most once a run, got ${most}`);
+  assert.ok(most <= 6, `the saves are spread over the minute, got ${most} in one tick`);
 });
 
 test("guilds: travel counts the same spread over the second, saves spread over the 30 seconds, AFK players aren't read", async () => {
