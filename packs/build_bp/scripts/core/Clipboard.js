@@ -7,7 +7,7 @@ import { getMaxBlocks, getUndoThreshold, getReplaceBlocks, getAllowDestroy, getD
 import { snapshotJob, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
 import { sliceDue, runJobAsync, ownerHere, inTurn } from "./TickBudget.js";
 import { enqueue, cancelQueued } from "./PlacementQueue.js";
-import { reportPlaced } from "../utils/PlacedReport.js";
+import { reportPlacedJob } from "../utils/PlacedReport.js";
 import { ALWAYS_REPLACEABLE, UNPLACEABLE } from "./BlockPlacer.js";
 import { rotateStates } from "../utils/BlockStates.js";
 import { applyModifiersToEntries } from "./ModifierPipeline.js";
@@ -396,7 +396,6 @@ export async function executePaste(player, origin) {
         for (const [tid, count] of consumed) removeBlocks(player, tid, count);
     }
 
-    reportPlaced(dim.id, entries.map((e) => ({ ...e.pos, typeId: e.typeId })), (p) => p.typeId);
     recordSnapshot(player, snapshot);
 
     if (isCut && !creative) {
@@ -429,6 +428,8 @@ export async function executePaste(player, origin) {
                 enqueue(playerId, dimId, e.pos, perm, refund);
             } catch { }
         }
+        yield;
+        yield* reportPlacedJob(dimId, entries.map((e) => ({ ...e.pos, typeId: e.typeId })), (p) => p.typeId);
     })());
     return entries.length;
 }

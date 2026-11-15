@@ -4,10 +4,26 @@ import { isNaturalKind } from "./natural-kinds.js";
 
 const PER_TICK = 16;
 
+// reportPlaced tells the other packs (Town Projects, Skills, Guilds, Daily Quests) that script-placed blocks exist:
+// realm:blocks_placed { dim, box, from }, at most 16 events per tick. The boxes of natural-kind blocks and wild plants
+// (what Town Projects keeps cells for) are sent again with natural: true; Town Projects only listens to those.
+
 /**
- * Tells the other packs (Town Projects, Skills, Guilds, Daily Quests) that script-placed blocks exist:
- * realm:blocks_placed { dim, box, from }, at most 16 events per tick. The boxes of natural-kind blocks and wild plants
- * (what Town Projects keeps cells for) are sent again with natural: true; Town Projects only listens to those.
+ * reportPlaced in slices of 4,096 positions for a job (yields between them): a 50,000-block build's boxes are a lot of
+ * script for one tick. A box cut by a slice edge is sent in two parts, which the listeners treat the same.
+ * @param {string} dimId
+ * @param {{x: number, y: number, z: number}[]} positions
+ * @param {(pos: any) => string | undefined} [typeOf]
+ * @returns {Generator<void, void, void>}
+ */
+export function* reportPlacedJob(dimId, positions, typeOf) {
+    for (let i = 0; i < positions.length; i += 4096) {
+        if (i > 0) yield;
+        reportPlaced(dimId, positions.slice(i, i + 4096), typeOf);
+    }
+}
+
+/**
  * @param {string} dimId
  * @param {{x: number, y: number, z: number}[]} positions
  * @param {(pos: any) => string | undefined} [typeOf] the block type placed at a position

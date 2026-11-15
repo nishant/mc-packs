@@ -5,7 +5,7 @@ import { getMaxBlocks, getBuildSpeed, getUndoThreshold, getReplaceBlocks } from 
 import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 import { enqueue } from "./PlacementQueue.js";
-import { reportPlaced } from "../utils/PlacedReport.js";
+import { reportPlaced, reportPlacedJob } from "../utils/PlacedReport.js";
 import { snapshotJob, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
 import { overBudget, sliceDue, runJobAsync, ownerHere, inTurn } from "./TickBudget.js";
 import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern } from "./Palette.js";
@@ -422,7 +422,11 @@ function* placeJob(player, startDim, positions, anchor, typeId, blockStates, opt
             scheduleOrdered(ordered, waveTicks <= 1 ? 256 : Math.min(64, Math.max(1, Math.ceil(ordered.length / waveTicks))));
         }
     }
-    if (!options.immediate) yield;
-    reportPlaced(dim.id, toPlace, (p) => (assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? p.typeId ?? typeId) : (p.typeId ?? typeId)));
+    const typeOfPos = (p) => (assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? p.typeId ?? typeId) : (p.typeId ?? typeId));
+    if (options.immediate) reportPlaced(dim.id, toPlace, typeOfPos);
+    else {
+        yield;
+        yield* reportPlacedJob(dim.id, toPlace, typeOfPos);
+    }
     return total;
 }
