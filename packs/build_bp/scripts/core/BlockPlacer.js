@@ -5,8 +5,9 @@ import { getMaxBlocks, getBuildSpeed, getUndoThreshold, getReplaceBlocks } from 
 import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 import { enqueue } from "./PlacementQueue.js";
-import { reportPlaced } from "../utils/PlacedReport.js";
-import { captureSnapshot, recordSnapshot } from "./UndoRedo.js";
+import { reportPlaced, reportPlacedJob } from "../utils/PlacedReport.js";
+import { snapshotJob, recordSnapshot, pack, trackWrites } from "./UndoRedo.js";
+import { overBudget, sliceDue, runJobAsync, ownerHere, inTurn } from "./TickBudget.js";
 import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern } from "./Palette.js";
 import { getPlacementStatesFromAir } from "../modes/AirBuildMode.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
@@ -39,8 +40,29 @@ export const ALWAYS_REPLACEABLE = new Set([
     "minecraft:torchflower", "minecraft:open_eyeblossom",
     "minecraft:closed_eyeblossom",
 ]);
+/**
+ * Builds a shape. Returns the number of blocks it will write: at once for `options.immediate` (one Air Build block),
+ * else a Promise. A big build reads its cells in a `system.runJob` job a slice a tick (BSE-01): each cell is read once
+ * for both the filter and the undo snapshot, nothing is charged or written until the reading is done, and a build
+ * whose owner left, died or changed dimension meanwhile stops there. Then the writes go out a few a tick within the
+ * shared tick budget, at every speed (BSE-19).
+ */
 export function placeBlocks(player, positions, anchor, typeId, blockStates, options = {}) {
+    // The build belongs to the dimension it was confirmed in, even if the job starts after a portal.
+    const startDim = player.dimension.id;
+    if (options.immediate) {
+        const job = placeJob(player, startDim, positions, anchor, typeId, blockStates, options);
+        let step = job.next();
+        while (!step.done) step = job.next();
+        return step.value ?? 0;
+    }
+    return inTurn(player.id, async () => (await runJobAsync(placeJob(player, startDim, positions, anchor, typeId, blockStates, options))) ?? 0);
+}
+const BEDROCK_ID = "minecraft:bedrock";
+const AIR_ID = "minecraft:air";
+function* placeJob(player, startDim, positions, anchor, typeId, blockStates, options) {
     if (UNPLACEABLE.has(typeId)) return 0;
+    if (!ownerHere(player, startDim)) return 0;
     if (isBuildBlockedForPlayer(player, true)) return 0;
     const dim           = player.dimension;
     const dimId         = dim.id;
@@ -49,18 +71,31 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
     const creative      = isCreative(player);
     const survival      = !creative;
     const replaceBlocks = creative && getReplaceBlocks(player);
-    let toPlace = filterSafeZonePositions(player, dim.id, positions, true).filter(p => {
-        if (p.y < yMin || p.y > yMax) return false;
-        try {
-            const block = dim.getBlock(p);
-            if (block === null || block === undefined) return true;
-            const existing = block.typeId;
-            if (!creative && existing === "minecraft:bedrock") return false;
-            if (!replaceBlocks && !ALWAYS_REPLACEABLE.has(existing)) return false;
-            return existing !== typeId;
+    const waveTicks     = options.immediate ? 1 : getBuildSpeed(player);
+    // One read per cell for the filter and the undo snapshot (_bt/_bs: what the cell held; air has no states).
+    let toPlace = [];
+    for (const p of filterSafeZonePositions(player, dimId, positions, true)) {
+        if (sliceDue()) {
+            yield;
+            if (!ownerHere(player, dimId)) return 0;
         }
-        catch { return true; }
-    });
+        if (p.y < yMin || p.y > yMax) continue;
+        let block, existing;
+        try {
+            block = dim.getBlock(p);
+            existing = block?.typeId;
+        } catch { toPlace.push(p); continue; }
+        if (existing === undefined) { toPlace.push(p); continue; }
+        if (!creative && existing === BEDROCK_ID) continue;
+        if (!replaceBlocks && !ALWAYS_REPLACEABLE.has(existing)) continue;
+        if (existing === typeId) continue;
+        let states = {};
+        if (existing !== AIR_ID) { try { states = block.permutation.getAllStates(); } catch { } }
+        p._bt = pack(existing);
+        p._bs = states;
+        toPlace.push(p);
+    }
+    if (!toPlace.length) return 0;
     if (toPlace.some(p => p._bedGroup != null)) toPlace = dropIncompleteBeds(toPlace);
     const cap = getMaxBlocks(player);
     const bedBuild = isBedType(typeId);
@@ -110,6 +145,12 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
         toPlace = trimmed.positions;
         if (assignments) assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeByKey.get(`${p.x},${p.y},${p.z}`) ?? typeId }));
     }
+    let basePerm;
+    try {
+        basePerm = BlockPermutation.resolve(typeId, blockStates ?? {});
+    } catch {
+        try { basePerm = BlockPermutation.resolve(typeId); } catch { return 0; }
+    }
     if (!creative) {
         if (assignments) {
             const needed = new Map();
@@ -157,18 +198,20 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
     try { player.playSound("block.end_portal_frame.fill", { pitch: 0.6 }); } catch { }
     const perPosTypeIds  = assignments ? assignments.map(a => a.typeId) : null;
     const undoThreshold  = getUndoThreshold(player);
-    const snapshot = captureSnapshot(dim, toPlace, typeId, blockStates ?? {}, perPosTypeIds, undoThreshold);
+    const snapshot = yield* snapshotJob(dim, toPlace, typeId, blockStates ?? {}, perPosTypeIds, undoThreshold);
     if (snapshot) snapshot.survival = survival;
     if (!snapshot) {
         lockActionBar(player.id, 1500);
         player.onScreenDisplay.setActionBar(t("eb.place.undo_disabled"));
     }
-    let basePerm;
-    try {
-        basePerm = BlockPermutation.resolve(typeId, blockStates ?? {});
-    } catch {
-        try { basePerm = BlockPermutation.resolve(typeId); } catch { return 0; }
-    }
+    // Recorded now, before any write, with its write id (trackWrites, also kept in a saved entry): an undo while the
+    // writes run stops the rest of them first.
+    const ctl = { stopped: false, onStop: null };
+    const untrack = trackWrites(snapshot, () => {
+        ctl.stopped = true;
+        if (ctl.onStop) ctl.onStop();
+    });
+    recordSnapshot(player, snapshot);
     const permMap    = new Map();
     const posTypeMap = new Map();
     if (assignments) {
@@ -279,56 +322,82 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                 }
             }
         }
+        // What a survival player paid for this block: given back if the queue finally gives the write up (BSE-12).
+        const refund = survival && !pos._bedHead
+            ? (assignments ? (posTypeMap.get(`${pos.x},${pos.y},${pos.z}`) ?? typeId) : (pos.typeId ?? typeId))
+            : undefined;
         try {
             const block = dim.getBlock(pos);
             if (block) {
                 block.setPermutation(perm);
             } else {
-                enqueue(playerId, dim.id, pos, perm);
+                enqueue(playerId, dim.id, pos, perm, refund);
             }
         } catch (e) {
             const msg = String(e);
-            if (!msg.includes("LocationOutOfWorldBoundaries")) {
+            // An unloaded chunk waits in the queue like a missing block (it used to be lost after the charge).
+            if (e?.name === "LocationInUnloadedChunkError" || /unloaded chunk/i.test(msg)) {
+                enqueue(playerId, dim.id, pos, perm, refund);
+            } else if (!msg.includes("LocationOutOfWorldBoundaries")) {
                 console.warn(`[EB] place failed @ ${pos.x},${pos.y},${pos.z} - ${e}`);
             }
         }
     }
+    const refundFrom = (list, from) => {
+        if (!survival || from >= list.length || !player.isValid) return;
+        const refund = new Map();
+        for (let r = from; r < list.length; r++) {
+            const p = list[r];
+            if (p._bedHead) continue;
+            const tid = assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? typeId) : typeId;
+            refund.set(tid, (refund.get(tid) ?? 0) + 1);
+        }
+        for (const [tid, cnt] of refund) giveBlocks(player, tid, cnt);
+    };
     function scheduleOrdered(ordered, perTick) {
         let idx = 0;
         const runId = system.runInterval(() => {
             try {
-                let end = Math.min(idx + perTick, ordered.length);
-                const edge = ordered[end - 1];
-                const next = ordered[end];
-                if (edge && next && edge._bedGroup != null && edge._bedGroup === next._bedGroup) end++;
-                for (; idx < end; idx++) placeOne(ordered[idx]);
-                if (idx >= ordered.length) system.clearRun(runId);
+                // At most perTick a tick (64 at most at the wave speeds, 256 at Instant), within the shared budget.
+                const end = Math.min(idx + perTick, ordered.length);
+                let n = 0;
+                while (idx < end) {
+                    if ((++n & 15) === 0 && overBudget()) break;
+                    placeOne(ordered[idx++]);
+                }
+                // Never split a bed between ticks.
+                const edge = ordered[idx - 1];
+                const next = ordered[idx];
+                if (edge && next && edge._bedGroup != null && edge._bedGroup === next._bedGroup) placeOne(ordered[idx++]);
+                if (idx >= ordered.length) {
+                    system.clearRun(runId);
+                    untrack();
+                }
             } catch {
                 system.clearRun(runId);
-                if (survival && idx < ordered.length && player.isValid) {
-                    const refund = new Map();
-                    for (let r = idx; r < ordered.length; r++) {
-                        const p = ordered[r];
-                        if (p._bedHead) continue;
-                        const tid = assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? typeId) : typeId;
-                        refund.set(tid, (refund.get(tid) ?? 0) + 1);
-                    }
-                    for (const [tid, cnt] of refund) giveBlocks(player, tid, cnt);
-                }
+                untrack();
+                refundFrom(ordered, idx);
             }
         }, 1);
+        // An undo of this build while it is written: stop and hand back what was not written.
+        ctl.onStop = () => {
+            system.clearRun(runId);
+            refundFrom(ordered, idx);
+        };
     }
     if (options.immediate) {
+        untrack();
         for (let i = 0; i < total; i++) placeOne(toPlace[i]);
     } else {
-        const waveTicks = getBuildSpeed(player);
+        let ordered;
         if (waveTicks <= 1) {
-            scheduleOrdered(keepBedHalvesTogether(toPlace), 256);
+            ordered = keepBedHalvesTogether(toPlace);
         } else {
-
+            // Shells by distance from the anchor, each shuffled: plain script work, sliced too.
             const ax = anchor.x + 0.5, ay = anchor.y, az = anchor.z + 0.5;
             const shellMap = new Map();
             for (const pos of toPlace) {
+                if (sliceDue()) yield;
                 const shell = Math.floor(Math.sqrt(
                     (pos.x - ax) ** 2 + (pos.y - ay) ** 2 + (pos.z - az) ** 2
                 ));
@@ -340,13 +409,24 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                     const j = Math.floor(Math.random() * (i + 1));
                     [shell[i], shell[j]] = [shell[j], shell[i]];
                 }
+                if (sliceDue()) yield;
             }
-            const shellList     = [...shellMap.keys()].sort((a, b) => a - b).map(k => shellMap.get(k));
-            const ordered       = keepBedHalvesTogether(shellList.flat());
-            scheduleOrdered(ordered, Math.min(64, Math.max(1, Math.ceil(ordered.length / waveTicks))));
+            const shellList = [...shellMap.keys()].sort((a, b) => a - b).map(k => shellMap.get(k));
+            yield;
+            ordered = keepBedHalvesTogether(shellList.flat());
+        }
+        if (ctl.stopped) {
+            // Undone before a block was written: everything goes back.
+            refundFrom(ordered, 0);
+        } else {
+            scheduleOrdered(ordered, waveTicks <= 1 ? 256 : Math.min(64, Math.max(1, Math.ceil(ordered.length / waveTicks))));
         }
     }
-    reportPlaced(dim.id, toPlace, (p) => (assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? p.typeId ?? typeId) : (p.typeId ?? typeId)));
-    recordSnapshot(player, snapshot);
+    const typeOfPos = (p) => (assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? p.typeId ?? typeId) : (p.typeId ?? typeId));
+    if (options.immediate) reportPlaced(dim.id, toPlace, typeOfPos);
+    else {
+        yield;
+        yield* reportPlacedJob(dim.id, toPlace, typeOfPos);
+    }
     return total;
 }

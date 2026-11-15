@@ -6,6 +6,7 @@ import { getMaxBlocks, getUndoThreshold, getDestroyDrops, getBuildSpeed } from "
 import { recordSnapshot } from "./UndoRedo.js";
 import { lockActionBar } from "../utils/ActionBar.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
+import { overBudget } from "./TickBudget.js";
 import { bedPartnerPos, isBedType, expandDestroyForClaims, dropIncompleteBeds, trimPlacement, chargeUnits } from "./beds.js";
 
 export const UNBREAKABLE = new Set([
@@ -253,8 +254,7 @@ function isNoDropBlock(typeId) {
     return false;
 }
 
-export function getBlockDrop(block, hasSilkTouch, fortuneLevel) {
-    const typeId = block.typeId;
+export function getBlockDrop(block, hasSilkTouch, fortuneLevel, typeId = block.typeId) {
     if (hasSilkTouch) return { typeId, amount: 1 };
     if (isNoDropBlock(typeId)) return null;
 
@@ -352,17 +352,24 @@ export function startMagnetEffect(player, entities) {
     }, 1);
 }
 
-export function destroyBlocks(player, positions, onComplete) {
+/**
+ * Mines the cells a few a tick within the shared tick budget. `known` holds what confirmPlacement already read for
+ * each cell ("x,y,z" -> { typeId, states only for a bed }), so a cell is not read again before its turn (BSE-01).
+ */
+export function destroyBlocks(player, positions, known, onComplete) {
     if (isBuildBlockedForPlayer(player, true)) { onComplete?.(0); return; }
     const dim      = player.dimension;
     const dimId    = dim.id;
     const yMin     = dimId === "minecraft:nether" || dimId === "minecraft:the_end" ? 0 : -64;
     const yMax     = dimId === "minecraft:nether" ? 127 : dimId === "minecraft:the_end" ? 255 : 319;
     const expanded = expandDestroyForClaims(positions, (p) => {
+        const k = `${p.x},${p.y},${p.z}`;
+        if (known?.has(k)) return known.get(k);
         try {
             const block = dim.getBlock(p);
             if (!block) return null;
-            return { typeId: block.typeId, states: block.permutation.getAllStates() };
+            const typeId = block.typeId;
+            return isBedType(typeId) ? { typeId, states: block.permutation.getAllStates() } : { typeId };
         } catch { return null; }
     });
     const safePos  = dropIncompleteBeds(filterSafeZonePositions(player, dim.id, expanded, true).filter(p => p.y >= yMin && p.y <= yMax));
@@ -447,12 +454,10 @@ export function destroyBlocks(player, positions, onComplete) {
     const threshold = getUndoThreshold(player);
     const snapshot  = threshold > 0 ? { dim: dim.id, bef: [], aft: [], destroy: true, survival: !creative } : null;
 
-    const BULK_THRESHOLD = 500;
-    const useBulk        = capped.length > BULK_THRESHOLD;
     const spawnDrops     = !creative;
     const collectDrops   = !creative && getDestroyDrops(player);
-    const drops          = (useBulk && collectDrops) ? new Map() : null;
-    const spawnedEntities = [];
+    // Collected drops are counted and handed over at the end for any size (no item entity per block, no magnet).
+    const drops          = collectDrops ? new Map() : null;
     let totalXp    = 0;
     let count      = 0;
     let damageDealt = 0;
@@ -469,8 +474,10 @@ export function destroyBlocks(player, positions, onComplete) {
             return;
         }
         const end = Math.min(idx + blocksPerTick, capped.length);
+        let steps = 0;
 
         for (; idx < end; idx++) {
+            if ((++steps & 15) === 0 && overBudget()) break;
             if (!creative && durabilityLeft <= 0) {
                 if (spareTools.length > 0) {
 
@@ -501,25 +508,28 @@ export function destroyBlocks(player, positions, onComplete) {
                 if (clearedBeds.has(posKey)) continue;
                 const block = dim.getBlock(pos);
                 if (!block) { pending.push(pos); continue; }
-                if (block.isAir || UNBREAKABLE.has(block.typeId)) continue;
-                if (!creative && !canMineWith(toolTypeId, block.typeId, false)) continue;
+                // One typeId read and at most one states read per block (BSE-34).
+                const typeId = block.typeId;
+                if (typeId === "minecraft:air" || UNBREAKABLE.has(typeId)) continue;
+                if (!creative && !canMineWith(toolTypeId, typeId, false)) continue;
+                const isBed  = isBedType(typeId);
+                const states = (snapshot || isBed) ? block.permutation.getAllStates() : null;
 
-                const bedHead = isBedType(block.typeId) && (pos._bedHead === true || block.permutation.getAllStates()?.head_piece_bit === true);
+                const bedHead = isBed && (pos._bedHead === true || states?.head_piece_bit === true);
                 let drop      = null;
                 if (spawnDrops && !bedHead) {
-                    drop = getBlockDrop(block, hasSilkTouch, fortuneLevel);
+                    drop = getBlockDrop(block, hasSilkTouch, fortuneLevel, typeId);
                 }
 
-                const xpGain = (!hasSilkTouch && SCULK_XP[block.typeId] ? SCULK_XP[block.typeId] : 0)
-                             + getOreXp(block.typeId, hasSilkTouch);
+                const xpGain = (!hasSilkTouch && SCULK_XP[typeId] ? SCULK_XP[typeId] : 0)
+                             + getOreXp(typeId, hasSilkTouch);
                 let snapBef = null;
                 if (snapshot) {
-                    const packed = block.typeId.startsWith("minecraft:") ? block.typeId.slice(10) : block.typeId;
-                    const states = block.permutation.getAllStates();
-                    const units = chargeUnits(block.typeId, states, pos._bedHead === true);
+                    const packed = typeId.startsWith("minecraft:") ? typeId.slice(10) : typeId;
+                    const units = chargeUnits(typeId, states, pos._bedHead === true);
                     snapBef = { x: pos.x, y: pos.y, z: pos.z, t: packed, s: states, u: units };
                 }
-                const bedStates = isBedType(block.typeId) ? block.permutation.getAllStates() : null;
+                const bedStates = isBed ? states : null;
                 const partner = bedStates ? bedPartnerPos(pos, bedStates) : null;
                 const pk = partner ? `${partner.x},${partner.y},${partner.z}` : null;
                 if (partner && pk && !clearedBeds.has(pk)) {
@@ -560,8 +570,7 @@ export function destroyBlocks(player, positions, onComplete) {
                             drops.set(drop.typeId, (drops.get(drop.typeId) ?? 0) + drop.amount);
                         } else {
                             try {
-                                const entity = dim.spawnItem(new ItemStack(drop.typeId, drop.amount), { x: pos.x + 0.5, y: pos.y + 1.0, z: pos.z + 0.5 });
-                                if (entity) spawnedEntities.push(entity);
+                                dim.spawnItem(new ItemStack(drop.typeId, drop.amount), { x: pos.x + 0.5, y: pos.y + 1.0, z: pos.z + 0.5 });
                             } catch { }
                         }
                     }
@@ -596,7 +605,7 @@ export function destroyBlocks(player, positions, onComplete) {
 
         system.clearRun(runId);
 
-        if (useBulk && drops && drops.size > 0) {
+        if (drops && drops.size > 0) {
             try {
                 const head     = player.getHeadLocation();
                 const spawnPos = { x: head.x, y: head.y - 1, z: head.z };
@@ -609,8 +618,6 @@ export function destroyBlocks(player, positions, onComplete) {
                     }
                 }
             } catch { }
-        } else if (spawnedEntities.length > 0 && collectDrops) {
-            startMagnetEffect(player, spawnedEntities);
         }
 
         if (!creative && toolTypeId && damageDealt > 0) {

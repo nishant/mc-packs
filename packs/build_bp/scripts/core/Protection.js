@@ -43,9 +43,13 @@ export function isBuildBlockedForPlayer(player, notify = false) {
     return false;
 }
 
-export function inSafeZoneAt(dimId, x, z) {
-    for (const zone of allZones()) {
-        if (zone.src !== "zones" || zone.dim !== dimId) continue;
+/** The Safe Zones pack's zones in one dimension (one list per build, not one per cell). */
+export function safeZonesIn(dimId) {
+    return allZones().filter((zone) => zone.src === "zones" && zone.dim === dimId);
+}
+
+export function inSafeZoneAt(dimId, x, z, zones = safeZonesIn(dimId)) {
+    for (const zone of zones) {
         if (zone.shape === "square") {
             if (Math.abs(x - zone.x) <= zone.r && Math.abs(z - zone.z) <= zone.r) return zone;
             continue;
@@ -60,10 +64,12 @@ export function inSafeZoneAt(dimId, x, z) {
 export function filterSafeZonePositions(player, dimId, positions, notify = false) {
     if (!positions?.length) return positions;
     if (isOp(player) || get("safeZonesOperatorsOnly") !== true) return positions;
+    const zones = safeZonesIn(dimId);
+    if (!zones.length) return positions;
     let blockedZone = undefined;
     const allowed = positions.filter(p => {
         const pos = p.pos ?? p;
-        const z = inSafeZoneAt(dimId, pos.x, pos.z);
+        const z = inSafeZoneAt(dimId, pos.x, pos.z, zones);
         if (z) {
             blockedZone = z;
             return false;

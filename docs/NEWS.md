@@ -11,6 +11,14 @@ entries below as a changelog.
 
 - Minimap: the radar costs the server about a third of what it did while players move, and its land fills in faster on a small server.
 
+## Smoother building
+
+- Easy Building: big builds, copies, cuts and pastes no longer freeze the server. They start a moment later and fill in over a few seconds.
+- Easy Building: the preview stays still when you stop aiming, instead of flipping between a box and the shape.
+- Easy Building: blocks you dig with a tool come to you as full stacks at the end.
+- Easy Building: using undo while a build is still going stops it and gives back the blocks it had not placed yet.
+- Easy Building: blocks placed into a part of the world that is not loaded wait for it now, instead of being lost.
+
 ## Minimap scans
 
 - Minimap: radars keep filling in after a big scan, and players can scan up to 128 blocks (operators 384).

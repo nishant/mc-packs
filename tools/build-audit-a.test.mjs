@@ -52,7 +52,7 @@ function claimsAnswer(claims) {
 const noClaims = () => claimsAnswer([]);
 noClaims();
 
-test("MCP-001/010: a copy box over the block limit is refused before any block is read", () => {
+test("MCP-001/010: a copy box over the block limit is refused before any block is read", async () => {
   const p = player({ op: true });
   setMaxBlocks(p, 1000);
   let reads = 0;
@@ -62,7 +62,7 @@ test("MCP-001/010: a copy box over the block limit is refused before any block i
     const far = { x: 5000, y: 300, z: 5000 };
     assert.equal(boxVolume("minecraft:overworld", { x: 0, y: -64, z: 0 }, far) > 1000, true);
     assert.equal(copyTooBig(p, { x: 0, y: -64, z: 0 }, far), true);
-    assert.equal(captureClipboard(p, { x: 0, y: -64, z: 0 }, far), 0);
+    assert.equal(await captureClipboard(p, { x: 0, y: -64, z: 0 }, far), 0);
     assert.equal(reads, 0);
     assert.equal(copyTooBig(p, { x: 0, y: 64, z: 0 }, { x: 9, y: 66, z: 9 }), false);
   } finally { dim.getBlock = real; }
@@ -90,6 +90,7 @@ test("MCP-005: a survival cut leaves bedrock and Land Claims cells alone", async
   claimsAnswer([{ n: "Bob", x1: 102, z1: 100, x2: 102, z2: 100 }]);
   const cut = await cutAndCapture(p, { x: 100, y: 64, z: 100 }, { x: 104, y: 64, z: 100 });
   noClaims();
+  mc.flushIntervals(); // the cut writes its air through the placement queue
   assert.equal(cut, 3, "100, 101 and 103 are cut");
   assert.equal(at(100, 64, 100).typeId, "minecraft:air");
   assert.equal(at(102, 64, 100).typeId, "minecraft:stone", "the claimed cell stays");
