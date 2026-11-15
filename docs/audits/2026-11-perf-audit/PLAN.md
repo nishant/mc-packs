@@ -268,19 +268,14 @@ Findings: HUD-04, HUD-05, HUD-27. Packs: the 7 with `side.js`, `hud_rp`.
 - Proof: `tools/hud-layout.test.mjs`, `side-*` tests, the HUD scenarios; `setTitle` bytes per tick in the profile;
   one check on the Fold with the old and the new Realm Resources (section 6).
 
-### W7 Easy Building: no long ticks (M to L: two PRs)
+### W7 Easy Building: no long ticks (M: one PR left, W7a)
 
-Findings: BSE-01, BSE-02, BSE-28, BSE-34, BSE-19, BSE-12, BSE-32, BSE-36. Packs: `build_bp`.
+Findings: BSE-01, BSE-34, BSE-19, BSE-36. Packs: `build_bp`.
 - **W7a** Place, destroy, copy, cut and paste read every cell in one tick before the sliced writes start, and cut
   sets every block to air unsliced (BSE-01): move the reading into `system.runJob` generators with a time budget per
   tick, read each cell once for both the filter and the undo snapshot, and send cut's writes through the sliced path.
   The destroy loop's ten `typeId` reads per block and the 500 drops pulled every tick (BSE-34). A time budget for
   "Instant" placing (BSE-19).
-- **W7b** The preview: its cache key contains the draw cadence the solve itself changes, so many previews re-solve
-  every 15 ticks forever (BSE-28: a bug, fix first and alone); a solve reads every cell, up to 8,000 with defer on
-  (BSE-02: slice it, or solve the shell only). The placement queue rescanning itself every second and dropping blocks
-  the player was charged for (BSE-12, a bug with a behavior change in the player's favor). A ticking area added and
-  removed on every paste even in loaded chunks (BSE-32).
 - Proof: `build-big-perf` (longest tick under 50 ms for 50,000 blocks); `build*.js` scenarios; undo and redo of a
   sliced job interrupted by leave, death and a dimension change (C17).
 - Risk: a job that now spans ticks can be interleaved with another player's edit or the owner leaving: keep the

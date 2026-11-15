@@ -8,6 +8,7 @@
     "Mining the same stone spot again within 5 minutes gives no Mining XP, so cobblestone and basalt generators do not farm it.",
     "The sky-wonder bonus in Frogs in Three Voices also works with Rainbows, Tornadoes or Storm Cells.",
     "Town Projects residents can no longer breed.",
+    "Easy Building: a resting preview no longer flips between the box and the shape, big previews no longer stall the server, and survival blocks that could not reach an unloaded chunk are handed back instead of lost.",
     "Minimap radar: a full terrain cache no longer leaves radars blank for minutes after a big scan, and costs the server less while players travel; players can scan up to 128 blocks with /realm:minimap scan (operators 384)."
   ],
   "resourceNotes": [
@@ -77,6 +78,10 @@
     "quests_bp": {
       "version": "1.3.13",
       "notes": "Fish quests count the catches Fishing Rewards reports, instead of following every bobber again (when Fishing Rewards is installed)."
+    },
+    "build_bp": {
+      "version": "3.0.17",
+      "notes": "The deferred preview solves a shape once while the aim rests (it re-solved about every 13 ticks) and reads big shapes over a few ticks; queued blocks open a chunk loader only once one comes back unloaded (at most two), wait up to a minute for one, and are refunded to survival players when given up."
     },
     "map_bp": {
       "version": "1.5.8",
