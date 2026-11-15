@@ -33,30 +33,45 @@ function dimOf(id) {
 export function setPlayerBuildSpeed(playerId, blocksPerTick) {
     playerSpeeds.set(playerId, Math.max(1, Math.floor(blocksPerTick)));
 }
+/**
+ * A player left: their speed goes, but their queued writes still finish (a cut whose air was still queued must not
+ * leave its blocks in the world while its clipboard is saved), and the loader goes when the queue is empty.
+ */
 export function removePlayerBuildSpeed(playerId) {
     playerSpeeds.delete(playerId);
-    const q = queues.get(playerId);
-    if (q) {
-        totalPending -= q.items.length - q.head;
-        queues.delete(playerId);
-    }
-    releaseChunkLoaders(playerId);
+    if (!queues.has(playerId)) releaseChunkLoaders(playerId);
 }
 /**
  * Queues one block write for a cell that could not be written yet (an unloaded chunk) or for a paste. `refund` is the
- * item the player was charged for this block, given back if the write is finally given up.
+ * item the player was charged for this block, given back if the write is finally given up. With `expect` (a cut), the
+ * cell is written only while it still holds that type.
  */
-export function enqueue(playerId, dimensionId, pos, permutation, refund) {
+export function enqueue(playerId, dimensionId, pos, permutation, refund, expect, jid) {
     let q = queues.get(playerId);
     if (!q) {
         q = { items: [], head: 0, sx: 0, sy: 0, sz: 0, miss: null, missDim: dimensionId, loader: null };
         queues.set(playerId, q);
     }
-    q.items.push({ dimensionId, pos, permutation, refund, attempts: 0, tried: -1 });
+    q.items.push({ dimensionId, pos, permutation, refund, expect, jid, attempts: 0, tried: -1 });
     q.sx += pos.x; q.sy += pos.y; q.sz += pos.z;
     totalPending++;
 }
 export function queueSize() { return totalPending; }
+/** Drops the player's waiting writes of one job (an undo of a cut whose air is still queued). */
+export function cancelQueued(playerId, jid) {
+    const q = queues.get(playerId);
+    if (!q || jid === undefined) return;
+    const kept = [];
+    for (let i = q.head; i < q.items.length; i++) {
+        const e = q.items[i];
+        if (!e) continue;
+        if (e.jid === jid) {
+            totalPending--;
+            q.sx -= e.pos.x; q.sy -= e.pos.y; q.sz -= e.pos.z;
+        } else kept.push(e);
+    }
+    if (kept.length) { q.items = kept; q.head = 0; } else queues.delete(playerId);
+}
 function isUnloaded(e) {
     return e?.name === "LocationInUnloadedChunkError" || /unloaded chunk/i.test(String(e?.message ?? e));
 }
@@ -129,7 +144,9 @@ export function startPlacementQueue() {
                     let result = "drop";
                     try {
                         const block = dimOf(entry.dimensionId).getBlock(entry.pos);
-                        if (block) {
+                        if (block && entry.expect && block.typeId !== entry.expect) {
+                            result = "skip";
+                        } else if (block) {
                             block.setPermutation(entry.permutation);
                             result = "placed";
                         } else {
@@ -153,7 +170,7 @@ export function startPlacementQueue() {
                     if (result === "placed") {
                         done++;
                         totalPlaced++;
-                    } else if (entry.refund) {
+                    } else if (result !== "skip" && entry.refund) {
                         // Given up: hand back what the player was charged for this block.
                         let byType = refunds.get(playerId);
                         if (!byType) { byType = new Map(); refunds.set(playerId, byType); }

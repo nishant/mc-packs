@@ -6,6 +6,8 @@ export const MAX_CHUNKS = 40;
 
 /** True when a clipboard's blocks fit in one saved slot (what saveSlot accepts). */
 export function fitsInSlot(blocks) {
+    // Every block takes at least 40 characters: a clipboard over that bound cannot fit, and is not stringified.
+    if (blocks.length * 40 > CHUNK_SIZE * MAX_CHUNKS) return false;
     try { return JSON.stringify(blocks).length <= CHUNK_SIZE * MAX_CHUNKS; } catch { return false; }
 }
 
@@ -40,6 +42,7 @@ export function saveSlot(player, slot, clipboard) {
     };
     if (clipboard.isCut === true && clipboard.cutId !== undefined) meta.cv = clipboard.cutId;
     try {
+        if (clipboard.blocks.length * 40 > CHUNK_SIZE * MAX_CHUNKS) return false;
         const data = JSON.stringify(clipboard.blocks);
         if (data.length > CHUNK_SIZE * MAX_CHUNKS) return false;
         // Chunks first, stale chunks next, the meta last: a failure leaves the slot empty, never half old and half new.

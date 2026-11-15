@@ -268,18 +268,17 @@ Findings: HUD-04, HUD-05, HUD-27. Packs: the 7 with `side.js`, `hud_rp`.
 - Proof: `tools/hud-layout.test.mjs`, `side-*` tests, the HUD scenarios; `setTitle` bytes per tick in the profile;
   one check on the Fold with the old and the new Realm Resources (section 6).
 
-### W7 Easy Building: no long ticks (M: one PR left, W7a)
+### W7 Easy Building: what is left of the long ticks (S)
 
-Findings: BSE-01, BSE-34, BSE-19, BSE-36. Packs: `build_bp`.
-- **W7a** Place, destroy, copy, cut and paste read every cell in one tick before the sliced writes start, and cut
-  sets every block to air unsliced (BSE-01): move the reading into `system.runJob` generators with a time budget per
-  tick, read each cell once for both the filter and the undo snapshot, and send cut's writes through the sliced path.
-  The destroy loop's ten `typeId` reads per block and the 500 drops pulled every tick (BSE-34). A time budget for
-  "Instant" placing (BSE-19).
-- Proof: `build-big-perf` (longest tick under 50 ms for 50,000 blocks); `build*.js` scenarios; undo and redo of a
-  sliced job interrupted by leave, death and a dimension change (C17).
-- Risk: a job that now spans ticks can be interleaved with another player's edit or the owner leaving: keep the
-  existing lifecycle generation checks around every yield.
+Findings: BSE-01 (the rest), BSE-36. Packs: `build_bp`.
+- Hollow spheres, cylinders and circles still scan their whole bounding box in script before a build or preview
+  (`utils/GeometryUtils.js`, up to 2 million cells at the limit): walk the shell analytically (per y-slice, the two x
+  roots) instead. Not done with the jobs because it is plain script work in the shape handlers, not reads.
+- Every item use by anyone runs `hasRequiredTag` and `getInfiniteReach` before the mode test (BSE-36).
+- A 48,000-block paste still has one tick of 111 to 119 ms in `build-big-perf` (place, copy and cut are at the
+  runner's idle floor, 71 to 75 ms against 66 with no job at all): find it (the profiler shows an 80 ms build_bp
+  callback during the paste, the same as before W7a; likely the placement queue's writes or `trimPasteEntries`).
+- Proof: `build-big-perf` with a hollow sphere of radius 40 added as a phase.
 
 ### W8 Easy Building: previews, particles and the idle floor (M)
 
