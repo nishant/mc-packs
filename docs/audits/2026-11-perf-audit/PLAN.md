@@ -300,21 +300,12 @@ Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
 
 ### W10 Townsfolk, labels and towns (M to L: two PRs)
 
-Findings: ENT-01, ENT-02, ENT-03, ENT-04, ENT-16, ENT-25, ENT-27, ENT-32, ENT-40, ENT-29, ENT-38 (W10a); ENT-05,
-ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `npc_bp`, `town_bp`,
-`wander_bp`, `caravan_bp` (the four with `name-labels.js`), `tools/name-labels-shared.js`, `tools/owed-shared.js`,
-`tools/tether-shared.js`.
-- **W10a Labels and the townsfolk loop.** The "is anyone near" test reads every player's dimension and place once
-  per townsfolk every half second (ENT-01: 3 x players x townsfolk calls, 14 ms bursts at 40 players with nobody
-  near a town): read the players once per run. The label sync's 2 ms is 229 native calls, 3 per observer and 9 per
-  townsfolk whether near or far (ENT-02); the two earlier attempts removed none of them. Learn validity from events
-  instead of asking, and keep fixed anchors for townsfolk that do not move, which takes a standing NPC to about one
-  call. This is OPEN.md O3. For wanderers, split "follow the mob" from "who sees the label" so the 2-tick sync stops
-  repeating every read to move one label (ENT-03); separate create and remove distances at the label range edge
-  (ENT-04); read a caption back only on the sweep (ENT-16). A bug to fix on the way: a townsfolk with no saved skin
-  and any entity within 2 blocks loses and regains its label every 10 s (ENT-25). The 10-second audit of every
-  loaded townsfolk (ENT-40), turning to a player being a teleport (ENT-27), and wander's 405 block reads around
-  each exploring player every minute at night before a 7% roll (ENT-29: roll first).
+Findings: ENT-05, ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `town_bp`,
+`tools/owed-shared.js`, `tools/tether-shared.js`. W10a is #249 (npc_bp, wander_bp, caravan_bp and the
+shared labels); left from it, each only if a measurement asks for it: with a crowd standing around the townsfolk
+the half-second loop is still about 1.2 to 1.6 ms (npc-labels-perf near phase at 40, mostly the turning teleports and
+the players' places, which that phase needs); the label entities' `minecraft:transient` and `minecraft:physics`
+(ENT-32, needs a BDS check); caravan_bp's traders still use the labels' default reads (`trustHandles` off).
 - **W10b The town scan and saved indexes.** A project with no valid spot in the loaded ground is scanned from
   scratch every 5 s while a player is in the town: the column cache dies with each scan, columns past tick distance 4
   are always "unknown", and "unknown" never ends as "no good spot" (ENT-05); walks over cached columns are also

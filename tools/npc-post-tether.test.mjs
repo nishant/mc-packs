@@ -32,8 +32,12 @@ const blocks = {
 };
 
 function run(rec, entity) {
+  entity.getHeadLocation ??= function () {
+    return { ...this.location, y: this.location.y + 1.6 };
+  };
   const ctx = {
     world: { getDimension: () => ({ id: "minecraft:overworld", ...blocks }) },
+    dimOf: (/** @type {string} */ id) => ctx.world.getDimension(id),
     system: { currentTick: 0 },
     stateOf: () => ({}),
     save() {},
