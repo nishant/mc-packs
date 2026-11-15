@@ -275,6 +275,9 @@ Findings: BSE-01 (the rest), BSE-36. Packs: `build_bp`.
   (`utils/GeometryUtils.js`, up to 2 million cells at the limit): walk the shell analytically (per y-slice, the two x
   roots) instead. Not done with the jobs because it is plain script work in the shape handlers, not reads.
 - Every item use by anyone runs `hasRequiredTag` and `getInfiniteReach` before the mode test (BSE-36).
+- A 48,000-block paste still has one tick of 111 to 119 ms in `build-big-perf` (place, copy and cut are at the
+  runner's idle floor, 71 to 75 ms against 66 with no job at all): find it (the profiler shows an 80 ms build_bp
+  callback during the paste, the same as before W7a; likely the placement queue's writes or `trimPasteEntries`).
 - Proof: `build-big-perf` with a hollow sphere of radius 40 added as a phase.
 
 ### W8 Easy Building: previews, particles and the idle floor (M)
