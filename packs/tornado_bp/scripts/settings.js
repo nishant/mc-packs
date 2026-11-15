@@ -19,6 +19,7 @@ const OPTIONS = [
   { key: "throwPlayers", type: "bool", scope: "world", label: "Suck up & launch players", help: "Players near the funnel (any gamemode) are sucked in, spun around up the funnel and shot high into the sky" },
   { key: "viewDistance", type: "int", scope: "world", label: "Funnel view distance (blocks)", min: 32, max: 192, step: 16 },
   { key: "rings", type: "int", scope: "world", label: "Funnel rings", help: "Rings of vortex clouds stacked up the funnel, for each nearby player", min: 4, max: 32, step: 1 },
+  { key: "density", type: "float", scope: "player", base: "density", label: "Tornado funnel density", help: "Lower it if a tornado slows your device down. With two or more players near the funnel, it is drawn once for all of them at the realm's density", min: 0.25, max: 1.5, step: 0.25 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

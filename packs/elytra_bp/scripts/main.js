@@ -6,6 +6,7 @@ import {
   EquipmentSlot,
   GameMode,
   ItemStack,
+  MolangVariableMap,
   Player,
   system,
   world,
@@ -162,10 +163,19 @@ function consumeNosRocket(player) {
   return false;
 }
 
+/** The NOS plume's two emitters' variables, made on first use (not while the scripts load) and reused: spawnParticle copies them. */
+/** @type {MolangVariableMap | undefined} */
+let ringVars;
+/** @type {MolangVariableMap | undefined} */
+let ribbonVars;
+
 /**
- * Spawns blue/cyan nitrous flame particles with orange spark accents along the gliding player's flight path
- * (both in front/beside the wings so first-person players see the nitrous slipstream, and at the tail so
- * third-person players and bystanders see a blazing cyan-blue & orange afterburner trail).
+ * Spawns the nitrous plume along the gliding player's flight path: a cyan-blue slipstream ring ahead of the head
+ * (first-person players see it stream past the corners of the view) and an afterburner ribbon behind (third-person
+ * players and bystanders), with orange embers once the boost is hot. Two Realm Skies emitters a tick
+ * (`realm:nos_ring`, `realm:nos_ribbon`) whose particles place themselves, plus one vanilla blue flame (so the boost
+ * shows without the resource pack) and, at full boost, a lava pop. Before 1.4.0 this was 41 spawns a tick at full
+ * boost (16 ring points and 24 ribbon points of 4 particle kinds each, and the lava), 12 during the spool-up.
  * @param {Player} player
  * @param {{ x: number, y: number, z: number }} forward
  * @param {"spool" | "boost" | "flutter"} phase
@@ -176,66 +186,46 @@ function spawnNosParticles(player, forward, phase) {
   const head = player.getHeadLocation();
   const vel = player.getVelocity();
   const spd = Math.hypot(vel.x, vel.y, vel.z); // blocks per tick: 3.6 at 72 blocks/s
-  const hot = phase === "boost" || phase === "flutter";
-  const jitter = (/** @type {number} */ s) => (Math.random() - 0.5) * s * 2;
-  const emit = (/** @type {string} */ id, /** @type {{ x: number, y: number, z: number }} */ at) => {
+  const hot = phase === "boost" || phase === "flutter" ? 1 : 0;
+  const emit = (/** @type {string} */ id, /** @type {{ x: number, y: number, z: number }} */ at, /** @type {MolangVariableMap | undefined} */ vars = undefined) => {
     try {
-      dim.spawnParticle(id, at);
+      dim.spawnParticle(id, at, vars);
     } catch {
       // unloaded or unsupported particle
     }
   };
 
-  // Orthogonal axes around the sightline (falls back to world X when looking straight up or down)
+  // The level right-hand axis around the sightline (world X when looking straight up or down); the ring's up axis is
+  // worked out on the device from it and the forward one.
   const flat = Math.hypot(forward.x, forward.z);
-  const right = flat > 1e-4 ? { x: -forward.z / flat, y: 0, z: forward.x / flat } : { x: 1, y: 0, z: 0 };
-  const up = {
-    x: right.y * forward.z - right.z * forward.y,
-    y: right.z * forward.x - right.x * forward.z,
-    z: right.x * forward.y - right.y * forward.x,
-  };
+  const rx = flat > 1e-4 ? -forward.z / flat : 1, rz = flat > 1e-4 ? forward.x / flat : 0;
 
-  // 1) Forward slipstream ring: the player covers `spd` blocks a tick, so lead the camera far enough that the
-  // sparks are still ahead of it next frame and stream past all four corners of the view
-  const baseLead = Math.max(3.5, spd * 2.4);
-  for (const angle of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) {
-    const d = baseLead + Math.random() * 4.5;
-    const r = 0.65 + Math.random() * 0.5;
-    const rx = Math.cos(angle) * r;
-    const ry = Math.sin(angle) * r;
-    const ringPt = {
-      x: head.x + forward.x * d + right.x * rx + up.x * ry,
-      y: head.y + forward.y * d + right.y * rx + up.y * ry,
-      z: head.z + forward.z * d + right.z * rx + up.z * ry,
-    };
-    emit("realm:sky_spark", ringPt);
-    emit("minecraft:blue_flame_particle", ringPt);
-    if (hot) {
-      emit("realm:trail_ember", ringPt);
-      emit("minecraft:basic_flame_particle", ringPt);
-    }
-  }
+  // 1) Forward slipstream ring: the player covers `spd` blocks a tick, so lead the camera far enough that the sparks
+  // are still ahead of it next frame (the emitter spreads them over the 4.5 blocks after this point).
+  const lead = Math.max(3.5, spd * 2.4);
+  const rv = (ringVars ??= new MolangVariableMap());
+  rv.setFloat("variable.fx", forward.x);
+  rv.setFloat("variable.fy", forward.y);
+  rv.setFloat("variable.fz", forward.z);
+  rv.setFloat("variable.rx", rx);
+  rv.setFloat("variable.rz", rz);
+  rv.setFloat("variable.hot", hot);
+  emit("realm:nos_ring", { x: head.x + forward.x * lead, y: head.y + forward.y * lead, z: head.z + forward.z * lead }, rv);
 
-  // 2) Continuous afterburner ribbon behind: interpolated from where the player just was to the tail,
-  // so there are no gaps even at 72 blocks/s
+  // 2) Afterburner ribbon behind: from just behind the player back to where they were, so there are no gaps even at
+  // 72 blocks/s. Its count follows the old ribbon's points (6 at full boost, 3 fluttering, 2 spooling).
   const steps = phase === "boost" ? 6 : phase === "flutter" ? 3 : 2;
   const from = { x: pos.x - vel.x * 1.4 - forward.x * 1.8, y: pos.y - vel.y * 1.4 - forward.y * 1.8, z: pos.z - vel.z * 1.4 - forward.z * 1.8 };
-  const to = { x: pos.x - forward.x * 0.3, y: pos.y - forward.y * 0.3, z: pos.z - forward.z * 0.3 };
-  for (let i = 0; i < steps; i++) {
-    const t = steps > 1 ? i / (steps - 1) : 1;
-    const corePt = {
-      x: from.x + (to.x - from.x) * t + jitter(0.2),
-      y: from.y + (to.y - from.y) * t + 0.4 + jitter(0.16),
-      z: from.z + (to.z - from.z) * t + jitter(0.2),
-    };
-    emit("realm:sky_spark", corePt);
-    emit("minecraft:blue_flame_particle", corePt);
-    if (hot) {
-      emit("realm:trail_ember", corePt);
-      emit("minecraft:basic_flame_particle", corePt);
-    }
-    if (phase === "boost" && i === steps - 1) emit("minecraft:lava_particle", corePt);
-  }
+  const to = { x: pos.x - forward.x * 0.3, y: pos.y - forward.y * 0.3 + 0.4, z: pos.z - forward.z * 0.3 };
+  const bv = (ribbonVars ??= new MolangVariableMap());
+  bv.setFloat("variable.dx", from.x - to.x);
+  bv.setFloat("variable.dy", from.y + 0.4 - to.y);
+  bv.setFloat("variable.dz", from.z - to.z);
+  bv.setFloat("variable.n", steps * 6);
+  bv.setFloat("variable.hot", hot);
+  emit("realm:nos_ribbon", to, bv);
+  emit("minecraft:blue_flame_particle", to);
+  if (phase === "boost") emit("minecraft:lava_particle", to);
 }
 
 /**

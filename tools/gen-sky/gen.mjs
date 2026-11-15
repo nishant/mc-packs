@@ -466,6 +466,12 @@ function motes(/** @type {string} */ id, /** @type {number[]} */ color) {
   });
 }
 
+// The NOS plume's per-particle terms: about 45% of its particles are orange embers once the boost is hot.
+const NOS_EMBER = "(variable.hot > 0 && variable.particle_random_4 < 0.45)";
+const NOS_ANGLE = "(variable.particle_random_1 * 360)";
+const NOS_ALONG = "(variable.particle_random_2 * 4.5)";
+const NOS_R = "(0.65 + variable.particle_random_3 * 0.5 + variable.particle_age * 1.5)";
+
 const PARTICLES = {
   // One segment of an aurora curtain: upright, rippling (an 8-frame flipbook), additive, tinted green to purple.
   sky_aurora: effect("realm:sky_aurora", "aurora", "particles_add", {
@@ -519,6 +525,31 @@ const PARTICLES = {
         gradient: { "0.0": [1, 1, 1, 1], "0.3": [0.85, 0.9, 1, 0.8], "1.0": [0.5, 0.6, 1, 0] },
       },
     },
+  }),
+
+  // One band of the little rainbow over a pot of gold (rainbow_bp): a steady emitter at the middle of the arc that keeps
+  // small glowing dots on a half circle of variable.r blocks, standing in the vertical plane along (ux, uz), in the
+  // band's color (cr, cg, cb), for variable.life seconds. Each dot is placed once (parametric, from its own randoms)
+  // and stays put while it fades in and out, so the band twinkles like the vanilla flames it replaced. Seven of these,
+  // one per band, sent every 2 s, draw what 259 vanilla flames sent twice a second did.
+  sky_arc: effect("realm:sky_arc", "glow", "particles_blend", {
+    "minecraft:emitter_rate_steady": { spawn_rate: 45, max_particles: 60 },
+    ...once(or("life", 2)),
+    "minecraft:emitter_shape_point": {},
+    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(0.7, 1.1)" },
+    "minecraft:particle_motion_parametric": {
+      relative_position: [
+        `Math.cos(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.3) * variable.ux`,
+        `Math.sin(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.3)`,
+        `Math.cos(variable.particle_random_1 * 180) * (${or("r", 10)} + (variable.particle_random_2 - 0.5) * 0.3) * variable.uz`,
+      ],
+    },
+    "minecraft:particle_appearance_billboard": {
+      size: ["0.12 + variable.particle_random_3 * 0.05", "0.12 + variable.particle_random_3 * 0.05"],
+      facing_camera_mode: "lookat_xyz",
+      uv: uv("glow"),
+    },
+    "minecraft:particle_appearance_tinting": { color: ["variable.cr", "variable.cg", "variable.cb", `${fade(0.15, 0.3)} * 0.95`] },
   }),
 
   // A meteor: like the shooting star, but a big fireball head and a long fiery trail whose embers drift and cool
@@ -654,13 +685,15 @@ const PARTICLES = {
   }),
 
   // One ring of a tornado: dark inner condensation core (random_2 < 0.42) + silver-gray outer spiral bands circling at
-  // variable.radius, spinning at variable.spin rad/s and climbing. Billboard size scales with variable.radius so 18-44
-  // particles per ring form a thick, seamless twisting funnel.
+  // variable.radius, spinning at variable.spin rad/s and climbing. Billboard size scales with variable.radius so 14-34
+  // particles per ring form a thick, seamless twisting funnel. tornado_bp redraws each ring every 0.8 s; before sky_rp
+  // 1.4.0 it was every 0.5 s with 18-44 smaller particles living 1.05-1.55 s (about 2,500 alive for a viewer up close,
+  // now about 1,400, a little bigger each so the funnel stays as solid).
   sky_tornado: effect("realm:sky_tornado", "dust", "particles_blend", {
-    ...burst(`Math.clamp(${or("radius", 2)} * 5.2 + 14, 18, 44)`),
+    ...burst(`Math.clamp(${or("radius", 2)} * 4.2 + 11, 14, 34)`),
     ...once(),
     "minecraft:emitter_shape_point": {},
-    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(1.05, 1.55)" },
+    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(1.2, 1.8)" },
     "minecraft:particle_motion_parametric": {
       relative_position: [
         `Math.cos(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 5)} * 57.2958 * (variable.particle_random_2 < 0.42 ? 1.2 : 0.92)) * ${or("radius", 2)} * (variable.particle_random_2 < 0.42 ? (0.26 + 0.50 * variable.particle_random_2) : (0.76 + 0.38 * variable.particle_random_2))`,
@@ -671,8 +704,8 @@ const PARTICLES = {
     "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-180, 180)" },
     "minecraft:particle_appearance_billboard": {
       size: [
-        `(0.78 + ${or("radius", 2)} * 0.30 + variable.particle_random_3 * 0.48) * (1 + 0.36 * ${T})`,
-        `(0.58 + ${or("radius", 2)} * 0.21 + variable.particle_random_3 * 0.34) * (1 + 0.28 * ${T})`,
+        `(0.9 + ${or("radius", 2)} * 0.345 + variable.particle_random_3 * 0.55) * (1 + 0.36 * ${T})`,
+        `(0.67 + ${or("radius", 2)} * 0.24 + variable.particle_random_3 * 0.39) * (1 + 0.28 * ${T})`,
       ],
       facing_camera_mode: "lookat_xyz",
       uv: uv("dust", ["Math.floor(variable.particle_random_4 * 4) * 32", 0], [32, 32]),
@@ -843,6 +876,57 @@ const PARTICLES = {
     },
     "minecraft:particle_appearance_tinting": { color: [1, 1, 1, 1] },
   }),
+
+  // A NOS boost's slipstream ring (elytra_bp), one emitter a tick: cyan-blue sparks on a ring of 0.65-1.15 blocks around
+  // the flight line (forward fx, fy, fz; right rx, rz, level), spread over 4.5 blocks ahead of the emitter and flaring
+  // out, plus orange embers once the boost is hot (variable.hot 1). Each spark's spot comes from its own randoms
+  // (parametric), so the ring needs no per-point packets: before sky_rp 1.4.0 it was 16 spawns a tick.
+  nos_ring: effect("realm:nos_ring", "glow", "particles_add", {
+    ...burst("variable.hot > 0 ? 24 : 14"),
+    ...once(),
+    "minecraft:emitter_shape_point": {},
+    "minecraft:particle_lifetime_expression": { max_lifetime: `${NOS_EMBER} ? Math.random(0.6, 1.0) : Math.random(0.15, 0.35)` },
+    "minecraft:particle_motion_parametric": {
+      relative_position: [
+        `variable.fx * ${NOS_ALONG} + (variable.rx * Math.cos(${NOS_ANGLE}) - variable.rz * variable.fy * Math.sin(${NOS_ANGLE})) * ${NOS_R}`,
+        `variable.fy * ${NOS_ALONG} + (variable.rz * variable.fx - variable.rx * variable.fz) * Math.sin(${NOS_ANGLE}) * ${NOS_R}`,
+        `variable.fz * ${NOS_ALONG} + (variable.rz * Math.cos(${NOS_ANGLE}) + variable.rx * variable.fy * Math.sin(${NOS_ANGLE})) * ${NOS_R}`,
+      ],
+    },
+    "minecraft:particle_appearance_billboard": {
+      size: [`(${NOS_EMBER} ? 0.07 : 0.11 + variable.particle_random_3 * 0.08) * (1 - 0.5 * ${T})`, `(${NOS_EMBER} ? 0.07 : 0.11 + variable.particle_random_3 * 0.08) * (1 - 0.5 * ${T})`],
+      facing_camera_mode: "lookat_xyz",
+      uv: uv("glow"),
+    },
+    "minecraft:particle_appearance_tinting": {
+      color: [`${NOS_EMBER} ? 1 : 0.55`, `${NOS_EMBER} ? 0.92 - 0.6 * ${T} : 0.85`, `${NOS_EMBER} ? 0.5 - 0.4 * ${T} : 1`, `1 - ${T}`],
+    },
+  }),
+
+  // A NOS boost's afterburner ribbon (elytra_bp), one emitter a tick: cyan-blue flames along the line from the emitter
+  // to (dx, dy, dz) (where the player was), variable.n of them, and once hot, orange embers that float up and cool.
+  // Before sky_rp 1.4.0 the ribbon was up to 24 spawns a tick.
+  nos_ribbon: effect("realm:nos_ribbon", "glow", "particles_add", {
+    ...burst(`${or("n", 12)}`),
+    ...once(),
+    "minecraft:emitter_shape_point": {},
+    "minecraft:particle_lifetime_expression": { max_lifetime: `${NOS_EMBER} ? Math.random(0.8, 1.3) : Math.random(0.3, 0.6)` },
+    "minecraft:particle_motion_parametric": {
+      relative_position: [
+        "variable.dx * variable.particle_random_1 + (variable.particle_random_2 - 0.5) * 0.4",
+        `variable.dy * variable.particle_random_1 + (variable.particle_random_3 - 0.5) * 0.32 + (${NOS_EMBER} ? variable.particle_age * 1.1 : 0)`,
+        "variable.dz * variable.particle_random_1 + (Math.mod(variable.particle_random_2 * 7, 1) - 0.5) * 0.4",
+      ],
+    },
+    "minecraft:particle_appearance_billboard": {
+      size: [`(${NOS_EMBER} ? 0.07 : 0.14 + variable.particle_random_3 * 0.06) * (1 - 0.6 * ${T})`, `(${NOS_EMBER} ? 0.07 : 0.14 + variable.particle_random_3 * 0.06) * (1 - 0.6 * ${T})`],
+      facing_camera_mode: "lookat_xyz",
+      uv: uv("glow"),
+    },
+    "minecraft:particle_appearance_tinting": {
+      color: [`${NOS_EMBER} ? 1 : 0.4 + 0.3 * ${T}`, `${NOS_EMBER} ? 0.92 - 0.6 * ${T} : 0.75`, `${NOS_EMBER} ? 0.5 - 0.4 * ${T} : 1`, `1 - ${T}`],
+    },
+  }),
 };
 
 // ---------------------------------------------------------------------------
@@ -878,7 +962,7 @@ const MANIFEST = {
     name: "Realm Skies",
     description: "Auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     uuid: "c9dba129-e60f-4f08-919b-0d4901bea43a",
-    version: [1, 3, 2],
+    version: [1, 4, 0],
     min_engine_version: [1, 21, 100],
   },
   modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 2, 0] }],

@@ -1,4 +1,4 @@
-// Which way a rainbow's end lies, and the dots of the rainbow standing over it. Plain math with no game imports, so tools can test it in Node.
+// Which way a rainbow's end lies, and the bands of the rainbow standing over it. Plain math with no game imports, so tools can test it in Node.
 
 /** The rainbow's end is picked within this angle (radians) of straight opposite the sun. */
 export const SPREAD = Math.PI / 4;
@@ -29,28 +29,21 @@ export const COLORS = [
   [0.62, 0.3, 0.95],
 ];
 export const BAND = 0.5;
-/** About this many blocks between dots along a band. */
-export const STEP = 0.75;
 
 /**
- * The dots of a rainbow standing in a vertical plane, its outer (red) foot at `foot`, the other foot ARC_WIDTH
- * away along `ang` (x = cos, z = sin). Each band is a half circle around the middle point between the feet.
+ * A rainbow standing in a vertical plane, its outer (red) foot at `foot`, the other foot ARC_WIDTH away along `ang`
+ * (x = cos, z = sin). Each band is a half circle of radius `r` around `center`, the middle point between the feet;
+ * `ux`, `uz` is the plane's direction (angle 0 is the far foot, 180 the pot's foot).
  * @param {{ x: number, y: number, z: number }} foot @param {number} ang
- * @returns {{ x: number, y: number, z: number, band: number }[]}
+ * @returns {{ center: { x: number, y: number, z: number }, ux: number, uz: number, bands: { r: number, color: number[] }[] }}
  */
-export function arcDots(foot, ang) {
+export function arcBands(foot, ang) {
   const r0 = ARC_WIDTH / 2;
   const ux = Math.cos(ang), uz = Math.sin(ang);
-  const cx = foot.x + ux * r0, cz = foot.z + uz * r0;
-  /** @type {{ x: number, y: number, z: number, band: number }[]} */
-  const out = [];
-  COLORS.forEach((_, band) => {
-    const r = r0 - band * BAND;
-    const n = Math.max(2, Math.ceil((Math.PI * r) / STEP));
-    for (let i = 0; i <= n; i++) {
-      const a = (Math.PI * i) / n; // 0 at the far foot, PI at the pot's foot
-      out.push({ x: cx + ux * Math.cos(a) * r, y: foot.y + Math.sin(a) * r, z: cz + uz * Math.cos(a) * r, band });
-    }
-  });
-  return out;
+  return {
+    center: { x: foot.x + ux * r0, y: foot.y, z: foot.z + uz * r0 },
+    ux,
+    uz,
+    bands: COLORS.map((color, band) => ({ r: r0 - band * BAND, color })),
+  };
 }
