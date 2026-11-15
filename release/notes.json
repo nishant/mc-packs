@@ -1,5 +1,6 @@
 {
   "notes": [
+    "Town Projects picks spots for its projects much faster on hillsides, stops rescanning the same ground every 5 seconds, and tells operators and the players in a town when no good spot can be found.",
     "Daily Quests, Skills, Milestones, Titles & Trails, Atlas of the Realm and Realm News write their saved data less often (Daily Quests no longer on every counted block), and Skills no longer forgets blocks placed just before the Realm closes.",
     "Champions and the Bounty Board cost the server less: mob farms and dropped items no longer wake Champions up, and a Stormcaller strike or a new bounty target no longer makes one long tick.",
     "Quick Stack & Sort costs the server much less while you mine on a nearly full inventory page: auto-store moves pickups at most once a second, all together.",
@@ -26,39 +27,39 @@
   "packNotes": {
     "elite_bp": {
       "version": "1.3.23",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "bounty_bp": {
-      "version": "1.3.16",
-      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "version": "1.3.17",
+      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "hud_rp": {
       "version": "1.6.3",
       "notes": "The right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens."
     },
     "relics_bp": {
-      "version": "1.2.22",
+      "version": "1.2.23",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "moon_bp": {
       "version": "1.2.20",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "skills_bp": {
       "version": "1.1.19",
-      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "town_bp": {
-      "version": "1.7.8",
+      "version": "1.7.9",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "saga_bp": {
-      "version": "1.16.26",
-      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "version": "1.16.27",
+      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "maps_bp": {
       "version": "1.8.20",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "platypus_bp": {
       "version": "1.1.12",
@@ -66,26 +67,26 @@
     },
     "party_bp": {
       "version": "1.2.14",
-      "notes": "The party line under the Coordinates HUD is sent again only when it changes (or every 12 s), and taken off as soon as no mate is near; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "The party line under the Coordinates HUD is sent again only when it changes (or every 12 s), and taken off as soon as no mate is near; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "stash_bp": {
       "version": "1.9.8",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "npc_bp": {
-      "version": "1.9.7",
+      "version": "1.9.8",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "wander_bp": {
-      "version": "1.2.27",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "version": "1.2.28",
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "titles_bp": {
       "version": "1.2.20",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "fishing_bp": {
-      "version": "1.1.20",
+      "version": "1.1.21",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "journal_bp": {
@@ -97,12 +98,12 @@
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "caravan_bp": {
-      "version": "1.2.15",
+      "version": "1.2.16",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "build_bp": {
       "version": "3.0.19",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "map_bp": {
       "version": "1.5.10",
@@ -122,7 +123,7 @@
     },
     "tornado_bp": {
       "version": "1.3.1",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "elytra_bp": {
       "version": "1.4.1",
@@ -130,11 +131,11 @@
     },
     "claims_bp": {
       "version": "1.5.14",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "zones_bp": {
       "version": "1.0.16",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "climate_bp": {
       "version": "1.0.16",
@@ -150,23 +151,31 @@
     },
     "atlas_bp": {
       "version": "1.1.18",
-      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "news_bp": {
-      "version": "1.7.113",
-      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "version": "1.7.114",
+      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+    },
+    "cooking_bp": {
+      "version": "1.1.21",
+      "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+    },
+    "guilds_bp": {
+      "version": "1.1.20",
+      "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "admin_bp": {
       "version": "1.6.18",
-      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "afk_bp": {
       "version": "1.3.16",
-      "notes": "The sleep count on the action bar is drawn when it changes, and every 2 s otherwise; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "The sleep count on the action bar is drawn when it changes, and every 2 s otherwise; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "calendar_bp": {
       "version": "1.0.26",
-      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "chairs_bp": {
       "version": "1.3.17",
@@ -174,10 +183,6 @@
     },
     "cleanup_bp": {
       "version": "1.2.12",
-      "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
-    },
-    "cooking_bp": {
-      "version": "1.1.20",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "crowns_bp": {
@@ -194,7 +199,7 @@
     },
     "domt_bp": {
       "version": "1.1.20",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "durability_bp": {
       "version": "1.2.16",
@@ -218,19 +223,15 @@
     },
     "guard_bp": {
       "version": "1.4.14",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
-    },
-    "guilds_bp": {
-      "version": "1.1.19",
-      "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "harvest_bp": {
       "version": "1.3.13",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "help_bp": {
-      "version": "1.1.97",
-      "notes": "/realm:help opens at once and sends no script events: the installed packs come from one check shared by every pack when the world loads; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "version": "1.1.98",
+      "notes": "/realm:help opens at once and sends no script events: the installed packs come from one check shared by every pack when the world loads; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "hud_bp": {
       "version": "1.3.14",
@@ -246,7 +247,7 @@
     },
     "meteor_bp": {
       "version": "1.2.17",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "mobhp_bp": {
       "version": "1.2.22",
@@ -268,6 +269,10 @@
       "version": "1.1.10",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
+    "settings_bp": {
+      "version": "1.4.9",
+      "notes": "/realm:prefs asks only for preferences and /realm:config only for realm settings, so packs with nothing to show there stay silent."
+    },
     "silly_bp": {
       "version": "1.2.17",
       "notes": "Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
@@ -278,11 +283,11 @@
     },
     "stats_bp": {
       "version": "1.4.17",
-      "notes": "The stats ticker under the Coordinates HUD is sent again only when it changes (or every 12 s); and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "The stats ticker under the Coordinates HUD is sent again only when it changes (or every 12 s); and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "storm_bp": {
       "version": "1.1.17",
-      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
+      "notes": "Safe zones: its list is sent only when it changes, and split into messages without repeated work; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     },
     "translucent_bp": {
       "version": "1.0.11",
@@ -298,11 +303,7 @@
     },
     "welcome_bp": {
       "version": "1.5.16",
-      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server. Its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
-    },
-    "settings_bp": {
-      "version": "1.4.9",
-      "notes": "/realm:prefs asks only for preferences and /realm:config only for realm settings, so packs with nothing to show there stay silent."
+      "notes": "Installed packs are found by one check shared by every pack when the world loads, never again on a timer; and its part of the Realm Settings menus (/realm:prefs, /realm:config) is built without repeated work, so opening them no longer stalls the server."
     }
   }
 }

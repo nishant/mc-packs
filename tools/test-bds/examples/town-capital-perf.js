@@ -10,13 +10,16 @@
 //   the transients, measured on their own: --arg transient=scan (a third town is added at the soak's start, so its
 //   scan runs in the window; autoSpots Enabled) or --arg transient=build (its well and notice board are finished at the
 //   soak's start, so the outline, the check, the leveling, the builds and their paths run in the window)
+//   players away from both towns (ENT-28: the 5-second check then reads every player for every town): --arg away=1
+//   (every player walks about 300 blocks from both towns in the window; read the slowest tick)
 // Arguments: players (default 10), seconds (default 120), baseline (0), npc (0; 1: the baseline with one townsfolk
-// placed where Birch's mayor stands), transient (none | scan | build).
+// placed where Birch's mayor stands), transient (none | scan | build), away (0).
 export default async function (t) {
   const N = Math.max(2, Number(t.args.players ?? 10));
   const SECONDS = Math.max(10, Number(t.args.seconds ?? 120));
   const BASELINE = String(t.args.baseline ?? "0") === "1";
   const TRANSIENT = String(t.args.transient ?? "none");
+  const AWAY = String(t.args.away ?? "0") === "1";
   const sys = t.system;
   const dim = t.dimension;
   const cfg = (key, value) => sys.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `perf_${key}`, pack: "town_bp", key, value }));
@@ -139,7 +142,18 @@ export default async function (t) {
     t.check(animals.every((n) => n === 4), `each pen has its 4 animals (${animals})`);
   }
 
-  const declared = { players: N, seconds: SECONDS, baseline: BASELINE, npc: BASELINE && String(t.args.npc ?? "0") === "1", transient: TRANSIENT, towns: BASELINE ? 0 : CENTERS.length };
+  if (AWAY) {
+    // Everyone 300 blocks or more from both towns: nobody is in a town, so every check reads every player.
+    // The world's 10 ticking areas are taken (one per simulated player, as for the transients): free them first.
+    t.server("/tickingarea remove_all");
+    const { top } = await t.loadArea(150, 320, { radius: 4, whole: true });
+    for (const s of players) {
+      s.home = { x: 150 + Math.round(Math.random() * 20) - 10, z: 320 + Math.round(Math.random() * 20) - 10 };
+      s.p.teleport({ x: s.home.x + 0.5, y: top.y + 1, z: s.home.z + 0.5 });
+    }
+    await t.wait(40);
+  }
+  const declared = { players: N, seconds: SECONDS, baseline: BASELINE, npc: BASELINE && String(t.args.npc ?? "0") === "1", transient: TRANSIENT, away: AWAY, towns: BASELINE ? 0 : CENTERS.length };
   t.report("perf-workload", { schema: 1, declared, spawned: players.length });
   t.assert(players.length === N, `all ${N} declared players spawned (${players.length})`);
   const start = t.tick;

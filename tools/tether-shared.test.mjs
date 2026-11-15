@@ -295,3 +295,35 @@ test("fall watch: waits while a mob drops from its anchor, not while it floats i
   const w = { ...e, id: "w", isInWater: true };
   assert.equal(fall.falling(w, "w", anchor, 0), false, "floating in water");
 });
+
+test("freeSpotNear with no free spot (ENT-37): each block is fetched once and its typeId read once, no isAir or isLiquid", () => {
+  // Home in a box of water: every ring position fails, the worst case of a last-resort snap.
+  const base = flatDim();
+  let gets = 0;
+  let reads = 0;
+  const seen = new Set();
+  const dim = {
+    getBlock(p) {
+      gets++;
+      const k = `${p.x},${p.y},${p.z}`;
+      assert.ok(!seen.has(k), `block ${k} fetched again`);
+      seen.add(k);
+      const b = p.y >= 64 ? { typeId: "minecraft:water", isAir: false, isLiquid: true } : base.getBlock(p);
+      return {
+        get typeId() {
+          reads++;
+          return b.typeId;
+        },
+        get isAir() {
+          throw new Error("isAir read");
+        },
+        get isLiquid() {
+          throw new Error("isLiquid read");
+        },
+      };
+    },
+  };
+  assert.equal(freeSpotNear(dim, { x: 0.5, y: 64, z: 0.5 }, 6), undefined, "no free spot in the water");
+  assert.equal(reads, gets, `one typeId read per block (${reads} for ${gets})`);
+  assert.ok(gets < 200, `${gets} blocks fetched`);
+});

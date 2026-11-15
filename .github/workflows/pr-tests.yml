@@ -1,6 +1,6 @@
 # The fast pre-merge game tests (docs/WORKING.md "Testing in CI"): only the BDS scenarios a PR touches, split over up
-# to 8 runners, and a short perf check that runs the PR's base and the PR back to back on the same runner, failing
-# only on a clear slowdown (tools/test-bds/perf-compare.mjs). The full suite, the long soaks, the Realm Bundle soak and
+# to 8 runners, and a short perf check that runs the PR's base and the PR back to back on the same runner as the
+# built Realm Bundle, failing only on a clear slowdown or a failed soak (tools/test-bds/perf-compare.mjs). The full suite, the long soaks, the Realm Bundle soak and
 # the memory soak run after release in validate.yml. check.yml (check, build, bundle smoke) is unchanged.
 # A follow-up push to the same PR (same base, no force-push) reruns only the scenarios the last run didn't pass and
 # those its new commits touch, and the perf check only when they touch packs/ or the harness or it wasn't green.
@@ -139,22 +139,28 @@ jobs:
         run: |
           git worktree add "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
           ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/base/node_modules"
-      # One 10-player, 60 s soak per side, then a second pair in the other order only when the first pair is not
-      # clean; perf-compare takes each side's lowest figures, so one noisy run can't fail the PR.
+      # The built Realm Bundle, as it ships (one script context; PIPE-07 (5)): both trees' bundles under the PR's
+      # harness. One 10-player, 60 s soak per side, then a second pair in the other order only when the first pair is
+      # not clean; perf-compare reads each side's lowest and mean figures, the bundle and each pack by scripts/<pack>/.
+      - name: Build both bundles
+        run: |
+          for t in "$RUNNER_TEMP/base" "$GITHUB_WORKSPACE"; do (cd "$t" && node tools/bundle.mjs --all > /dev/null); done
+          cp "$RUNNER_TEMP/base/dist/realm_bundle.mcpack" "$RUNNER_TEMP/base.mcpack"
+          cp "$GITHUB_WORKSPACE/dist/realm_bundle.mcpack" "$RUNNER_TEMP/head.mcpack"
       - name: Soak base and PR back to back
         run: |
-          soak() { (cd "$1" && node tools/test-bds/suite.mjs --perf 10 --perf-seconds 60 --json "$2" > "$2.out" 2>&1) || true; tail -4 "$2.out"; }
           T="$RUNNER_TEMP"
-          soak "$T/base" "$T/base-1.json"; soak "$GITHUB_WORKSPACE" "$T/head-1.json"
+          soak() { node tools/test-bds/suite.mjs --perf 10 --perf-seconds 60 --perf-bundle "$T/$1.mcpack" --json "$2" > "$2.out" 2>&1 || true; tail -4 "$2.out"; }
+          soak base "$T/base-1.json"; soak head "$T/head-1.json"
           set +e
           node tools/test-bds/perf-compare.mjs --base "$T/base-1.json" --head "$T/head-1.json" > /dev/null
           first=$?
           set -e
           if [ "$first" != 0 ]; then
             echo "first pair: exit $first, running a second pair in the other order"
-            soak "$GITHUB_WORKSPACE" "$T/head-2.json"; soak "$T/base" "$T/base-2.json"
+            soak head "$T/head-2.json"; soak base "$T/base-2.json"
           fi
-          node tools/test-bds/perf-compare.mjs --base "$T/base-1.json" --base "$T/base-2.json" --head "$T/head-1.json" --head "$T/head-2.json"
+          node tools/test-bds/perf-compare.mjs --top 25 --base "$T/base-1.json" --base "$T/base-2.json" --head "$T/head-1.json" --head "$T/head-2.json"
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

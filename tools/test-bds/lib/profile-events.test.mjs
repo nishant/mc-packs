@@ -19,8 +19,8 @@ function fakeGame(clock = Date) {
   }
   class System {
     constructor() { this.currentTick = 100; this.afterEvents = { scriptEventReceive: new Signal(), other: new Signal() }; this.beforeEvents = {}; }
-    run() {}
-    runTimeout() {}
+    run(cb) { (this.queue ??= []).push(cb); }
+    runTimeout(cb) { (this.queue ??= []).push(cb); }
     runInterval() {}
     runJob() {}
     sendScriptEvent(id, message) { this.afterEvents.scriptEventReceive.fire({ id, message }); }
@@ -109,4 +109,24 @@ test("the report sums the packs per tick, with who sends each id", () => {
   assert.deepEqual(e.handledPerTick["realm:side"], { calls: 2, ms: 0.3 });
   assert.deepEqual(e.handledPerTick["realm:actionbar"], { calls: 0.4, ms: 0.15 });
   assert.deepEqual(Object.keys(e.handledPerTick), ["realm:side", "realm:actionbar"]);
+});
+
+test("a system.run inside a timed callback takes its parent's site without a stack capture (PIPE-08)", () => {
+  const { system, logs } = fakeGame();
+  system.afterEvents.other.subscribe(function onOther() { system.run(function later() {}); system.runTimeout(() => {}, 5); });
+  system.afterEvents.other.fire({});
+  for (const cb of system.queue) cb();
+  system.run(() => {}); // outside any timed callback: captured once
+  system.currentTick += 1;
+  system.afterEvents.scriptEventReceive.fire({ id: "harness:profile_dump", message: '{"final":true}' });
+  const row = JSON.parse(logs.find((l) => l.startsWith("PROFILE ")).slice("PROFILE ".length));
+  assert.equal(row.stacks, 2, "one capture for the subscription, one for the top-level run, none for the deferred calls");
+  const keys = JSON.parse(logs.filter((l) => l.startsWith("PROFILE_CALLBACKS ")).map((l) => JSON.parse(l.slice(18)).d).join("") || "[]").map((c) => c.key);
+  const top = row.top.map((c) => c.key);
+  const all = [...new Set([...keys, ...top])];
+  const parent = all.find((k) => k.startsWith("system.after.other onOther @ "));
+  assert.ok(parent, "the subscription is labeled");
+  const at = parent.slice(parent.lastIndexOf(" @ ") + 3);
+  assert.ok(all.includes(`run later @ ${at}`), `the deferred run is labeled with the parent site: ${all.join(", ")}`);
+  assert.ok(all.includes(`runTimeout @ ${at}`));
 });
