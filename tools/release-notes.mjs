@@ -7,6 +7,7 @@
 //     "notes": ["What changed in the Realm Bundle, for players."],
 //     "resourceNotes": ["What changed in Realm Resources (optional: without it Realm Resources takes the notes)."],
 //     "packNotes": { "guard_bp": { "version": "1.4.10", "notes": "What changed in this pack." } }
+//     (a resource pack that grows more than 5% also needs "size": "why it is bigger": tools/check-size.mjs)
 //   }
 //
 // Rules, comparing each pack's header.version with the base (the merge-base of HEAD and origin/master, or --base <ref>):
@@ -74,6 +75,7 @@ export function shapeProblems(file) {
       for (const [folder, e] of Object.entries(file.packNotes)) {
         if (!e || typeof e !== "object" || typeof e.version !== "string" || !/^\d+(\.\d+)*$/.test(e.version)) p.push(`packNotes.${folder}: needs "version": "1.2.3" (the version these notes describe)`);
         else if (!lines(e.notes).length || (typeof e.notes !== "string" && !Array.isArray(e.notes))) p.push(`packNotes.${folder}: needs "notes": "what changed" (a string or a list of strings)`);
+        else if (e.size !== undefined && !lines(e.size).length) p.push(`packNotes.${folder}: "size" must say why the pack grew (a non-empty string; tools/check-size.mjs)`);
       }
     }
   }

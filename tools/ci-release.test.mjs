@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mergeArgs, mergeGate, modeOf, outputLines, parseArchive, summaryMarkdown, writeOutputs } from "./ci-release.mjs";
+import { LIVE_RETRY_WAITS, liveLine, mergeArgs, mergeGate, modeOf, outputLines, parseArchive, retryLive, summaryMarkdown, writeOutputs } from "./ci-release.mjs";
 
 const base = { rows: [], used: [], changed: false };
 
@@ -75,4 +75,41 @@ test("mergeGate merges only on CLEAN, waits while checks run, and stops on confl
   assert.equal(mergeGate("HAS_HOOKS"), "merge");
   for (const s of ["UNSTABLE", "UNKNOWN", ""]) assert.equal(mergeGate(s), "wait", s);
   for (const s of ["DIRTY", "BEHIND", "BLOCKED", "DRAFT"]) assert.equal(mergeGate(s), "stop", s);
+});
+
+test("retryLive passes at once without waiting, and retries a failed check-live after 60 s and then 120 s", () => {
+  const slept = [];
+  const once = retryLive(() => ({ ok: true }), { sleep: (s) => slept.push(s) });
+  assert.deepEqual([once.attempts, slept], [1, []]);
+  const outcomes = [false, true];
+  const second = retryLive((n) => ({ ok: outcomes[n - 1], n }), { sleep: (s) => slept.push(s) });
+  assert.deepEqual([second.attempts, second.result.n, slept], [2, 2, [60]]);
+  slept.length = 0;
+  const calls = [];
+  const real = retryLive((n) => (calls.push(n), { ok: false, out: `fail ${n}` }), { sleep: (s) => slept.push(s) });
+  assert.deepEqual([real.attempts, real.result.out, calls, slept], [3, "fail 3", [1, 2, 3], LIVE_RETRY_WAITS]);
+  assert.deepEqual(LIVE_RETRY_WAITS, [60, 120]);
+});
+
+test("the check-live line says which attempt passed, and the summary still reports the site as up to date", () => {
+  assert.equal(liveLine(true, 1), "passed");
+  assert.equal(liveLine(true, 3), "passed on attempt 3");
+  assert.equal(liveLine(false, 3), "FAILED (3 attempts)");
+  const md = summaryMarkdown({ ...base, bundle: "2026.1114.1", resources: "2026.1114.1", live: liveLine(true, 2) });
+  assert.match(md, /^check-live: passed on attempt 2$/m);
+  assert.match(md, /^Site up to date: Realm Bundle 2026\.1114\.1/m);
+});
+test("both release jobs that need Chromium take it from the cached, time-limited Playwright action (PIPE-12)", () => {
+  const wf = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  for (const name of ["release", "merge"]) {
+    const start = wf.indexOf(`\n  ${name}:\n`);
+    const end = wf.slice(start + 1).search(/\n {2}[a-z]+:\n/);
+    const body = end === -1 ? wf.slice(start) : wf.slice(start, start + 1 + end);
+    assert.match(body, /uses: \.\/mc-packs\/\.github\/actions\/playwright\n\s+timeout-minutes: 10\n\s+with:\n\s+working-directory: hosting\/minecraft\n/, `${name} job`);
+    assert.match(body, /hosting\/minecraft\/package-lock\.json/, `${name} job caches hosting's npm packages too`);
+  }
+  assert.doesNotMatch(wf, /playwright install --with-deps/);
+  const action = readFileSync(new URL("../.github/actions/playwright/action.yml", import.meta.url), "utf8");
+  assert.match(action, /path: ~\/\.cache\/ms-playwright\n\s+key: playwright-chromium-\$\{\{ runner\.os \}\}-\$\{\{ steps\.version\.outputs\.version \}\}/);
+  assert.match(action, /timeout 240 "\$@" \|\| \{[^}]*timeout 240 "\$@"; \}/, "a 4-minute limit and one retry");
 });

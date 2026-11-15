@@ -2,9 +2,13 @@ import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 
-/** Recursively lists files under dir. @param {string} dir @returns {string[]} */
+/**
+ * Recursively lists files under dir, sorted by name at every level: readdir order differs between file systems, so
+ * sorting makes the same folder give a byte-identical zip on every OS (PIPE-22).
+ * @param {string} dir @returns {string[]}
+ */
 export function walk(dir) {
-  return readdirSync(dir).flatMap((name) => {
+  return readdirSync(dir).sort().flatMap((name) => {
     const p = join(dir, name);
     return statSync(p).isDirectory() ? walk(p) : [p];
   });
@@ -17,7 +21,7 @@ export function zip(files) {
   let offset = 0;
   for (const { name, data } of files) {
     const nameBuf = Buffer.from(name, "utf8");
-    const compressed = deflateRawSync(data);
+    const compressed = deflateRawSync(data, { level: 9 }); // smallest download; free at build time (XC-09)
     const crc = crc32(data);
 
     const local = Buffer.alloc(30);

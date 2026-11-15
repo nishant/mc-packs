@@ -142,6 +142,33 @@ export function mergeArgs(branch, sha) {
   return ["pr", "merge", branch, "--merge", ...(sha ? ["--match-head-commit", sha] : [])];
 }
 
+/** check-live's waits before its second and third attempts, in seconds (PIPE-11). */
+export const LIVE_RETRY_WAITS = [60, 120];
+
+/**
+ * Runs `attempt` until it passes, waiting `waits[i]` seconds before attempt i + 2. The deploy can report done a moment
+ * before its asset fetch and archive redirects are in place, so a check-live failure that clears within 3 minutes is a
+ * race (2 of 8 releases needed a manual rerun for it); one that fails all three attempts is real.
+ * @template {{ ok: boolean }} R
+ * @param {(n: number) => R} attempt called with the attempt number, from 1
+ * @param {{ waits?: number[], sleep?: (seconds: number) => void, log?: (line: string) => void }} [o]
+ * @returns {{ result: R, attempts: number }}
+ */
+export function retryLive(attempt, { waits = LIVE_RETRY_WAITS, sleep = () => {}, log = () => {} } = {}) {
+  let result = attempt(1);
+  let n = 1;
+  while (!result.ok && n <= waits.length) {
+    log(`check-live failed on attempt ${n}; trying again in ${waits[n - 1]} s (the deploy may still be settling)`);
+    sleep(waits[n - 1]);
+    n++;
+    result = attempt(n);
+  }
+  return { result, attempts: n };
+}
+
+/** The summary's check-live line. @param {boolean} ok @param {number} attempts */
+export const liveLine = (ok, attempts) => (ok ? (attempts > 1 ? `passed on attempt ${attempts}` : "passed") : `FAILED (${attempts} attempt${attempts === 1 ? "" : "s"})`);
+
 /**
  * The job summary, in Markdown.
  * @param {{ sourceSha?: string, rows: { slug: string, version: string, what: string }[], used: string[][], fetch?: string, archive?: string, bundle?: string, resources?: string, pr?: string, merged?: boolean, changed: boolean, live?: string, failed?: { step: string, output: string } }} r
@@ -283,8 +310,13 @@ if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
   // The live site (waits for the deploy on the hosting PC first).
   const checkLive = () => {
     if (opt["no-live"]) return;
-    const live = node("tools/check-live.mjs", "--wait", String(opt["live-wait"]));
-    report.live = live.ok ? "passed" : "FAILED";
+    // After a failure, check again 60 s and then 120 s later (retryLive): check-live's --wait has already seen the
+    // deploy finish by then, so the retries only cover what settles just after it.
+    const { result: live, attempts } = retryLive(() => node("tools/check-live.mjs", "--wait", String(opt["live-wait"])), {
+      sleep: (s) => void spawnSync("sleep", [String(s)]),
+      log: (l) => console.log(l),
+    });
+    report.live = liveLine(live.ok, attempts);
     if (!live.ok) {
       report.failed = { step: "check-live", output: live.out };
       finish(1);

@@ -199,7 +199,7 @@ Findings: XC-03, BSE-31, UTL-19, HUD-35, HUD-18. Packs: decided by the histogram
 
 ### W4 Bundle payload and startup (M, low priority)
 
-Findings: XC-08, XC-09, PIPE-17, PIPE-22, HUD-41, XC-10, XC-11.
+Findings: XC-08, PIPE-17, HUD-41, XC-10, XC-11.
 - Measure first: world start to first tick (the server log's timings, or `run.mjs --meter` around startup) and
   bedrock_server RSS, with the bundle and without. BDS 1.26.52 has no script memory figure (`script watchdog
   exportstats` does not exist; see the harness README), so RSS is the memory measure.
@@ -208,7 +208,6 @@ Findings: XC-08, XC-09, PIPE-17, PIPE-22, HUD-41, XC-10, XC-11.
 - Comment stripping at bundle time with every line number kept, only if the measurement shows startup or memory
   worth having (PIPE-17's assessment: likely small). No minification.
 - Dormant Minimap modules that are shipped and evaluated but never used (HUD-41): delete or stop importing.
-- `deflateRawSync` level 9; sort `walk()` so zip order is stable across machines (PIPE-22).
 - Diagnostics: do not keep an entry per world property key when its prefix has one owner (XC-10).
 - Proof: bundle size, startup time and memory before and after; `bundle-smoke.js`; `check-pipeline`.
 
@@ -406,8 +405,6 @@ ENT-35.
 
 Findings: PIPE-15, BSE-33, BSE-15, BSE-44, XC-09. Packs: `build_rp`, `elytra_bp`'s track inside it, the Realm
 Resources bundle.
-- A size budget in `npm run check`: print the largest files of each built pack and fail when a resource pack grows
-  more than 5% without a line in `release/notes.json` (PIPE-15 (d)). Ship this first; it needs no decision.
 - A bundle-time language filter for Realm Resources (`bundle.mjs --resources --langs ...`), with Easy Building's
   language picker offering only the languages present; the standalone `build_rp` keeps all 13. Default: all 13, so
   nothing changes until the owner says which languages the Realm needs (section 6). The 12 non-English sets are
@@ -415,16 +412,19 @@ Resources bundle.
 - Not planned: re-encoding the 2.9 MB song (audible), a third upload (two uploads is a rule).
 - Proof: built size of `realm_resources.mcpack`; the language picker scenario with a filtered bundle.
 
-### W20 Release and local checks (S)
+### W20 Release checks: what is left (S)
 
-Findings: PIPE-11, PIPE-12, PIPE-18, PIPE-21, PIPE-14.
-- check-live racing the deploy, which made 2 of the last 8 releases need a manual rerun (PIPE-11); Playwright
-  installed twice per release, uncached and with no time limit (PIPE-12); the bundle smoke waiting for `check`
-  though it needs nothing from it (PIPE-18); the BDS cache key changing on any edit to `lib/server.mjs` (PIPE-21).
-- `npm run check`: unit tests (45 s), `tsc` (12 s) and `check-stories` (11 s) are 80% of its 85 s and run one after
-  another: run the three in parallel with one combined report and keep the rest of the chain as it is (PIPE-14).
-- Proof: merge-to-live time over the next five releases (9 to 14 minutes today, no reruns); `npm run check` wall
-  time.
+The release and local check changes shipped in `perf/release-checks` (check-live retried twice, Playwright cached
+and time-limited, the bundle smoke beside `check`, the BDS cache keyed on its version, `npm run check` in two lanes).
+Left: confirm them on real releases, which could not run while `nishant/hosting`'s Actions budget was exhausted:
+merge-to-live time and the "Chromium for Playwright" step times over the next five releases (9 to 14 minutes and
+15 to 245 s before, no reruns wanted). The upload job's 2-minute listing of 76 releases is in hosting's
+`archive-packs.mjs` (PIPE-12: one GraphQL query instead), a hosting change. `npm run check` in two lanes took 41 s
+to 24 s on the PC but 85 s to 83 s in CI: on the 4-vCPU runner the unit tests alone keep every core busy (220 files,
+about 83 s of process time, mostly each file's own process start and imports; the slowest are `map-art-themes`,
+`map-hotpaths` and `suite-stage`, about 7 s each), so CI time drops only with less test work. One process for all
+files (`--experimental-test-isolation=none`) did not finish within 3 minutes on the PC: some tests depend on their own
+process.
 
 ## 5. Order and what can run together
 
