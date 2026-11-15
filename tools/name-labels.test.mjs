@@ -458,6 +458,7 @@ test("the townsfolk idle loop skips entity and block work beyond its active rang
     CONFIG: { respawnRange: 24, idleRange: 12 },
     MISSING_EVERY: 4,
     playersNow: () => ({ all: [{ dimId: "minecraft:overworld", x: 0, y: 0, z: 0 }] }),
+    activeRangeNow: () => 40,
     handleOf: () => {
       entityReads++;
     },

@@ -335,18 +335,60 @@ world.afterEvents.entityRemove.subscribe(
 );
 
 /**
- * Every player's dimension and place, read once per tick and shared by the loop, the labels and the turning (3 native
- * reads a player instead of 3 per player per townsfolk). `spectator`: in spectator mode (the labels and turning skip them).
+ * The dimension and place of every player near a post (playersNearPosts), read once per tick and shared by the loop,
+ * the labels and the turning (3 native reads a player instead of 3 per player per townsfolk; none for players far away). `spectator`: in spectator mode (the labels and turning skip them).
  * @typedef {{ p: Player, id: string, dimId: string, x: number, y: number, z: number, spectator: boolean }} Seen
  */
 /** @type {{ tick: number, all: Seen[], watching: Seen[] }} */
 let seen = { tick: -1, all: [], watching: [] };
+/** How near a post a player makes its townsfolk active: the largest of the label, respawn, facing and idle ranges plus 16. */
+const activeRangeNow = () => Math.max(NAME_RANGE, CONFIG.respawnRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
+
+/** Posts closer than this (per axis cell) are asked about with one query. */
+const CLUSTER_CELL = 256;
+
+/**
+ * The players who could be within the loop's active range of any post: one `getPlayers` query per group of posts
+ * (one cell of CLUSTER_CELL blocks in one dimension: a town), over a circle holding every post of the group plus that
+ * range. Players farther from every post (exploring, in another town) are never read. @returns {Player[]}
+ */
+function playersNearPosts() {
+  /** @type {Map<string, { dim: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number }>} */
+  const groups = new Map();
+  for (const r of list) {
+    const key = `${r.dim}|${Math.floor(r.x / CLUSTER_CELL)}|${Math.floor(r.z / CLUSTER_CELL)}`;
+    const g = groups.get(key);
+    if (!g) groups.set(key, { dim: r.dim, x0: r.x, x1: r.x, y0: r.y, y1: r.y, z0: r.z, z1: r.z });
+    else {
+      g.x0 = Math.min(g.x0, r.x);
+      g.x1 = Math.max(g.x1, r.x);
+      g.y0 = Math.min(g.y0, r.y);
+      g.y1 = Math.max(g.y1, r.y);
+      g.z0 = Math.min(g.z0, r.z);
+      g.z1 = Math.max(g.z1, r.z);
+    }
+  }
+  const reach = activeRangeNow();
+  /** @type {Map<string, Player>} */
+  const found = new Map();
+  for (const g of groups.values()) {
+    const location = { x: (g.x0 + g.x1) / 2, y: (g.y0 + g.y1) / 2, z: (g.z0 + g.z1) / 2 };
+    const maxDistance = Math.hypot(g.x1 - g.x0, g.y1 - g.y0, g.z1 - g.z0) / 2 + reach + 1;
+    try {
+      for (const p of dimOf(g.dim).getPlayers({ location, maxDistance })) found.set(p.id, p);
+    } catch {
+      // dimension not available
+    }
+  }
+  return [...found.values()];
+}
+
 function playersNow() {
   const tick = system.currentTick;
   if (seen.tick === tick) return seen;
   /** @type {Seen[]} */
   const all = [];
-  const players = world.getAllPlayers();
+  const players = list.length ? playersNearPosts() : [];
   if (players.length) {
     const spect = new Set(world.getPlayers({ gameMode: GameMode.Spectator }).map((p) => p.id));
     for (const p of players) {
@@ -875,7 +917,7 @@ function loop() {
     }
   }
   const lively = get("enabled") === true;
-  const activeRange = Math.max(NAME_RANGE, CONFIG.respawnRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
+  const activeRange = activeRangeNow();
   const activeSq = activeRange * activeRange;
   // Every player's place is read once per run (ENT-01: it was read once per townsfolk, 3 x players x townsfolk calls).
   const { all } = list.length ? playersNow() : { all: [] };
