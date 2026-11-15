@@ -112,8 +112,8 @@ export default async function (t) {
   // copy: sneak-clicks pick the blocks themselves as corners (the low corner, the far low corner, the far top corner)
   await pickMode(/Copy/i);
   // Corner 1 (sneaking picks the clicked block itself: the low corner of the box), then from the top of the box
-  // corner 2 (only its x and z count: the face cell above the far top corner) and, sneaking again, the height (the far
-  // top layer: a block beside the far top corner).
+  // corner 2 (only its x and z count: the face cell above the far top corner) and the height (the y of the far
+  // top layer, from beside the box).
   const selectBox = async () => {
     t.echoActionBar = true;
     p.isSneaking = true;
@@ -127,13 +127,15 @@ export default async function (t) {
     at = t.tick;
     await click({ x: b.x, y: TOP, z: b.z }, Direction.Up);
     await waitBar(/copy_corner2/, at, 60);
-    t.echoActionBar = false;
+    // The height: the face cell east of the top layer (y = TOP), clicked from a post just outside the box (a sneaking
+    // use with an anchor set cancels the selection instead).
+    t.server(`/setblock ${b.x + 2} ${TOP - 1} ${b.z - 1} stone`);
+    await stand(b.x + 2, b.z - 1, TOP);
+    await lookAt({ x: b.x + 1, y: TOP + 0.5, z: b.z - 0.5 });
     const formP = t.waitForm(p, { timeout: 100 });
-    // A second use on the same block right after is not delivered: the height click takes the block beside it.
-    await lookAt({ x: b.x + 0.5, y: TOP + 1, z: b.z - 0.5 });
-    p.isSneaking = true;
-    await click({ x: b.x, y: TOP, z: b.z - 1 }, Direction.Up);
-    p.isSneaking = false;
+    at = t.tick;
+    await click({ x: b.x, y: TOP, z: b.z - 1 }, Direction.East);
+    t.echoActionBar = false;
     return formP;
   };
   let form = await selectBox();
