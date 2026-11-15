@@ -7,6 +7,10 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Lighter Minimap radar
+
+- Minimap: the radar costs the server about a third of what it did while players move, and its land fills in faster on a small server.
+
 ## Lighter weather on phones
 
 - Rainbows: the little rainbow over a pot of gold is drawn by your own device now, with far less sent by the server. It needs Realm Resources, as the other sky effects do.

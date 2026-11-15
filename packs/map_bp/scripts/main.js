@@ -13,8 +13,9 @@
 // again from the pass's markers for players who turned or moved, so the compass follows the view; only a part whose
 // text changed is sent. The terrain under the radar is read by a scanner and drawn from what it stored.
 // The cost is capped, not the player count: each kind of work (drawing, building a radar's terrain picture, passes,
-// the scanner) has a time budget a tick (budget.js; about 3 ms a tick in all at budgetLevel "normal", saved up when
-// there's little to do).
+// the scanner) has a time budget a tick (map-profile.js; 0.4 + 0.75 + 0.2 + 2.5 ms at budgetLevel "normal", an overrun
+// paid back by the next ticks; measured about 3.8 ms a tick at 10 players and 4.6 at 40 with every radar on and players
+// moving, map-radar-perf).
 // With many players moving at once each one's strip and radar come a few ticks later, the longest-waiting first.
 // The broadcasts (each message under 2048 characters, long lists in parts):
 //   realm:npc_places      { part, parts, folk: [{ id, n, dim, x, z }] }            <- Townsfolk; realm:npc_places_ping {}
@@ -44,7 +45,7 @@ import { CONFIG } from "./config.js";
 import { G, overlayGlyph, SELF_ARROWS } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
-import { aheadPicks, colKey, COL, glyphAt, hydratePreview, MISS_RETRY, PREVIEW, previewGlyph, radarGeometry, northUpRadarGeometry, readColumn, retainVisible, sampleCoord, scanQueueCounters, spendBudget, TerrainWorld, TerrainUnavailableError } from "./terrain.js";
+import { colKey, COL, glyphAt, hydratePreview, MISS_RETRY, PREVIEW, previewGlyph, radarGeometry, northUpRadarGeometry, readColumn, retainVisible, sampleCoord, scanQueueCounters, spendBudget, TerrainWorld, TerrainUnavailableError } from "./terrain.js";
 import { PreviewPersistence } from "./preview-persistence.js";
 import { onScriptEvent } from "./script-events.js";
 import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetPlayer, staleForm, WORLD_GEN } from "./reset.js";
@@ -59,7 +60,7 @@ import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetP
 import { MAP_PROFILE as EXP } from "./map-profile.js";
 import { MANUAL_SCAN_MAX_RADIUS, circleCandidates, circleAnchors, insideRadar, circularMarker, radarBadgeCells, circularMarkerNeighbors, orderLatticeWork } from "./terrain-work.js";
 import { ManualScanner } from "./manual-scanner.js";
-import { rollTerrainDemand } from "./rolling-demand.js";
+import { ROLL_WALK_MAX, rollIncremental, rollTerrainDemand } from "./rolling-demand.js";
 import { reconstructRaster } from "./terrain-estimate.js";
 import { RADAR_PIXELS, snapshotCoverage, rasterCadenceReady } from "./raster-work.js";
 import { selectNetherLayer } from "./nether-layer.js";
@@ -70,12 +71,18 @@ import { registerMinimapCommand } from "./minimap-command.js";
 class LabBudget {
   /** @param {number} perTick @param {number} max @param {number} tickMax */
   constructor(perTick, max, tickMax) { this.perTick = perTick; this.max = max; this.tickMax = tickMax; this.left = 0; }
-  tick() { this.left = Math.min(this.perTick, this.tickMax); }
+  /** A new tick: the budget again, less what the last ticks overran it by (at most DEBT_TICKS ticks' worth), so a
+   * long piece of work that could not be split is paid back by the ticks after it instead of every tick going over. */
+  tick() { this.left = Math.min(this.perTick, this.tickMax) + Math.max(-DEBT_TICKS * this.perTick, Math.min(0, this.left)); }
   get room() { return Math.max(0, Math.min(this.left, this.tickMax)); }
   get ok() { return this.room > 0; }
   /** @param {number} ms */
   spend(ms) { this.left -= ms; }
 }
+/** How many ticks' worth of overrun a budget carries into the next ticks at most. */
+const DEBT_TICKS = 4;
+// The feature envelope carries no debt: drawing and passes always run (a title must not fade), so a debt there would
+// stop the scanner for good (map-radar-perf: 0 reads at 40 players). Each budget below carries its own.
 class LabEnvelope {
   constructor() { this.at = -1; this.used = 0; this.last = 0; this.peak = 0; }
   /** @param {number} tick */
@@ -106,11 +113,11 @@ class LabDisabledPersistence {
 }
 function experimentNative() { return EXP.palette === "native"; }
 /** @typedef {import("./terrain.js").Pick & {d:number,stale:boolean,queuedAt:number,visible?:boolean}} LabPick */
-/** @type {Map<string,{key:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,lossSeq?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
+/** @type {Map<string,{key:string,geometryKey?:string,geometry:ReturnType<typeof northUpRadarGeometry>,x:number,z:number,version:string,storeVersion?:number,lossSeq?:number,reorderAt?:number,freshUntil?:number,retryDeadline?:number,readRadius?:number,footprintKey?:string,anchors?:import("./terrain-work.js").Anchor[]}>} */
 const labPlans = new Map();
 /** @type {Map<string,{storeId:string,x:number,z:number,sample:import("./detail-persistence.js").Raw,wall:number}>} */
 const labPendingWrites = new Map();
-const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
+const labStats = { saveErrors: 0, deferredSaves: 0, estimatedBuilds:0,estimatedCells:0,estimateVisited:0,planned: 0, rolled:0,rolledIncremental:0,requeued:0,rollTail:0,rollEntered:0,rollRawChecks:0,rasterBuilds: 0, coveragePasses: 0 };
 const LAB_SAVE_LIMIT = 2048;
 
 /** Sorts fresh work without losing its original request age. Native4 can only seed one genuine2 anchor. */
@@ -993,18 +1000,13 @@ world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
   }
 });
 
-// Terrain scanner, every tick like the compass. Each viewer's missing columns are read from a reading budget the
-// viewers share evenly (at most SCAN_TOTAL a tick and SCAN_EACH for one, within scanBudget's time). A column read for
-// one is stored for all viewers of that store, and the version of its region bumps, so every viewer near it redraws.
-// Which columns a viewer needs (the plan, kept and resumed tick after tick): walking or standing, the list their
-// radar made of what its picture misses when it was last built (radarOf: nothing extra to work out; exact near-field
-// columns only once they stop); moving fast, that list alternating with the ground ahead (aheadPicks: the radar's
-// whole reach around the point `lead` blocks ahead; at most PLAN_EACH_TICK viewers a tick, not sooner than
-// PLAN_MIN_AGE ticks after their last plan). A viewer is
-// checked right after their radar was built or when they move fast (planNow), else every PLAN_EVERY ticks
-// (the roof probe, reads that failed).
-const SCAN_TOTAL = 48;
-const SCAN_EACH = 24;
+// Terrain scanner, every tick like the compass. Each viewer's missing columns are read from one reading budget the
+// viewers share in turns (EXP.ops operations a tick, within scanBudget's time). A column read for one is stored for
+// all viewers of that store, and the version of its region bumps, so every viewer near it redraws. Which columns a
+// viewer needs (the plan, kept and resumed tick after tick): every unknown or stale column of their circle, nearest
+// first; as they move the plan is rolled (rolling-demand.js: a long queue only gets the columns the move brought in).
+// A viewer is checked when they move fast or their reads failed (planNow, at most PLAN_EACH_TICK of those a tick),
+// else every PLAN_EVERY ticks in turns.
 /** The scanner's time: planning checks and reads (a read is one native block query or ray, ~0.1 ms). */
 const scanBudget = new LabBudget(EXP.scanMs,EXP.scanMs,EXP.scanMs);
 // Bounded per-tick experiment admission replaces the episode controller.
@@ -1021,14 +1023,16 @@ const STORE_IDLE_CHECK = 200;
 /** The largest /realm:minimap scan radius for players who are not operators (operators: MANUAL_SCAN_MAX_RADIUS). */
 const PLAYER_SCAN_MAX_RADIUS = 128;
 const PLAN_EACH_TICK = 2;
+/** How far (in radii) a viewer may have moved since their plan and still be rolled instead of planned again: with
+ * plans spread over the ticks a flier can be 30 blocks on before their turn, and a full plan costs ten rolls. */
+const ROLL_REACH = 1.5;
+/** Of the scan time a tick, what planning may start in (whole ms: Date.now() is the only clock). */
+const PLAN_MS = 1;
 const PLAN_EVERY = EXP.checkEvery;
 /** Viewers to check first: their radar was just built (a new list of what it misses) or they move fast. @type {Set<string>} */
 const planNow = new Set();
 /** Viewers whose reads failed (unloaded chunks), and when to check them again. @type {Map<string, number>} */
 const retryAt = new Map();
-/** Where each viewer was at their last check (their speed when the game reports none, as for a teleporting flier). @type {Map<string, { x: number, z: number, tick: number }>} */
-const lastPose = new Map();
-const PLAN_MIN_AGE = 4;
 /** Columns kept per store at least, and per viewer of it (40 viewers spread out need more than the minimum). */
 const STORE_MIN = 6000;
 const STORE_PER_VIEWER = 1200;
@@ -1192,6 +1196,9 @@ function scanFrame() {
   let scanDeadline=t0+Math.max(0,Math.min(EXP.scanMs,featureEnvelope.room-EXP.renderReserve));
   let scanExpired=false;
   const scanTimeLeft=()=>{if(scanExpired)return false;if(Date.now()<scanDeadline)return true;scanExpired=true;return false;};
+  // Planning (which columns each viewer needs) gets the first part of the scan time only, so reading always gets the
+  // rest: with 40 viewers moving, planning alone used to fill the whole deadline and nothing was read (map-radar-perf).
+  const planTimeLeft=()=>scanTimeLeft()&&Date.now()-t0<PLAN_MS;
   const enabled=get("enabled")===true;
   if (!enabled&&!manualScans.contexts.size) return;
   const readsAtEntry=scanReads;
@@ -1209,7 +1216,6 @@ function scanFrame() {
     scanPlans.delete(id);
     playerStore.delete(id);
     retryAt.delete(id);
-    lastPose.delete(id);
     planNow.delete(id);
   }
   planTurn.left = PLAN_EACH_TICK;
@@ -1232,8 +1238,9 @@ function scanFrame() {
   /** @type {Map<string, Player> | undefined} */
   let playersById;
   for (const id of planNow) {
-    if(!scanBudget.ok||!scanTimeLeft())break;
-    planNow.delete(id);
+    // At most PLAN_EACH_TICK a tick; the rest keep their place in the set and go first next tick.
+    if(!scanBudget.ok||!planTimeLeft()||planTurn.left<=0)break;
+    planNow.delete(id);planTurn.left--;
     if (!candidateIds.has(id)) continue;
     let player;
     if (indexPlanNow) {
@@ -1255,11 +1262,11 @@ function scanFrame() {
     scanQueueCost.chargedMs += charged;
   }
   let checked = 0;
-  for (; checked < checks && scanBudget.ok && scanTimeLeft(); checked++) {
+  for (; checked < checks && scanBudget.ok && planTimeLeft(); checked++) {
     const t = Date.now();
     try {
       const p = candidates[(checked + scanFirst) % n];
-      if (!planIdle(idOf(p), now)) planFor(p, now,true);
+      planFor(p, now, true);
     } catch {
       // unloaded chunk or player left
     }
@@ -1390,15 +1397,7 @@ function scanFrame() {
   scanTicks++;
 }
 system.runInterval(() => { const started = featureEnvelope.begin(system.currentTick); try { scanFrame(); } finally { featureEnvelope.end(started); } }, 1);
-/** Blocks a viewer moves before the rotating check plans them again (their own radar asks sooner when it needs land). */
-const IDLE_MOVE = 16;
-/**
- * Can the rotating check skip this viewer (no game reads)? They haven't moved IDLE_MOVE blocks (a chunk), changed height
- * or dimension since their plan was made (their last draw says where they are), their radar listed nothing newer and
- * their roof probe isn't due. A plan still being read goes on being read as it is; one whose reads failed is asked again
- * by retryAt, a radar's new list by planNow, a fast mover by the turn check (planNow).
- * @param {string} id @param {import("./terrain.js").Store} store @param {{x:number,z:number}} at @param {number} radius
- */
+/** @param {string} id @param {import("./terrain.js").Store} store @param {{x:number,z:number}} at @param {number} radius */
 function requestDetailFootprint(id, store, at, radius) {
   if (!EXP.persistence) return;
   const x0 = Math.floor((at.x - radius) / 64), x1 = Math.floor((at.x + radius) / 64);
@@ -1413,10 +1412,6 @@ function requestDetailFootprint(id, store, at, radius) {
 }
 const detailFootprints = new Map();
 
-/** Independent of raster construction: scanning can begin before the first HUD frame. */
-/** @param {string} _id @param {number} _now */
-function planIdle(_id, _now) { return false; }
-
 /**
  * Is everything a plan knew about still there: no column within its circle evicted or invalidated since the plan
  * last checked (a loss far away, behind a traveler at the store cap, is not its business: HUD-29)? Moves the plan's
@@ -1427,6 +1422,34 @@ function keptDemand(store, state, radius) {
   if (terrain.lostNear(store, state.lossSeq ?? -1, state.x, state.z, (state.readRadius ?? radius) + COL)) return false;
   state.lossSeq = store.lossSeq;
   return true;
+}
+
+/**
+ * Puts a plan's failed reads that are still in its circle and past their retry wait back at the front of its queue.
+ * Columns skipped while cooling (full plans and rolls) are in plan.failed too, so nothing waits on a full plan.
+ * @param {ScanPlan} plan @param {{retryDeadline?:number}} state @param {import("./terrain.js").Store} store @param {{x:number,z:number}} at @param {number} radius @param {number} now @param {string} id
+ */
+function requeueFailed(plan, state, store, at, radius, now, id) {
+  let next = Infinity;
+  /** @type {import("./terrain.js").Pick[]} */ const back = [];
+  if (plan.failed) for (const [k, p] of plan.failed) {
+    if ((p.store && p.store !== store) || (p.resolution ?? COL) !== COL) { plan.failed.delete(k); continue; }
+    if ((p.wx - at.x) ** 2 + (p.wz - at.z) ** 2 > radius * radius) continue; // kept: its age counts if it comes back into the circle
+    const c = store.cols.get(p.key);
+    if (c && c.valid !== false && now - c.tick <= SCAN_MAX_AGE) { plan.failed.delete(k); continue; }
+    const miss = store.miss.get(p.key);
+    if (miss !== undefined && now - miss < MISS_RETRY) { next = Math.min(next, miss + MISS_RETRY); continue; }
+    plan.failed.delete(k);
+    back.push(p);
+  }
+  // In front: they were being read when they failed, near the viewer (over read slots, else spliced in).
+  if (back.length) {
+    if (plan.pos >= back.length) { plan.pos -= back.length; for (let i = 0; i < back.length; i++) plan.picks[plan.pos + i] = back[i]; }
+    else plan.picks.splice(plan.pos, 0, ...back);
+  }
+  state.retryDeadline = next < Infinity ? next : undefined;
+  if (next < Infinity) retryAt.set(id, Math.min(retryAt.get(id) ?? Infinity, next));
+  labStats.requeued++;
 }
 
 /** @param {Player} player @param {number} now @param {boolean} [trustedRoster] */
@@ -1444,13 +1467,25 @@ function planFor(player, now,trustedRoster=false) {
   const geometryKey = store.id + "|" + Math.round(at.x) + "|" + Math.round(at.z) + "|" + pr.radarRadius;
   let version="";
   const sameFootprint = state && state.key === geometryKey && state.x === at.x && state.z === at.z;
-  if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*.75)**2&&keptDemand(store,state,pr.revealRadius)){
+  // Reads that failed (unloaded chunks) come due: put the ones still in the circle back in the queue, instead of a
+  // full plan (on BDS a flier outrunning chunk loading made one every tick or two, about 10 ms each).
+  if(same&&state&&state.retryDeadline!==undefined&&now>=state.retryDeadline&&EXP.rolling===true&&!EXP.preview&&!EXP.persistence)requeueFailed(old,state,store,at,pr.revealRadius,now,idOf(player));
+  if(same&&state&&!sameFootprint&&EXP.rolling===true&&!EXP.preview&&state.readRadius===pr.revealRadius&&state.geometry.radius===pr.radarRadius&&now<(state.freshUntil??0)&&(state.retryDeadline===undefined||now<state.retryDeadline)&&!EXP.persistence&&Number.isFinite(state.freshUntil)&&(at.x-state.x)**2+(at.z-state.z)**2<=(pr.revealRadius*ROLL_REACH)**2&&keptDemand(store,state,pr.revealRadius)){
+    if(old.picks.length-old.pos>ROLL_WALK_MAX){
+      // A long queue: add what the move brought in instead of walking it all (rollIncremental). Its order is not
+      // redone, so a reorder that comes due waits until the queue is short.
+      const inc=rollIncremental({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed??=new Map()});
+      old.pos=inc.pos;old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;
+      state.key=geometryKey;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,inc.nextFresh);
+      if(inc.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,inc.nextRetry);retryAt.set(idOf(player),Math.min(retryAt.get(idOf(player))??Infinity,inc.nextRetry));}
+      labStats.rolled++;labStats.rolledIncremental++;labStats.rollEntered+=inc.stats.entered;labStats.rollRawChecks+=inc.stats.rawChecks;planTurn.made++;return old;
+    }
     // The rounded position (and so the geometry) is often the same as last time for a walker.
-    const geometry=state.key===geometryKey?state.geometry:northUpRadarGeometry(store.id,Math.round(at.x),Math.round(at.z),pr.radarRadius,R,state.geometry);
+    const geometry=(state.geometryKey??state.key)===geometryKey?state.geometry:northUpRadarGeometry(store.id,Math.round(at.x),Math.round(at.z),pr.radarRadius,R,state.geometry);
     const rerank=now>=(state.reorderAt??Infinity);
     const rolled=rollTerrainDemand({store,picks:old.picks,pos:old.pos,at:old.at,previous:{x:state.x,z:state.z},current:at,radius:pr.revealRadius,geometry,now,maxAge:SCAN_MAX_AGE,missRetry:MISS_RETRY,failed:old.failed,rerank});
     if(rolled){old.picks=rolled.picks;old.pos=0;old.x=at.x;old.z=at.z;old.dim=dim;old.py=py;old.viewer=undefined;old.rangeDeleted=undefined;
-      state.key=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh);
+      state.key=geometryKey;state.geometryKey=geometryKey;state.geometry=geometry;state.x=at.x;state.z=at.z;state.version=terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);state.storeVersion=store.ver;state.lossSeq=store.lossSeq;state.freshUntil=Math.min(state.freshUntil??Infinity,rolled.nextFresh);
       if(rerank)state.reorderAt=now+80;if(rolled.nextRetry<Infinity){state.retryDeadline=Math.min(state.retryDeadline??Infinity,rolled.nextRetry);retryAt.set(idOf(player),Math.min(retryAt.get(idOf(player))??Infinity,rolled.nextRetry));}
       labStats.rolled++;labStats.rollTail+=rolled.stats.tailVisited;labStats.rollEntered+=rolled.stats.entered;labStats.rollRawChecks+=rolled.stats.rawChecks;planTurn.made++;return old;
     }
@@ -1458,7 +1493,8 @@ function planFor(player, now,trustedRoster=false) {
   if(same&&sameFootprint&&(state.retryDeadline===undefined||now<state.retryDeadline)){
     const complete=old.pos>=old.picks.length;
     if(!complete&&now<(state.freshUntil??0)&&(!EXP.persistence||state.storeVersion===store.ver)&&keptDemand(store,state,pr.revealRadius)){
-      if(now>=(state.reorderAt??Infinity)){old.picks=labOrder(old.picks.slice(old.pos).map(p=>({...p,d:(p.wx-at.x)**2+(p.wz-at.z)**2,stale:p.stale===true,queuedAt:p.queuedAt??old.at,visible:"visible" in p?p.visible!==false:undefined})),now);old.pos=0;state.reorderAt=now+80;}
+      if(now>=(state.reorderAt??Infinity)&&old.picks.length-old.pos>ROLL_WALK_MAX)state.reorderAt=now+80; // a long queue keeps its order (a reorder walks and sorts it all)
+      else if(now>=(state.reorderAt??Infinity)){old.picks=labOrder(old.picks.slice(old.pos).map(p=>({...p,d:(p.wx-at.x)**2+(p.wz-at.z)**2,stale:p.stale===true,queuedAt:p.queuedAt??old.at,visible:"visible" in p?p.visible!==false:undefined})),now);old.pos=0;state.reorderAt=now+80;}
       return old;
     }
     // Any drained nonempty queue must be verified once: same-color renewals do not bump visual versions.
@@ -1469,13 +1505,14 @@ function planFor(player, now,trustedRoster=false) {
     }
   }
   version ||= terrainVerOf(idOf(player),dim.id,at,pr.radarRadius);
-  const geometry = state?.key === geometryKey ? state.geometry : northUpRadarGeometry(store.id, Math.round(at.x), Math.round(at.z), pr.radarRadius, R,state?.geometry);
+  const geometry = state && (state.geometryKey ?? state.key) === geometryKey ? state.geometry : northUpRadarGeometry(store.id, Math.round(at.x), Math.round(at.z), pr.radarRadius, R,state?.geometry);
   const footprintKey=[store.id,pr.revealRadius,sampleCoord(at.x-pr.revealRadius,COL),sampleCoord(at.x+pr.revealRadius,COL),sampleCoord(at.z-pr.revealRadius,COL),sampleCoord(at.z+pr.revealRadius,COL)].join("|");
   const anchors=state?.footprintKey===footprintKey&&state.anchors?state.anchors:circleCandidates(at,pr.revealRadius,sampleCoord,colKey).anchors;
   const ages = new Map();
   if (same) for (let i = old.pos; i < old.picks.length; i++) ages.set(old.picks[i].key, old.picks[i].queuedAt ?? old.at);
   if(same)for(const pick of old.failed?.values()??[]){const identity=pick.key;ages.set(identity,Math.min(ages.get(identity)??Infinity,pick.queuedAt??old.at));}
   /** @type {LabPick[]} */ const picks=[];
+  /** @type {LabPick[]} */ const cooling=[];
   const seenKeys=new Set();
   let nextRetry = Infinity,nextRefresh=Infinity;
   const add = (/** @type {number} */ key, /** @type {number} */ x, /** @type {number} */ z, /** @type {number} */ resolution, visible=false) => {
@@ -1488,7 +1525,7 @@ function planFor(player, now,trustedRoster=false) {
     const valid = !!sample && (!("valid" in sample) || sample.valid !== false);
     if(valid&&now-sample.tick<=SCAN_MAX_AGE){nextRefresh=Math.min(nextRefresh,sample.tick+SCAN_MAX_AGE+1);return;}
     const miss = (resolution === PREVIEW ? store.previewMiss : store.miss).get(key);
-    if (miss !== undefined && now - miss < MISS_RETRY) { nextRetry = Math.min(nextRetry, miss + MISS_RETRY); return; }
+    if (miss !== undefined && now - miss < MISS_RETRY) { nextRetry = Math.min(nextRetry, miss + MISS_RETRY); if (resolution === COL) cooling.push({ wx: x, wz: z, key, resolution, d, stale: valid, visible, queuedAt: ages.get(identity) ?? now, since: valid ? now : now - SCAN_MAX_AGE }); return; }
     const stale = valid;
     picks.push({ wx: x, wz: z, key, resolution, d, stale, visible, queuedAt: ages.get(identity) ?? now, since: stale ? now : now - SCAN_MAX_AGE });
   };
@@ -1504,8 +1541,9 @@ function planFor(player, now,trustedRoster=false) {
   for(const anchor of anchors)add(anchor.key,anchor.x,anchor.z,COL,false);
   const plan = { id: idOf(player), player, store, picks: labOrder(picks, now), dim, py, x: at.x, z: at.z,
     at: now, pos: 0, missed: 0, missRun: 0, failed: same ? old.failed : undefined };
+  if (cooling.length) { const failed = plan.failed ??= new Map(); for (const c of cooling) if (!failed.has(store.id + "|" + c.key) && failed.size < 4096) failed.set(store.id + "|" + c.key, c); }
   scanPlans.set(idOf(player), plan);
-  labPlans.set(idOf(player), { key: geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,lossSeq:store.lossSeq,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
+  labPlans.set(idOf(player), { key: geometryKey, geometryKey, geometry, x: at.x, z: at.z, version,storeVersion:store.ver,lossSeq:store.lossSeq,reorderAt:now+80,freshUntil:Math.min(nextRefresh,now+SCAN_MAX_AGE+1),readRadius:pr.revealRadius,footprintKey,anchors,retryDeadline:nextRetry<Infinity?nextRetry:undefined });
   if (nextRetry < Infinity) retryAt.set(idOf(player), nextRetry);
   planTurn.made++; labStats.planned++;
   return plan;
@@ -1785,7 +1823,6 @@ function hidePlayerHud(player) {
   scanPlans.delete(id);
   retryAt.delete(id);
   playerStore.delete(id);
-  lastPose.delete(id);
   if (lastSent.has(id)) {
     side.clear(player, "", false);
     side.clear(player, "radar", false);
@@ -2175,17 +2212,6 @@ const passBudget = new Budget(0.2, 4, 2);
 /** Player id -> tick of their last pass. @type {Map<string, number>} */
 const passAt = new Map();
 
-/**
- * budgetLevel: each budget's [perTick, max, tickMax] (ms), in the order drawing, terrain pictures, passes, scanner.
- * "normal" is about 1 ms a tick in all (the owner's budget for the Minimap): with many players moving, strips and
- * radars come a little later, mob dots and land a few seconds later. "high" is the earlier normal (about 2.9 ms a
- * tick), for a server with time to spare; "low" about 0.7 ms. A title about to fade is drawn again whatever the level.
- */
-const BUDGET_LEVELS = /** @type {Record<string, [number, number, number][]>} */ ({
-  low: [[0.3, 5, 2], [0.1, 3, 2], [0.14, 3, 2], [0.17, 10, 3]],
-  normal: [[0.4, 6, 2], [0.15, 4, 2], [0.2, 4, 2], [0.25, 15, 3]],
-  high: [[1, 8, 3], [0.4, 6, 2], [0.5, 6, 2], [1, 30, 4]],
-});
 const BUDGETS = [drawBudget, rebuildBudget, passBudget, scanBudget];
 let budgetLevel = "";
 /** Sets the budgets to budgetLevel's share (at load and when an operator changes it). */
@@ -2264,7 +2290,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   if (roster.delete(playerId)) playersList = [...roster.values()];
   manualScans.cancel(playerId,"Player left",false);
   labPlans.delete(playerId); detailFootprints.delete(playerId);
-  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, costPassBy, retryAt, lastPose]) m.delete(playerId);
+  for (const m of [netherLayers, detailFootprints, preparedDetailFrames, publishedDetailFrames, wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, costPassBy, retryAt]) m.delete(playerId);
   planNow.delete(playerId);
 });
 

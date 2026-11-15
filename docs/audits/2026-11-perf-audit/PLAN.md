@@ -226,13 +226,14 @@ Findings: XC-08, XC-09, PIPE-17, PIPE-22, HUD-41, XC-10, XC-11.
 
 ### W5 Minimap (L: two PRs left)
 
-Findings: HUD-01, HUD-06, HUD-02, HUD-03, HUD-08, HUD-14, HUD-31, HUD-36, HUD-37, HUD-38,
+Findings: HUD-01, HUD-06, HUD-02, HUD-03, HUD-14, HUD-31, HUD-36, HUD-37, HUD-38,
 HUD-16, HUD-17, HUD-20, HUD-21. Packs: `map_bp` (and `hud_rp` only through W6).
 
-**W5b Budgets** (M). With the numbers from `map-radar-perf` (`tools/test-bds/examples/`), set the scan, rebuild and draw ceilings (6 + 2 + 1 ms today) so one flier
-costs 2 ms or less and several share a per-tick envelope that carries overruns into the next tick (HUD-01). Make
-`config.js`, PACKS.md and CLAUDE.md's "about 1 ms" say what is true. Finish or delete the planner's idle skip and
-its dead limits (HUD-08). The radar fills more slowly at the same budget: a NEWS line.
+**W5b (what is left) 40 radar viewers moving** (M). Minimap 1.5.9 rolls a long queue incrementally, gives planning
+the first 1 ms of a 2.5 ms scanner budget and carries overruns: `map-radar-perf` went from 11-14 to 3.8 ms a tick at 10
+and 4.6 at 40. At 40 viewers moving, planning (about 140 full plans of ~30 ms and the rotating checks) still uses most
+of the scanner's time and only a few hundred columns are read in 150 s: make a full plan splittable over ticks (or
+cheaper), then check one flier alone against the 2 ms target.
 **W5c Idle floor and resends** (S to M). One read of each player value per pass instead of 20 + n (HUD-02); a longer
 pass interval for players who have not moved, with the mob search skipped when nothing nearby changed (HUD-03,
 HUD-19); no

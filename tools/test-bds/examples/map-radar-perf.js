@@ -96,11 +96,15 @@ export default async function (t) {
   const refused = asked.filter((id) => replies.find((e) => e.id === "realm:cfg_ack" && e.m.id === id)?.m.ok !== true);
   t.assert(refused.length === 0, `every player's radar preference was saved (${refused.length} refused)`);
   // The standing radars read their first circle here, before the window (about 25 ticks each at the scan ceiling).
-  await t.wait(100);
+  // (A smaller scan budget takes longer: wait up to 30 s for every radar to have some land.)
   let reading = 0;
-  for (const s of players) {
-    const d = await ask({ player: s.p.id, action: "detail" }, (m) => m.player === s.p.id && !!m.detail);
-    if (d && d.detail.fullCircleSampled > 0) reading++;
+  const pending = new Set(players);
+  for (let waited = 0; waited < 600 && pending.size; waited += 100) {
+    await t.wait(100);
+    for (const s of [...pending]) {
+      const d = await ask({ player: s.p.id, action: "detail" }, (m) => m.player === s.p.id && !!m.detail);
+      if (d && d.detail.fullCircleSampled > 0) { reading++; pending.delete(s); }
+    }
   }
   t.check(reading === made, `every radar has terrain read around it before the window (${reading}/${made})`);
 
