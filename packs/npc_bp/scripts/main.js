@@ -350,7 +350,8 @@ const CLUSTER_CELL = 256;
 /**
  * The players who could be within the loop's active range of any post: one `getPlayers` query per group of posts
  * (one cell of CLUSTER_CELL blocks in one dimension: a town), over a circle holding every post of the group plus that
- * range. Players farther from every post (exploring, in another town) are never read. @returns {Player[]}
+ * range. Players farther from every post (exploring, in another town) are never read, and each one found comes with the
+ * dimension it was found in (no dimension read). @returns {{ p: Player, dimId: string }[]}
  */
 function playersNearPosts() {
   /** @type {Map<string, { dim: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number }>} */
@@ -369,13 +370,13 @@ function playersNearPosts() {
     }
   }
   const reach = activeRangeNow();
-  /** @type {Map<string, Player>} */
+  /** @type {Map<string, { p: Player, dimId: string }>} */
   const found = new Map();
   for (const g of groups.values()) {
     const location = { x: (g.x0 + g.x1) / 2, y: (g.y0 + g.y1) / 2, z: (g.z0 + g.z1) / 2 };
     const maxDistance = Math.hypot(g.x1 - g.x0, g.y1 - g.y0, g.z1 - g.z0) / 2 + reach + 1;
     try {
-      for (const p of dimOf(g.dim).getPlayers({ location, maxDistance })) found.set(p.id, p);
+      for (const p of dimOf(g.dim).getPlayers({ location, maxDistance })) found.set(p.id, { p, dimId: g.dim });
     } catch {
       // dimension not available
     }
@@ -391,10 +392,10 @@ function playersNow() {
   const players = list.length ? playersNearPosts() : [];
   if (players.length) {
     const spect = new Set(world.getPlayers({ gameMode: GameMode.Spectator }).map((p) => p.id));
-    for (const p of players) {
+    for (const { p, dimId } of players) {
       try {
         const l = p.location;
-        all.push({ p, id: p.id, dimId: p.dimension.id, x: l.x, y: l.y, z: l.z, spectator: spect.has(p.id) });
+        all.push({ p, id: p.id, dimId, x: l.x, y: l.y, z: l.z, spectator: spect.has(p.id) });
       } catch {
         // left this tick
       }
