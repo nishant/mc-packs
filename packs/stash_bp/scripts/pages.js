@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, onChange, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, exportPending, indexedEntries, indexedRoom, InventoryRecoveryError, inventoryReady, kindKey, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, roomOfRecs, saveSnapshot, signature, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, exportPending, indexedEntries, indexedRoom, InventoryRecoveryError, inventoryReady, kindKey, kindsOfRecs, loadSnapshot, onItemSpawn, parseKind, pendingSummary, pruneIndex, recordIndex, roomOfRecs, saveSnapshot, signature, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -97,8 +97,8 @@ const prevOf = (cur, total) => (cur <= 1 ? total : cur - 1);
 /** @param {number} cur @param {number} total */
 const nextOf = (cur, total) => (cur >= total ? 1 : cur + 1);
 
-/** @param {Player} player */
-const buttonsWanted = (player) => !buttonsMissing && totalPages(player) > 1 && getFor(player, "invButtons") !== false;
+/** @param {Player} player @param {number} [total] totalPages(player), when the caller has it */
+const buttonsWanted = (player, total = totalPages(player)) => !buttonsMissing && total > 1 && getFor(player, "invButtons") !== false;
 
 // ---------------------------------------------------------------------------
 // Reading old JSON pages (new saves always use native ItemStacks)
@@ -1071,13 +1071,21 @@ function pollButtons(player, inv = undefined, id = player.id) {
 // Event payloads may arrive several ticks after our writes, or after a newer gesture. They are wakeups,
 // not requests. Only the current slot/cursor transaction can request a switch. Reconcile outside the
 // engine's inventory event dispatch so a client transaction finishes before we replace its slots.
+// The same event wakes the player's next look (auto-store and the button check; see wake below).
 world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
   try {
     const player = event.player;
-    if (event.inventoryType !== PlayerInventoryType.Inventory || !Number.isInteger(event.slot) || event.slot < 9 || event.slot > 35) return;
-    if (!player?.isValid || dead.has(player.id) || reconciling.has(player.id) || switching.has(player.id)) return;
-    if (!buttonsWanted(player) || !BUTTON_SLOTS.includes(event.slot) && !isButton(event.beforeItemStack) && !isButton(event.itemStack)) return;
-    if (buttonState.get(player.id) !== true || !inventoryReady(player)) return;
+    if (!player) return;
+    const id = player.id;
+    const slot = event.slot;
+    const onPage = event.inventoryType === PlayerInventoryType.Inventory && Number.isInteger(slot) && slot >= 9 && slot <= 35;
+    const buttonish = onPage && (BUTTON_SLOTS.includes(slot) || isButton(event.beforeItemStack) || isButton(event.itemStack));
+    // A hotbar change matters to auto-store only on a page down to its last few free slots, whose look also totals
+    // everything carried: a stack dropped from the hotbar must be seen before the next pickup is counted against it.
+    if (onPage || nearFull(id)) wake(player, buttonish);
+    if (!buttonish) return;
+    if (!player.isValid || dead.has(id) || reconciling.has(id) || switching.has(id)) return;
+    if (buttonState.get(id) !== true || !buttonsWanted(player) || !inventoryReady(player)) return;
     // Old control positions are storage in layout 2; finish migration before interpreting gestures.
     if (stateOf(player).layout !== 2) return;
     const request = observedButtons(player);
@@ -1112,10 +1120,17 @@ world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
   }
 });
 
-// A button dropped from the inventory screen is removed at once, and counts as the click.
-world.afterEvents.entitySpawn.subscribe(({ entity }) => {
+/** Does anyone online have their page buttons in place? Only then can a dropped item be one. */
+function anyButtonsShown() {
+  for (const shown of buttonState.values()) if (shown) return true;
+  return false;
+}
+
+// A button dropped from the inventory screen is removed at once, and counts as the click. (page-store.js has the
+// pack's one entitySpawn listener and hands it every dropped item.)
+onItemSpawn((entity) => {
   try {
-    if (entity.typeId !== "minecraft:item") return;
+    if (!anyButtonsShown()) return;
     const item = entity.getComponent("minecraft:item")?.itemStack;
     if (!isButton(item)) return;
     const at = entity.location;
@@ -1185,7 +1200,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 // ---------------------------------------------------------------------------
-// Ticking: buttons every 2 ticks, auto-store every 10
+// Looking at players: after an inventory change (auto-store at most once a second), and quiet players now and then
 // ---------------------------------------------------------------------------
 
 /** @type {Map<string, number>} player id → page count seen last */
@@ -1196,17 +1211,26 @@ const lastEnforce = new Map();
 /** What a stack counts as when looking for new pickups: its item and name, not its amount. @param {ItemStack} item */
 const keyOf = (item) => `${item.typeId}|${item.nameTag ?? ""}|${item.getLore().join("/")}`;
 
-/** How many empty slots this page has, and how many items of each kind. @param {import("@minecraft/server").Container} inv */
+/**
+ * How many empty slots this page has, how many items of each kind, and each stack with its key (so the move that may
+ * follow reads no slot twice). @param {import("@minecraft/server").Container} inv
+ */
 function lookAtPage(inv) {
   /** @type {Map<string, number>} */
   const amounts = new Map();
+  /** @type {Map<number, { item: ItemStack, key: string }>} */
+  const stacks = new Map();
   let empty = 0;
   for (const s of STORAGE_SLOTS) {
     const item = inv.getItem(s);
     if (!item) empty++;
-    else if (!isButton(item)) amounts.set(keyOf(item), (amounts.get(keyOf(item)) ?? 0) + item.amount);
+    else if (!isButton(item)) {
+      const key = keyOf(item);
+      amounts.set(key, (amounts.get(key) ?? 0) + item.amount);
+      stacks.set(s, { item, key });
+    }
   }
-  return { empty, amounts };
+  return { empty, amounts, stacks };
 }
 
 /** @type {string[]} the armor and offhand slots (EquipmentSlot values) */
@@ -1222,7 +1246,9 @@ function liveTotals(player, inv, page) {
   const live = new Map(page);
   /** @param {ItemStack | undefined} item */
   const add = (item) => {
-    if (item && !isButton(item)) live.set(keyOf(item), (live.get(keyOf(item)) ?? 0) + item.amount);
+    if (!item || isButton(item)) return;
+    const key = keyOf(item);
+    live.set(key, (live.get(key) ?? 0) + item.amount);
   };
   for (const s of HOTBAR) add(inv.getItem(s));
   try { add(player.getComponent("minecraft:cursor_inventory")?.item); } catch { /* an unreadable cursor counts as empty */ }
@@ -1232,10 +1258,8 @@ function liveTotals(player, inv, page) {
   } catch { /* no equipment to count */ }
   return live;
 }
-/** Free slots across every page the player has. @param {Player} player @param {import("@minecraft/server").Container} inv */
-function freeEverywhere(player, inv) {
-  const total = totalPages(player);
-  const cur = curPage(player);
+/** Free slots across every page the player has. @param {Player} player @param {import("@minecraft/server").Container} inv @param {number} [total] @param {number} [cur] */
+function freeEverywhere(player, inv, total = totalPages(player), cur = curPage(player)) {
   let free = PAGE_SIZE - usedOnPage(inv);
   for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, savedStacks(player, p) ?? PAGE_SIZE);
   return free;
@@ -1275,13 +1299,23 @@ function mayHold(player, page, id) {
  * the total of everything carried (page, hotbar, cursor, worn gear): a kind only counts when that total grew, and
  * only up to that growth. Every page touched is read once and everything is one transaction, so a failure changes
  * nothing, and the look is always refreshed first so a failed attempt is never retried against old numbers.
- * @param {Player} player
+ * At most one move a second per player (STORE_GAP): what arrives within the second after a move waits, counted against
+ * the look taken after that move, and goes in one transaction with the rest when the second is up.
+ * @param {Player} player @param {number} [total] totalPages(player) @param {number} [cur] curPage(player)
  */
-function autoStore(player) {
+function autoStore(player, total = totalPages(player), cur = curPage(player)) {
   const inv = invOf(player);
-  if (!inv || switching.has(player.id) || queuedButtons.has(player.id) || reconciling.has(player.id)) return;
-  const total = totalPages(player);
-  const cur = curPage(player);
+  const id = player.id;
+  if (!inv || switching.has(id) || queuedButtons.has(id) || reconciling.has(id)) return;
+  const tick = system.currentTick;
+  const before = snapshots.get(id);
+  const nextMove = (storedAt.get(id) ?? -Infinity) + STORE_GAP;
+  // Within a second of the last move, a page that was near full is not looked at (its baseline stays the look taken
+  // after that move): it gets one look when the second is up.
+  if (before?.page === cur && before.live && tick < nextMove) {
+    lookAt(player, nextMove);
+    return;
+  }
   const now = lookAtPage(inv);
   // Everything carried is only compared on a page down to one free slot, against the look before it; a page with
   // more room than LIVE_MARGIN can't get there by the next look short of several new stacks at once, so its look
@@ -1290,8 +1324,7 @@ function autoStore(player) {
   // as if nothing else carried changed. Otherwise a full page and a full hotbar could never see another pickup
   // and would stay stuck. A misread move only sends the player's own stack to another of their pages.
   const live = now.empty <= LIVE_MARGIN ? liveTotals(player, inv, now.amounts) : undefined;
-  const before = snapshots.get(player.id);
-  snapshots.set(player.id, { page: cur, amounts: now.amounts, empty: now.empty, live });
+  snapshots.set(id, { page: cur, amounts: now.amounts, empty: now.empty, live });
   if (!before || before.page !== cur || now.empty > 1 || !live) return;
   const burst = !before.live;
   if (burst && !(before.empty > LIVE_MARGIN)) return;
@@ -1309,6 +1342,12 @@ function autoStore(player) {
   const targets = [];
   for (let p = 1; p <= total; p++) if (p !== cur) targets.push(p);
   if (!targets.length) return;
+  if (tick < nextMove) {
+    // A burst within a second of the last move: keep counting from the look before it, and move it when the second is up.
+    snapshots.set(id, before);
+    lookAt(player, nextMove);
+    return;
+  }
 
   /** @type {Map<number, Rec[]>} */
   const edits = new Map();
@@ -1319,11 +1358,14 @@ function autoStore(player) {
   let movedCount = 0;
   let name = "";
   let empty = now.empty;
+  /** @type {Map<string, number>} what left the page, by kind, for the look after the move */
+  const gone = new Map();
   for (let i = STORAGE_SLOTS.length - 1; i >= 0 && gains.size && empty < 2; i--) {
     const s = STORAGE_SLOTS[i];
-    const item = inv.getItem(s);
-    if (!item || isButton(item) || item.lockMode === ItemLockMode.slot) continue;
-    const key = keyOf(item);
+    const stack = now.stacks.get(s);
+    if (!stack) continue;
+    const { item, key } = stack;
+    if (item.lockMode === ItemLockMode.slot) continue;
     const want = gains.get(key);
     if (!want) continue;
     const piece = item.clone();
@@ -1347,24 +1389,36 @@ function autoStore(player) {
       empty++;
     }
     movedCount += n;
+    gone.set(key, (gone.get(key) ?? 0) + n);
     name = item.nameTag ?? pretty(item.typeId);
     void rem;
   }
   if (!movedCount) return;
   const after = carried(inv).filter((e) => !changed.has(e.s));
   for (const [s, item] of changed) if (item) after.push({ s, item });
+  storedAt.set(id, tick); // a failed move waits its second too
   try {
-    commitPages(player, edits, after);
+    commitPages(player, edits, after, cur);
   } catch (e) {
     console.warn(`[stash] auto-store: ${e}`);
-    snapshots.delete(player.id); // the next look is a fresh baseline, so this pickup is never retried as new
+    snapshots.delete(id); // the next look is a fresh baseline, so this pickup is never retried as new
     hooks.bar(player, "§cAuto-store could not move your pickup. Nothing changed");
     return;
   }
-  const look = lookAtPage(inv);
-  snapshots.set(player.id, { page: cur, amounts: look.amounts, empty: look.empty, live: look.empty <= LIVE_MARGIN ? liveTotals(player, inv, look.amounts) : undefined });
+  // The look after the move, from the look before it: the commit changed only the slots in `changed`, by `gone`.
+  /** @param {Map<string, number>} totals */
+  const less = (totals) => {
+    const out = new Map(totals);
+    for (const [k, n] of gone) {
+      const left = (out.get(k) ?? 0) - n;
+      if (left > 0) out.set(k, left);
+      else out.delete(k);
+    }
+    return out;
+  };
+  snapshots.set(id, { page: cur, amounts: less(now.amounts), empty, live: empty <= LIVE_MARGIN ? less(live) : undefined });
   const dest = [...perPage.entries()].sort((a, b) => a[0] - b[0]).sort((a, b) => b[1] - a[1])[0][0];
-  hooks.bar(player, `§8[§bPage #${dest}§8] §7Auto-stored §f${movedCount}x ${name} §7(${freeEverywhere(player, inv)} slots left)`);
+  hooks.bar(player, `§8[§bPage #${dest}§8] §7Auto-stored §f${movedCount}x ${name} §7(${freeEverywhere(player, inv, total, cur)} slots left)`);
 }
 
 /**
@@ -1645,7 +1699,7 @@ export function refillFromPages(player, slot, want) {
 
 /**
  * One look at a player. `id` is `player.id`, passed in so a look reads it from the game once, not a dozen times, and
- * the page state is read once (it is a dynamic property parsed from JSON).
+ * the page count is worked out once (the page state is cached by stateOf).
  * @param {Player} player @param {boolean} withAutoStore @param {string} [id]
  */
 function tickPlayer(player, withAutoStore, id = player.id) {
@@ -1668,7 +1722,7 @@ function tickPlayer(player, withAutoStore, id = player.id) {
     lastEnforce.set(id, { total, tick: system.currentTick });
     if (enforcePageCount(player)) lastTotal.set(id, total);
   }
-  if (!buttonsWanted(player)) {
+  if (!buttonsWanted(player, total)) {
     if (buttonState.get(id) !== false) {
       removeButtons(player);
       buttonState.set(id, false);
@@ -1684,7 +1738,7 @@ function tickPlayer(player, withAutoStore, id = player.id) {
     if (withAutoStore) sweepStrays(player, inv);
   }
   if (total > 1 && withAutoStore) {
-    if (getFor(player, "autoStore") !== false) autoStore(player);
+    if (getFor(player, "autoStore") !== false) autoStore(player, total, curPage(player));
     else snapshots.delete(id); // what arrived while it was off is not new when it is turned back on
   }
 }
@@ -1695,34 +1749,62 @@ const backoff = new Map();
 const RETRY_TICKS = 40;
 const WARN_TICKS = 1200;
 
+/** Ticks between two auto-store moves for one player (at most one a second), and between two auto-store looks at a changing inventory. */
+const STORE_GAP = 20;
+/** A look this long after the last inventory change sees what an event reported late. */
+const FOLLOW_TICKS = 20;
+/** @type {Map<string, number>} player id -> tick of the last auto-store move */
+const storedAt = new Map();
 /**
- * When each player's inventory (or a setting of this pack) last changed. A player whose inventory changed
- * in the last second is looked at every 2 ticks (button clicks, and every 10 ticks pickups to auto-store);
- * a quiet one every 5 s, spread over the ticks, without the page scan, which a quiet inventory can't need
- * (that runs every 25 s anyway, in case an event was missed). A look costs 0.1 to 0.4 ms, so idle players
- * have to be looked at rarely.
- * @type {Map<string, number>}
+ * The players with a look due. An inventory change asks for a look on the next beat (the layout, the page count and the
+ * buttons: a few native calls) and one more FOLLOW_TICKS after the last change, which sees a button slot that changed
+ * after its event. On a page near full (see nearFull) only one look in STORE_GAP also runs auto-store (the page and
+ * everything carried: 40 to 60 item reads), so a miner's pickups are looked at once a second, not every 10 ticks as
+ * before, and none is missed: a change that only a look without auto-store saw asks for one when the second is up. A player without their
+ * buttons yet (a new player, a respawn, a page count change) is looked at every beat until they have them. Button clicks
+ * themselves are handled by the inventory event at once (above). Before, every player whose inventory changed in the
+ * last second was looked at every 2 ticks.
+ * `change` is the tick of the last inventory change, `store` of the last look with auto-store, `at` when the next is due.
+ * @type {Map<string, { player: Player, at: number, store: number, change: number }>}
  */
-const changedAt = new Map();
-const ACTIVE_TICKS = 20;
-/**
- * The players looked at every beat: changed in the last ACTIVE_TICKS, or without their buttons yet (a new player, a
- * respawn, a page count change). A beat walks only these and the quiet players whose turn it is, not everyone: with
- * 40 online, walking all of them every beat was about 0.03 ms a tick before any player was looked at.
- * @type {Map<string, Player>}
- */
-const active = new Map();
-/** @param {Player} player */
-function touch(player) {
-  changedAt.set(player.id, system.currentTick);
-  active.set(player.id, player);
+const due = new Map();
+/** @param {Player} player @param {string} id */
+function dueOf(player, id) {
+  let d = due.get(id);
+  if (!d) due.set(id, (d = { player, at: Infinity, store: -Infinity, change: -Infinity }));
+  d.player = player;
+  return d;
 }
-world.afterEvents.playerInventoryItemChange?.subscribe(({ player }) => {
-  if (player) touch(player);
-});
+/**
+ * Was the player's page down to LIVE_MARGIN free slots or fewer at the last auto-store look? Only then is auto-store held
+ * to one look a second: a page with more room is looked at after every change, as before, so the look before a burst
+ * of new stacks (the baseline its pickups are told apart by) is never skipped. @param {string} id
+ */
+const nearFull = (id) => !!snapshots.get(id)?.live;
+/**
+ * The player's inventory (or a setting of this pack) changed: look on the next beat, with auto-store unless the page is
+ * near full and its second since the last auto-store look is not up (then that look comes when it is), and once more a
+ * second later. `urgent` (a button slot or a button changed, a setting, a spawn), or a player without their buttons in
+ * place, gets a look on the next beat even when auto-store has to wait.
+ * @param {Player} player @param {boolean} [urgent]
+ */
+function wake(player, urgent = true) {
+  const now = system.currentTick;
+  const id = player.id;
+  const d = dueOf(player, id);
+  d.change = now;
+  d.at = Math.min(d.at, urgent || !buttonState.has(id) || !nearFull(id) ? now + 1 : Math.max(now + 1, d.store + STORE_GAP));
+}
+/** A look at this tick (or the next beat after it), without counting as a change. @param {Player} player @param {number} at */
+function lookAt(player, at) {
+  const d = dueOf(player, player.id);
+  d.at = Math.min(d.at, at);
+}
+/** @param {Player} player */
+const touch = (player) => wake(player);
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  changedAt.delete(playerId);
-  active.delete(playerId);
+  due.delete(playerId);
+  storedAt.delete(playerId);
 });
 // A new page count or button choice shows at once, not at the next quiet look.
 onChange((key, player) => {
@@ -1730,9 +1812,13 @@ onChange((key, player) => {
   else for (const p of online().values()) touch(p);
 });
 
-/** Beats (2 ticks each) between looks at a quiet player, and between a quiet player's page scans. */
-const QUIET_BEATS = 50;
-const QUIET_SCAN_BEATS = 250;
+/**
+ * Beats (2 ticks each) between looks at a quiet player (30 s), and between a quiet player's page scans (2 minutes). The
+ * inventory events are what starts every real look; the quiet look only repairs a button lost some other way and
+ * notices a page count or a recovery journal, and the scan an auto-store pickup whose event was missed.
+ */
+const QUIET_BEATS = 300;
+const QUIET_SCAN_BEATS = 1200;
 
 /**
  * The online players, kept from spawn and leave events and read from the game again every ROSTER_TICKS in case one was
@@ -1760,7 +1846,7 @@ function online() {
     for (const p of world.getAllPlayers()) {
       roster.set(p.id, p);
       // Someone here before this script loaded, or whose spawn was missed, has no buttons yet.
-      if (!buttonState.has(p.id)) active.set(p.id, p);
+      if (!buttonState.has(p.id)) lookAt(p, now);
     }
     order = [...roster];
     rosterAt = now;
@@ -1788,22 +1874,28 @@ system.runInterval(() => {
   ++beat;
   const now = system.currentTick;
   online();
-  for (const [id, player] of active) {
-    // Nothing to look at until they respawn (a death clears their buttons, which would make them look active).
+  for (const [id, d] of due) {
+    // Nothing to look at until they respawn (a death clears their buttons, which would make them look due).
     if (dead.has(id) || !roster.has(id)) {
-      active.delete(id);
+      due.delete(id);
       continue;
     }
-    if (now - (changedAt.get(id) ?? -Infinity) > ACTIVE_TICKS && buttonState.has(id)) {
-      active.delete(id);
-      continue;
-    }
-    look(id, player, beat % 5 === 0, now);
+    if (now < d.at) continue;
+    d.at = Infinity;
+    const store = now >= d.store + STORE_GAP || !nearFull(id);
+    if (store) d.store = now;
+    look(id, d.player, store, now);
+    if (!buttonState.has(id)) d.at = Math.min(d.at, now + 2);
+    // A change auto-store hasn't looked at yet gets that look when its second is up.
+    if (d.change > d.store) d.at = Math.min(d.at, d.store + STORE_GAP);
+    // The follow-up runs auto-store too, so it also takes the baseline the next pickup is counted against.
+    if (now < d.change + FOLLOW_TICKS) d.at = Math.min(d.at, Math.max(d.change + FOLLOW_TICKS, d.store + STORE_GAP));
+    if (d.at === Infinity) due.delete(id);
   }
   // The quiet players whose turn it is: player i is looked at when (beat + i) is a multiple of QUIET_BEATS.
   for (let i = (QUIET_BEATS - (beat % QUIET_BEATS)) % QUIET_BEATS; i < order.length; i += QUIET_BEATS) {
     const [id, player] = order[i];
-    if (active.has(id) || dead.has(id)) continue;
+    if (due.has(id) || dead.has(id)) continue;
     look(id, player, (beat + i) % QUIET_SCAN_BEATS === 0, now);
   }
 }, 2);

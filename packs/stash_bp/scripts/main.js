@@ -624,6 +624,7 @@ world.beforeEvents.playerBreakBlock.subscribe((event) => {
 // owner's lock count stays right and the leftover can't sit outside the maxLocks limit.
 world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
   try {
+    if (!locks().size) return; // no lock anywhere: nothing to read about the block
     const key = lockKey(block.dimension.id, block.location);
     const gone = locks().get(key);
     if (!gone) return;
@@ -643,6 +644,7 @@ world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
   }
 });
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
+  if (!locks().size) return;
   const key = lockKey(block.dimension.id, block.location);
   if (locks().has(key)) saveLock(key, undefined); // a leftover of a container that went some other way
 });
@@ -848,8 +850,9 @@ function tapped(event) {
       return;
     }
   }
-  const tap = getFor(player, "sneakTap"); // the realm's choice, or the player's own from /realm:prefs
   const handsFree = player.isSneaking && freeHand(itemStack);
+  // The realm's choice, or the player's own from /realm:prefs; only a sneak-tap with a free hand needs it.
+  const tap = handsFree ? getFor(player, "sneakTap") : undefined;
   const container = containerTypes.has(block.typeId);
   const sorts = handsFree && tap !== "off" && container && (tap === "sort" || !itemStack);
   const menu = handsFree && tap === "menu" && !sorts && (container || block.typeId === ENDER_CHEST);
