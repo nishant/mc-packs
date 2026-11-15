@@ -141,6 +141,10 @@
     "milestones_bp": {
       "version": "1.0.12",
       "notes": "Your record is saved when a tier changes, as you leave, and otherwise at most once a minute, instead of every 10 seconds while you walk."
+    },
+    "atlas_bp": {
+      "version": "1.1.17",
+      "notes": "Saving the regions found and the sites built writes only the parts that changed, and in a big world the region or site at the edge of two saved parts is no longer lost on a restart."
     }
   }
 }
