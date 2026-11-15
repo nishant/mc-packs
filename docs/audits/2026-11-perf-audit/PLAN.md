@@ -409,15 +409,6 @@ Findings: PRG-30, PRG-05, PRG-40, PRG-47, PRG-16 (after W2). Packs: `saga_bp`.
   pending place every 2 s (PRG-05), a `getTags()` per player per second for the party story (PRG-47).
 - Proof: `saga-perf-quests` pairs; `check-stories`; the saga scenarios.
 
-### W17 Weather and sky effects (W17b left)
-
-W17a shipped (rainbow emitters, a lighter tornado with a per-player density, the NOS plume, claim and zone outlines,
-UTL-35, rain_bp's sounds and join fogs; UTL-36 unchanged, see section 7). Left: `rain_rp` (UTL-16, UTL-37).
-- **W17b What devices load.** `rain_rp`'s ten 20-second clips loaded as samples and all marked for low-memory
-  devices (UTL-16: needs a memory reading on the phone before and after); the vanilla rain splash redefined with 300
-  particles and per-frame work (UTL-37).
-- Proof: the owner's device check (section 6).
-
 ### W18 Small polls that can be events or caches (S each: batch by pack owner)
 
 Findings: UTL-04, UTL-05, UTL-07, UTL-08, UTL-13, UTL-14, UTL-20, UTL-21, UTL-22, UTL-23, UTL-24, UTL-28, UTL-29,
@@ -501,3 +492,6 @@ rest of its workstream.
 - XC-12 (a timeout scheduled before a profiling window is not counted in it): documented behavior of
   `/realm:diag`, not worth the code. BSE-18 is a measurement note, not a change.
 - Everything under "Checked and fine" and "Rejected leads" in the findings files.
+- UTL-37 (the redefined rain splash): vanilla's own `rain_splash_particle` has the same 300-particle cap, collision and
+  per-frame acceleration; Realistic Rain's is a third of the area and a little shorter-lived, so it draws no more than
+  vanilla. Nothing to change.

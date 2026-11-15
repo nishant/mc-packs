@@ -509,6 +509,11 @@ function synth(/** @type {() => Float64Array} */ fn) {
   return { make: () => Float64Array.from(get()), recipe: () => ["synthesized", pcmHash(get())] };
 }
 
+// `stream: true`: the game streams the event's clips from the pack as they play instead of decoding each whole clip into
+// memory when it loads it (a 20 s mono clip is about 1.8 MB decoded, 10 s about 0.9 MB). Set on the long beds Rain Extras
+// plays one or two of at a time (bed, bed_inside, rain.inside, wind, wind_inside: 13 clips, about 18.5 MB decoded in all).
+// Not on rain.enter (it must start the instant the game's rain stops, which a streamed clip may miss by a moment), nor
+// on the short clips the game starts many times a second or on a bolt (rain, thunder, lightning.impact, roof).
 const EVENTS = [
   {
     event: "ambient.weather.rain", subtitle: "subtitles.weather.rain", target: -23, ceiling: -1.5, layered: RAIN_LEVEL,
@@ -525,16 +530,16 @@ const EVENTS = [
     files: cuts("crack", "thunder", [100.3, 169.25, 204.2, 465.6].map((t) => [t, 4.5]), 0.01, 2, strikeWithoutRain),
   },
   {
-    event: "realm.storm.bed", target: -18, ceiling: -1, level: -33,
+    event: "realm.storm.bed", target: -18, ceiling: -1, level: -33, stream: true,
     files: cuts("bed", "thunder", [40, 230, 360, 490].map((t) => [t, 20]), 2, 2),
   },
   {
-    event: "realm.storm.bed_inside", target: -24, ceiling: -1, level: -40,
+    event: "realm.storm.bed_inside", target: -24, ceiling: -1, level: -40, stream: true,
     files: cuts("bed_inside", "thunder", [40, 360].map((t) => [t, 20]), 2, 2, muffled),
   },
   {
     // The rain heard through walls and a roof, for Rain Extras to play while it stops the game's rain indoors (INDOORS).
-    event: "realm.rain.inside", subtitle: "subtitles.weather.rain", target: -24, ceiling: -1, level: indoorLevel(INDOORS.db),
+    event: "realm.rain.inside", subtitle: "subtitles.weather.rain", target: -24, ceiling: -1, level: indoorLevel(INDOORS.db), stream: true,
     files: fromRain("rain_inside", [301, 302]),
   },
   {
@@ -544,12 +549,12 @@ const EVENTS = [
     files: fromRain("rain_enter", [311, 312], true),
   },
   {
-    event: "realm.storm.wind", target: -20, ceiling: -3, level: -34,
+    event: "realm.storm.wind", target: -20, ceiling: -3, level: -34, stream: true,
     files: [0, 1, 2].map((i) => ({ name: `wind${i + 1}`, ...synth(() => wind(4100 + i, 10)) })),
   },
   {
     // 3.7 dB under the muffled rain in plain rain (as the breeze is under the rain outdoors), so indoors the rain leads.
-    event: "realm.storm.wind_inside", target: -26, ceiling: -3, level: -44,
+    event: "realm.storm.wind_inside", target: -26, ceiling: -3, level: -44, stream: true,
     files: [0, 1].map((i) => ({ name: `wind_inside${i + 1}`, ...synth(() => wind(4200 + i, 10, true)) })),
   },
   {
@@ -568,7 +573,7 @@ function definitions(/** @type {Map<string, number>} */ volumes) {
       category: "weather",
       max_distance: null,
       min_distance: 100.0,
-      sounds: e.files.map((f) => ({ load_on_low_memory: true, name: `sounds/realistic_rain/${f.name}`, volume: volumes.get(f.name) })),
+      sounds: e.files.map((f) => ({ load_on_low_memory: true, name: `sounds/realistic_rain/${f.name}`, volume: volumes.get(f.name), ...(e.stream ? { stream: true } : {}) })),
       ...(e.subtitle ? { subtitle: e.subtitle } : {}),
     };
   }

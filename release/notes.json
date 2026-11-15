@@ -19,6 +19,7 @@
   ],
   "resourceNotes": [
     "Side HUD: the right-side boxes start right under the compass when the Minimap radar is hidden, so they show on short phone screens.",
+    "Realistic Rain: the long thunderstorm, wind and muffled-rain clips are streamed as they play instead of loaded whole into memory, which should leave phones more memory during storms.",
     "Realm Skies: new particles for the little rainbow over a pot of gold and a NOS boost's plume, and a tornado funnel of fewer, slightly bigger clouds that looks the same at about half the particles."
   ],
   "packNotes": {
@@ -105,6 +106,10 @@
     "map_bp": {
       "version": "1.5.9",
       "notes": "The radar's planner no longer walks each moving player's whole list of land to read every tick, planning gets only the first part of the scanner's time, and the time budgets are smaller (scanner 2.5 ms, pictures 0.75, drawing 0.4) with overruns paid back by the next ticks: about 3.8 ms a tick at 10 players and 4.6 at 40 with every radar on and players moving, from 11 to 14."
+    },
+    "rain_rp": {
+      "version": "1.4.5",
+      "notes": "The 13 long clips Rain Extras plays (realm.storm.bed, bed_inside, realm.rain.inside, realm.storm.wind, wind_inside) are marked stream: true in sound_definitions.json; realm.rain.enter and the short clips stay loaded."
     },
     "sky_rp": {
       "version": "1.4.0",
