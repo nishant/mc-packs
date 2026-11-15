@@ -501,7 +501,7 @@ export function* scanTown(input) {
   const order = [...input.projects].sort((a, b) => Number(!!b.well) - Number(!!a.well));
   /** Footprint shapes (all four facings, and `near`) that found no valid spot this scan. @type {Set<string>} */
   const none = new Set();
-  /** Shapes that ended "wait" since the last pick (ENT-05): with the same spots taken the next one waits too. @type {Set<string>} */
+  /** Shapes that ended "wait" since the last pick (ENT-05): with the same spots taken the next one waits too (true: hopeful). @type {Map<string, boolean>} */
   const waited = new Map();
   /** @type {string[]} */
   const hopeful = [];
