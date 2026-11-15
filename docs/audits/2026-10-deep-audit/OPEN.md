@@ -35,13 +35,6 @@ Tracked in `nishant/skills` MANUAL-STEPS.md ("Run the mc-packs real-client check
 - O15 Minimap `budgetLevel` low, normal and high while walking, flying and at a crowded spawn (checklist A4).
 - O16 Saga nameplate rendering (code done `98012e88`): spectators excluded, labels look right on a real client.
 
-## Tests
-
-- F1 stash_bp "Fill earlier pages" item-loss fix is on master (`4a9e3b85`) and guarded only by the unit test
-  `tools/stash-pages.test.mjs`. Still to write: `tools/test-bds/examples/stash-fill-locked.js` (header with its run
-  command): a `lock_in_slot` stack on the shown page plus movable stacks, run Fill earlier pages, assert the locked
-  stack keeps its amount, lock and slot and every page's census is unchanged; prove it fails on `4a9e3b85^`.
-
 ## Backlog (ideas from the audit, not commitments)
 
 saga: siege and escort outcomes as letters, a first-hour newcomer chapter, story places per town, a `{town}` name,

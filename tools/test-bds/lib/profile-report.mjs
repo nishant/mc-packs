@@ -4,7 +4,82 @@ import fs from "node:fs";
 import { execSync } from "node:child_process";
 import { evaluatePerf } from "./perf-acceptance.mjs";
 
-const LINE = /^\[Scripting\] (?:\[[^\]]*\] )?(PROFILE|PROFILE_TICKS|PROFILE_SERVER) (\{.*\})\s*$/;
+const LINE = /^\[Scripting\] (?:\[[^\]]*\] )?(PROFILE|PROFILE_TICKS|PROFILE_CALLBACKS|PROFILE_HEAVY|PROFILE_SERVER) (\{.*\})\s*$/;
+
+/** Tick residues the histograms use: the intervals of 20 to 200 ticks the packs start in their load tick line up on these. */
+export const HISTOGRAM_MODS = [20, 40, 100, 200];
+
+/**
+ * Average ms by `tick % m` for each m in HISTOGRAM_MODS, and how many ticks over 5 ms fall on a multiple of 20.
+ * @param {number[]} per ms per tick @param {number} start the absolute tick of per[0]
+ */
+export function tickHistogram(per, start) {
+  /** @type {Record<string, number[]>} */
+  const byMod = {};
+  for (const m of HISTOGRAM_MODS) {
+    const sum = new Array(m).fill(0), n = new Array(m).fill(0);
+    per.forEach((v, i) => { const r = (((start + i) % m) + m) % m; sum[r] += v; n[r]++; });
+    byMod[`mod${m}`] = sum.map((s, r) => (n[r] ? Math.round((1000 * s) / n[r]) / 1000 : 0));
+  }
+  // The comb of 20-tick timers has a fixed offset against currentTick, not always 0: also name the busiest residue
+  // and the share of slow ticks that fall on it.
+  const peak20 = byMod.mod20.reduce((best, v, r, a) => (v > a[best] ? r : best), 0);
+  let over5 = 0, over5On20 = 0, over5OnPeak20 = 0;
+  per.forEach((v, i) => { if (v > 5) { over5++; const r = (start + i) % 20; if (r === 0) over5On20++; if (r === peak20) over5OnPeak20++; } });
+  return { ...byMod, over5, over5On20, shareOver5On20: over5 ? over5On20 / over5 : 0, peak20, over5OnPeak20, shareOver5OnPeak20: over5 ? over5OnPeak20 / over5 : 0 };
+}
+
+/**
+ * The n slowest ticks with the single calls of 1 ms or more that ran in them (every pack's).
+ * @param {number[]} per @param {number} start @param {Map<number, { pack: string, key: string, ms: number }[]>} heavy @param {number} [n]
+ */
+export function worstTicks(per, start, heavy, n = 10) {
+  return per.map((ms, i) => ({ tick: start + i, ms })).filter((x) => x.ms > 0).sort((a, b) => b.ms - a.ms || a.tick - b.tick).slice(0, n)
+    .map((x) => ({ ...x, calls: [...(heavy.get(x.tick) ?? [])].sort((a, b) => b.ms - a.ms) }));
+}
+
+/**
+ * One script context's callbacks (the Realm Bundle) grouped by the `<pack>_bp/` folder in their file:line, so the
+ * one-context run has per-pack figures of its own. Callbacks with no pack folder in their site are "(other)".
+ * @param {{ key: string, ms: number, calls: number, max: number }[]} callbacks @param {number} ticks
+ */
+export function byPackPath(callbacks, ticks) {
+  const n = Math.max(1, ticks);
+  /** @type {Map<string, { pack: string, ms: number, calls: number, max: number, callbacks: number, top: string }>} */
+  const by = new Map();
+  for (const c of callbacks) {
+    const site = c.key.slice(c.key.lastIndexOf(" @ ") + 3);
+    const m = /(?:^|[\s(/\\])([A-Za-z0-9_]+_bp)[/\\]/.exec(site);
+    const pack = m ? m[1] : "(other)";
+    let e = by.get(pack);
+    if (!e) by.set(pack, (e = { pack, ms: 0, calls: 0, max: 0, callbacks: 0, top: c.key }));
+    e.ms += c.ms; e.calls += c.calls; e.callbacks++;
+    if (c.max > e.max) e.max = c.max;
+  }
+  return [...by.values()].map((e) => ({ ...e, msPerTick: e.ms / n, callsPerTick: e.calls / n })).sort((a, b) => b.ms - a.ms || b.calls - a.calls);
+}
+
+const COUNTERS = ["ticks", "calls", "callsPerTick", "callbacks", "dynWrites", "dynBytes", "dynWorld", "dynEntity", "dynItem", "actionBar", "titles", "commands", "p95TickMs", "maxTickMs"];
+/**
+ * suite.mjs --perf --json's form of one profile JSON: the bundle, server, process, workload and watchdog figures, and
+ * each pack's whole and steady ms/tick with its top and slowest callbacks and counters (the full JSON is uploaded too).
+ * @param {any} r
+ */
+export function reducedReport(r) {
+  return {
+    acceptance: r.acceptance ?? null, bundle: r.bundle, server: r.server, process: r.process ?? null, workload: r.workload ?? null, watchdog: r.watchdog ?? null,
+    packs: Object.fromEntries((r.packs ?? []).map((/** @type {any} */ x) => [x.pack, {
+      whole: x.msPerTick, steady: x.steadyMsPerTick ?? null, top: x.top ?? [], slowest: x.slowest ?? [],
+      counters: Object.fromEntries(COUNTERS.filter((k) => x[k] !== undefined).map((k) => [k, x[k]])),
+    }])),
+  };
+}
+
+/** A complete set of parts joined, or null while one is missing. @param {{ n: number, parts: (string | undefined)[] } | undefined} e */
+function joined(e) {
+  if (!e || e.parts.filter((x) => x !== undefined).length < e.n) return null;
+  return e.parts.join("");
+}
 
 // The process figures below come from /proc, so only Linux has them (and only Linux has getconf: elsewhere the
 // call printed a "not recognized" error line into every run's output).
@@ -72,6 +147,9 @@ export class Profile {
     this.latest = new Map();
     this.final = new Map();
     this.tickParts = new Map();
+    this.cbParts = new Map();
+    this.heavyParts = new Map();
+    this.watchdog = null;
     this.server = null;
     this.serverFinal = null;
     this.interval = null;
@@ -84,11 +162,53 @@ export class Profile {
   /** The scenario's own account of its workload (perf-soak's `perf-workload` report). */
   setWorkload(workload) { this.workload = workload; }
 
+  /** Watchdog and slow-tick lines from the server log (lib/watchdog.mjs watchdogSummary). */
+  setWatchdog(summary) { this.watchdog = summary; }
+
+  /** True when `packs` final rows, each with every part it announced, and the tick meter's final line have arrived. */
+  complete(packs) {
+    if (this.final.size < packs || !this.serverFinal) return false;
+    for (const [pack, row] of this.final) {
+      const want = row.parts;
+      if (!want) continue; // an older profiler: no part counts to wait for
+      const have = (/** @type {Map<string, any>} */ m) => m.get(pack)?.parts.filter((x) => x !== undefined).length ?? 0;
+      if (have(this.tickParts) < want.ticks || have(this.cbParts) < want.callbacks || have(this.heavyParts) < want.heavy) return false;
+    }
+    return true;
+  }
+
+  /** A pack's every timed callback (the final PROFILE_CALLBACKS), or null. */
+  callbacksOf(pack) {
+    const s = joined(this.cbParts.get(pack));
+    if (s === null) return null;
+    try { return JSON.parse(s); } catch { return null; }
+  }
+
+  /** tick -> the single calls of 1 ms or more in it, over every pack. */
+  heavyByTick() {
+    /** @type {Map<number, { pack: string, key: string, ms: number }[]>} */
+    const by = new Map();
+    for (const pack of this.heavyParts.keys()) {
+      const s = joined(this.heavyParts.get(pack));
+      const cbs = this.callbacksOf(pack);
+      if (!s || !cbs) continue;
+      for (const item of s.split(",")) {
+        const [tick, ms, idx] = item.split(":").map(Number);
+        if (!Number.isFinite(tick)) continue;
+        let l = by.get(tick);
+        if (!l) by.set(tick, (l = []));
+        l.push({ pack, key: cbs[idx]?.key ?? "?", ms });
+      }
+    }
+    return by;
+  }
+
   send(cmd) { try { this.bds.send(cmd); } catch (e) { /* server gone */ } }
 
   start(bds) {
     this.bds = bds;
-    this.latest.clear(); this.final.clear(); this.tickParts.clear();
+    this.latest.clear(); this.final.clear(); this.tickParts.clear(); this.cbParts.clear(); this.heavyParts.clear();
+    this.heavy = null;
     this.send("scriptevent harness:profile_reset {}");
     this.cpu0 = procStats(bds.proc.pid);
     this.startedAt = Date.now();
@@ -119,9 +239,10 @@ export class Profile {
     if (m[1] === "PROFILE") {
       this.latest.set(obj.pack, obj);
       if (obj.final) this.final.set(obj.pack, obj);
-    } else if (m[1] === "PROFILE_TICKS") {
-      let e = this.tickParts.get(obj.pack);
-      if (!e) this.tickParts.set(obj.pack, (e = { startTick: obj.startTick, n: obj.n, parts: [] }));
+    } else if (m[1] === "PROFILE_TICKS" || m[1] === "PROFILE_CALLBACKS" || m[1] === "PROFILE_HEAVY") {
+      const map = m[1] === "PROFILE_TICKS" ? this.tickParts : m[1] === "PROFILE_CALLBACKS" ? this.cbParts : this.heavyParts;
+      let e = map.get(obj.pack);
+      if (!e) map.set(obj.pack, (e = { startTick: obj.startTick, n: obj.n, parts: [] }));
       e.parts[obj.i] = obj.d;
     } else if (m[1] === "PROFILE_SERVER") {
       if (this.finalRequested()) this.serverFinal = obj;
@@ -172,7 +293,13 @@ export class Profile {
     const per = [];
     for (let t = start; t < end; t++) per.push(sum.get(t) || 0);
     const sorted = [...per].sort((a, b) => a - b);
-    return { ticks: per.length, avg: per.reduce((a, b) => a + b, 0) / Math.max(1, per.length), p50: pct(sorted, 0.5), p95: pct(sorted, 0.95), p99: pct(sorted, 0.99), max: sorted[sorted.length - 1] || 0, over50: per.filter((x) => x > 50).length };
+    this.heavy ??= this.heavyByTick();
+    return {
+      ticks: per.length, startTick: start, endTick: end, avg: per.reduce((a, b) => a + b, 0) / Math.max(1, per.length), p50: pct(sorted, 0.5), p95: pct(sorted, 0.95), p99: pct(sorted, 0.99), max: sorted[sorted.length - 1] || 0, over50: per.filter((x) => x > 50).length,
+      // Which tick residues the time falls on (timers started in one tick line up), and the 10 worst ticks with the calls of 1 ms or more in them.
+      histogram: tickHistogram(per, start),
+      worst: worstTicks(per, start, this.heavy),
+    };
   }
 
   /** One pack's average ms/tick over a tick window from its already collected per-tick data; null if its data is incomplete. */
@@ -206,8 +333,12 @@ export class Profile {
       this.write(rows, null, null);
       return L;
     }
+    this.heavy = null;
     const bundle = this.bundleTicks();
     const ticks = Math.max(...rows.map((r) => r.ticks));
+    for (const r of rows) r.callbacksAll = this.callbacksOf(r.pack);
+    // One script context (the Realm Bundle): per-pack figures from the callbacks' scripts/<pack>/ paths.
+    const byPath = rows.length === 1 && rows[0].callbacksAll ? byPackPath(rows[0].callbacksAll, rows[0].ticks) : null;
     let cpu = null;
     if (this.cpu0 && this.cpu1) {
       const wall = this.cpu1.at - this.cpu0.at;
@@ -217,9 +348,14 @@ export class Profile {
     const totals = rows.reduce((a, r) => ({ ms: a.ms + r.totalMs, dyn: a.dyn + r.dynWrites, bytes: a.bytes + r.dynBytes, bar: a.bar + r.actionBar, ttl: a.ttl + r.titles, cmd: a.cmd + r.commands, calls: a.calls + r.calls }), { ms: 0, dyn: 0, bytes: 0, bar: 0, ttl: 0, cmd: 0, calls: 0 });
     L.push(`profile: ${rows.length} packs over ${ticks} ticks (${(ticks / 20).toFixed(0)} game s)`);
     L.push(`  bundle: ${f3(totals.ms / ticks)} ms/tick in pack callbacks${bundle ? `, per-tick p50 ${bundle.p50} / p95 ${bundle.p95} / p99 ${bundle.p99} / max ${bundle.max} ms, ${bundle.over50} ticks over 50 ms` : ""}; ${f2(totals.calls / ticks)} calls/tick; setDynamicProperty ${f3(totals.dyn / ticks)}/tick (${f2(totals.bytes / ticks)} chars/tick); setActionBar ${f2(totals.bar / ticks)}/tick; setTitle ${f2(totals.ttl / ticks)}/tick; runCommand ${f2(totals.cmd / ticks)}/tick`);
-    if (s) L.push(`  server: ${f2(s.tps)} TPS; tick interval avg ${f2(s.tickIntervalAvgMs)} / p95 ${s.tickIntervalP95Ms} / p99 ${s.tickIntervalP99Ms} / max ${s.tickIntervalMaxMs} ms; ${s.ticksOver50ms} ticks over 55 ms, ${s.ticksOver100ms} over 100 ms`);
+    if (s) L.push(`  server: ${f2(s.tps)} TPS; tick interval avg ${f2(s.tickIntervalAvgMs)} / p95 ${s.tickIntervalP95Ms} / p99 ${s.tickIntervalP99Ms} / max ${s.tickIntervalMaxMs} ms; ${s.ticksOver50ms} ticks over 50 ms${s.ticksOver55ms !== undefined ? ` (${s.ticksOver55ms} over 55)` : ""}, ${s.ticksOver100ms} over 100 ms`);
     if (cpu) L.push(`  bedrock_server process: ${f2(cpu.cpuMsPerTick)} CPU ms/tick (${cpu.cpuPct.toFixed(0)}% of one core), RSS ${cpu.rssMB?.toFixed(0)} MB, ${cpu.threads} threads`);
+    if (this.watchdog) L.push(`  watchdog and slow-tick lines: ${this.watchdog.count}${this.watchdog.count ? ` (${Object.entries(this.watchdog.byKind).map(([k, n]) => `${n} ${k}`).join(", ")})` : ""}`);
     L.push(...this.table(rows).map((l) => "  " + l));
+    if (byPath) {
+      L.push(`  one script context, by scripts/<pack>/ path (${byPath.length} groups):`);
+      for (const p of byPath.slice(0, 15)) L.push(`    ${p.pack.padEnd(16)} ${f3(p.msPerTick)} ms/tick, ${f2(p.callsPerTick)} calls/tick, max ${p.max} ms, ${p.callbacks} callbacks`);
+    }
     let steady = null;
     if (this.workload) {
       const win = this.workload.soak;
@@ -239,25 +375,31 @@ export class Profile {
         for (const ph of this.phaseBundle) L.push(`  phase ${ph.name} (${ph.bundle?.ticks ?? 0} ticks): ${f3(ph.bundle?.avg)} ms/tick summed over packs, p95 ${ph.bundle?.p95 ?? "-"} / max ${ph.bundle?.max ?? "-"} ms; ${rows.slice(0, 8).map((r) => `${r.pack} ${f3(r.phases[ph.name]?.avg)} (p95 ${r.phases[ph.name]?.p95 ?? "-"}, max ${r.phases[ph.name]?.max ?? "-"})`).join(", ")}`);
       }
     }
+    const slow = steady ?? bundle;
+    if (slow?.histogram) {
+      const h = slow.histogram;
+      L.push(`  ${steady ? "steady window" : "whole run"}, ms by tick % 20: ${h.mod20.map((v) => v.toFixed(2)).join(" ")}; ${h.over5} ticks over 5 ms, ${h.over5On20} of them on a multiple of 20 (${(100 * h.shareOver5On20).toFixed(0)}%), ${h.over5OnPeak20} on the busiest residue ${h.peak20} (${(100 * h.shareOver5OnPeak20).toFixed(0)}%)`);
+      for (const w of slow.worst.slice(0, 3)) L.push(`  worst tick ${w.tick} (${w.ms} ms): ${w.calls.slice(0, 4).map((c) => `${c.key} ${c.ms}`).join("; ") || "no single call of 1 ms or more"}`);
+    }
     const events = scriptEventTotals(rows, ticks);
     const topSent = Object.entries(events.sentPerTick).slice(0, 8);
     if (topSent.length) L.push(`  script events sent/tick: ${f3(events.sentTotalPerTick)} (${topSent.map(([id, n]) => `${id} ${f3(n)}`).join(", ")})`);
     L.push(`  profile JSON: ${this.json}`);
-    this.write(rows, bundle, cpu, s, totals, ticks, steady, events);
+    this.write(rows, bundle, cpu, s, totals, ticks, steady, events, byPath);
     return L;
   }
 
-  write(rows, bundle, cpu, server = null, totals = null, ticks = 0, steady = null, events = scriptEventTotals(rows, ticks)) {
+  write(rows, bundle, cpu, server = null, totals = null, ticks = 0, steady = null, events = scriptEventTotals(rows, ticks), byPath = null) {
     try {
       fs.writeFileSync(this.json, JSON.stringify({
         date: new Date().toISOString(), scenario: this.scenario, args: this.args, ticks,
-        server, process: cpu,
+        server, process: cpu, watchdog: this.watchdog,
         workload: this.workload, acceptance: this.acceptance,
         // Every figure is time inside callbacks the packs handed to the game; time after an await in an async callback
         // is not attributed (see lib/profile.js), and a run of separate packs sums separate script contexts.
         measurement: { unattributed: ["time after an await inside an async callback"], contexts: rows.length },
-        bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, steadyWindow: steady, phases: this.phaseBundle ?? undefined, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks, scriptEvents: events } : null,
-        packs: rows.map((r) => ({ ...r, dynWritesPerTick: r.dynWrites / r.ticks, actionBarPerTick: r.actionBar / r.ticks, setTitlePerTick: r.titles / r.ticks, runCommandPerTick: r.commands / r.ticks })),
+        bundle: totals ? { msPerTick: totals.ms / ticks, perTick: bundle, steadyWindow: steady, phases: this.phaseBundle ?? undefined, callsPerTick: totals.calls / ticks, dynWritesPerTick: totals.dyn / ticks, dynCharsPerTick: totals.bytes / ticks, actionBarPerTick: totals.bar / ticks, setTitlePerTick: totals.ttl / ticks, runCommandPerTick: totals.cmd / ticks, scriptEvents: events, byPath: byPath ?? undefined } : null,
+        packs: rows.map(({ callbacksAll, ...r }) => ({ ...r, callbackList: callbacksAll ?? undefined, dynWritesPerTick: r.dynWrites / r.ticks, actionBarPerTick: r.actionBar / r.ticks, setTitlePerTick: r.titles / r.ticks, runCommandPerTick: r.commands / r.ticks })),
       }, null, 2));
     } catch (e) {
       this.say(`[profile] could not write ${this.json}: ${e}`);

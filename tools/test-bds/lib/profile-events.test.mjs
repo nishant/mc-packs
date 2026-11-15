@@ -9,7 +9,7 @@ import { scriptEventTotals } from "./profile-report.mjs";
 
 const source = readFileSync(new URL("./profile.js", import.meta.url), "utf8");
 
-function fakeGame() {
+function fakeGame(clock = Date) {
   const logs = [];
   class Signal {
     constructor() { this.subs = []; }
@@ -18,7 +18,7 @@ function fakeGame() {
     fire(ev) { for (const f of [...this.subs]) f(ev); }
   }
   class System {
-    constructor() { this.currentTick = 100; this.afterEvents = { scriptEventReceive: new Signal() }; this.beforeEvents = {}; }
+    constructor() { this.currentTick = 100; this.afterEvents = { scriptEventReceive: new Signal(), other: new Signal() }; this.beforeEvents = {}; }
     run() {}
     runTimeout() {}
     runInterval() {}
@@ -30,7 +30,7 @@ function fakeGame() {
   const world = Object.assign(new World(), { afterEvents: {}, beforeEvents: {} });
   const context = {
     console: { warn: (l) => logs.push(l) },
-    Date,
+    Date: clock,
     __mc: { world, system, System, World, Entity: class {}, ItemStack: class {}, ScreenDisplay: class {}, Dimension: class {}, CustomCommandRegistry: class {} },
     globalThis: {},
   };
@@ -59,6 +59,40 @@ test("sends and handled events are counted per id in the PROFILE line", () => {
   assert.equal(obj.scriptEventsHandled["realm:actionbar"].calls, 1);
   assert.equal(obj.scriptEventsHandled["harness:profile_dump"], undefined); // the profiler dumps before the pack sees the dump
   assert.ok(Array.isArray(obj.slowest), "the longest single calls are listed too (hitches)");
+});
+
+test("a callback subscribed to two signals can be unsubscribed from each (PIPE-20)", () => {
+  const { system } = fakeGame();
+  const cb = () => {};
+  system.afterEvents.scriptEventReceive.subscribe(cb);
+  system.afterEvents.other.subscribe(cb);
+  system.afterEvents.scriptEventReceive.unsubscribe(cb);
+  system.afterEvents.other.unsubscribe(cb);
+  // The profiler's own listener stays on scriptEventReceive; the pack's wrapper is gone from both.
+  assert.equal(system.afterEvents.scriptEventReceive.subs.length, 1);
+  assert.equal(system.afterEvents.other.subs.length, 0);
+});
+
+test("the final dump sends every timed callback and every call of 1 ms or more, in parts it announces", () => {
+  let clock = 1000;
+  const { system, logs } = fakeGame({ now: () => clock });
+  // Each call to the pack's listener takes 2 ms on the fake clock.
+  system.afterEvents.other.subscribe(() => { clock += 2; });
+  system.afterEvents.other.fire({});
+  system.currentTick += 1;
+  system.afterEvents.other.fire({});
+  system.currentTick += 5;
+  system.afterEvents.scriptEventReceive.fire({ id: "harness:profile_dump", message: '{"final":true}' });
+  const of = (type) => logs.filter((l) => l.startsWith(type + " ")).map((l) => JSON.parse(l.slice(type.length + 1)));
+  const row = of("PROFILE")[0];
+  assert.equal(row.final, true);
+  assert.deepEqual(row.parts, { ticks: 1, callbacks: 1, heavy: 1 });
+  const cbs = JSON.parse(of("PROFILE_CALLBACKS").map((p) => p.d).join(""));
+  assert.equal(cbs.length, 1);
+  assert.equal(cbs[0].calls, 2);
+  assert.equal(cbs[0].ms, 4);
+  const heavy = of("PROFILE_HEAVY").map((p) => p.d).join("").split(",");
+  assert.deepEqual(heavy, ["100:2:0", "101:2:0"]);
 });
 
 test("the report sums the packs per tick, with who sends each id", () => {
