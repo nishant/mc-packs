@@ -4,7 +4,7 @@ import { createGossip } from "./gossip.js";
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get } from "./settings.js";
+import { get, getFor } from "./settings.js";
 import { allZones, isProtected, protectedBox, zonesAt } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -18,7 +18,9 @@ const FRAME_TICKS = 2; // the funnel is redrawn and players are spun every 2 tic
 const FRAMES_PER_SECOND = 20 / FRAME_TICKS;
 const NEAR = 64; // beyond this, players get half the rings
 const SHARED_FROM = 2; // with this many players within NEAR, the funnel is drawn once for all of them
-const REDRAW_FRAMES = 5; // each ring lives ~1.05-1.55s and every ring is redrawn every 5 frames (0.5s), so there are no gaps
+// Each ring lives 1.2-1.8 s and every ring is redrawn every 8 frames (0.8 s), so a ring overlaps the next one (no gaps)
+// with about two generations alive (before 1.3.0: every 5 frames, two to three, 40% more packets and particles).
+const REDRAW_FRAMES = 8;
 const WIND_RANGE = 48;
 const RUMBLE_RANGE = 100;
 const WIND_EVERY = 5; // seconds
@@ -42,7 +44,8 @@ const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 /** @typedef {{ startTick: number, angle: number }} SpinState */
 /**
  * @typedef {{ x: number, y: number, z: number, groundY: number, heading: number, speed: number, lean: number,
- *   endsAt: number, natural: boolean, frame: number, path: Vector3[], viewers: { player: Player, dist: number }[],
+ *   endsAt: number, natural: boolean, frame: number, path: Vector3[], viewers: { player: Player, id: string, dist: number, density: number }[],
+ *   spawn: { x: number, z: number },
  *   warned: Set<string>, seen: Set<string>, spinning: Map<string, SpinState>, thrown: Map<string, number>,
  *   hornIn: number, windIn: number, rumbleIn: number }} Tornado
  */
@@ -69,9 +72,8 @@ function compass(dx, dz) {
   return COMPASS[Math.round(deg / 45) % 8];
 }
 
-/** Horizontal distance from the world spawn. @param {number} x @param {number} z */
-function fromSpawn(x, z) {
-  const s = world.getDefaultSpawnLocation();
+/** Horizontal distance from the world spawn (`s`: a spawn read earlier). @param {number} x @param {number} z @param {{ x: number, z: number }} [s] */
+function fromSpawn(x, z, s = world.getDefaultSpawnLocation()) {
   return Math.hypot(x - s.x, z - s.z);
 }
 
@@ -230,6 +232,7 @@ function start(at, natural) {
     frame: 0,
     path: [{ ...at }],
     viewers: [],
+    spawn: world.getDefaultSpawnLocation(), // read again once a second (move() runs every frame)
     warned: new Set(),
     seen: new Set(),
     spinning: new Map(),
@@ -288,10 +291,10 @@ function frame() {
 function move(t) {
   const step = (t.speed * FRAME_TICKS) / 20;
   const nx = t.x + Math.cos(t.heading) * step, nz = t.z + Math.sin(t.heading) * step;
-  const next = fromSpawn(nx, nz);
-  if (next < get("avoidSpawn") && next < fromSpawn(t.x, t.z)) {
+  const s = t.spawn;
+  const next = fromSpawn(nx, nz, s);
+  if (next < get("avoidSpawn") && next < fromSpawn(t.x, t.z, s)) {
     // Heading into the spawn area: turn to head straight away from spawn and wait for the next frame.
-    const s = world.getDefaultSpawnLocation();
     t.heading = Math.atan2(t.z - s.z, t.x - s.x) + rand(-0.4, 0.4);
     return;
   }
@@ -322,6 +325,11 @@ function nearestZone(x, z) {
 /** Once a second: wander, find the ground, see who's near, warn, sounds. @param {Tornado} t @param {Dimension} dim */
 function everySecond(t, dim) {
   t.heading += rand(-0.35, 0.35);
+  try {
+    t.spawn = world.getDefaultSpawnLocation();
+  } catch {
+    // keep the last one
+  }
   const ground = groundAt(dim, t.x, t.z);
   // Over water or trees the funnel stands on the surface; in an unloaded chunk it keeps its height.
   if (ground) t.groundY = ground.location.y + 1;
@@ -344,11 +352,11 @@ function everySecond(t, dim) {
   const windTo = [];
   for (const player of dim.getPlayers()) {
     try {
-      if (!player.isValid) continue;
-      const l = player.location;
+      const l = player.location; // a handle just listed: no isValid needed
       const dist = Math.hypot(l.x - t.x, l.z - t.z);
       if (dist <= view && Math.abs(l.y - t.y) < 100) {
-        t.viewers.push({ player, dist });
+        // Their own funnel density (/realm:prefs), read once a second: it scales the copy drawn for them alone.
+        t.viewers.push({ player, id: player.id, dist, density: Number(getFor(player, "density")) || 1 });
         if (!t.seen.has(player.id)) {
           t.seen.add(player.id);
           sendJournal(player);
@@ -455,21 +463,24 @@ function funnelAxis(t, f, top) {
  * @param {Tornado} t @param {Dimension} dim
  */
 function draw(t, dim) {
-  const density = get("density");
   const top = Math.max(12, Math.min(CONFIG.height, 318 - t.y));
+  const rings0 = get("rings");
+  // No isValid on these kept handles (on BDS 1.26 it makes the reads after it dearer): viewers are listed again every
+  // second, a player who left is dropped on playerLeave, and a spawn on a stale handle throws, caught below.
   let near = 0;
-  for (const v of t.viewers) if (v.dist <= NEAR && v.player.isValid) near++;
+  for (const v of t.viewers) if (v.dist <= NEAR) near++;
   const shared = near >= SHARED_FROM;
   if (shared) {
     try {
-      drawSlice(t, top, Math.max(5, Math.round(get("rings") * density)), true, (id, at, vars) => dim.spawnParticle(id, at, vars));
+      // One copy for everyone near: the realm's density.
+      drawSlice(t, top, Math.max(5, Math.round(rings0 * get("density"))), true, (id, at, vars) => dim.spawnParticle(id, at, vars));
     } catch {
       // An unloaded chunk or the edge of the world: skip this frame.
     }
   }
-  for (const { player, dist } of t.viewers) {
-    if (!player.isValid || (shared && dist <= NEAR)) continue;
-    const rings = Math.max(5, Math.round(get("rings") * density * (dist > NEAR ? 0.5 : 1)));
+  for (const { player, dist, density } of t.viewers) {
+    if (shared && dist <= NEAR) continue;
+    const rings = Math.max(5, Math.round(rings0 * density * (dist > NEAR ? 0.5 : 1)));
     try {
       drawSlice(t, top, rings, dist <= NEAR, (id, at, vars) => player.spawnParticle(id, at, vars));
     } catch {
@@ -494,13 +505,14 @@ function drawSlice(t, top, rings, close, spawn) {
     molang().setFloat("variable.height", f);
     spawn(RING, axis, molang());
   }
-  // Keep the ground contact dust whirl and upper storm collar anchored without excess emitters
-  if (t.frame % 2 === 0) {
+  // Keep the ground contact dust whirl and upper storm collar anchored without excess emitters: one of them every
+  // other frame (each lives 1.2-1.8 s, so three or four of each are always alive).
+  if (t.frame % 4 === 0) {
     molang().setFloat("variable.radius", 3.2);
     molang().setFloat("variable.spin", 8.8);
     molang().setFloat("variable.height", 0.02);
     spawn(RING, { x: t.x, y: t.y + 0.35, z: t.z }, molang());
-  } else {
+  } else if (t.frame % 4 === 2) {
     const topAxis = funnelAxis(t, 0.94, top);
     molang().setFloat("variable.radius", funnelRadius(0.94));
     molang().setFloat("variable.spin", 3.5);
@@ -722,7 +734,11 @@ function cushion() {
     landingLoop = undefined;
   }
 }
-world.afterEvents.playerLeave.subscribe(({ playerId }) => landing.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  landing.delete(playerId);
+  // The funnel isn't drawn for them for the rest of this second (draw() reads no isValid).
+  if (tornado) tornado.viewers = tornado.viewers.filter((v) => v.id !== playerId);
+});
 
 // ---------------------------------------------------------------------------
 // Storm Glass where it dies down

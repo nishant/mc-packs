@@ -634,7 +634,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lWhere are the borders?§r §e/realm:claim§r -> §lShow claim borders§r sparkles the edges of every claim near you for 10 seconds (asking again starts over). Walking in or out of one says §eEntering Sam's claim§r / §eLeaving Sam's claim§r above the hotbar.",
+        "text": "§lWhere are the borders?§r §e/realm:claim§r -> §lShow claim borders§r sparkles the edges of the claims near you (the 6 nearest) at your height for 10 seconds (asking again starts over). Walking in or out of one says §eEntering Sam's claim§r / §eLeaving Sam's claim§r above the hotbar.",
         "ops": false
       },
       {
@@ -2923,7 +2923,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lTowns and claims§r lists the protected areas other packs share (towns with §lProtect from world events§r, claims while §lProtect claims from world events§r is on), read only, with their source; §lShow outline§r works for them too, and operators get §lTeleport (operator)§r to the center's surface (the top of the water over a lake or the sea). §lShow nearby outlines§r traces every zone whose edge is within 64 blocks of you.",
+        "text": "§lTowns and claims§r lists the protected areas other packs share (towns with §lProtect from world events§r, claims while §lProtect claims from world events§r is on), read only, with their source; §lShow outline§r works for them too, and operators get §lTeleport (operator)§r to the center's surface (the top of the water over a lake or the sea). §lShow nearby outlines§r traces the zones whose edge is within 64 blocks of you (the 6 nearest).",
         "ops": false
       },
       {
@@ -3115,6 +3115,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "Does your phone or tablet slow down near a tornado? §e/realm:prefs§r -> §lTornadoes§r -> §lTornado funnel density§r: lower it (0.5 draws half the rings) for your own screen.",
+        "ops": false
+      },
+      {
         "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the funnel. §e/realm:tornado§r -> §lSpawn one§r (or §e/realm:tornado_spawn§r) makes a tornado 40 blocks in front of you right away, in any weather; §lEnd the tornado§r stops it. §e/realm:config§r -> §lTornadoes§r enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are sucked up and launched.",
         "ops": true
       }
@@ -3167,7 +3171,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r the compass needs the Minimap (in the Realm Bundle) and Side HUD (in §lRealm Resources§r) for its icons. §e/realm:rainbow_now§r puts a rainbow up right away, with its pot of gold 150 to 300 blocks from you. §e/realm:config§r -> §lRainbows & the Pot of Gold§r enables or disables rainbows after rain and sets the chance, how long rainbows and pots last, the Crowns and relic chance and the distance kept from spawn.",
+        "text": "§lOperators:§r the compass needs the Minimap (in the Realm Bundle) and Side HUD (in §lRealm Resources§r) for its icons, and the little rainbow over the pot needs Realm Skies (also in Realm Resources). §e/realm:rainbow_now§r puts a rainbow up right away, with its pot of gold 150 to 300 blocks from you. §e/realm:config§r -> §lRainbows & the Pot of Gold§r enables or disables rainbows after rain and sets the chance, how long rainbows and pots last, the Crowns and relic chance and the distance kept from spawn.",
         "ops": true
       }
     ],

@@ -74,9 +74,16 @@ export function spawnChecked(dim, type, at, opts) {
 
 const NEAR_RESEND_RANGE = 20;
 const NEAR_RESEND_SQ = NEAR_RESEND_RANGE * NEAR_RESEND_RANGE;
-/** Syncs between scans of whole dimensions for strays (a helper the tracked list lost). Loaded strays are removed
- * on their load event already, so this is only a backstop: every 10th sync (1 s at a sync every 2 ticks). */
+/** Syncs between checks of what was written (helper captions and places, the targets' own name tags) and, with
+ * `trustHandles`, of whether the tracked entities are still valid: every 10th sync. */
 const SWEEP_EVERY = 10;
+/** A helper is taken down only this far past `observerRange`, so a viewer at the edge doesn't remove and spawn it again. */
+const KEEP_MARGIN = 4;
+/** Ticks between scans of whole dimensions for strays (a helper the tracked list lost). Loaded strays are removed on
+ * their load event already, so this is only a backstop: once a minute (and on the first sync). */
+const STRAY_TICKS = 1200;
+/** Syncs between those scans without `syncTicks` (a sync every 2 ticks is the fastest caller). */
+const STRAY_SYNCS = 600;
 const NEAR_RESEND_STEPS = [1, 3]; // syncs after a new viewer enters within 20 blocks, then 3 syncs more
 const RESEND_TICKS = [20, 60]; // with `syncTicks`: 1 s after a new viewer enters within 20 blocks, then 3 s more
 
@@ -90,10 +97,13 @@ const RESEND_TICKS = [20, 60]; // with `syncTicks`: 1 s after a new viewer enter
  *   observerRange?: number,
  *   headOffset?: number,
  *   spectatorsExcluded?: boolean,
- *   syncTicks?: number
+ *   syncTicks?: number,
+ *   trustHandles?: boolean
  * }} opts `syncTicks`: how often the caller syncs, in ticks; the resends after a new viewer comes near are then 1 s
  * and 3 s more later (without it they come 1 sync and 3 syncs later). `spectatorsExcluded`: the observers given to sync never include spectators (the caller asked
- * world.getPlayers to leave them out), so their game mode isn't read again on every sync
+ * world.getPlayers to leave them out), so their game mode isn't read again on every sync. `trustHandles`: the caller
+ * calls `forget(id)` from `entityRemove` for its target and label types, so between checks (every 10th sync) the
+ * targets and helpers are not asked whether they are still valid.
  */
 export function createNameLabels(opts) {
   const {
@@ -105,8 +115,10 @@ export function createNameLabels(opts) {
     headOffset = HEAD_OFFSET,
     spectatorsExcluded = false,
     syncTicks,
+    trustHandles = false,
   } = opts;
   const resendSteps = syncTicks ? RESEND_TICKS.map((t) => Math.max(1, Math.round(t / syncTicks))) : NEAR_RESEND_STEPS;
+  const strayEvery = syncTicks ? Math.max(1, Math.round(STRAY_TICKS / syncTicks)) : STRAY_SYNCS;
   /**
    * @type {Map<string, {
    *   target: Entity,
@@ -118,13 +130,20 @@ export function createNameLabels(opts) {
    *   resendStage?: number,
    *   useAltVariant?: boolean,
    *   caption?: string,
-   *   at?: { x: number, y: number, z: number }
-   * }>} `caption` and `at`: what was last written to the helper, so a sync with nothing new reads nothing back
+   *   at?: { x: number, y: number, z: number },
+   *   targetTag?: string,
+   *   tid: string,
+   *   hid: string
+   * }>} `caption` and `at`: what was last written to the helper and `targetTag` to the target, so a sync with nothing
+   * new reads nothing back; `tid` and `hid`: the target's and the helper's ids, for `forget`
    */
   const tracked = new Map();
   /** @type {Set<string>} */
   const warned = new Set();
+  /** Targets with no helper whose own name tag was set to their full name: key -> target id and that text. @type {Map<string, { tid: string, text: string }>} */
+  const restored = new Map();
   const rangeSq = observerRange * observerRange;
+  const keepSq = (observerRange + KEEP_MARGIN) ** 2;
   let syncs = 0;
 
   /** @param {Entity | undefined} entity */
@@ -147,17 +166,46 @@ export function createNameLabels(opts) {
     }
   };
 
+  /**
+   * restoreFallback for a target with no helper; with trustHandles written once: later syncs trust it until the next
+   * check, a new entity or a new text. @param {string} key @param {Entity} target @param {string} name @param {boolean} check
+   */
+  const restoreOnce = (key, target, name, check) => {
+    const tid = target.id;
+    const was = restored.get(key);
+    if (!check && trustHandles && was && was.tid === tid && was.text === name) return;
+    restoreFallback(target, name);
+    restored.set(key, { tid, text: name });
+  };
+
   /** @param {string} key */
   const removeFor = (key) => {
     warned.delete(key);
+    restored.delete(key);
     const entry = tracked.get(key);
     if (!entry) return;
     remove(entry.helper);
     tracked.delete(key);
   };
 
-  /** @param {Dimension[]} [dimensions] */
-  const sweepStrays = (dimensions = []) => {
+  /**
+   * An entity went (`entityRemove`: removed, killed or unloaded): a helper that went is dropped from the list, and a
+   * target that went has its helper taken down. Callers with `trustHandles` call it for their target and label types.
+   * @param {string} id
+   */
+  const forget = (id) => {
+    for (const [key, entry] of [...tracked]) {
+      if (entry.hid === id) tracked.delete(key);
+      else if (entry.tid === id) {
+        remove(entry.helper);
+        tracked.delete(key);
+      }
+    }
+    for (const [key, r] of [...restored]) if (r.tid === id) restored.delete(key);
+  };
+
+  /** Drops tracked entries whose target or helper is gone, or which are in different dimensions. */
+  const checkTracked = () => {
     for (const [key, entry] of [...tracked]) {
       try {
         if (!entry.target.isValid || !entry.helper.isValid || entry.target.dimension.id !== entry.helper.dimension.id) {
@@ -169,7 +217,11 @@ export function createNameLabels(opts) {
         tracked.delete(key);
       }
     }
-    const validHelpers = new Set([...tracked.values()].map((e) => e.helper.id));
+  };
+
+  /** Removes the helpers of our type in whole dimensions that no tracked entry owns. @param {Dimension[]} [dimensions] */
+  const scanStrays = (dimensions = []) => {
+    const validHelpers = new Set([...tracked.values()].map((e) => e.hid));
     for (const dim of dimensions) {
       try {
         for (const ent of dim.getEntities({ type: labelType })) {
@@ -182,10 +234,17 @@ export function createNameLabels(opts) {
   };
 
   /** @param {Dimension[]} [dimensions] */
+  const sweepStrays = (dimensions = []) => {
+    checkTracked();
+    scanStrays(dimensions);
+  };
+
+  /** @param {Dimension[]} [dimensions] */
   const clear = (dimensions = []) => {
     for (const entry of tracked.values()) remove(entry.helper);
     tracked.clear();
     warned.clear();
+    restored.clear();
     for (const dim of dimensions) {
       try {
         for (const ent of dim.getEntities({ type: labelType })) remove(ent);
@@ -204,7 +263,7 @@ export function createNameLabels(opts) {
     if (!entity || entity.typeId !== labelType) return false;
     let entry;
     for (const r of tracked.values()) {
-      if (r.helper.id === entity.id) {
+      if (r.hid === entity.id) {
         entry = r;
         break;
       }
@@ -228,17 +287,22 @@ export function createNameLabels(opts) {
   /**
    * Syncs helpers for the active targets and observers.
    * Observers and dimensions may be given as functions, called only when they are needed (not on a sync with
-   * nothing to label).
-   * @param {LabelTarget[]} targets
-   * @param {Player[] | (() => Player[])} observerList
+   * nothing to label). An observer may be a player or a record `{ dimId, x, y, z, id }` the caller already read (one
+   * snapshot of the players shared with its own loop). A target may carry `dimId` (its dimension, which the caller
+   * knows) and `head` (where its head is, for a target that stands on a fixed post): neither is then read from it.
+   * @param {(LabelTarget & { dimId?: string, head?: import("@minecraft/server").Vector3 })[]} targets
+   * @param {(Player | { dimId: string, x: number, y: number, z: number, id: string })[] | (() => (Player | { dimId: string, x: number, y: number, z: number, id: string })[])} observerList
    * @param {Dimension[] | (() => Dimension[])} [dimensionList]
    */
   const sync = (targets, observerList, dimensionList = []) => {
-    const sweepNow = syncs++ % SWEEP_EVERY === 0;
+    const n = syncs++;
+    const checkNow = n % SWEEP_EVERY === 0;
+    const strayNow = n % strayEvery === 0;
     const dims = () => (typeof dimensionList === "function" ? dimensionList() : dimensionList);
+    if (checkNow && tracked.size) checkTracked();
     // Nothing to label and nothing left over (no caravan here, no townsfolk placed): no work at all.
     if (!targets.length && !tracked.size) {
-      if (sweepNow) sweepStrays(dims());
+      if (strayNow) scanStrays(dims());
       return;
     }
     const observers = !targets.length ? [] : typeof observerList === "function" ? observerList() : observerList;
@@ -249,14 +313,21 @@ export function createNameLabels(opts) {
     const activeObservers = [];
     for (const p of observers) {
       try {
-        if (!p || (!spectatorsExcluded && p.isValid === false)) continue; // a fresh getPlayers list holds only valid players
-        if (!spectatorsExcluded && typeof p.getGameMode === "function" && String(p.getGameMode()).toLowerCase() === "spectator") continue;
-        const l = p.location;
-        activeObservers.push({ dimId: p.dimension.id, x: l.x, y: l.y, z: l.z, id: String(p.id ?? p.name ?? "") });
+        if (!p) continue;
+        if (typeof (/** @type {any} */ (p).dimId) === "string") {
+          activeObservers.push(/** @type {any} */ (p));
+          continue;
+        }
+        const pl = /** @type {Player} */ (p);
+        if (!spectatorsExcluded && pl.isValid === false) continue; // a fresh getPlayers list holds only valid players
+        if (!spectatorsExcluded && typeof pl.getGameMode === "function" && String(pl.getGameMode()).toLowerCase() === "spectator") continue;
+        const l = pl.location;
+        activeObservers.push({ dimId: pl.dimension.id, x: l.x, y: l.y, z: l.z, id: String(pl.id ?? pl.name ?? "") });
       } catch {
         // gone
       }
     }
+    const askValid = !trustHandles || checkNow;
 
     for (const item of targets) {
       const target = item?.entity;
@@ -270,40 +341,44 @@ export function createNameLabels(opts) {
           : SUPPRESSED_NAME;
       const fallback = suppressed === SUPPRESSED_NAME ? name : `${name}${suppressed}`;
       try {
-        if (!target.isValid) continue;
+        if (askValid && !target.isValid) continue;
         // Distances from its head (one read for both): a block and a half off its feet matters nothing at 20 blocks.
-        const loc = target.getHeadLocation();
-        const dim = target.dimension;
-        const dimId = dim.id;
+        const loc = item.head ?? target.getHeadLocation();
+        const dimId = item.dimId ?? target.dimension.id;
+        let entry = tracked.get(key);
+        // A helper already up stays until its viewers are KEEP_MARGIN past the range (no remove and respawn at the edge).
+        const reachSq = entry ? keepSq : rangeSq;
         let near = false;
         /** @type {Set<string>} */
         const nearIds = new Set();
         for (const p of activeObservers) {
           if (p.dimId !== dimId) continue;
           const d2 = (p.x - loc.x) ** 2 + (p.y - loc.y) ** 2 + (p.z - loc.z) ** 2;
-          if (d2 <= rangeSq) near = true;
+          if (d2 <= reachSq) near = true;
           if (d2 <= NEAR_RESEND_SQ) nearIds.add(p.id);
         }
         if (!near) {
-          restoreFallback(target, fallback);
+          restoreOnce(key, target, fallback, checkNow);
           continue;
         }
+        restored.delete(key);
         const anchor = { x: loc.x, y: loc.y + headOffset, z: loc.z };
 
-        let entry = tracked.get(key);
-        if (entry && (!entry.helper.isValid || entry.target.id !== target.id || entry.dimId !== dimId)) {
+        if (entry && ((askValid && !entry.helper.isValid) || entry.tid !== target.id || entry.dimId !== dimId)) {
           remove(entry.helper);
           tracked.delete(key);
           entry = undefined;
         }
         if (!entry) {
-          const helper = spawnChecked(dim, labelType, anchor);
+          const helper = spawnChecked(target.dimension, labelType, anchor);
           if (ownerTag) helper.addTag(ownerTag);
           if (labelTag) helper.addTag(labelTag);
           if (labelIdTag) helper.addTag(labelIdTag + key);
-          entry = { target, helper, dimId, useAltVariant: false };
+          // Spawned at the anchor: no teleport to where it already is.
+          entry = { target, helper, dimId, useAltVariant: false, at: anchor, tid: target.id, hid: helper.id };
           tracked.set(key, entry);
         }
+        entry.target = target;
 
         // Bedrock's client caches a creature's default name ("NPC") when the entity spawns in the same packet
         // batch as its nameTag or before a newly joined viewer enters range. When a new viewer enters within
@@ -337,15 +412,15 @@ export function createNameLabels(opts) {
         const helperWanted = useAlt ? `${baseName}§r` : baseName;
         const targetWanted = useAlt ? `${suppressed}§r` : suppressed;
 
-        // What was written last is trusted between sweeps; a sweep sync reads the helper back in case something
-        // else renamed or moved it.
-        if (sweepNow) {
+        // What was written last is trusted between checks; a check sync reads the helper and the target back in
+        // case something else renamed or moved them.
+        if (checkNow) {
           entry.caption = entry.helper.nameTag;
           entry.at = entry.helper.location;
+          entry.targetTag = target.nameTag;
         }
         if (entry.caption !== helperWanted) {
           entry.helper.nameTag = helperWanted;
-          if (entry.helper.nameTag !== helperWanted) throw new Error(`helper ${labelType} failed caption sync`);
           entry.caption = helperWanted;
         }
         const hloc = entry.at;
@@ -353,7 +428,12 @@ export function createNameLabels(opts) {
           entry.helper.teleport(anchor);
           entry.at = anchor;
         }
-        if (target.nameTag !== targetWanted) target.nameTag = targetWanted;
+        // Without trustHandles the target's own name tag is read every sync (the caller may rename it itself).
+        if (entry.targetTag === undefined || !trustHandles) entry.targetTag = target.nameTag;
+        if (entry.targetTag !== targetWanted) {
+          target.nameTag = targetWanted;
+          entry.targetTag = targetWanted;
+        }
         wanted.add(key);
         warned.delete(key);
       } catch (e) {
@@ -363,8 +443,16 @@ export function createNameLabels(opts) {
           remove(failed.helper);
           tracked.delete(key);
         }
+        restored.delete(key);
         restoreFallback(target, fallback);
-        if (!warned.has(key)) {
+        let gone = false;
+        try {
+          gone = !target.isValid;
+        } catch {
+          gone = true;
+        }
+        // A target that went since it was handed over (unloaded this tick) is not worth a warning.
+        if (!gone && !warned.has(key)) {
           warned.add(key);
           console.warn(`[name-labels] ${labelType} (${key}): ${e}`);
         }
@@ -376,7 +464,7 @@ export function createNameLabels(opts) {
       remove(entry.helper);
       tracked.delete(key);
     }
-    if (sweepNow) sweepStrays(dims());
+    if (strayNow) scanStrays(dims());
   };
 
   return {
@@ -384,6 +472,7 @@ export function createNameLabels(opts) {
     loaded,
     sync,
     removeFor,
+    forget,
     clear,
     sweep: sweepStrays,
   };

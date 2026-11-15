@@ -145,6 +145,10 @@ function edge(s, at) {
   return { inside: d <= s.r, dist: Math.abs(s.r - d) };
 }
 
+const MAX_SHAPES = 6; // shapes outlined at once, the nearest first
+/** Squared distance from a shape's middle to the player. @param {Shape} s @param {Player} p */
+const sq = (s, p) => (s.x - p.location.x) ** 2 + (s.z - p.location.z) ** 2;
+
 /**
  * Draws the edge of each shape near the player for `seconds`, at the player's height (only that player sees it).
  * A new call replaces the outlines they had. `onTick` runs once a second (the preview's action bar).
@@ -156,25 +160,33 @@ function drawOutlines(player, shapes, seconds, particle, onTick) {
   if (previous !== undefined) system.clearRun(previous);
   const until = system.currentTick + seconds * 20;
   let step = 0;
+  const stop = () => {
+    system.clearRun(run);
+    if (drawing.get(pid) === run) drawing.delete(pid);
+  };
+  // The nearest MAX_SHAPES only, each edge at one height (before 1.0.15: every shape at two heights, so a few zones
+  // and claims together were hundreds of spawns twice a second).
+  const shown = shapes.length > MAX_SHAPES ? [...shapes].sort((a, b) => sq(a, player) - sq(b, player)).slice(0, MAX_SHAPES) : shapes;
   const run = system.runInterval(() => {
-    if (!player.isValid || system.currentTick > until) {
-      system.clearRun(run);
-      if (drawing.get(pid) === run) drawing.delete(pid);
-      return;
+    if (system.currentTick > until) return stop();
+    let px, py, pz, dim;
+    try {
+      // No isValid on this kept handle (it makes the reads after it dearer): a player who left throws here.
+      ({ x: px, y: py, z: pz } = player.location);
+      dim = player.dimension.id;
+    } catch {
+      return stop();
     }
     try {
       if (onTick && step % (20 / DRAW_EVERY) === 0) onTick(Math.ceil((until - system.currentTick) / 20));
       step++;
-      const { x: px, y: py, z: pz } = player.location;
-      for (const s of shapes) {
-        if (s.dim !== player.dimension.id) continue;
+      for (const s of shown) {
+        if (s.dim !== dim) continue;
         for (const [x, z] of edgePoints(s, px, pz)) {
-          for (const dy of [0.2, 1.6]) {
-            try {
-              player.spawnParticle(particle, { x, y: py + dy, z });
-            } catch {
-              // outside the loaded world
-            }
+          try {
+            player.spawnParticle(particle, { x, y: py + 0.9, z });
+          } catch {
+            // outside the loaded world
           }
         }
         if (Math.hypot(s.x - px, s.z - pz) <= DRAW_RANGE) {

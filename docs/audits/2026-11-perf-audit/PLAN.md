@@ -301,21 +301,12 @@ Findings: BSE-27 (its fix option 3). Packs: `stash_bp`.
 
 ### W10 Townsfolk, labels and towns (M to L: two PRs)
 
-Findings: ENT-01, ENT-02, ENT-03, ENT-04, ENT-16, ENT-25, ENT-27, ENT-32, ENT-40, ENT-29, ENT-38 (W10a); ENT-05,
-ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `npc_bp`, `town_bp`,
-`wander_bp`, `caravan_bp` (the four with `name-labels.js`), `tools/name-labels-shared.js`, `tools/owed-shared.js`,
-`tools/tether-shared.js`.
-- **W10a Labels and the townsfolk loop.** The "is anyone near" test reads every player's dimension and place once
-  per townsfolk every half second (ENT-01: 3 x players x townsfolk calls, 14 ms bursts at 40 players with nobody
-  near a town): read the players once per run. The label sync's 2 ms is 229 native calls, 3 per observer and 9 per
-  townsfolk whether near or far (ENT-02); the two earlier attempts removed none of them. Learn validity from events
-  instead of asking, and keep fixed anchors for townsfolk that do not move, which takes a standing NPC to about one
-  call. This is OPEN.md O3. For wanderers, split "follow the mob" from "who sees the label" so the 2-tick sync stops
-  repeating every read to move one label (ENT-03); separate create and remove distances at the label range edge
-  (ENT-04); read a caption back only on the sweep (ENT-16). A bug to fix on the way: a townsfolk with no saved skin
-  and any entity within 2 blocks loses and regains its label every 10 s (ENT-25). The 10-second audit of every
-  loaded townsfolk (ENT-40), turning to a player being a teleport (ENT-27), and wander's 405 block reads around
-  each exploring player every minute at night before a 7% roll (ENT-29: roll first).
+Findings: ENT-05, ENT-06, ENT-28, ENT-11, ENT-26, ENT-14, ENT-15, ENT-34, ENT-39, ENT-37 (W10b). Packs: `town_bp`,
+`tools/owed-shared.js`, `tools/tether-shared.js`. W10a is #249 (npc_bp, wander_bp, caravan_bp and the
+shared labels); left from it, each only if a measurement asks for it: with a crowd standing around the townsfolk
+the half-second loop is still about 1.2 to 1.6 ms (npc-labels-perf near phase at 40, mostly the turning teleports and
+the players' places, which that phase needs); the label entities' `minecraft:transient` and `minecraft:physics`
+(ENT-32, needs a BDS check); caravan_bp's traders still use the labels' default reads (`trustHandles` off).
 - **W10b The town scan and saved indexes.** A project with no valid spot in the loaded ground is scanned from
   scratch every 5 s while a player is in the town: the column cache dies with each scan, columns past tick distance 4
   are always "unknown", and "unknown" never ends as "no good spot" (ENT-05); walks over cached columns are also
@@ -427,20 +418,14 @@ Findings: PRG-30, PRG-05, PRG-40, PRG-47, PRG-16 (after W2). Packs: `saga_bp`.
   pending place every 2 s (PRG-05), a `getTags()` per player per second for the party story (PRG-47).
 - Proof: `saga-perf-quests` pairs; `check-stories`; the saga scenarios.
 
-### W17 Weather and sky effects (M: two PRs)
+### W17 Weather and sky effects (W17b left)
 
-Findings: UTL-02, UTL-03, UTL-06, UTL-15, UTL-35, UTL-36, UTL-16, UTL-37, UTL-18. Packs: `rainbow_bp`, `tornado_bp`,
-`elytra_bp`, `claims_bp`, `zones_bp`, `climate_bp`, `leaves_bp`, `rain_bp`, and `sky_rp`, `rain_rp`, `silly_rp`.
-- **W17a Fewer packets.** The rainbow as 7 client emitters instead of 259 server particles twice a second (UTL-02);
-  the tornado's 67 packets a second and about 2,500 live particles per viewer (UTL-03: fewer, larger particles and a
-  per-player density preference); a NOS boost's 41 spawns a tick (UTL-06); claim borders and zone outlines (UTL-15);
-  a new `MolangVariableMap` per player per second (UTL-35); leaf decay's 6 destroy commands a tick (UTL-36).
+W17a shipped (rainbow emitters, a lighter tornado with a per-player density, the NOS plume, claim and zone outlines,
+UTL-35, rain_bp's sounds and join fogs; UTL-36 unchanged, see section 7). Left: `rain_rp` (UTL-16, UTL-37).
 - **W17b What devices load.** `rain_rp`'s ten 20-second clips loaded as samples and all marked for low-memory
   devices (UTL-16: needs a memory reading on the phone before and after); the vanilla rain splash redefined with 300
   particles and per-frame work (UTL-37).
-- Proof: `weather-crowd`, `tornado-sound-perf` (numbers kept after W0c), the night-and-thunder phase; before and
-  after pictures and clips regenerated (`gen:rain`, `gen:sky`); the looks change, so a NEWS line and the owner's
-  device check (section 6).
+- Proof: the owner's device check (section 6).
 
 ### W18 Small polls that can be events or caches (S each: batch by pack owner)
 
@@ -515,6 +500,9 @@ rest of its workstream.
 
 ## 7. Not planned, and why
 
+- UTL-36 (leaf decay's `setblock ... destroy` commands): each leaf's break particles, sound and drops are the point,
+  and the stable API has no other way to drop a leaf's own loot; the cost is per leaf, not per tick, and
+  `leavesPerTick` already lets operators slow it. No change.
 - A third Realm upload for stable assets: CLAUDE.md keeps it at two.
 - Minifying the bundle: unreadable stacks in the server log for a gain nobody has measured.
 - A central patch of `runInterval` to stagger every pack's timers: it would change timing behind the packs' backs.
