@@ -70,22 +70,27 @@ import { registerMinimapCommand } from "./minimap-command.js";
 class LabBudget {
   /** @param {number} perTick @param {number} max @param {number} tickMax */
   constructor(perTick, max, tickMax) { this.perTick = perTick; this.max = max; this.tickMax = tickMax; this.left = 0; }
-  tick() { this.left = Math.min(this.perTick, this.tickMax); }
+  /** A new tick: the budget again, less what the last ticks overran it by (at most DEBT_TICKS ticks' worth), so a
+   * long piece of work that could not be split is paid back by the ticks after it instead of every tick going over. */
+  tick() { this.left = Math.min(this.perTick, this.tickMax) + Math.max(-DEBT_TICKS * this.perTick, Math.min(0, this.left)); }
   get room() { return Math.max(0, Math.min(this.left, this.tickMax)); }
   get ok() { return this.room > 0; }
   /** @param {number} ms */
   spend(ms) { this.left -= ms; }
 }
+/** How many ticks' worth of overrun a budget or the feature envelope carries into the next ticks at most. */
+const DEBT_TICKS = 4;
 class LabEnvelope {
-  constructor() { this.at = -1; this.used = 0; this.last = 0; this.peak = 0; }
+  constructor() { this.at = -1; this.used = 0; this.last = 0; this.peak = 0; this.debt = 0; }
   /** @param {number} tick */
   begin(tick) {
-    if (this.at !== tick) { this.last = this.used; this.used = 0; this.at = tick; }
+    if (this.at !== tick) { this.debt = Math.min(DEBT_TICKS * EXP.featureMs, Math.max(0, this.debt + this.used - EXP.featureMs)); this.last = this.used; this.used = 0; this.at = tick; }
     return Date.now();
   }
   /** @param {number} start */
   end(start) { this.used += Math.max(0, Date.now() - start); this.peak = Math.max(this.peak, this.used); }
-  get room() { return Math.max(0, EXP.featureMs - this.used); }
+  /** What the whole feature may still spend this tick, less the overrun carried from the ticks before. */
+  get room() { return Math.max(0, EXP.featureMs - this.used - this.debt); }
 }
 // Disabled means no terrain persistence IO, including the legacy preview provider.
 // Player preferences / waypoints still use their existing storage.
@@ -1016,6 +1021,8 @@ const STORE_IDLE_CHECK = 200;
 /** The largest /realm:minimap scan radius for players who are not operators (operators: MANUAL_SCAN_MAX_RADIUS). */
 const PLAYER_SCAN_MAX_RADIUS = 128;
 const PLAN_EACH_TICK = 2;
+/** Of the scan time a tick, what planning may start in (whole ms: Date.now() is the only clock). */
+const PLAN_MS = Math.max(1, EXP.scanMs / 2);
 const PLAN_EVERY = EXP.checkEvery;
 /** Viewers to check first: their radar was just built (a new list of what it misses) or they move fast. @type {Set<string>} */
 const planNow = new Set();
@@ -1184,6 +1191,9 @@ function scanFrame() {
   let scanDeadline=t0+Math.max(0,Math.min(EXP.scanMs,featureEnvelope.room-EXP.renderReserve));
   let scanExpired=false;
   const scanTimeLeft=()=>{if(scanExpired)return false;if(Date.now()<scanDeadline)return true;scanExpired=true;return false;};
+  // Planning (which columns each viewer needs) gets the first part of the scan time only, so reading always gets the
+  // rest: with 40 viewers moving, planning alone used to fill the whole deadline and nothing was read (map-radar-perf).
+  const planTimeLeft=()=>scanTimeLeft()&&Date.now()-t0<PLAN_MS;
   const enabled=get("enabled")===true;
   if (!enabled&&!manualScans.contexts.size) return;
   const readsAtEntry=scanReads;
@@ -1224,7 +1234,7 @@ function scanFrame() {
   let playersById;
   for (const id of planNow) {
     // At most PLAN_EACH_TICK a tick; the rest keep their place in the set and go first next tick.
-    if(!scanBudget.ok||!scanTimeLeft()||planTurn.left<=0)break;
+    if(!scanBudget.ok||!planTimeLeft()||planTurn.left<=0)break;
     planNow.delete(id);planTurn.left--;
     if (!candidateIds.has(id)) continue;
     let player;
@@ -1247,7 +1257,7 @@ function scanFrame() {
     scanQueueCost.chargedMs += charged;
   }
   let checked = 0;
-  for (; checked < checks && scanBudget.ok && scanTimeLeft(); checked++) {
+  for (; checked < checks && scanBudget.ok && planTimeLeft(); checked++) {
     const t = Date.now();
     try {
       const p = candidates[(checked + scanFirst) % n];
